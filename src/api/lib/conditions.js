@@ -53,7 +53,7 @@ const SPECIAL_FIELDS = [
 const DEFAULT_ENABLED = new Set([
     'learner.opco', 'learner.professional_status', 'learner.diploma_level', 'learner.current_contract',
     'learner.cpf_amount', 'learner.project_creation', 'learner.project_takeover', 'learner.project_oven',
-    'learner.project_truck', 'learner.project_job',
+    'learner.project_truck', 'learner.project_job', 'learner.project_improvement',
     'enrollment.financing', 'enrollment.crm_stage', 'enrollment.price',
     'training_program.days', 'training_program.level', 'training_program.code',
     'training_program.rs_code', 'training_program.hygiene',
@@ -115,6 +115,7 @@ const FR_LABELS = {
     cpf_amount: 'Montant CPF', current_contract: 'Contrat actuel', financing: 'Financement', opco: 'OPCO / financeur',
     project_creation: 'Projet : création', project_takeover: 'Projet : reprise', project_oven: 'Projet : four',
     project_truck: 'Projet : camion / remorque', project_job: 'Projet : recherche de poste',
+    project_improvement: 'Projet : perfectionnement',
     // Inscription
     price: 'Prix', acompte: 'Acompte', crm_stage: 'Étape CRM', conformite_score: 'Score de conformité',
     // Formation

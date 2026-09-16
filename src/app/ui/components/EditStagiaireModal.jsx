@@ -13,7 +13,11 @@ const STATUTS_ENTREPRISE = ["SARL", "SAS", "SASU", "EURL", "EI", "Auto-entrepren
    « e-mail », « tel », « Tél. », « bac+2 », « Bac + 2 » : impossible de compter d'où viennent les
    contacts, ni de filtrer sur un niveau. Une liste tranche la question à la saisie. */
 const CONTACTS = ["Mail", "Téléphone"];
-const DIPLOMES = ["Sans diplôme", "CAP", "BEP", "BAC", "BAC +1", "BAC +2", "BAC +3", "BAC +4", "BAC +5", "BAC +8"];
+/* « BTS » est rangé à côté de « BAC +2 », qui EST son niveau : la liste mêle des NOMS de
+   diplôme (CAP, BEP, BAC, BTS) et des NIVEAUX (BAC +1 … +8), et c'est voulu — on demande ici
+   le plus haut diplôme, que les gens nomment tantôt d'une façon, tantôt de l'autre. Les
+   placer côte à côte évite qu'on cherche le BTS en fin de liste. */
+const DIPLOMES = ["Sans diplôme", "CAP", "BEP", "BAC", "BAC +1", "BAC +2", "BTS", "BAC +3", "BAC +4", "BAC +5", "BAC +8"];
 /* Conserve une valeur HÉRITÉE hors liste : passer un champ libre en liste déroulante ne doit pas
    effacer en silence ce qu'un ancien dossier contenait (« Site web », « Bac pro »…). Elle reste
    proposée pour ce dossier-là, sans polluer la liste des autres. */
@@ -27,9 +31,14 @@ const EMPTY = {
   france_travail_id: "", current_contract: "", social_security: "",
   financing: "PARTICULIER", opco: "", levels: "", completed_levels: "", company_id: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
+  project_improvement: false,
 };
 
-const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job"];
+/* LA LISTE DOIT SUIVRE `EMPTY` : `toForm` lit les autres clés en `?? ""`, si bien qu'un booléen
+   oublié ici arriverait à `false`… puis à la chaîne vide au premier enregistrement. Trois listes
+   disent le même ensemble dans ce fichier (EMPTY, BOOL_FIELDS, les cases rendues) — un test le
+   vérifie, parce qu'elles ont vocation à diverger. */
+const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job", "project_improvement"];
 const dateOnly = (v) => (v ? String(v).slice(0, 10) : "");
 
 function toForm(d) {
@@ -277,7 +286,11 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               <div className="divider" />
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet</h3>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-                {[["project_creation", "Création"], ["project_takeover", "Reprise"], ["project_oven", "Four"], ["project_truck", "Camion / Remorque"], ["project_job", "Cherche poste pizzaïolo(la)"]].map(([k, lab]) => (
+                {/* « Perfectionnement » (migration 158) : les cinq autres cases disent toutes un projet de
+                    CHANGEMENT — créer, reprendre, s'équiper, chercher un poste. Qui exerce déjà et vient
+                    se perfectionner n'avait aucune case, et ressortait donc avec un projet VIDE,
+                    indiscernable d'une fiche non remplie. */}
+                {[["project_creation", "Création"], ["project_takeover", "Reprise"], ["project_oven", "Four"], ["project_truck", "Camion / Remorque"], ["project_job", "Cherche poste pizzaïolo(la)"], ["project_improvement", "Perfectionnement"]].map(([k, lab]) => (
                   <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                     <input type="checkbox" checked={!!form[k]} onChange={toggle(k)} /> {lab}
                   </label>
