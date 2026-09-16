@@ -17,6 +17,7 @@ import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
 import MenuActions from "../components/MenuActions.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import RemiseTypes from "../components/RemiseTypes.jsx";
 
 // Types proposés à la saisie. La liste n'est qu'une aide : le champ reste libre, un organisme
 // peut définir son propre type. FACTURE / ACOMPTE / AVOIR y figurent désormais — ils
@@ -449,6 +450,11 @@ function Modeles() {
           </div>
         )}
       </Card>
+
+      {/* L'AUTRE SENS, juste en dessous : ce que l'école REMET. Les deux référentiels se
+          suivent parce qu'ils répondent à la même question dans les deux directions — et les
+          séparer d'un onglet ferait chercher le second. */}
+      <RemiseTypes onStatus={setStatus} />
       </>
       )}
 

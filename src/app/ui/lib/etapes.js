@@ -21,7 +21,8 @@
  */
 
 /**
- * @param {{status?: string, stagiaireSign?: boolean, piece?: boolean, pieceStatus?: string}} doc
+ * @param {{status?: string, stagiaireSign?: boolean, piece?: boolean, pieceStatus?: string,
+ *          remise?: boolean, remiseStatus?: string}} doc
  * @returns {"todo"|"progress"|"done"}
  */
 export function stepState(doc) {
@@ -33,6 +34,17 @@ export function stepState(doc) {
     if (doc.piece) {
         if (doc.pieceStatus === "VALIDEE") return "done";
         if (doc.pieceStatus === "DEPOSEE") return "progress";
+        return "todo";
+    }
+    /* UNE REMISE NON PLUS N'A PAS DE DOCUMENT GÉNÉRÉ, et pour la même raison que la pièce —
+       son état vient de la remise. Mais la frontière est ailleurs, et c'est tout le propos de
+       la migration 160 : DÉPOSER N'EST PAS REMETTRE. Un fichier déposé que personne n'a
+       confirmé est « en cours », jamais « terminé » ; le compter comme fait ferait monter le
+       score de conformité du dossier sur un document que le stagiaire n'a peut-être jamais
+       ouvert. Seul son accusé de réception termine l'étape. */
+    if (doc.remise) {
+        if (doc.remiseStatus === "RECUE") return "done";
+        if (doc.remiseStatus === "REMISE") return "progress";
         return "todo";
     }
     if (doc.status === "SIGNE") return "done";

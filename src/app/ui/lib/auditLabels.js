@@ -169,6 +169,17 @@ const ACTION_LABEL = {
     'piece.refusee': ['Pièce refusée', R],
     'piece.fichier_supprime': ['Fichier de pièce supprimé', R],
 
+    /* REMISES (migration 160) — le sens inverse des pièces : l'école remet un document nominatif
+       au stagiaire, qui en accuse réception. « Remis » et « reçu » sont deux événements
+       DISTINCTS, et c'est tout l'intérêt : déposer n'est pas remettre. Les confondre en une
+       seule ligne de journal effacerait la seule chose qu'un contrôle vient y lire. */
+    'remise.depot': ['Document remis au stagiaire', B],
+    'remise.accusee': ['Réception confirmée par le stagiaire', G],
+    'remise.fichier_supprime': ['Document remis retiré', R],
+    'remise_type.create': ['Type de remise créé', A],
+    'remise_type.update': ['Type de remise modifié', A],
+    'remise_type.delete': ['Type de remise supprimé', R],
+
     /* Communauté — modération. Ces trois codes ne sont posés que quand on agit sur le message
        d'UN AUTRE : supprimer sa propre publication ne regarde personne. Rouge pour les deux
        suppressions — irréversibles, les réponses et l'image partent par cascade ; ambre pour la
@@ -260,6 +271,8 @@ const ENTITY_LABEL = {
     CommunityAnswer: ['Réponse', 'f'],
     PieceType: ['Type de pièce', 'm'],
     PieceDepot: ['Dépôt de pièce', 'm'],
+    RemiseType: ['Type de remise', 'm'],
+    RemiseDocument: ['Document remis', 'm'],
     EvaluationGrille: ['Grille d\'évaluation', 'f'],
     EvaluationNote: ['Note d\'évaluation', 'f'],
     EvaluationVerdict: ['Avis du jury', 'm'],

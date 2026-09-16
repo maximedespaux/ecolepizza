@@ -972,6 +972,37 @@ export function createPieceType(payload) { return request("/pieces", { method: "
 export function updatePieceType(id, payload) { return request(`/pieces/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
 export function deletePieceType(id) { return request(`/pieces/${id}`, { method: "DELETE" }); }
 
+/* --- REMISES : ce que l'ORGANISME remet au stagiaire (migration 160) ---
+   Le miroir des pièces ci-dessus, dans l'autre sens. Deux asymétries qui se lisent dans les
+   fonctions : seul le personnel dépose et retire (le serveur refuse le stagiaire), et seul le
+   stagiaire accuse réception (le serveur refuse le personnel). C'est ce qui donne sa valeur à
+   l'accusé : une preuve signée par celui qu'elle engage. */
+export function getDossierRemises(enrollmentId) { return request(`/remises/dossier/${enrollmentId}`, { silent: true }); }
+export async function deposerRemise(enrollmentId, remiseTypeId, file) {
+  const fd = new FormData();
+  fd.append("fichier", file); // doit matcher depot.single('fichier') côté route
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/remises/dossier/${enrollmentId}/${remiseTypeId}`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi du fichier échoué");
+    return data;
+  } finally { stopLoading(); }
+}
+// URL directe du fichier (déchiffré à la volée côté serveur). La consulter NE VAUT PAS
+// réception : le serveur ne touche ni au statut ni à la date. Cf. remise.controller.js.
+export function remiseFichierUrl(fichierId) { return `${API_BASE_URL}/remises/fichier/${fichierId}`; }
+export function supprimerRemiseFichier(fichierId) { return request(`/remises/fichier/${fichierId}`, { method: "DELETE" }); }
+// Le STAGIAIRE confirme avoir reçu. Le serveur refuse quiconque n'est pas le stagiaire du dossier.
+export function accuserRemise(remiseId) { return request(`/remises/${remiseId}/accuser`, { method: "POST" }); }
+
+// --- Référentiel des TYPES de remises (géré depuis Modèles de documents) ---
+export function getRemiseTypes() { return request("/remises"); }
+export function createRemiseType(payload) { return request("/remises", { method: "POST", body: JSON.stringify(payload) }); }
+export function updateRemiseType(id, payload) { return request(`/remises/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function deleteRemiseType(id) { return request(`/remises/${id}`, { method: "DELETE" }); }
+
 export function getMyRecipes(kind) { return request(`/recipes/mine${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`); }
 export function getSharedRecipes() { return request("/recipes/shared"); }
 export function getComponents(q) { return request(`/recipes/components${q ? `?q=${encodeURIComponent(q)}` : ""}`, { silent: true }); }
