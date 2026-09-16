@@ -103,3 +103,56 @@ test('LA COLONNE EST LUE, EN TÊTE DE CASCADE', () => {
        base où la 155 n'est pas jouée. */
     assert.match(TEMPLATE, /parcours_defaut',\s*\n\s*', company_level, company_sign, signers, buyer_audience',/);
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LES QCM SUIVENT LA MÊME RÈGLE (migration 156).
+
+   LE CAS QUI POSAIT PROBLÈME était plus vicieux que pour les documents. Un QCM est candidat au
+   parcours d'une formation s'il lui est rattaché OU s'il ne l'est à AUCUNE
+   (`program_id = ? OR program_id IS NULL`). Le second cas le rendait candidat PARTOUT — et
+   actif par défaut. Or la duplication crée volontairement un QCM non rattaché, « pour pouvoir
+   l'ajouter partout » : dupliquer un QCM peuplait donc le parcours de chaque formation d'un
+   seul coup.
+
+   DEUX NOTIONS ÉTAIENT CONFONDUES : `program_id` dit QUI PEUT l'utiliser, `parcours_defaut` s'il
+   y entre TOUT SEUL. L'éligibilité entraînait l'appartenance ; elle ne l'entraîne plus. */
+const QUIZ = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/quiz.controller.js'), 'utf8'));
+const MIG156 = fs.readFileSync(path.join(BASE, 'migrations', '156_qcm_hors_parcours.sql'), 'utf8');
+
+test('QCM : rien de ce qui existe ne bouge non plus', () => {
+    assert.match(MIG156, /ADD COLUMN IF NOT EXISTS parcours_defaut TINYINT\(1\) NOT NULL DEFAULT 1/);
+    assert.ok(!/UPDATE quiz|DELETE|DROP TABLE|TRUNCATE/i.test(MIG156),
+        'aucune formation ne doit perdre son test de positionnement ni ses évaluations formatives');
+});
+
+test('QCM : le parcours suit le réglage du QCM, sauf exception enregistrée', () => {
+    assert.match(PROGRAM, /active: o \? !!o\.active : q\.parcours_defaut !== 0/);
+    assert.ok(!/active: o \? !!o\.active : true/.test(PROGRAM),
+        'plus aucun « toujours actif » : documents ET QCM sont passés au réglage');
+});
+
+test('QCM : la colonne est lue, avec un repli si la 156 n\'est pas jouée', () => {
+    const zone = PROGRAM.slice(PROGRAM.indexOf('const selQuiz'));
+    assert.match(zone, /selQuiz\(', parcours_defaut'\)/);
+    assert.match(zone, /e\.code !== 'ER_BAD_FIELD_ERROR'/);
+    assert.match(zone, /selQuiz\(''\)/, 'sans la colonne, on relit sans — le parcours reste lisible');
+});
+
+test('QCM : création ET duplication naissent hors parcours', () => {
+    /* LA DUPLICATION COMPTE AUTANT QUE LA CRÉATION, et c'est même elle qui faisait le plus de
+       dégâts : elle crée un QCM NON RATTACHÉ, donc candidat dans toutes les formations. */
+    for (const [quoi, fn] of [['création', 'insere'], ['duplication', 'dupliquer']]) {
+        const zone = QUIZ.slice(QUIZ.indexOf(`const ${fn} = `));
+        assert.match(zone, /avecDefaut \? ', parcours_defaut' : ''/, `${quoi} : la colonne est posée`);
+        assert.match(zone, /avecDefaut \? ', 0' : ''/, `${quoi} : et à 0`);
+        assert.match(zone, new RegExp(`await ${fn}\\(false\\)`), `${quoi} : repli sans la colonne`);
+        assert.match(zone, new RegExp(`try \\{ await ${fn}\\(true\\); \\}`), `${quoi} : et la fonction est APPELÉE`);
+    }
+});
+
+test('QCM : le rattachement reste ce qui dit QUI PEUT l\'utiliser', () => {
+    /* La colonne ne remplace pas `program_id` : un QCM rattaché à une formation reste invisible
+       des autres. On sépare éligibilité et appartenance, on ne fusionne pas les deux. */
+    assert.match(PROGRAM, /\(program_id = \? OR program_id IS NULL\)/,
+        'le filtre de rattachement est conservé tel quel');
+});

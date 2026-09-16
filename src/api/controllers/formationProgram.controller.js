@@ -95,10 +95,20 @@ async function formationSteps(conn, orgId, program) {
     // QCM ajoutables comme étapes (slug « quiz:<id> ») : ceux rattachés à cette
     // formation, ET ceux non rattachés (program_id NULL) — pour qu'un QCM nouvellement
     // créé soit proposé dans le parcours de n'importe quelle formation.
-    const [quizzes] = await conn.query(
-        'SELECT id, title, day FROM quiz WHERE organization_id = ? AND (program_id = ? OR program_id IS NULL) AND active = 1 ORDER BY (program_id IS NULL), title',
-        [orgId, program.id]
-    );
+    /* `parcours_defaut` (migration 156) est facultative : sans elle on relit sans, et un QCM est
+       réputé entrer dans les parcours — le comportement d'avant. Le parcours doit rester lisible
+       que la migration soit jouée ou non. */
+    let quizzes = [];
+    const selQuiz = (col) =>
+        `SELECT id, title, day${col} FROM quiz
+          WHERE organization_id = ? AND (program_id = ? OR program_id IS NULL) AND active = 1
+          ORDER BY (program_id IS NULL), title`;
+    try {
+        [quizzes] = await conn.query(selQuiz(', parcours_defaut'), [orgId, program.id]);
+    } catch (e) {
+        if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+        [quizzes] = await conn.query(selQuiz(''), [orgId, program.id]);
+    }
     const quizSteps = quizzes.map((q) => {
         const slug = `quiz:${q.id}`;
         const o = overlay.get(slug);
@@ -108,7 +118,12 @@ async function formationSteps(conn, orgId, program) {
             slug, label: q.title, doc_type: 'QCM', quiz_id: q.id, day: q.day,
             signable: true, stagiaire_sign: true, company_level: false,
             sort_order: o ? o.sort_order : dflt,
-            active: o ? !!o.active : true,
+            /* MÊME RÈGLE QUE LES DOCUMENTS (migrations 155/156) : sans exception enregistrée,
+               c'est le QCM qui décide. Un QCM non rattaché était candidat dans TOUTES les
+               formations et y entrait actif — dupliquer un QCM l'ajoutait donc partout d'un
+               coup, la duplication le créant volontairement non rattaché. Le rattachement dit
+               désormais qui PEUT l'utiliser, ce réglage s'il y entre TOUT SEUL. */
+            active: o ? !!o.active : q.parcours_defaut !== 0,
         };
     });
 

@@ -159,14 +159,22 @@ const createQuiz = async (req, res) => {
     if (!b.title || !String(b.title).trim()) return res.status(422).json({ error: 'Titre requis.' });
     try {
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-            [id, req.user.organization_id, b.program_id || null,
-             b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
-             String(b.title).slice(0, 255),
-             b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null]
-        );
+        /* UN QCM NEUF N'ENTRE DANS AUCUN PARCOURS (migration 156). Le rattachement à une
+           formation dit qui PEUT l'utiliser ; ce réglage dit s'il y entre tout seul, et la
+           réponse est non — on l'active dans la formation voulue, d'un clic. Colonne
+           facultative : sans elle, on réinsère sans, et le comportement d'avant revient. */
+        const vals = [id, req.user.organization_id, b.program_id || null,
+            b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
+            String(b.title).slice(0, 255),
+            b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null];
+        const insere = (avecDefaut) => db.promise().query(
+            `INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active${avecDefaut ? ', parcours_defaut' : ''})
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1${avecDefaut ? ', 0' : ''})`, vals);
+        try { await insere(true); }
+        catch (e) {
+            if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+            await insere(false);
+        }
         logAudit(req, 'quiz.create', 'Quiz', id);
         res.status(201).json({ id, message: 'QCM créé' });
     } catch (err) {
@@ -357,12 +365,21 @@ const duplicateQuiz = async (req, res) => {
         const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
         const rowsByQ = await loadGridRows(conn, gridQids, true);
 
-        // Nouveau QCM : titre « … (copie) », non rattaché (program_id NULL) pour pouvoir l'ajouter partout.
+        /* Nouveau QCM : titre « … (copie) », non rattaché (program_id NULL) pour POUVOIR l'ajouter
+           partout — ce qui n'a jamais voulu dire l'ajouter partout d'office. C'était pourtant
+           l'effet : non rattaché = candidat dans toutes les formations, et actif par défaut.
+           Dupliquer un QCM peuplait donc chaque parcours d'un coup. `parcours_defaut = 0`
+           rétablit le sens de la phrase (migration 156). */
         const newId = crypto.randomUUID();
-        await conn.query(
-            'INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active) VALUES (?, ?, NULL, NULL, 0, ?, ?, ?, 1)',
+        const dupliquer = (avecDefaut) => conn.query(
+            `INSERT INTO quiz (id, organization_id, program_id, day, auto_send, title, kind, pass_score, active${avecDefaut ? ', parcours_defaut' : ''}) VALUES (?, ?, NULL, NULL, 0, ?, ?, ?, 1${avecDefaut ? ', 0' : ''})`,
             [newId, orgId, `${src.title || 'QCM'} (copie)`.slice(0, 255), src.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', src.pass_score]
         );
+        try { await dupliquer(true); }
+        catch (e) {
+            if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+            await dupliquer(false);
+        }
 
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
