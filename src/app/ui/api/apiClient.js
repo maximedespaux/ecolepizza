@@ -535,6 +535,19 @@ export function listCompanyDocuments(id, sessionId) {
   return request(`/companies/${id}/documents${qs}`);
 }
 // Lien de signature partageable (représentant entreprise). createSignLink → { token }.
+/* DOCUMENTS DE SESSION signés par un intervenant externe (contrat d'hygiène…). Distincts du
+   lien de signature ci-dessous : l'intervenant A un compte, il signe depuis son espace. */
+export function getDocumentsSession(sessionId) {
+  return request(`/sessions/${sessionId}/documents-externes`);
+}
+export function envoyerDocumentSession(sessionId, payload) {
+  return request(`/sessions/${sessionId}/documents-externes`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function getMesDocumentsIntervenant() { return request("/intervenant/documents"); }
+export function signerMonDocumentIntervenant(id, payload = {}) {
+  return request(`/intervenant/documents/${id}/signer`, { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function createSignLink(documentId, payload = {}) {
   return request(`/documents/${documentId}/sign-link`, { method: "POST", body: JSON.stringify(payload) });
 }

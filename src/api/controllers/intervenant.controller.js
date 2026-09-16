@@ -375,7 +375,110 @@ const cloturerJury = async (req, res) => {
     }
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   LES DOCUMENTS QUI M'ATTENDENT.
+
+   L'école envoie un document de session — un contrat d'hygiène, par exemple — en ATTRIBUANT sa
+   case de signature à un intervenant précis (`document_signature.user_id`). Cet espace lit ces
+   cases-là : celles qui portent mon identifiant.
+
+   PAS DE LIEN, PAS DE JETON. Le représentant d'une entreprise, lui, n'a pas de compte : il
+   reçoit un lien public. L'intervenant en a un, avec une signature déjà enregistrée pour ses
+   émargements. Lui envoyer un jeton par courriel serait faire circuler un secret là où une
+   simple page suffit — et lui demander de redessiner sa signature à chaque fois.
+
+   L'ORGANISME SIGNE APRÈS, TOUT SEUL. `applySlotSignature` s'en charge (« l'organisme signe en
+   DERNIER »), puis re-scelle le PDF avec les deux signatures et passe le document à SIGNÉ. On
+   ne réécrit rien de tout ça ici. */
+const { applySlotSignature, clientIp } = require('./document.controller.js');
+
+const SLOT_EXTERNE = 'externe';
+
+/** GET /api/intervenant/documents — ce qui m'est attribué, signé ou non. */
+const mesDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        let rows = [];
+        try {
+            [rows] = await conn.query(
+                `SELECT d.id, d.title, d.status, d.template_slug,
+                        DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS envoye_le,
+                        DATE_FORMAT(ds.signed_at, '%Y-%m-%d %H:%i') AS signe_le,
+                        s.year, s.week, p.code AS program_code, p.title AS program_title
+                   FROM document_signature ds
+                   JOIN generated_document d ON d.id = ds.document_id
+                   LEFT JOIN training_session s ON s.id = d.session_id
+                   LEFT JOIN training_program p ON p.id = s.program_id
+                  WHERE ds.user_id = ? AND ds.organization_id = ?
+                  ORDER BY ds.signed_at IS NOT NULL, d.created_at DESC`,
+                [req.user.id, req.user.organization_id]);
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        }
+        res.json({ data: rows });
+    } catch (err) {
+        console.error('Erreur documents intervenant :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/intervenant/documents/:id/signer — signe avec la signature enregistrée.
+ *
+ * CORPS FACULTATIF : `signature_data` permet de signer avec un tracé frais (premier passage,
+ * ou signature jamais enregistrée). Sans lui, on reprend celle du profil — c'est le geste
+ * normal, et c'est ce qui rend la signature d'un clic possible.
+ */
+const signerMonDocument = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        /* LA CASE DOIT M'ÊTRE ATTRIBUÉE. Le contrôle porte sur `user_id`, pas sur
+           l'organisation : un intervenant ne signe que ce qu'on lui a confié, jamais le
+           document d'un collègue. */
+        const [[ligne]] = await conn.query(
+            `SELECT ds.id, ds.signed_at, d.id AS doc_id, d.template_slug, d.learner_id, d.title
+               FROM document_signature ds JOIN generated_document d ON d.id = ds.document_id
+              WHERE ds.document_id = ? AND ds.user_id = ? AND ds.organization_id = ?`,
+            [req.params.id, req.user.id, orgId]);
+        if (!ligne) return res.status(404).json({ message: "Ce document ne vous est pas attribué." });
+        if (ligne.signed_at) return res.status(409).json({ message: 'Vous avez déjà signé ce document.' });
+
+        const fourni = (req.body || {}).signature_data;
+        if (fourni && !/^data:image\//.test(fourni)) {
+            return res.status(422).json({ message: 'Image de signature invalide.' });
+        }
+        let signature = fourni || null;
+        if (!signature) {
+            const [[u]] = await conn.query('SELECT signature_image FROM user WHERE id = ?', [req.user.id]);
+            signature = decrypt(u && u.signature_image) || null;
+        }
+        if (!signature) {
+            return res.status(422).json({ message: "Aucune signature enregistrée : dessinez-la une fois dans votre profil." });
+        }
+
+        const [[doc]] = await conn.query('SELECT * FROM generated_document WHERE id = ? AND organization_id = ?',
+            [ligne.doc_id, orgId]);
+        const nom = [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || 'Intervenant';
+        await applySlotSignature(conn, orgId, doc, {
+            slot: SLOT_EXTERNE, label: 'Intervenant externe', signerName: nom,
+            signatureData: signature, ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+        });
+        /* `user_id` n'est pas touché par `applySlotSignature` (elle ne connaît que le créneau) :
+           on le RÉAFFIRME, sinon l'attribution disparaîtrait au premier passage et l'espace
+           cesserait d'afficher le document une fois signé. */
+        await conn.query('UPDATE document_signature SET user_id = ? WHERE document_id = ? AND slot = ?',
+            [req.user.id, ligne.doc_id, SLOT_EXTERNE]);
+        logAudit(req, 'document.sign_externe', 'GeneratedDocument', ligne.doc_id);
+        res.json({ success: true, message: 'Document signé.' });
+    } catch (err) {
+        console.error('Erreur signature document intervenant :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
+    mesDocuments, signerMonDocument,
     listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, removeSessionIntervenant,
     getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature,
     getMyJuryGrille, noterJury, verdictJury, cloturerJury,
