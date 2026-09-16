@@ -75,12 +75,21 @@ test('L\'ORDRE DES SEMAINES VIENT DU SERVEUR, ON NE LE REFAIT PAS', async () => 
         'et les autres gardent l\'ordre du serveur');
 });
 
-test('IL N\'EXISTE QU\'UN SÉLECTEUR, ET DEUX ÉCRANS L\'EMPLOIENT', () => {
-    for (const f of ['pages/Notation.jsx', 'pages/Pipeline.jsx']) {
+test('DEUX PRÉSENTATIONS, UN SEUL RANGEMENT', () => {
+    /* CE QUI A CHANGÉ, et pourquoi ce test ne dit plus « un seul sélecteur ». Notation est passé
+       au choix par SEMAINE — on y installe les épreuves une fois et on note tout le monde,
+       formations mêlées ; le Pipeline, lui, suit UNE session étape par étape : choisir la
+       session EST son sujet. Deux questions différentes, donc deux présentations.
+
+       CE QUI NE DOIT PAS DIVERGER, en revanche, ce sont les RÈGLES de rangement — normalisation
+       des champs, regroupement par semaine, tri par formation. Elles vivent dans `lib/sessions.js`
+       et les deux composants les importent. C'était ça, le défaut d'origine : pas deux écrans,
+       deux copies de la même logique. */
+    for (const [f, composant] of [['pages/Notation.jsx', 'SelecteurSemaine'], ['pages/Pipeline.jsx', 'SelecteurSession']]) {
         const src = lire(f);
-        assert.match(src, /import SelecteurSession from ["']\.\.\/components\/SelecteurSession\.jsx["']/,
-            `${f} doit employer le composant`);
-        assert.match(src, /<SelecteurSession /, `${f} doit le rendre`);
+        assert.match(src, new RegExp(`import ${composant} from ["']\\.\\./components/${composant}\\.jsx["']`),
+            `${f} doit employer ${composant}`);
+        assert.match(src, new RegExp(`<${composant} `), `${f} doit le rendre`);
         /* L'ANCIEN MENU EST SUPPRIMÉ, pas laissé à côté : deux chemins vers la même chose, c'est
            reprendre la dette qu'on vient de payer. */
         assert.ok(!/<select[^>]*>[\s\S]{0,400}sessions\.map/.test(src),
@@ -93,10 +102,12 @@ test('IL N\'EXISTE QU\'UN SÉLECTEUR, ET DEUX ÉCRANS L\'EMPLOIENT', () => {
        sans lui, on aurait DEUX rangements — celui qu'on teste, et celui qui s'affiche. Le test
        est né d'une réintroduction restée verte : retirer cet import casse l'écran au runtime et
        rien ne le signalait, `esbuild` ne voyant pas une référence non définie (CLAUDE.md § 2.4). */
-    const comp = lire('components/SelecteurSession.jsx');
-    assert.match(comp, /import \{ normaliserSession, grouperParSemaine \} from ["']\.\.\/lib\/sessions\.js["']/);
-    assert.ok(!/function normaliser|\.sort\(\(a, b\) => \(a\.code/.test(comp),
-        'aucune copie du rangement dans le composant');
+    for (const c of ['components/SelecteurSession.jsx', 'components/SelecteurSemaine.jsx']) {
+        const comp = lire(c);
+        assert.match(comp, /from ["']\.\.\/lib\/sessions\.js["']/, `${c} doit tirer les règles de la lib`);
+        assert.ok(!/function normaliser|\.sort\(\(a, b\) => \(a\.code/.test(comp),
+            `${c} : aucune copie du rangement dans le composant`);
+    }
 });
 
 test('LE FILTRE DE RÉSULTATS QCM N\'EST PAS TOUCHÉ', () => {
