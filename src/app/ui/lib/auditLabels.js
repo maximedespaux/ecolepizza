@@ -92,6 +92,10 @@ const ACTION_LABEL = {
 
     // Stagiaires et équipe
     'learner.create': ['Stagiaire ajouté', G],
+    /* L'identifiant de connexion a suivi la correction de l'e-mail sur la fiche. Journalisé
+       parce qu'on change LA CLÉ D'ENTRÉE de quelqu'un dans l'application : si la personne ne
+       peut plus se connecter demain, c'est la première ligne à regarder. */
+    'learner.account_email': ['E-mail de connexion mis à jour', G],
     'equipe.convert': ['Membre converti en stagiaire', A],
     'equipe.revert_stagiaire': ['Retour au statut stagiaire', A],
 

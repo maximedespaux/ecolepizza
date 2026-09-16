@@ -48,7 +48,11 @@ test('le financement ne se propage pas aux dossiers à chaque enregistrement de 
     // l'air d'être là sans rien garder.
     assert.match(src, /const financingAvant = rows\[0\]\.financing/,
         'la valeur précédente doit venir de la ligne chargée');
-    assert.match(src, /SELECT company_id, financing FROM learner/,
+    /* ÉCRITE TROP LITTÉRALEMENT au départ : elle épinglait la liste EXACTE des colonnes, si
+       bien qu'en ajouter une — `user_id` et `email`, pour propager l'identifiant de connexion —
+       la faisait échouer alors que `financing` était toujours lu. Le contrat est « la colonne
+       est lue », pas « la requête ne bouge jamais ». */
+    assert.match(src, /SELECT [^`]*\bfinancing\b[^`]*FROM learner WHERE id = \? AND organization_id/,
         'la colonne doit être lue, sinon la comparaison porte sur undefined');
 });
 

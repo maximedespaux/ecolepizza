@@ -272,6 +272,18 @@ function Stagiaires() {
                     <Icon name="building" size={15} />
                   </Link>
                 )}
+                {/* L'IDENTIFIANT A DÉCROCHÉ DE LA FICHE, et rien ne le disait. Corriger l'e-mail
+                    d'une fiche ne changeait pas celui du COMPTE : la personne ne pouvait plus se
+                    connecter, et la connexion répondait « Email ou mot de passe incorrect » —
+                    message volontairement ambigu, pour ne pas révéler l'existence d'un compte.
+                    On réinitialisait donc le mot de passe en boucle, sans effet possible.
+                    Depuis, l'e-mail suit ; cette alerte reste pour les fiches déjà décrochées. */}
+                {l.compte_email_different && (
+                  <span className="badge r" title={`Ce stagiaire se connecte avec « ${l.compte_email_different} », pas avec l'e-mail de sa fiche. Réenregistrez la fiche pour aligner les deux.`}
+                    style={{ cursor: "help" }}>
+                    <Icon name="alert-triangle" size={12} style={{ verticalAlign: "-2px" }} /> identifiant ≠ fiche
+                  </span>
+                )}
                 {l.has_account ? (
                   <>
                     <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
