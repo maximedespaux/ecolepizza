@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import {
   getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature,
+  getMesDocumentsIntervenant, signerMonDocumentIntervenant,
 } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -12,6 +13,82 @@ import SignatureModal from "../components/SignatureModal.jsx";
 import JuryGrille from "../components/JuryGrille.jsx";
 
 const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+
+/**
+ * LES DOCUMENTS QUI M'ATTENDENT — envoyés par l'école, attribués à moi.
+ *
+ * SIGNER EST UN CLIC. La signature enregistrée pour les émargements sert ici aussi : redessiner
+ * son nom à chaque contrat n'apporte rien, et un intervenant qui vient une semaine par an ne
+ * doit pas avoir à réapprendre l'écran. Qui n'a rien enregistré est renvoyé vers le dessin —
+ * une fois, puis plus jamais.
+ *
+ * L'ORGANISME CONTRESIGNE TOUT SEUL, ensuite : le serveur appose sa signature et re-scelle le
+ * PDF. L'écran ne le promet pas avant que ce soit fait, il le CONSTATE après.
+ *
+ * LA CARTE DISPARAÎT QUAND IL N'Y A RIEN — ni document attendu, ni document signé. La plupart
+ * des intervenants n'en recevront jamais : une carte vide sur chaque espace ferait du bruit
+ * pour rien, comme la grille de jury juste en dessous.
+ */
+function MesDocuments({ onStatus, fullName }) {
+  const [docs, setDocs] = useState(null);
+  const [occupe, setOccupe] = useState(null);
+  const [dessiner, setDessiner] = useState(null);
+
+  const charger = () => getMesDocumentsIntervenant()
+    .then((r) => setDocs(r.data || [])).catch(() => setDocs([]));
+  useEffect(() => { charger(); }, []);
+
+  async function signer(d, signature_data) {
+    setOccupe(d.id);
+    try {
+      const r = await signerMonDocumentIntervenant(d.id, signature_data ? { signature_data } : {});
+      onStatus?.({ type: "success", message: r.message || "Document signé." });
+      setDessiner(null);
+      charger();
+    } catch (e) {
+      /* PAS DE SIGNATURE ENREGISTRÉE : le serveur le dit en 422 plutôt que de deviner. On ouvre
+         alors le dessin, au lieu de renvoyer l'intervenant dans son profil et de lui faire
+         refaire le chemin. */
+      if (/signature enregistrée/i.test(e.message || "")) setDessiner(d);
+      else onStatus?.({ type: "error", message: e.message });
+    } finally { setOccupe(null); }
+  }
+
+  if (!docs || docs.length === 0) return null;
+  return (
+    <>
+      <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents à signer</span>}>
+        <div className="grid" style={{ gap: 6 }}>
+          {docs.map((d) => (
+            <div key={d.id} className="arch-doc">
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b>{d.title}</b>
+                <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
+                  {d.program_code ? `${d.program_code} · ` : ""}
+                  {d.week ? `S${d.week} ${d.year} · ` : ""}
+                  {d.signe_le ? `signé le ${d.signe_le}` : `reçu le ${d.envoye_le}`}
+                </span>
+              </span>
+              {d.signe_le
+                ? <Badge tone="g">Signé</Badge>
+                : (
+                  <button className="btn sm primary" disabled={occupe === d.id}
+                    onClick={() => signer(d, null)}>
+                    {occupe === d.id ? "Signature…" : "Signer"}
+                  </button>
+                )}
+            </div>
+          ))}
+        </div>
+      </Card>
+      {dessiner && (
+        <SignatureModal doc={{ label: dessiner.title }} defaultName={fullName}
+          onConfirm={({ signature_data }) => signer(dessiner, signature_data)}
+          onClose={() => setDessiner(null)} />
+      )}
+    </>
+  );
+}
 
 function IntervenantEspace() {
   const { user } = useContext(UserContext);
@@ -181,6 +258,8 @@ function IntervenantEspace() {
           d'elle-même quand la formation n'a pas de grille de jury — la plupart n'en ont pas, et
           une carte vide sur chaque session ferait du bruit pour rien. */}
       {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} />)}
+
+      <MesDocuments onStatus={setStatus} fullName={fullName} />
 
       {signing && (
         <SignatureModal doc={{ label: signing.label }} defaultName={fullName} onConfirm={drawSign} onClose={() => setSigning(null)} />

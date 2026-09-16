@@ -15,6 +15,7 @@ import SessionIntervenants from "../components/SessionIntervenants.jsx";
 import SessionRetraits from "../components/SessionRetraits.jsx";
 import SessionConsentements from "../components/SessionConsentements.jsx";
 import CommissionJury from "../components/CommissionJury.jsx";
+import DocumentsExternes from "../components/DocumentsExternes.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
@@ -486,6 +487,7 @@ function SessionDetail() {
       {isAdmin && (
         <div style={{ marginTop: 16 }}>
           <CommissionJury sessionId={id} />
+          <DocumentsExternes sessionId={id} isAdmin={isAdmin} onStatus={setStatus} />
         </div>
       )}
 

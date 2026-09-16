@@ -1,5 +1,8 @@
 const express = require('express');
-const { getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature, getMyJuryGrille, noterJury, verdictJury, cloturerJury } = require('../controllers/intervenant.controller.js');
+const { getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile,
+    setMyIntervenantSignature, getMyJuryGrille, noterJury, verdictJury, cloturerJury,
+    mesDocuments, signerMonDocument,
+} = require('../controllers/intervenant.controller.js');
 const { authenticateToken, authorizeRoles } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -8,6 +11,11 @@ router.use(authenticateToken, authorizeRoles('INTERVENANT'));
 
 router.get('/me', getMyIntervenantProfile);
 router.put('/signature', setMyIntervenantSignature);
+/* Documents de session qui LUI sont attribués (contrat d'hygiène…). Il les signe d'un clic
+   avec sa signature enregistrée : aucun lien public, aucun jeton par courriel — il a un compte. */
+router.get('/documents', mesDocuments);
+router.post('/documents/:id/signer', signerMonDocument);
+
 router.get('/emargement', getMyIntervenantSheets);
 router.post('/emargement/sign', signMyIntervenantSheet);
 

@@ -4,6 +4,7 @@ const { listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, rem
 const { getSessionConsents, setConsentPourStagiaire, getManquantsParSession } = require('../controllers/consentement.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
+const { listerDocumentsSession, envoyerDocumentSession } = require('../controllers/documentSession.controller.js');
 const router = express.Router();
 router.use(authenticateToken);
 
@@ -43,5 +44,11 @@ router.put('/:id/consentements/:learnerId', authorizeRoles(...ADMIN_ROLES), setC
  * PÉRIODE plutôt qu'une session — c'est là qu'on choisit à qui l'on écrit. La page de la session
  * garde le SUIVI des consentements, qui est son sujet : qui a accepté, qui a refusé, qui n'a
  * jamais été sollicité. */
+
+/* DOCUMENTS DE SESSION signés par un intervenant externe (contrat d'hygiène…).
+   Lecture pour tout le personnel — le formateur doit voir où en est la signature ; l'ENVOI
+   engage l'organisme et reste au bureau, comme toute génération de document. */
+router.get('/:id/documents-externes', authorizeRoles(...STAFF_ROLES), listerDocumentsSession);
+router.post('/:id/documents-externes', authorizeRoles(...ADMIN_ROLES), envoyerDocumentSession);
 
 module.exports = router;

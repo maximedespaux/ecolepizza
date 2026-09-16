@@ -33,6 +33,10 @@ const ACTION_LABEL = {
        justement la distinction que l'import doit préserver. */
     'document.import': ['Document reçu et importé', B],
     'document.sign_link': ['Lien de signature émis', B],
+    /* Document de SESSION envoyé à un intervenant externe pour signature (contrat d'hygiène…).
+       Journalisé des deux côtés : l'envoi engage l'organisme, la signature engage l'intervenant. */
+    'document.session_externe': ['Document envoyé à un intervenant', G],
+    'document.sign_externe': ['Document signé par un intervenant', G],
     'document.delete': ['Document supprimé', R],
 
     // Facturation et ventes
