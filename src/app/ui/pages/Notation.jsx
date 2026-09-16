@@ -10,8 +10,9 @@ import DataTable from "../components/DataTable.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import ProgressPct from "../components/ProgressPct.jsx";
 import SessionEvaluation from "../components/SessionEvaluation.jsx";
+import SelecteurSession from "../components/SelecteurSession.jsx";
 import { getSessionsANoter, getNotationSession } from "../api/apiClient.js";
-import { initials, dateHeure } from "../lib/format.js";
+import { initials } from "../lib/format.js";
 
 /**
  * NOTATION — noter, puis lire ce que ça donne.
@@ -30,6 +31,16 @@ import { initials, dateHeure } from "../lib/format.js";
  * LA SESSION SE CHOISIT EN HAUT, UNE FOIS, et vaut pour les deux sections : on note un groupe
  * puis on regarde ses résultats — reposer la question entre les deux serait du travail en plus
  * pour rien.
+ *
+ * ELLE SE CHOISIT PAR SEMAINE, PUIS PAR FORMATION — et non dans un menu déroulant. Le menu
+ * alignait soixante lignes « CODE — Titre · date · N inscrits » qu'il fallait lire une à une,
+ * fermées sur elles-mêmes : on ne voyait jamais ce qu'il y avait à noter cette semaine-là, ni
+ * combien de formations tournaient en parallèle. Or une école pense en SEMAINES — c'est l'unité
+ * de ses sessions, de ses feuilles d'émargement et de son classement d'archives.
+ *
+ * MÊME ARBORESCENCE QUE LE COFFRE DOCUMENTAIRE (Suivi → Archives) : semaine, puis formation,
+ * aux mêmes couleurs. Deux écrans qui rangent la même réalité doivent la ranger pareil, sans
+ * quoi on apprend deux fois le même classement.
  */
 
 const tonePct = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -78,6 +89,7 @@ function Notation() {
   const sessionChoisie = useMemo(
     () => (sessions || []).find((s) => s.id === choisie) || null,
     [sessions, choisie]);
+
 
   /* La moyenne de la promotion, sur les seuls dossiers qui ont une note : ceux qui n'ont rien
      passé ne doivent pas la tirer vers le bas. */
@@ -158,14 +170,7 @@ function Notation() {
       ) : (
         <>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "0 0 14px" }}>
-            <select className="inp" style={{ maxWidth: 460 }} value={choisie} aria-label="Session"
-              onChange={(e) => setChoisie(e.target.value)}>
-              {sessions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code ? `${s.code} — ` : ""}{s.title || "Session"} · {dateHeure(s.start_date)} · {s.inscrits} inscrit(s)
-                </option>
-              ))}
-            </select>
+            <SelecteurSession sessions={sessions} valeur={choisie} onChoisir={setChoisie} />
             <div className="seg">
               <button type="button" className={"seg-btn" + (vue === "note" ? " on" : "")} onClick={() => setVue("note")}>Note</button>
               <button type="button" className={"seg-btn" + (vue === "resultat" ? " on" : "")} onClick={() => setVue("resultat")}>Résultat</button>
