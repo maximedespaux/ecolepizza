@@ -119,7 +119,7 @@ test('l\'APERÇU sert le fichier reçu, pas le modèle régénéré', () => {
     /* ET LES IMPORTS SUIVENT. C'est le défaut d'hier, à l'identique : un symbole utilisé sans
        être importé ne se voit ni à la compilation ni au build, seulement à l'exécution. */
     assert.match(MODALE, /import \{[^}]*API_BASE_URL[^}]*\} from "\.\.\/api\/apiClient\.js"/);
-    assert.match(MODALE, /import \{ dateHeure \} from "\.\.\/lib\/format\.js"/);
+    assert.match(MODALE, /import \{ dateHeure.*\} from "\.\.\/lib\/format\.js"/);
 });
 
 test('le PDF téléchargé est le fichier reçu, quand c\'en est un', () => {

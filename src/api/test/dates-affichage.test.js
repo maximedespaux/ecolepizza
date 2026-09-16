@@ -85,3 +85,63 @@ test("les valeurs transmises, elles, RESTENT en ISO", () => {
     assert.match(post, /date=\{post\.created_at\}/, 'Le composant destinataire formate lui-même…');
     assert.match(post, /\{dateHeure\(date\)\}/, '…et c\'est ici qu\'il le fait.');
 });
+
+test('une date affichée est au format FRANÇAIS : jj/mm/aaaa', () => {
+    /* DÉFAUT SIGNALÉ PAR L'ÉCOLE, sur la fiche stagiaire. Elle y lisait TROIS formats à la fois :
+         · « 1987-03-12 »       — la date de naissance et « Contact le », tronquées par un `d10`
+                                  local qui avait l'air de formater et ne faisait que couper ;
+         · « 12-03-1987 »       — `dateHeure`, qui n'est le format d'AUCUN pays : ni l'ISO
+                                  (1987-03-12), ni le français (12/03/1987) ;
+         · « 12/03/1987 »       — un helper `fr` défini dans une cellule de tableau, seul à
+                                  rendre le bon format, et par `new Date(iso)` — donc en UTC.
+       Trois rendus, trois résultats, un seul écran. */
+    const fmt = fs.readFileSync(path.join(UI, 'lib/format.js'), 'utf8');
+    assert.match(fmt, /return `\$\{p\.j\}\/\$\{p\.mo\}\/\$\{p\.a\}`/, 'dateFr rend jj/mm/aaaa');
+    assert.match(fmt, /return `\$\{p\.j\}\/\$\{p\.mo\}\/\$\{p\.a\}` \+ \(p\.h \? ` \$\{p\.h\}:\$\{p\.mi\}` : ""\)/,
+        'dateHeure aussi, l\'heure en plus');
+    assert.ok(!/\$\{j\}-\$\{mo\}-\$\{a\}/.test(fmt), 'plus de tiret : ce n\'était le format de personne');
+});
+
+test('les DEUX rendus jj/mm/aaaa donnent exactement la même chose', async () => {
+    /* `lib/contrat.js` a sa propre implémentation (`frISO`) et LA GARDE — j'ai essayé de la
+       remplacer par un import de `dateFr`, et ça casse `contrat-partenaire.test.js` en entier :
+       ce test lit le fichier comme du TEXTE et l'évalue par `new Function`, seul moyen d'éprouver
+       le vrai calcul du navigateur depuis des tests CommonJS. Un `import` en tête et tout tombe
+       sur « Cannot use import statement outside a module ».
+
+       La duplication est donc SUBIE, pas choisie. Ce qui la rendrait dangereuse, c'est son
+       silence : on corrigerait l'une, l'autre continuerait. On compare donc les deux sur des
+       entrées réelles — y compris les vides et les formes inattendues, là où deux
+       implémentations « équivalentes » cessent le plus souvent de l'être. */
+    const { dateFr } = await import('../../app/ui/lib/format.js');
+    const { frISO } = await import('../../app/ui/lib/contrat.js');
+    for (const v of ['2027-01-15', '2026-08-01 14:32', '2026-08-01T09:05', '', null, undefined]) {
+        assert.strictEqual(frISO(v), dateFr(v), `divergence sur ${JSON.stringify(v)}`);
+    }
+    assert.strictEqual(dateFr('2027-01-15'), '15/01/2027');
+});
+
+test('la fiche stagiaire n\'a plus de raccourci local qui rend de l\'ISO', () => {
+    /* `d10(l.birthday)` PASSAIT AU TRAVERS du garde-fou ci-dessus : celui-ci interdit d'afficher
+       un champ de date brut (`{l.birthday}`), mais ne voit pas un appel de fonction — qui, lui,
+       a l'air de formater. Le contournement était involontaire et c'est bien ce qui le rend
+       durable : rien ne le signalait. */
+    const fiche = fs.readFileSync(path.join(UI, 'pages/StagiaireDetail.jsx'), 'utf8');
+    assert.ok(!/const d10 = /.test(fiche), 'le raccourci est supprimé');
+    assert.ok(!/d10\(/.test(fiche), '…et plus appelé nulle part');
+    assert.ok(!/toLocaleDateString/.test(fiche), 'ni de `new Date(iso)`, qui se lit en UTC');
+    assert.match(fiche, /value=\{dateFr\(l\.birthday\)\}/);
+    assert.match(fiche, /value=\{dateFr\(l\.contacted_at\)\}/);
+});
+
+test('les champs de SAISIE gardent l\'ISO — le défaut inverse', () => {
+    /* `dateOnly` dans la modale ressemble à `d10` et DOIT rester tel quel : il alimente des
+       `<input type="date">`, qui n'acceptent que `aaaa-mm-jj`. Lui appliquer le format français
+       viderait les champs « Date de naissance » et « Contact le » en SILENCE — pas d'erreur, pas
+       de message, juste une case vide au moment de rouvrir une fiche. Le voir un jour et le
+       « corriger » par symétrie est un piège évident : ce test est là pour ça. */
+    const modale = fs.readFileSync(path.join(UI, 'components/EditStagiaireModal.jsx'), 'utf8');
+    assert.match(modale, /const dateOnly = \(v\) => \(v \? String\(v\)\.slice\(0, 10\) : ""\);/);
+    assert.match(modale, /form\.birthday = dateOnly\(d\.birthday\);/);
+    assert.ok(!/dateFr\(/.test(modale), 'aucune date française ne doit entrer dans un champ de saisie');
+});

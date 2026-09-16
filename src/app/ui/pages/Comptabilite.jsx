@@ -10,6 +10,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
+import { dateFr } from "../lib/format.js";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
@@ -312,7 +313,7 @@ function Comptabilite() {
                   text="Ajoutez vos factures et charges avec le formulaire ci-dessus : elles alimentent la répartition par poste et le résultat de la période." />
               ) : (
                 <div>{data.depenses.map((d) => (
-                  <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${new Date(d.date).toLocaleDateString("fr-FR")}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
+                  <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${dateFr(d.date)}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
             </Card>
@@ -322,7 +323,7 @@ function Comptabilite() {
                   text="Les commissions et apports des partenaires se saisissent depuis la page Partenaires ; ils remontent ici automatiquement." />
               ) : (
                 <div>{data.revenus.map((r) => (
-                  <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${new Date(r.date).toLocaleDateString("fr-FR")}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
+                  <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${dateFr(r.date)}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
                 ))}</div>
               )}
             </Card>
