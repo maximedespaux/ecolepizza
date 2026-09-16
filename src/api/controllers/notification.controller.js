@@ -158,7 +158,13 @@ const getNotifications = async (req, res) => {
         const { navAccess, vue, dormant } = await profilActivite(moi);
 
         const [notifs] = await db.promise().query(
-            `SELECT id, type, title, body, link, is_read,
+            /* `NULLIF` PARCE QUE LA COLONNE REND DES CHAÎNES VIDES. Mesuré en production :
+               sept lignes « Nouvelle commande boutique » ont un type vide, alors que l'appelant
+               passe bien `type: 'BOUTIQUE'`. Signature d'un ENUM qui refuse la valeur — MariaDB
+               hors mode strict range `''` au lieu de refuser l'insertion. L'étiquette de couleur
+               affichait donc une pastille SANS TEXTE. Le repli rend la ligne lisible tout de
+               suite ; la cause, elle, se règle sur le schéma (cf. le rapport du 2026-09-16). */
+            `SELECT id, COALESCE(NULLIF(type, ''), 'INFO') AS type, title, body, link, is_read,
                     DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
              FROM notification
              WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL)
@@ -167,12 +173,23 @@ const getNotifications = async (req, res) => {
 
         const activite = await activiteRecente({ orgId, moi, role, navAccess, vue, dormant });
 
+        /* DEUX LISTES, PLUS UNE SEULE. Elles étaient mêlées par date puis coupées à quarante
+           lignes — et comme l'activité est par nature plus récente (trente lignes de journal
+           peuvent toutes dater du jour), elle occupait tout le haut. Mesuré le 2026-09-16 :
+           la relance « Émargement à signer » la plus récente se trouvait au ONZIÈME rang, et
+           seize notifications adressées tombaient déjà hors de la coupe. L'utilisateur croyait
+           qu'elles avaient disparu ; elles étaient noyées.
+
+           Les deux natures ne se disputent donc plus les mêmes places. C'est aussi ce que
+           l'accroche de la page promet depuis toujours — « ce qui appelle un geste » — sans
+           qu'aucun code ne l'ait jamais respecté : une note d'évaluation saisie par un collègue
+           n'appelle aucun geste, et depuis ce matin elle n'est même plus cliquable. */
         // Le format « AAAA-MM-JJ hh:mm » se trie comme une date : comparaison de chaînes suffisante.
-        const tout = [...notifs, ...activite].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-        // Compté sur la liste ENTIÈRE, avant la coupe : un non-lu repoussé au-delà des quarante
-        // premières lignes reste un non-lu — sinon la pastille ment par arrondi.
-        const unread = tout.filter((r) => !r.is_read).length;
-        res.json({ data: tout.slice(0, 40), unread });
+        const tri = (a, b) => (a.created_at < b.created_at ? 1 : -1);
+        /* Le compte des non-lus, lui, reste sur l'ENSEMBLE : la pastille de la cloche annonce
+           un total, pas le contenu d'un bloc. */
+        const unread = [...notifs, ...activite].filter((r) => !r.is_read).length;
+        res.json({ data: notifs.sort(tri), activite: activite.sort(tri), unread });
     } catch (err) {
         console.error('Erreur notifications :', err);
         res.status(500).json({ error: 'Internal Server Error' });

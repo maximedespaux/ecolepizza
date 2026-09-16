@@ -244,3 +244,42 @@ test('une ligne groupée « ×12 » perd son lien : elle ne nomme plus un enregi
     assert.strictEqual(groupe[0].nombre, 3);
     assert.strictEqual(groupe[0].link, null, 'un groupe ne nomme plus un enregistrement');
 });
+
+test('la cloche sépare ce qui appelle un geste de ce qui s\'est passé', () => {
+    /* DÉFAUT MESURÉ EN PRODUCTION le 2026-09-16 : l'utilisateur ne voyait plus ses relances
+       « Émargement à signer » et les croyait supprimées. Elles étaient là — au ONZIÈME rang.
+       Les deux sources étaient mêlées par date puis coupées à quarante lignes, et l'activité,
+       plus récente par nature (trente lignes de journal peuvent toutes dater du jour), occupait
+       tout le haut. Seize notifications adressées tombaient déjà hors de la coupe.
+
+       Les deux listes voyagent donc séparément, chacune avec sa limite. */
+    assert.match(NOTIF, /res\.json\(\{ data: notifs[^}]*activite: activite/,
+        'le serveur renvoie deux listes, pas une liste mêlée');
+    assert.ok(!/tout\.slice\(0, 40\)/.test(NOTIF), 'plus de coupe commune aux deux natures');
+    /* Le compte des non-lus reste sur l'ENSEMBLE : la pastille de la cloche annonce un total. */
+    assert.match(NOTIF, /const unread = \[\.\.\.notifs, \.\.\.activite\]\.filter/);
+    assert.match(PAGE, /rows\.alertes/, 'l\'écran a un bloc pour les alertes…');
+    assert.match(PAGE, /rows\.activite/, '…et un pour l\'activité');
+});
+
+test('la ligne de notification n\'est écrite qu\'UNE fois, et ne lit rien hors de sa portée', () => {
+    /* DEUX DÉFAUTS EN UN, tous deux rencontrés en écrivant ce correctif.
+
+       1. Rendre la même ligne dans deux blocs invitait à copier son balisage. Deux copies d'une
+          règle finissent toujours par diverger — ce projet l'a payé six fois (docState/stepState,
+          le sélecteur de session, sept copies de la regex d'accents…). Un seul composant.
+
+       2. En EXTRAYANT ce composant, `rows.map` est resté tel quel alors que `rows` n'existe plus
+          dans sa portée : au clic, `ReferenceError`. **esbuild n'a rien dit** — il ne détecte pas
+          les références non définies (CLAUDE.md § 2.4). Le défaut n'a été vu qu'en relisant. */
+    const bloc = PAGE.slice(PAGE.indexOf('function Liste({'), PAGE.indexOf('\nfunction Notifications()'));
+    assert.ok(bloc.length > 200, 'le composant de ligne existe au niveau du module');
+    assert.ok(!/\brows\b/.test(bloc), '`rows` n\'est pas dans la portée de Liste');
+    assert.match(bloc, /lignes\.map\(\(n\)/, 'il itère sur sa propre prop');
+    /* Compté sur `"notif-ligne"` et NON sur `className="notif-ligne"` : le balisage écrit
+       `className={"notif-ligne" + …}`, donc la seconde forme n'apparaît jamais et l'assertion
+       aurait été vraie quoi qu'on fasse — verte, et sans rien vérifier. */
+    assert.strictEqual((PAGE.match(/"notif-ligne"/g) || []).length, 1,
+        'le balisage de la ligne n\'existe qu\'à un seul endroit');
+    assert.strictEqual((PAGE.match(/<Liste /g) || []).length, 2, 'rendu par les deux blocs');
+});

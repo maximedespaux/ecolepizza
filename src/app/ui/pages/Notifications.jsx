@@ -47,6 +47,62 @@ function ligneLisible(n) {
   return { titre, corps: n.auteur ? `par ${n.auteur}` : null, ton: tone, etiquette: rubrique };
 }
 
+/**
+ * UNE SEULE ÉCRITURE DE LA LIGNE, rendue par les deux blocs.
+ *
+ * Au niveau du module, et non dans la page : un composant défini dans le corps du rendu est
+ * recréé à chaque passage, React remonte alors tout le sous-arbre, et le focus clavier saute.
+ */
+function Liste({ lignes, onOuvrir, onSupprimer, peutSupprimer }) {
+  return (
+    <div className="notif-liste">
+              {lignes.map((n) => {
+                const { titre, corps, ton, etiquette } = ligneLisible(n);
+                const agissable = n.link || (!n.is_read && n.type !== "ACTIVITE");
+                const agir = () => agissable && onOuvrir(n);
+                return (
+                  // Une notification se lisait à la souris seule : `<div onClick>` sans rôle ni
+                  // tabindex. Or c'est une LISTE D'ACTIONS — chaque ligne mène quelque part.
+                  // Le nom accessible reprend le titre ET le corps : onze lignes « Document
+                  // signé » ne se distinguent que par « signé par qui ».
+                  <div
+                    key={n.id}
+                    className={"notif-ligne" + (n.is_read ? "" : " neuf")}
+                    role={agissable ? "button" : undefined}
+                    tabIndex={agissable ? 0 : undefined}
+                    aria-label={agissable ? `${titre}${corps ? `, ${corps}` : ""}${n.is_read ? "" : " (non lue)"}` : undefined}
+                    onClick={agir}
+                    onKeyDown={agissable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); agir(); } } : undefined}
+                    title={n.link ? "Ouvrir" : (n.is_read || n.type === "ACTIVITE" ? undefined : "Marquer comme lu")}
+                  >
+                    <Badge tone={ton}>{etiquette}</Badge>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b>{titre}</b>
+                      {corps && <span className="notif-corps">{corps}</span>}
+                    </span>
+                    {/* Le « ↗ » littéral devient l'icône du jeu, comme partout ailleurs, et
+                        `aria-hidden` : il redit ce que le nom de la ligne annonce déjà. */}
+                    {n.link && <Icon name="chevron-right" size={15} aria-hidden="true" />}
+                    <span className="notif-date">{dateHeure(n.created_at)}</span>
+                    {/* Pas de corbeille sur une ligne d'ACTIVITÉ : elle vient du journal d'audit,
+                        qui ne s'efface pas. Le serveur refuse d'ailleurs explicitement — le bouton
+                        absent et le refus disent la même chose, ce qui est le but. */}
+                    {peutSupprimer && n.type !== "ACTIVITE" && (
+                      <button type="button" className="icon-btn sm"
+                        onClick={(e) => { e.stopPropagation(); onSupprimer(n); }}
+                        title="Supprimer cette notification"
+                        aria-label={`Supprimer la notification : ${titre}`}>
+                        <Icon name="trash" size={14} />
+                      </button>
+                    )}
+                    {!n.is_read && <span className="notif-point" aria-hidden="true" />}
+                  </div>
+                );
+              })}
+            </div>
+  );
+}
+
 function Notifications() {
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
@@ -57,11 +113,14 @@ function Notifications() {
      pire que pas de bouton : il fait croire à une panne là où il n'y a qu'un droit non accordé.
      Les propriétaires l'ont d'office — même liste que `ROLES_SUPPRESSION_DOFFICE` au serveur. */
   const peutSupprimer = !!user && (OWNER_ROLES.includes(user.role) || aLaCapacite(user, "cap:delete-notifications"));
-  const [rows, setRows] = useState(null); // `null` = on charge, `[]` = aucune notification
+  /* `null` = on charge ; sinon `{ alertes, activite }` — DEUX listes, parce que ce sont deux
+     natures. Une seule liste triée par date laissait l'activité du jour recouvrir les alertes
+     adressées : la relance d'émargement la plus récente arrivait au onzième rang. */
+  const [rows, setRows] = useState(null);
   const [status, setStatus] = useState(null);
 
   async function load() {
-    try { setRows((await getNotifications()).data); }
+    try { const r = await getNotifications(); setRows({ alertes: r.data || [], activite: r.activite || [] }); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
@@ -119,58 +178,29 @@ function Notifications() {
       />
       <StatusMessage status={status} />
 
-      <Card>
+      <Card title="Ce qui appelle un geste">
         {rows == null ? (
-          <Squelette lignes={6} h={52} />
-        ) : rows.length === 0 ? (
-          <EmptyState icon="bell" title="Aucune notification"
-            text="Les signatures, dépôts de pièces, relances et alertes de conformité s'afficheront ici, avec ce que fait le reste de l'équipe sur les dossiers." />
+          <Squelette lignes={4} h={52} />
+        ) : rows.alertes.length === 0 ? (
+          <EmptyState icon="bell" title="Rien à traiter"
+            text="Les émargements à signer, dépôts de pièces, commandes et signatures s'afficheront ici." />
         ) : (
-          <div className="notif-liste">
-            {rows.map((n) => {
-              const { titre, corps, ton, etiquette } = ligneLisible(n);
-              const agissable = n.link || (!n.is_read && n.type !== "ACTIVITE");
-              const agir = () => agissable && open(n);
-              return (
-                // Une notification se lisait à la souris seule : `<div onClick>` sans rôle ni
-                // tabindex. Or c'est une LISTE D'ACTIONS — chaque ligne mène quelque part.
-                // Le nom accessible reprend le titre ET le corps : onze lignes « Document
-                // signé » ne se distinguent que par « signé par qui ».
-                <div
-                  key={n.id}
-                  className={"notif-ligne" + (n.is_read ? "" : " neuf")}
-                  role={agissable ? "button" : undefined}
-                  tabIndex={agissable ? 0 : undefined}
-                  aria-label={agissable ? `${titre}${corps ? `, ${corps}` : ""}${n.is_read ? "" : " (non lue)"}` : undefined}
-                  onClick={agir}
-                  onKeyDown={agissable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); agir(); } } : undefined}
-                  title={n.link ? "Ouvrir" : (n.is_read || n.type === "ACTIVITE" ? undefined : "Marquer comme lu")}
-                >
-                  <Badge tone={ton}>{etiquette}</Badge>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <b>{titre}</b>
-                    {corps && <span className="notif-corps">{corps}</span>}
-                  </span>
-                  {/* Le « ↗ » littéral devient l'icône du jeu, comme partout ailleurs, et
-                      `aria-hidden` : il redit ce que le nom de la ligne annonce déjà. */}
-                  {n.link && <Icon name="chevron-right" size={15} aria-hidden="true" />}
-                  <span className="notif-date">{dateHeure(n.created_at)}</span>
-                  {/* Pas de corbeille sur une ligne d'ACTIVITÉ : elle vient du journal d'audit,
-                      qui ne s'efface pas. Le serveur refuse d'ailleurs explicitement — le bouton
-                      absent et le refus disent la même chose, ce qui est le but. */}
-                  {peutSupprimer && n.type !== "ACTIVITE" && (
-                    <button type="button" className="icon-btn sm"
-                      onClick={(e) => { e.stopPropagation(); supprimer(n); }}
-                      title="Supprimer cette notification"
-                      aria-label={`Supprimer la notification : ${titre}`}>
-                      <Icon name="trash" size={14} />
-                    </button>
-                  )}
-                  {!n.is_read && <span className="notif-point" aria-hidden="true" />}
-                </div>
-              );
-            })}
-          </div>
+          <Liste lignes={rows.alertes} onOuvrir={open} onSupprimer={supprimer} peutSupprimer={peutSupprimer} />
+        )}
+      </Card>
+
+      {/* CE QUI S'EST PASSÉ, et qui n'appelle rien. Séparé du bloc ci-dessus parce que les deux
+          se disputaient les mêmes quarante lignes et que l'activité, plus récente par nature,
+          gagnait toujours : la relance d'émargement la plus récente arrivait au onzième rang.
+          Aucune de ces lignes n'est cliquable sauf si elle mène à une fiche précise. */}
+      <Card title="Activité de l'équipe">
+        {rows == null ? (
+          <Squelette lignes={4} h={52} />
+        ) : rows.activite.length === 0 ? (
+          <EmptyState icon="history" title="Aucune activité"
+            text="Ce que fait le reste de l'équipe sur les dossiers s'affichera ici." />
+        ) : (
+          <Liste lignes={rows.activite} onOuvrir={open} onSupprimer={supprimer} peutSupprimer={peutSupprimer} />
         )}
       </Card>
     </>
