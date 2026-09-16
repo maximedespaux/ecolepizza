@@ -122,6 +122,23 @@ const getLearners = (req, res) => {
             const resoudre = await resolveurBadges(db.promise(), req.user.organization_id);
             const data = results.map(({ account_email, levels, ...rest }) => ({
                 ...rest, levels: resoudreCsv(levels, resoudre), has_account: !!account_email,
+                /* L'E-MAIL DU COMPTE QUAND IL A DÉCROCHÉ DE CELUI DE LA FICHE — et seulement
+                   alors. Il était lu ici depuis toujours, et JETÉ : l'écran ne pouvait donc pas
+                   signaler l'écart, et personne ne pouvait le voir.
+
+                   CE QUE ÇA COÛTAIT, vécu en production le 2026-09-16 : on corrige l'e-mail
+                   d'une fiche après la création du compte, on réinitialise le mot de passe, et
+                   la connexion répond « Email ou mot de passe incorrect » — parce qu'elle
+                   cherche dans `user`, resté sur l'ANCIENNE adresse. Le message est
+                   volontairement ambigu (il ne dit jamais si c'est l'e-mail ou le mot de passe,
+                   pour ne pas révéler l'existence d'un compte) : on cherche donc le mot de
+                   passe pendant des heures, alors que c'est l'identifiant qui a bougé.
+
+                   Il n'est renvoyé QUE s'il diffère : la liste ne publie pas l'adresse de
+                   connexion de 1073 personnes pour le plaisir. */
+                compte_email_different: account_email && rest.email
+                    && account_email.trim().toLowerCase() !== String(rest.email).trim().toLowerCase()
+                    ? account_email : null,
             }));
             res.json({ data });
         }
@@ -263,7 +280,9 @@ const updateLearner = async (req, res) => {
             // `financing` est lu pour savoir s'il CHANGE réellement (voir la propagation en
             // fin de fonction) : sans lui, la comparaison porterait sur `undefined` et la
             // garde laisserait tout passer.
-            'SELECT company_id, financing FROM learner WHERE id = ? AND organization_id = ?',
+            /* `user_id` et `email` sont lus pour la PROPAGATION de l'identifiant ci-dessous :
+               sans l'ancien e-mail, impossible de savoir s'il change réellement. */
+            'SELECT company_id, financing, user_id, email FROM learner WHERE id = ? AND organization_id = ?',
             [learnerId, organizationId]
         );
         if (rows.length === 0) {
@@ -323,6 +342,57 @@ const updateLearner = async (req, res) => {
                 `UPDATE learner SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`,
                 values
             );
+        }
+
+        /* ─── L'E-MAIL DE LA FICHE EST L'IDENTIFIANT DE CONNEXION : il doit suivre ───────────
+           DÉFAUT VÉCU EN PRODUCTION le 2026-09-16. Un e-mail saisi avec une coquille, corrigé
+           ensuite sur la fiche : la fiche affiche la bonne adresse, le COMPTE garde l'ancienne.
+           La connexion cherche dans `user` — elle ne trouve donc plus personne, et répond
+           « Email ou mot de passe incorrect ». Message volontairement ambigu, pour ne pas
+           révéler l'existence d'un compte : on réinitialise alors le mot de passe encore et
+           encore, ce qui ne peut rien changer, puisque c'est l'IDENTIFIANT qui a bougé.
+
+           TROIS GARDES, et elles comptent toutes les trois :
+             · seulement un compte de rôle STAGIAIRE — une fiche peut pointer sur un compte du
+               bureau (stagiaire converti), et lui changer son identifiant depuis l'écran
+               stagiaire serait une prise de contrôle. Même garde que partout ailleurs ici ;
+             · seulement si l'adresse est LIBRE dans l'organisme : deux comptes sur le même
+               e-mail rendraient la connexion sans code organisme ambiguë (elle répond 409) ;
+             · et l'on REFUSE bruyamment plutôt que de laisser diverger en silence — c'est le
+               silence qui a coûté la journée. */
+        /* LA COMPARAISON PORTE SUR LE COMPTE, PAS SUR L'ANCIENNE VALEUR DE LA FICHE.
+
+           Première version : « propager si l'e-mail CHANGE dans cet enregistrement ». Elle
+           réglait l'avenir et laissait le passé cassé — or c'est le passé qui fait mal : les
+           fiches DÉJÀ décrochées le restaient, puisque réenregistrer sans rien changer ne
+           déclenchait rien. Le cas signalé était précisément celui-là.
+
+           En comparant à l'e-mail du COMPTE, un simple réenregistrement de la fiche RÉPARE. Le
+           geste devient : ouvrir la fiche, enregistrer. Sans supprimer le compte, donc sans
+           perdre ce qui s'y rattache. */
+        const nouvelEmail = body.email !== undefined
+            ? String(body.email).trim()
+            : String(rows[0].email || '').trim();
+        if (nouvelEmail && rows[0].user_id) {
+            const [[compte]] = await conn.query(
+                'SELECT id, role, email FROM user WHERE id = ? AND organization_id = ?',
+                [rows[0].user_id, organizationId]);
+            if (compte && compte.role === 'STAGIAIRE'
+                && String(compte.email || '').trim().toLowerCase() !== nouvelEmail.toLowerCase()) {
+                const [pris] = await conn.query(
+                    'SELECT id FROM user WHERE email = ? AND organization_id = ? AND id <> ?',
+                    [nouvelEmail, organizationId, compte.id]);
+                if (pris.length) {
+                    return res.status(409).json({
+                        error: `La fiche est enregistrée, mais le compte de connexion n'a PAS pu suivre : `
+                            + `l'adresse « ${nouvelEmail} » est déjà celle d'un autre compte. `
+                            + `Ce stagiaire se connecte donc toujours avec « ${compte.email} ».`,
+                    });
+                }
+                await conn.query('UPDATE user SET email = ? WHERE id = ? AND organization_id = ?',
+                    [nouvelEmail, compte.id, organizationId]);
+                logAudit(req, 'learner.account_email', 'Learner', learnerId);
+            }
         }
 
         // Formations TERMINÉES (marquées manuellement) — colonne optionnelle (migration 094).
