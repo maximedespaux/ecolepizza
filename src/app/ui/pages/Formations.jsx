@@ -942,8 +942,16 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
             )}
           </div>
         ))}
+        {/* `setOuFor` ET `setChercheDoc` ÉTAIENT APPELÉS ICI, et ils appartiennent à
+            `ParcoursFlow` — un AUTRE composant de premier niveau. Le gestionnaire levait donc
+            une `ReferenceError` avant d'atteindre `setAdding` : le panneau ne s'ouvrait jamais,
+            et l'onglet « À l'arrivée via une entreprise » paraissait n'avoir aucun document à
+            proposer. Deux cent trois erreurs dans la console d'un seul écran, et rien de visible.
+            `esbuild` ne détecte pas les références non définies (CLAUDE.md § 2.4) ; le script
+            `lint` du projet, lui, est mort — ESLint est installé SANS configuration.
+            Cette section n'a ni recherche ni « OU » : il n'y a rien à réinitialiser. */}
         <button type="button" className={"pf-add" + (adding ? " on" : "")}
-          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
+          onClick={() => setAdding((a) => !a)}>
           ＋ Ajouter une étape
         </button>
       </div>
