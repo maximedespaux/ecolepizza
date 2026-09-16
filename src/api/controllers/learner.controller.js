@@ -360,10 +360,20 @@ const updateLearner = async (req, res) => {
                e-mail rendraient la connexion sans code organisme ambiguë (elle répond 409) ;
              · et l'on REFUSE bruyamment plutôt que de laisser diverger en silence — c'est le
                silence qui a coûté la journée. */
-        const nouvelEmail = body.email !== undefined ? String(body.email).trim() : null;
-        const ancienEmail = String(rows[0].email || '').trim();
-        if (nouvelEmail && rows[0].user_id
-            && nouvelEmail.toLowerCase() !== ancienEmail.toLowerCase()) {
+        /* LA COMPARAISON PORTE SUR LE COMPTE, PAS SUR L'ANCIENNE VALEUR DE LA FICHE.
+
+           Première version : « propager si l'e-mail CHANGE dans cet enregistrement ». Elle
+           réglait l'avenir et laissait le passé cassé — or c'est le passé qui fait mal : les
+           fiches DÉJÀ décrochées le restaient, puisque réenregistrer sans rien changer ne
+           déclenchait rien. Le cas signalé était précisément celui-là.
+
+           En comparant à l'e-mail du COMPTE, un simple réenregistrement de la fiche RÉPARE. Le
+           geste devient : ouvrir la fiche, enregistrer. Sans supprimer le compte, donc sans
+           perdre ce qui s'y rattache. */
+        const nouvelEmail = body.email !== undefined
+            ? String(body.email).trim()
+            : String(rows[0].email || '').trim();
+        if (nouvelEmail && rows[0].user_id) {
             const [[compte]] = await conn.query(
                 'SELECT id, role, email FROM user WHERE id = ? AND organization_id = ?',
                 [rows[0].user_id, organizationId]);

@@ -26,10 +26,12 @@ const sansCommentaires = (src) => src
 const LEARNER = sansCommentaires(fs.readFileSync(path.join(API, 'controllers/learner.controller.js'), 'utf8'));
 const UI = sansCommentaires(fs.readFileSync(path.join(API, '..', 'app', 'ui/pages/Stagiaires.jsx'), 'utf8'));
 
-test('L\'ANCIEN E-MAIL EST LU : sans lui, on ne sait pas qu\'il change', () => {
+test('LE COMPTE LIÉ ET L\'E-MAIL DE LA FICHE SONT LUS', () => {
     assert.match(LEARNER, /SELECT company_id, financing, user_id, email FROM learner/,
         'user_id ET email doivent être chargés pour pouvoir propager');
-    assert.match(LEARNER, /const ancienEmail = String\(rows\[0\]\.email \|\| ''\)\.trim\(\)/);
+    /* L'e-mail de la FICHE sert de repli quand le formulaire n'en envoie pas : un
+       réenregistrement partiel doit quand même pouvoir réparer. */
+    assert.match(LEARNER, /body\.email !== undefined\s*\n?\s*\? String\(body\.email\)\.trim\(\)\s*\n?\s*: String\(rows\[0\]\.email \|\| ''\)\.trim\(\)/);
 });
 
 test('LE COMPTE SUIT LA FICHE — mais seulement un compte STAGIAIRE', () => {
@@ -59,12 +61,30 @@ test('UNE ADRESSE DÉJÀ PRISE FAIT ÉCHOUER BRUYAMMENT', () => {
         'le message doit dire avec QUELLE adresse la personne se connecte encore');
 });
 
-test('RIEN NE BOUGE QUAND L\'E-MAIL NE CHANGE PAS', () => {
+test('RÉENREGISTRER UNE FICHE RÉPARE UNE DIVERGENCE DÉJÀ INSTALLÉE', () => {
+    /* PREMIÈRE VERSION DU CORRECTIF, INSUFFISANTE : elle propageait « si l'e-mail CHANGE dans
+       cet enregistrement ». Elle réglait donc l'avenir et laissait le passé cassé — or c'est le
+       passé qui fait mal. Le cas signalé était exactement celui-là : la fiche portait déjà la
+       bonne adresse, le compte l'ancienne, et réenregistrer sans rien modifier ne déclenchait
+       rien. Il aurait fallu supprimer le compte et le recréer, ce que l'utilisateur a refusé à
+       juste titre — un compte porte des choses qu'on ne veut pas perdre.
+
+       LA COMPARAISON PORTE DONC SUR LE COMPTE. Le geste de réparation devient : ouvrir la
+       fiche, enregistrer. */
     const zone = LEARNER.slice(LEARNER.indexOf('const nouvelEmail'));
-    assert.match(zone, /nouvelEmail\.toLowerCase\(\) !== ancienEmail\.toLowerCase\(\)/,
-        'comparaison insensible à la casse : « Jean@X.fr » et « jean@x.fr » sont la même adresse');
-    assert.match(zone, /nouvelEmail && rows\[0\]\.user_id/,
-        'pas de compte lié, rien à propager');
+    /* ON VÉRIFIE LA GARDE ENTIÈRE, pas une écriture particulière du défaut. Première version :
+       elle cherchait littéralement `nouvelEmail !== ancienEmail`, et restait verte dès qu'on
+       réintroduisait la même condition écrite autrement (`String(rows[0].email)…`). Un test qui
+       nomme UNE forme du défaut ne gèle pas le contrat — il gèle une orthographe. */
+    const garde = (zone.match(/if \(([\s\S]*?)\) \{/) || [])[1] || '';
+    assert.match(garde, /^\s*nouvelEmail && rows\[0\]\.user_id\s*$/,
+        `la propagation ne doit dépendre QUE d'un e-mail et d'un compte lié — vu : « ${garde.trim()} »`);
+    assert.ok(!/rows\[0\]\.email/.test(garde),
+        'aucune comparaison à l\'ancienne valeur de la fiche : elle empêcherait toute réparation');
+    assert.match(zone, /String\(compte\.email \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== nouvelEmail\.toLowerCase\(\)/,
+        'on compare à l\'e-mail DU COMPTE — insensible à la casse : « Jean@X.fr » et '
+        + '« jean@x.fr » sont la même adresse, et ne doivent rien déclencher');
+    assert.match(zone, /nouvelEmail && rows\[0\]\.user_id/, 'pas de compte lié, rien à propager');
 });
 
 test('L\'ÉCART DÉJÀ INSTALLÉ SE VOIT SUR LA LISTE', () => {
