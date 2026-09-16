@@ -145,3 +145,33 @@ test('les champs de SAISIE gardent l\'ISO — le défaut inverse', () => {
     assert.match(modale, /form\.birthday = dateOnly\(d\.birthday\);/);
     assert.ok(!/dateFr\(/.test(modale), 'aucune date française ne doit entrer dans un champ de saisie');
 });
+
+test('aucune date STOCKÉE n\'est rendue par `new Date(…).toLocaleDateString`', () => {
+    /* LE PIÈGE, écrit noir sur blanc dans lib/contrat.js après l'avoir subi : `new Date('2027-01-15')`
+       se lit en UTC, et l'affichage se fait en heure LOCALE — sur tout fuseau négatif, la date
+       recule d'un jour. Afficher la veille d'une échéance de contrat, ou une naissance au 11 mars
+       quand la base dit le 12, est le genre d'erreur qu'on ne remarque qu'en la subissant.
+
+       Quatre endroits le faisaient encore : la fiche stagiaire, l'aperçu d'un document, la
+       comptabilité, les apports partenaires et les demandes boutique. Ils rendaient le BON
+       format — c'est ce qui les rendait invisibles.
+
+       `new Date()` SANS ARGUMENT reste permis : c'est la date du jour, prise à l'heure locale,
+       sans chaîne à interpréter (cf. EmargementEditor, qui date le document qu'il compose). */
+    const fautifs = [];
+    for (const rel of fichiersJsx()) {
+        const src = fs.readFileSync(path.join(UI, rel), 'utf8');
+        src.split('\n').forEach((ligne, i) => {
+            /* Les lignes de COMMENTAIRE sont ignorées : `format.js` et `contrat.js` citent le
+               motif pour en avertir, et un test qui condamne son propre avertissement finit
+               par faire supprimer l'avertissement. */
+            if (/^\s*(\*|\/\/|\/\*)/.test(ligne)) return;
+            const m = /new Date\(([^)]+)\)\.toLocaleDateString/.exec(ligne);
+            /* `T00:00:00` force la lecture en heure LOCALE : c'est ce qui rend l'appel sûr, et
+               c'est donc lui qu'on exige — pas l'absence de `new Date`, qui condamnerait les
+               rendus « lundi 14 septembre » que `dateFr` ne sait pas produire. */
+            if (m && !/T00:00:00/.test(m[1])) fautifs.push(`${rel}:${i + 1}`);
+        });
+    }
+    assert.deepStrictEqual(fautifs, [], 'passer par `dateFr` de lib/format.js, qui découpe la chaîne');
+});

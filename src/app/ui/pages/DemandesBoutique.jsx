@@ -6,8 +6,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
-import { euro } from "../lib/format.js";
-import { initials } from "../lib/format.js";
+import { euro, dateFr, initials } from "../lib/format.js";
 import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, getEmitters, getTemplates, getShopSettings } from "../api/apiClient.js";
 
 // Créneau de retrait en clair (« lundi 27 juillet »), comme côté stagiaire : une date
@@ -104,7 +103,7 @@ function Demande({ d, onChange, onErreur }) {
       </span>
     }>
       <p className="hint" style={{ margin: "0 0 10px" }}>
-        {d.learner.email || "-"} · {d.learner.phone || "-"} · demandé le {new Date(d.created_at).toLocaleDateString("fr-FR")}
+        {d.learner.email || "-"} · {d.learner.phone || "-"} · demandé le {dateFr(d.created_at)}
       </p>
 
       {/* Créneau de retrait : QUAND le stagiaire passe chercher. Saisi par lui, mis en

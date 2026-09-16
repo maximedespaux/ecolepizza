@@ -18,7 +18,7 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import PartnerProduits from "../components/PartnerProduits.jsx";
 import { APPORT_TYPES, apportType, apportsOfPartner } from "../lib/apports.js";
-import { euro } from "../lib/format.js";
+import { euro, dateFr } from "../lib/format.js";
 
 /* LA LISTE N'EST PLUS ÉCRITE ICI — elle vient du serveur (migration 129), qui la rend gérable par
    l'école. Ce qui reste est un REPLI, servi tant que la migration n'est pas jouée : l'écran ne se
@@ -38,7 +38,10 @@ const EMPTY = {
   contrat: 0, contrat_debut: "", contrat_duree_mois: "",
   logo_url: "",
 };
-const frDate = (d) => (d ? new Date(d).toLocaleDateString("fr-FR") : "-");
+/* Le repli « - » lui est propre (une colonne de tableau ne reste pas vide) ; le DÉCOUPAGE,
+   lui, est celui de tout le monde. `new Date(d)` lisait la valeur en UTC et reculait d'un jour
+   sur tout fuseau négatif — pour une date d'apport, une erreur qu'on ne voit qu'en la subissant. */
+const frDate = (d) => dateFr(d) || "-";
 const sumCash = (ap) => ap.filter((a) => apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
 const sumKind = (ap) => ap.filter((a) => !apportType(a.type).cash).reduce((s, a) => s + (Number(a.value) || 0), 0);
 
