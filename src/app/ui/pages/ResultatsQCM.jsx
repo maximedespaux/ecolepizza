@@ -12,6 +12,7 @@ import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 /* LE MÊME rangement que Notation, pas une copie : c'est la règle de rangement qui divergeait
    quand le code était recopié (cf. lib/sessions.js), pas le balisage. */
 import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
+import GrilleCorrigee from "../components/GrilleCorrigee.jsx";
 
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
 const pctTone = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -555,12 +556,31 @@ function PreuveModal({ etat, onClose }) {
                         </li>
                       ))}
                     </ul>
+                  ) : q.lignes && q.lignes.some((li) => li.juste !== undefined) ? (
+                    /* PREUVE DE VERSION 2 : la correction a été figée à l'envoi. Elle est en LIBELLÉS
+                       (« Oui », « Non ») — la preuve doit se lire sans la grille d'aujourd'hui — et le
+                       tableau partagé attend des POSITIONS : on les retrouve dans les colonnes de la
+                       preuve elle-même, jamais dans le QCM actuel. */
+                    <GrilleCorrigee colonnes={q.colonnes || []} lignes={q.lignes.map((li) => ({
+                      texte: li.libelle,
+                      choisies: li.choisi.map((t) => (q.colonnes || []).indexOf(t)).filter((x) => x >= 0),
+                      bonnes: (li.bonnes || []).map((t) => (q.colonnes || []).indexOf(t)).filter((x) => x >= 0),
+                      juste: li.juste,
+                    }))} />
                   ) : q.lignes ? (
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {q.lignes.map((li, k) => (
-                        <li key={k}>{li.libelle} : <b>{li.choisi.length ? li.choisi.join(", ") : "—"}</b></li>
-                      ))}
-                    </ul>
+                    <>
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {q.lignes.map((li, k) => (
+                          <li key={k}>{li.libelle} : <b>{li.choisi.length ? li.choisi.join(", ") : "—"}</b></li>
+                        ))}
+                      </ul>
+                      {/* PREUVE DE VERSION 1 : on NE la complète PAS avec la grille d'aujourd'hui, qui a pu
+                          être corrigée depuis — la preuve mentirait. On dit simplement ce qui manque. */}
+                      <p className="hint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
+                        La correction des grilles n'était pas conservée dans les preuves avant le 17/09/2026 :
+                        seule la réponse donnée l'est. Le score, lui, est exact.
+                      </p>
+                    </>
                   ) : (
                     <div>Réponse : <b>{q.valeur ?? q.reponse_brute ?? "—"}</b></div>
                   )}

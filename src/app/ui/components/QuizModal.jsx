@@ -2,61 +2,9 @@ import { useEffect, useState } from "react";
 import { takeQuiz, submitQuiz } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
+import GrilleCorrigee from "./GrilleCorrigee.jsx";
 
 // Correction d'un QCM : bonnes réponses (vert) + réponses données (croix si fausse).
-/**
- * La correction d'une question en GRILLE : sa ligne, la colonne cochée, la bonne colonne.
- *
- * ELLE N'EXISTAIT PAS. La correction traitait une grille comme une question à choix et en listait
- * les « options » — c'est-à-dire ses COLONNES. Sur la question des allergènes, un stagiaire qui
- * avait répondu juste aux quatorze lignes lisait deux puces, « Non » et « Oui », ni cochées ni
- * bonnes, et aucun ✓. Les allergènes eux-mêmes n'apparaissaient nulle part.
- *
- * LECTURE : ● = ce que vous avez coché ; vert = la bonne réponse ; rouge = votre coche là où ce
- * n'était pas la bonne. En bout de ligne, ✓ ou ✗.
- */
-function CorrectionGrille({ q }) {
-  const cell = { padding: "5px 8px", borderBottom: "1px solid var(--border-soft)", fontSize: 13, textAlign: "center" };
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", width: "100%" }}>
-        <thead>
-          <tr>
-            <th style={{ ...cell, textAlign: "left" }}></th>
-            {q.colonnes.map((c, ci) => <th key={ci} style={{ ...cell, color: "var(--muted)", fontWeight: 600 }}>{c}</th>)}
-            <th style={cell}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {q.lignes.map((l, li) => (
-            <tr key={li}>
-              <td style={{ ...cell, textAlign: "left", fontWeight: 600 }}>{l.texte}</td>
-              {q.colonnes.map((_, ci) => {
-                const bonne = l.bonnes.includes(ci);
-                const cochee = l.choisies.includes(ci);
-                return (
-                  <td key={ci} style={{ ...cell,
-                    background: bonne ? "rgba(22,163,74,.13)" : cochee ? "rgba(192,57,43,.12)" : undefined,
-                    color: bonne ? "#16a34a" : cochee ? "#c0392b" : "var(--dim)" }}
-                    aria-label={`${bonne ? "bonne réponse" : ""}${bonne && cochee ? ", " : ""}${cochee ? "votre réponse" : ""}` || undefined}>
-                    {cochee ? "●" : bonne ? <Icon name="check" size={13} /> : ""}
-                  </td>
-                );
-              })}
-              <td style={{ ...cell, color: l.juste ? "#16a34a" : l.juste === false ? "#c0392b" : "var(--dim)" }}>
-                {l.juste === true ? <Icon name="check" size={15} /> : l.juste === false ? <Icon name="x" size={15} /> : ""}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="hint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
-        ● votre réponse · <span style={{ color: "#16a34a" }}>vert</span> la bonne réponse · <span style={{ color: "#c0392b" }}>rouge</span> une réponse erronée
-      </p>
-    </div>
-  );
-}
-
 function ReviewList({ review }) {
   return (
     <div style={{ textAlign: "left", marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -73,7 +21,7 @@ function ReviewList({ review }) {
           {q.type === "SCALE" ? (
             <div className="hint">Votre réponse : {q.scaleValue ?? "-"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
           ) : q.lignes ? (
-            <CorrectionGrille q={q} />
+            <GrilleCorrigee colonnes={q.colonnes} lignes={q.lignes} />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {q.options.map((o) => {

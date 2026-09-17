@@ -107,10 +107,34 @@ test('les écrans rendent les grilles en TABLEAU, et les énoncés gardent leurs
     const quiz = sansCommentaires(fs.readFileSync(path.join(UI, 'components/QuizModal.jsx'), 'utf8'));
     assert.match(res, /<TableauGrille grille=\{q\.grille\} \/>/, 'organisme : le récapitulatif en tableau');
     assert.ok(!/détail par cellule à venir/.test(res), 'plus de promesse de v2 à l\'écran');
-    assert.match(quiz, /q\.lignes \? \(\s*<CorrectionGrille q=\{q\} \/>/, 'stagiaire : la correction en tableau');
+    assert.match(quiz, /q\.lignes \? \(\s*<GrilleCorrigee colonnes=\{q\.colonnes\} lignes=\{q\.lignes\} \/>/, 'stagiaire : la correction en tableau');
     /* La liste de l'énoncé EST la question : c'est en lisant « graines torréfiées » qu'on trouve le
        sésame. En un seul paragraphe, on ne la lisait plus. */
     assert.strictEqual((res.match(/<b style=\{ENONCE\}>\{num\}\. \{q\.text\}<\/b>/g) || []).length, 4);
     assert.match(res, /const ENONCE = \{ whiteSpace: "pre-line" \};/);
     assert.strictEqual((quiz.match(/whiteSpace: "pre-line"/g) || []).length, 2, 'correction ET passage du QCM');
+});
+
+test('la PREUVE dessine la même grille corrigée que la correction du stagiaire', () => {
+    /* Deux écrans, un seul tableau. Écrits chacun de leur côté, ils auraient fini par ne pas marquer la
+       même chose — et l'école lirait « juste » là où le stagiaire a lu « faux ». */
+    const UI = path.join(__dirname, '..', '..', 'app', 'ui');
+    const sansCommentaires = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const res = sansCommentaires(fs.readFileSync(path.join(UI, 'pages/ResultatsQCM.jsx'), 'utf8'));
+    const quiz = sansCommentaires(fs.readFileSync(path.join(UI, 'components/QuizModal.jsx'), 'utf8'));
+    for (const [nom, src] of [['ResultatsQCM', res], ['QuizModal', quiz]]) {
+        assert.match(src, /import GrilleCorrigee from ["']\.\.?\/(components\/)?GrilleCorrigee\.jsx["']/, `${nom} importe le tableau partagé`);
+        assert.ok(!/function CorrectionGrille/.test(src), `${nom} n'en garde pas de copie`);
+    }
+    /* LA PREUVE SE LIT AVEC SES PROPRES COLONNES, jamais avec la grille d'aujourd'hui : c'est en
+       libellés qu'elle a été figée, et c'est dans `q.colonnes` — celles de la preuve — qu'on retrouve
+       les positions. */
+    assert.match(res, /choisies: li\.choisi\.map\(\(t\) => \(q\.colonnes \|\| \[\]\)\.indexOf\(t\)\)/);
+    assert.match(res, /bonnes: \(li\.bonnes \|\| \[\]\)\.map\(\(t\) => \(q\.colonnes \|\| \[\]\)\.indexOf\(t\)\)/);
+    /* UNE PREUVE DE VERSION 1 N'EST PAS COMPLÉTÉE après coup : la grille a pu être corrigée depuis. On
+       montre la réponse, et on dit que la correction n'était pas conservée. */
+    assert.match(res, /q\.lignes && q\.lignes\.some\(\(li\) => li\.juste !== undefined\)/, 'v2 reconnue à la présence de la correction');
+    assert.match(fs.readFileSync(path.join(UI, 'pages/ResultatsQCM.jsx'), 'utf8'),
+        /La correction des grilles n'était pas conservée dans les preuves avant le 17\/09\/2026/);
 });
