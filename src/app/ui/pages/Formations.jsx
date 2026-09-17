@@ -313,7 +313,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <h3>{isNew ? "Nouvelle formation" : <>Modifier, <span className="mono" style={{ color: effColor }}>{program.code}</span></>}</h3>
           <button className="x" onClick={onClose} aria-label="Fermer">×</button>
         </div>
-        <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, padding: "0 16px", borderBottom: "1px solid var(--border-soft)" }}>
+        {/* `tabs-defilantes` : sur téléphone, les quatre onglets restent sur une ligne et défilent
+            au lieu de se replier sur trois lignes et de sortir de la fenêtre (cf. app.css). */}
+        <div className="tabs tabs-defilantes" role="tablist">
           <button type="button" role="tab" className={"tab" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Informations</button>
           {!isNew && (
             <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
@@ -355,7 +357,9 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+          {/* `alignItems: end` : sur téléphone, « Nombre d'heures » et « Montant net (€) » passent
+              sur deux lignes et « Durée (jours) » non — les trois champs se décalaient en escalier. */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, alignItems: "end" }}>
             <div className="field"><label>Durée (jours)</label>
               <input className="inp" type="number" min="0" value={form.days} onChange={set("days")} /></div>
             <div className="field"><label>Nombre d'heures</label>
@@ -392,7 +396,7 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           <div className="row2" style={{ alignItems: "center" }}>
             <div className="field"><label>Code RS (certifiante)</label>
               <input className="inp" value={form.rs_code} onChange={set("rs_code")} placeholder="RS7404 (laisser vide sinon)" /></div>
-            <div style={{ display: "flex", gap: 18, alignItems: "center", paddingTop: 18 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px", alignItems: "center", paddingTop: 18 }}>
               <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }}>
                 <input type="checkbox" checked={!!form.hygiene} onChange={setChk("hygiene")} /> Hygiène
               </label>
@@ -455,9 +459,12 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                     <button type="button" className={"seg-btn" + (!isEntArch ? " on" : "")} onClick={() => setArchKind("stagiaire")}>Archivage stagiaire</button>
                     <button type="button" className={"seg-btn" + (isEntArch ? " on" : "")} onClick={() => setArchKind("entreprise")}>Archivage entreprise</button>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
+                  {/* En classes et non en style : sur un écran étroit, l'aperçu passe SOUS l'éditeur
+                      (cf. `.fm-archives` dans app.css). À deux colonnes sur un téléphone, il
+                      coupait chaque nom de dossier au bout de dix caractères. */}
+                  <div className="fm-archives">
                     <ArchiveTreeEditor tree={curTree} onChange={setCurTree} eqMap={eqMap} docs={docs} />
-                    <div style={{ position: "sticky", top: 0, border: "1px solid var(--border-soft)", borderRadius: 10, padding: 12, background: "var(--surface3, #faf9f7)" }}>
+                    <div className="fm-archives-apercu">
                       <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu, {isEntArch ? "entreprise" : "stagiaire"}</div>
                       <ArchiveTreePreview tree={curTree} code={form.code} title={form.title} />
                     </div>
@@ -638,7 +645,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               {g.steps.map((s, j) => (
                 <div key={s.slug}>
                   {j > 0 && <div className="pf-or">OU</div>}
-                  <div className="pf-opt">
+                  <div className="pf-variante">
                     <span className="pf-label">{s.label}</span>
                     {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
                     <button type="button" className="pf-x" title="Retirer cette étape" onClick={() => onToggle(s.slug)}><Icon name="x" size={13} /></button>
@@ -934,7 +941,7 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
               draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
               onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}>
               <span className="pf-grip" title="Glisser pour réordonner">⠿</span>
-              <div className="pf-opt">
+              <div className="pf-variante">
                 <span className="pf-label">{s.label}</span>
                 {badge(s)}
                 {/* SANS CE REPÈRE, ON NE COMPRENDRAIT PAS pourquoi l'étape est absente de

@@ -804,9 +804,13 @@ tbody tr:last-child td{border-bottom:none}
 /* Help dot (?) with tooltip ------------------------------------------ */
 .help-dot{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;border:1px solid #7cc0f0;background:#d8ecfb;color:#1f6fb2;font-size:11px;font-weight:700;line-height:1;cursor:help;user-select:none;vertical-align:middle}
 .help-dot:hover,.help-dot:focus{color:#fff;background:#2e90d9;border-color:transparent;outline:none}
-.help-dot .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:40;width:max-content;max-width:260px;padding:8px 10px;border-radius:8px;background:#1f2430;color:#f2f4f8;font-size:12px;font-weight:400;line-height:1.4;text-align:left;white-space:pre-line;box-shadow:0 6px 20px rgba(0,0,0,.28);opacity:0;visibility:hidden;transition:opacity .12s ease}
+.help-dot .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:40;width:max-content;max-width:min(260px,80vw);padding:8px 10px;border-radius:8px;background:#1f2430;color:#f2f4f8;font-size:12px;font-weight:400;line-height:1.4;text-align:left;white-space:pre-line;box-shadow:0 6px 20px rgba(0,0,0,.28);display:none}
 .help-dot .tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1f2430}
-.help-dot:hover .tip,.help-dot:focus .tip,.help-dot.open .tip{opacity:1;visibility:visible}
+/* `display` et non plus `visibility` : une infobulle INVISIBLE occupait toujours sa place. Posée
+   près du bord droit d'une fenêtre de téléphone, elle dépassait de 200 px et donnait au formulaire
+   entier une barre de défilement horizontale, sans rien de visible au bout. Le fondu de 0,12 s
+   est le prix de la correction. */
+.help-dot:hover .tip,.help-dot:focus .tip,.help-dot.open .tip{display:block}
 
 /* 404 ---------------------------------------------------------------- */
 .nf-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px;background:radial-gradient(70% 60% at 50% 0%,rgba(220,62,55,.14),transparent 60%),var(--bg)}
@@ -955,6 +959,20 @@ tbody tr:last-child td{border-bottom:none}
   border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;transition:color .15s,border-color .15s}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--text);border-color:var(--ember1)}
+/* ONGLETS QUI DÉFILENT quand la place manque (« Modifier la formation »). Quatre intitulés longs
+   ne tiennent pas sur un téléphone : ils se repliaient sur trois lignes, et le dernier sortait de
+   la fenêtre. Ils restent sur une ligne et défilent au doigt ; l'onglet coupé au bord dit qu'il
+   y en a d'autres.
+   Le filet du bas passe en ombre INTÉRIEURE : avec `overflow`, la marge négative de l'onglet
+   actif serait rognée, et son soulignement de 2 px n'en montrerait plus qu'un. */
+/* `flex:none` : la fenêtre est une COLONNE flexible, et un élément en `overflow` y perd sa hauteur
+   minimale — la barre s'écrasait à quinze pixels dès que le parcours dépassait de la fenêtre,
+   les onglets devenaient invisibles. Vu à l'aperçu sur téléphone, le 2026-09-17. */
+.tabs.tabs-defilantes{flex:none;padding:0 16px;overflow-x:auto;overflow-y:hidden;border-bottom:none;
+  box-shadow:inset 0 -1px 0 var(--border-soft);scrollbar-width:none}
+.tabs.tabs-defilantes::-webkit-scrollbar{display:none}
+.tabs.tabs-defilantes .tab{flex:none;white-space:nowrap;margin-bottom:0}
+@media (max-width:560px){.tabs.tabs-defilantes{padding:0 4px}.tabs.tabs-defilantes .tab{padding:9px 11px}}
 
 /* Parcours documentaire — vue « flux » (jalons enchaînés, variantes en OU) */
 .parcours-flow{display:flex;align-items:stretch;gap:6px;overflow-x:auto;padding:10px 2px 16px}
@@ -967,9 +985,16 @@ tbody tr:last-child td{border-bottom:none}
 .pf-or{text-align:center;font-size:10px;font-weight:700;color:var(--ember1,#c0392b);margin:3px 0;letter-spacing:.6px}
 .pf-or-add{width:100%;border:1px dashed var(--border-soft);background:none;color:var(--muted);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer}
 .pf-or-add:hover{border-color:var(--ember1);color:var(--ember1)}
-.pf-opt{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:1px 0}
-.pf-opt.excl{opacity:.5;text-decoration:line-through}
+/* `.pf-variante` ET NON PLUS `.pf-opt` : ce nom était AUSSI celui des pastilles du sélecteur
+   d'avatar (« Mon profil »), déclarées plus bas dans ce fichier — et, venues après, elles
+   gagnaient. Chaque variante du parcours héritait donc d'un carré (`aspect-ratio:1`), d'une ombre
+   et d'un sursaut au survol : la « tuile dans la carte » qu'on voyait sur chaque étape, et qui
+   rendait les cartes deux fois plus hautes que leur contenu. Constaté le 2026-09-17.
+   Dans le flux HORIZONTAL (cartes étroites), le contenu reste empilé et centré — la lecture que
+   l'école connaît ; en liste verticale, il passe en ligne (cf. plus bas). */
+.pf-variante{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;font-size:13px;padding:1px 0}
 .pf-label{flex:1;line-height:1.25}
+.pf-variante .pf-label{flex:none}
 .pf-badge{font-size:10px;font-weight:600;padding:1px 7px;border-radius:20px;
   background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b);white-space:nowrap}
 .pf-arrow{color:var(--dim,#c2c2c2);font-size:20px;flex-shrink:0}
@@ -1043,11 +1068,52 @@ tbody tr:last-child td{border-bottom:none}
 /* Variante compacte (section « à l'arrivée via une entreprise ») : cartes plus petites */
 .parcours.compact .parcours-flow{flex-wrap:nowrap;overflow-x:auto}
 .parcours.compact .pf-node{min-width:118px;max-width:172px;padding:8px 9px 8px}
-.parcours.compact .pf-opt{font-size:12px;gap:5px}
+.parcours.compact .pf-variante{font-size:12px;gap:5px}
 .parcours.compact .pf-grip{font-size:11px;top:4px;right:6px}
 .parcours.compact .pf-badge{font-size:9px;padding:1px 6px}
 .parcours.compact .pf-arrow{font-size:16px}
 .parcours.compact .pf-add{padding:8px 10px;min-height:0;font-size:12px}
+/* LE PARCOURS EN LISTE VERTICALE sur tablette, téléphone, et tout écran tactile. Seize jalons en
+   ligne faisaient 2 635 px de large : sur un téléphone on en voyait deux, et chaque étape se
+   cherchait en faisant défiler de côté une rangée plus large que six écrans. En colonne, le
+   parcours se lit de haut en bas, les flèches pointent vers le bas, et le défilement redevient
+   celui de la fenêtre — le geste naturel du doigt.
+   `(pointer:coarse)` en plus de la largeur : une tablette à l'horizontale a la place d'une rangée,
+   mais le doigt n'a pas la précision d'une souris pour saisir une carte de 118 px dans une rangée
+   qui défile. */
+@media (max-width:820px), (pointer:coarse){
+  .parcours.compact .parcours-flow{flex-direction:column;align-items:stretch;overflow-x:visible;padding:6px 0 12px}
+  .parcours.compact .pf-wrap{flex-direction:column;align-items:stretch;gap:2px}
+  .parcours.compact .pf-node{min-width:0;max-width:none;padding:10px 48px 10px 12px}
+  .parcours.compact .pf-variante{flex-direction:row;align-items:center;text-align:left;gap:8px;font-size:13.5px}
+  .parcours.compact .pf-variante .pf-label{flex:1}
+  .parcours.compact .pf-or{text-align:left}
+  .parcours.compact .pf-grip{top:50%;right:6px;transform:translateY(-50%)}
+  .parcours.compact .pf-arrow,.parcours.compact .pf-brk-arrow{display:inline-block;transform:rotate(90deg)}
+  .parcours.compact .pf-brk{align-self:center;flex-direction:row;gap:6px}
+  .parcours.compact .pf-add{align-self:stretch;white-space:normal;min-height:44px}
+}
+/* CIBLES À LA TAILLE D'UN DOIGT. La poignée faisait 11 px et la croix de retrait 18 : au toucher,
+   on attrape la carte d'à côté, ou la page défile au lieu de saisir. 40 px, c'est la cible qu'on
+   ne rate pas sans regarder. */
+@media (pointer:coarse){
+  .parcours.compact .pf-grip{display:grid;place-items:center;width:40px;height:40px;right:4px;
+    font-size:20px;border-radius:10px}
+  .pf-x{min-width:36px;min-height:36px;display:inline-grid;place-items:center;font-size:14px}
+  .pf-brk{min-width:44px;min-height:40px;justify-content:center}
+  .pf-or-add{min-height:36px}
+}
+/* Onglet « Arborescence d'archivage » : l'éditeur et son aperçu côte à côte, l'aperçu collé en
+   haut pendant qu'on fait défiler l'éditeur. Sous 640 px, deux colonnes ne laissent plus lire un
+   nom de dossier : l'aperçu passe dessous, et cesse d'être collant. */
+.fm-archives{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+.fm-archives-apercu{position:sticky;top:0;border:1px solid var(--border-soft);border-radius:10px;padding:12px;background:var(--surface3, #faf9f7)}
+@media (max-width:640px){
+  .fm-archives{grid-template-columns:minmax(0,1fr)}
+  .fm-archives-apercu{position:static}
+}
+/* Pendant un glissé : la carte saisie s'efface, la place visée s'entoure. */
+.pf-node.cible{border-color:var(--ember1);box-shadow:0 0 0 2px color-mix(in srgb,var(--ember1) 35%,transparent)}
 
 .poste-bar{position:relative;height:10px;border-radius:999px;background:var(--surface3);overflow:visible}
 .poste-bar > span{display:block;height:100%;border-radius:999px}
@@ -1535,7 +1601,14 @@ tbody tr:last-child td{border-bottom:none}
    stagiaire », c'est une fiche entière. On sort par la croix ou par le bouton d'enregistrement,
    jamais par accident. Les 54 fenêtres de l'application portent toutes la croix `.modal .x`,
    vérifié ; un test interdit de remettre un gestionnaire sur `.overlay`. */
-.overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:100;padding:20px}
+/* `grid-template-columns:minmax(0,1fr)` — SANS ELLE, UNE FENÊTRE DÉBORDAIT DE L'ÉCRAN. La piste
+   implicite d'une grille est `auto` : elle se dimensionne sur le CONTENU de la fenêtre, borné
+   seulement par son `max-width`. Mesuré le 2026-09-17 sur « Modifier la formation » : 840 px de
+   large sur une tablette de 768 px, et 506 à 840 px sur un téléphone de 375 px — la croix de
+   fermeture et « Enregistrer » hors de l'écran. Il suffisait d'un contenu large (le parcours
+   documentaire, une ligne de champs) pour que `width:100%` cesse de vouloir dire « la largeur de
+   l'écran ». Bornée, la piste ne dépasse jamais le voile, et la fenêtre y tient. */
+.overlay{position:fixed;inset:0;background:rgba(15,17,40,.55);backdrop-filter:blur(3px);display:grid;grid-template-columns:minmax(0,1fr);place-items:center;z-index:100;padding:20px}
 /* `backwards`, même piège que `.card` : avec `both`, la fenêtre gardait la matrice identité
    et devenait le bloc conteneur de tout `position:fixed` ouvert DEPUIS son contenu — une
    liste déroulante ou une popup imbriquée s'y serait recentrée. */
@@ -1548,6 +1621,14 @@ tbody tr:last-child td{border-bottom:none}
 .mbody{padding:18px 20px;overflow-y:auto}
 .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
+/* SUR TÉLÉPHONE, chaque pixel de marge est pris au contenu : vingt pixels autour de la fenêtre et
+   vingt dans chaque bloc laissaient 295 px utiles sur 375. `dvh` suit la barre d'adresse qui
+   apparaît et disparaît ; là où il n'est pas compris, la règle est ignorée et les 90vh restent. */
+@media (max-width:560px){
+  .overlay{padding:10px}
+  .modal{max-height:calc(100dvh - 20px)}
+  .mhead,.mbody,.mfoot{padding-left:14px;padding-right:14px}
+}
 
 /* Partenaires : grille de fiches de suivi */
 /* DEUX colonnes plutôt que trois. À 280px de plancher une troisième entrait, et chaque fiche
