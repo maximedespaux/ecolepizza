@@ -473,6 +473,14 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
   text-transform:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:2px}
 .dt-tri:hover{color:var(--text)}
 .dt-tri span{opacity:.45}
+/* LE TRI EN MODE CARTE. En cartes, l'en-tête — et avec lui chaque bouton `.dt-tri` — est retiré :
+   sur téléphone, on ne pouvait plus trier du tout. Une liste déroulante le remplace, À LA MÊME
+   LARGEUR que la bascule : `.dt-tri-zone` est un conteneur aussi large que le tableau, et la règle
+   qui affiche le choix vit dans le MÊME bloc `@container` que celle qui retire l'en-tête. Une
+   media query les désaccorderait : tableau en cartes dans une colonne étroite d'un grand écran,
+   sans aucun moyen de trier. */
+.dt-tri-zone{container-type:inline-size}
+.dt-tri-choix{display:none}
 .tablewrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
   overflow-x:auto;overflow-y:hidden;
   background-image:linear-gradient(to right,var(--surface),var(--surface)),
@@ -622,7 +630,11 @@ tbody tr:last-child td{border-bottom:none}
      dont les valeurs zigzaguent se lit moins vite qu'un tableau. */
   .dt td[data-intitule]::before{content:attr(data-intitule);display:inline-block;width:38%;
     min-width:88px;padding-right:10px;vertical-align:top;
-    font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+    font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+    /* L'intitulé PASSE À LA LIGNE, quoi que la cellule impose : une colonne en `nowrap` (une date
+       qu'on ne veut pas voir coupée) le lui transmettait, et « DATE DE CRÉATION » débordait sur
+       sa valeur — « DATE DE CRÉATION09/01/2015 ». La valeur, elle, garde son `nowrap`. */
+    white-space:normal}
   .dt td[data-intitule]{display:flex;gap:0;align-items:baseline}
   /* La colonne qui identifie la ligne devient le TITRE de la carte : elle perd son intitulé
      (« Nom : Dupont » en tête d'une carte n'apprend rien) et prend le poids d'un titre. */
@@ -653,6 +665,9 @@ tbody tr:last-child td{border-bottom:none}
      détachée, et plus rien ne dirait de quelle vente elle donne le détail. */
   .dt tr.dt-detail{margin-top:-11px;padding:0;border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);overflow:hidden}
   .dt tr.dt-detail > td{padding:0}
+  /* L'en-tête triable a disparu : le tri revient en liste déroulante (cf. `.dt-tri-choix`). */
+  .dt-tri-choix{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:var(--muted)}
+  .dt-tri-choix select{flex:1;min-width:0;max-width:300px}
 }
 
 /* ═══ NOTIFICATIONS ═════════════════════════════════════════════════════════════════════════
