@@ -631,6 +631,11 @@ tbody tr:last-child td{border-bottom:none}
   .dt td.dt-actions::before{display:none}
   /* Colonnes qui n'ont de sens qu'en tableau (chevron « ouvrir »…) : elles disparaissent. */
   .dt td.dt-sans-carte{display:none}
+  /* La poignée de glissé, en haut à droite : sur une carte, c'est la seule prise du doigt (la
+     carte entière fait défiler la page), elle ne peut donc pas disparaître comme un chevron. */
+  .dt tr:has(> td.dt-poignee){position:relative}
+  .dt td.dt-poignee{position:absolute;top:6px;right:6px;padding:0}
+  .dt tr:has(> td.dt-poignee) td.dt-principal{padding-right:44px}
   /* Valeur absente : la ligne s'efface. En tableau elle garde sa place pour l'alignement. */
   .dt td.dt-vide{display:none}
   /* Plus de défilement latéral à provoquer : la carte tient dans la largeur. */
@@ -981,7 +986,7 @@ tbody tr:last-child td{border-bottom:none}
   padding:12px 12px 11px;border:1.5px solid var(--border-soft,#e3e3e6);border-radius:12px;background:var(--panel,#fff)}
 .pf-node.drag{opacity:.5}
 .pf-node.off{opacity:.55;border-style:dashed}
-.pf-grip{position:absolute;top:5px;right:8px;cursor:grab;color:var(--dim,#b4b4b4);font-size:12px}
+.pf-grip{position:absolute;top:5px;right:8px;cursor:grab;color:var(--dim,#b4b4b4);font-size:12px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .pf-or{text-align:center;font-size:10px;font-weight:700;color:var(--ember1,#c0392b);margin:3px 0;letter-spacing:.6px}
 .pf-or-add{width:100%;border:1px dashed var(--border-soft);background:none;color:var(--muted);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer}
 .pf-or-add:hover{border-color:var(--ember1);color:var(--ember1)}
@@ -1681,8 +1686,15 @@ tbody tr:last-child td{border-bottom:none}
 /* Réorganisation par glisser-déposer (Formations) */
 .drag-row{cursor:default}
 .drag-row.dragging{opacity:.45}
-.drag-handle{cursor:grab;color:var(--dim);font-size:16px;text-align:center;-webkit-user-select:none;user-select:none}
+/* La place visée pendant un glissé (lib/useReordonner.js). */
+.drag-row.drop-cible{background:color-mix(in srgb,var(--ember1) 8%,transparent)}
+.dt tr.drop-cible{border-color:var(--ember1)}
+.drag-handle{cursor:grab;color:var(--dim);font-size:16px;text-align:center;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .drag-handle:active{cursor:grabbing}
+@media (pointer:coarse){.drag-handle{display:inline-grid;place-items:center;width:40px;height:40px;font-size:20px;border-radius:10px}}
+/* PENDANT UN GLISSÉ : aucune sélection de texte ne doit partir, et la main reste fermée partout,
+   même quand le pointeur survole un bouton ou un lien. Posée sur <html> par useReordonner. */
+.glisse-en-cours,.glisse-en-cours *{-webkit-user-select:none!important;user-select:none!important;cursor:grabbing!important}
 
 /* Carte : légende niveaux, bannière département, lignes cliquables */
 .level-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;font-size:12.5px;color:var(--muted)}

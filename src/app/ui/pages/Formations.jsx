@@ -11,12 +11,12 @@ import HelpDot from "../components/HelpDot.jsx";
 import GrilleEvaluation from "../components/GrilleEvaluation.jsx";
 import { euro, colorOf } from "../lib/format.js";
 import { setBadgeColors } from "../lib/levels.js";
+import { useReordonner, deplacerDans } from "../lib/useReordonner.js";
 
 function Formations() {
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // formation en cours d'édition
-  const [drag, setDrag] = useState(null);        // index de la ligne déplacée
 
   async function load() {
     try {
@@ -32,16 +32,12 @@ function Formations() {
   }
   useEffect(() => { load(); }, []);
 
-  // Glisser-déposer : réordonne localement puis persiste.
-  function onDrop(toIdx) {
-    if (drag === null || drag === toIdx) { setDrag(null); return; }
-    const next = [...programs];
-    const [moved] = next.splice(drag, 1);
-    next.splice(toIdx, 0, moved);
+  // Glisser (souris ou doigt, cf. lib/useReordonner.js) : réordonne localement puis persiste.
+  const glisser = useReordonner((de, vers) => {
+    const next = deplacerDans(programs, de, vers);
     setPrograms(next);
-    setDrag(null);
     reorderFormations(next.map((p) => p.id)).catch((e) => { setStatus({ type: "error", message: e.message }); load(); });
-  }
+  });
 
   function onSaved(msg) {
     setEditing(null);
@@ -71,22 +67,21 @@ function Formations() {
       <DataTable
         rows={programs}
         rowKey={(p) => p.id}
-        /* Le glisser-déposer de réordonnancement est porté par la LIGNE : `rowProps` le rend
-           au `<tr>` tel quel. En mode carte la ligne devient une carte — et reste donc
-           déplaçable, ce qui est le comportement attendu. */
+        /* Le glissé est porté par la LIGNE : `rowProps` le rend au `<tr>` tel quel. En mode carte
+           la ligne devient une carte — et reste déplaçable, au doigt par sa poignée. */
         rowProps={(p, i) => ({
-          className: "drag-row" + (drag === i ? " dragging" : ""),
-          draggable: true,
-          onDragStart: () => setDrag(i),
-          onDragOver: (e) => e.preventDefault(),
-          onDrop: () => onDrop(i),
-          onDragEnd: () => setDrag(null),
+          ...glisser.proprietes(i),
+          className: "drag-row" + (glisser.saisi === i ? " dragging" : "")
+            + (glisser.saisi !== null && glisser.vise === i && glisser.saisi !== i ? " drop-cible" : ""),
         })}
         vide={<EmptyState icon="graduation" title="Aucune formation"
           text="Crée tes formations : elles servent de base aux sessions, aux dossiers et aux mondes de Pizza Quest." />}
         cols={[
-          { k: "poignee", t: "", sansCarte: true, th: { width: 30 },
-            cell: () => <span className="drag-handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
+          /* `poignee` et plus `sansCarte` : sur téléphone la liste passe en cartes, et la poignée
+             y disparaissait — or c'est la SEULE prise du doigt, la carte entière servant à faire
+             défiler la page. Elle se pose en haut à droite de la carte (cf. `.dt-poignee`). */
+          { k: "poignee", t: "", poignee: true, th: { width: 30 },
+            cell: (p, i) => <span className="drag-handle" {...glisser.poignee(i)} title="Glisser pour réorganiser" aria-hidden="true">⠿</span> },
           { k: "code", t: "Code",
             cell: (p) => <span className="badge n mono" style={{ color: "#fff", background: p.color || colorOf(p.code), borderColor: "transparent" }}>{p.code}</span> },
           { k: "title", t: "Intitulé", principal: true,
@@ -580,7 +575,10 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
   // préservé tel quel lors d'un réordonnancement.
   const rest = steps.filter((s) => !(s.active && !s.company_level));
   const groups = groupMilestones(included, eqMap);
-  const [gdrag, setGdrag] = useState(null);
+  // Ordre inclus + reste (groupe / inactifs) conservé tel quel.
+  const glisser = useReordonner((de, vers) => {
+    onReorder([...deplacerDans(groups, de, vers).flatMap((g) => g.steps), ...rest]);
+  });
   const [adding, setAdding] = useState(false);
   const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont on ajoute une variante
   const [chercheDoc, setChercheDoc] = useState("");
@@ -592,15 +590,6 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [adding]);
-
-  function drop(to) {
-    if (gdrag === null || gdrag === to) { setGdrag(null); return; }
-    const ng = [...groups];
-    const [m] = ng.splice(gdrag, 1);
-    ng.splice(to, 0, m);
-    setGdrag(null);
-    onReorder([...ng.flatMap((g) => g.steps), ...rest]); // ordre inclus + reste (groupe/inactifs) conservé
-  }
 
   /* Les alertes de conditions, RÉUNIES EN TÊTE du parcours. Elles pourraient tenir dans une
      info-bulle sur chaque jalon, mais une info-bulle ne se lit que si on la cherche — et
@@ -635,10 +624,10 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
           const canBreak = typeof onSetBreak === "function";
           return (
           <div className="pf-wrap" key={g.steps[0].slug}>
-            <div className={"pf-node" + (gdrag === i ? " drag" : "")}
-              draggable onDragStart={() => setGdrag(i)} onDragOver={(e) => e.preventDefault()}
-              onDrop={() => drop(i)} onDragEnd={() => setGdrag(null)}>
-              <span className="pf-grip" title="Glisser pour réordonner le jalon">⠿</span>
+            <div className={"pf-node" + (glisser.saisi === i ? " drag" : "")
+              + (glisser.saisi !== null && glisser.vise === i && glisser.saisi !== i ? " cible" : "")}
+              {...glisser.proprietes(i)}>
+              <span className="pf-grip" {...glisser.poignee(i)} title="Glisser pour réordonner le jalon">⠿</span>
               {g.steps.some((st) => st.alerte) && (
                 <span className="pastille-alerte pf-alerte" title={g.steps.find((st) => st.alerte).alerte.texte}>!</span>
               )}
@@ -864,7 +853,6 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
 // entreprise ; n'altère pas le parcours principal.
 function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onSetBreak }) {
   const [adding, setAdding] = useState(false);
-  const [drag, setDrag] = useState(null);
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
   /* AUCUN FILTRE SUR `active`, NI ICI NI DANS LES ÉLIGIBLES — et ce n'est pas un relâchement.
@@ -905,15 +893,11 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
     if (slug === breakSlug) onSetBreak?.(null); // l'étape portait le point d'accès → on le retire
     if (s && s.company_level && s.active) onToggleActive?.(slug); // doc de groupe : n'existe qu'ici → désactiver
   };
-  function drop(to) {
-    if (drag === null || drag === to) { setDrag(null); return; }
-    const order = chosen.map((s) => s.slug);
-    const [m] = order.splice(drag, 1);
-    order.splice(to, 0, m);
+  const glisser = useReordonner((de, vers) => {
+    const order = deplacerDans(chosen.map((s) => s.slug), de, vers);
     const extra = value.filter((sl) => !order.includes(sl)); // slugs non résolus conservés
     onChange([...order, ...extra]);
-    setDrag(null);
-  }
+  });
   const badge = (s, short) => {
     const grp = isGroup(s), quiz = isQuiz(s);
     const text = isEmargement(s) ? (short ? "✍️" : "✍️ Émargement")
@@ -937,10 +921,10 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
       <div className="parcours-flow">
         {chosen.map((s, i) => (
           <div className="pf-wrap" key={s.slug}>
-            <div className={"pf-node" + (drag === i ? " drag" : "")}
-              draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()}
-              onDrop={() => drop(i)} onDragEnd={() => setDrag(null)}>
-              <span className="pf-grip" title="Glisser pour réordonner">⠿</span>
+            <div className={"pf-node" + (glisser.saisi === i ? " drag" : "")
+              + (glisser.saisi !== null && glisser.vise === i && glisser.saisi !== i ? " cible" : "")}
+              {...glisser.proprietes(i)}>
+              <span className="pf-grip" {...glisser.poignee(i)} title="Glisser pour réordonner">⠿</span>
               <div className="pf-variante">
                 <span className="pf-label">{s.label}</span>
                 {badge(s)}
