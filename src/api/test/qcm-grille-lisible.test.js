@@ -110,7 +110,8 @@ test('les écrans rendent les grilles en TABLEAU, et les énoncés gardent leurs
     assert.match(quiz, /q\.lignes \? \(\s*<GrilleCorrigee colonnes=\{q\.colonnes\} lignes=\{q\.lignes\} \/>/, 'stagiaire : la correction en tableau');
     /* La liste de l'énoncé EST la question : c'est en lisant « graines torréfiées » qu'on trouve le
        sésame. En un seul paragraphe, on ne la lisait plus. */
-    assert.strictEqual((res.match(/<b style=\{ENONCE\}>\{num\}\. \{q\.text\}<\/b>/g) || []).length, 4);
+    // Cinq depuis la réponse libre (migration 164) : échelle, grille ×2, choix, et texte rédigé.
+    assert.strictEqual((res.match(/<b style=\{ENONCE\}>\{num\}\. \{q\.text\}<\/b>/g) || []).length, 5);
     assert.match(res, /const ENONCE = \{ whiteSpace: "pre-line" \};/);
     assert.strictEqual((quiz.match(/whiteSpace: "pre-line"/g) || []).length, 2, 'correction ET passage du QCM');
 });

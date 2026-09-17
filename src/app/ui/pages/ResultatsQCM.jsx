@@ -103,6 +103,35 @@ function TableauGrille({ grille }) {
 }
 
 function DetailQuestion({ q, num }) {
+  /* RÉPONSE LIBRE : pas de répartition à dessiner, on LIT. Chaque texte avec son auteur et sa date,
+     dans l'ordre reçu ; la liste défile au-delà de quelques réponses pour ne pas repousser les
+     autres questions trois écrans plus bas. */
+  if (q.textes) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <b style={ENONCE}>{num}. {q.text}</b>
+          <span className="hint" style={{ flex: "none" }}>{q.textes.length} réponse{q.textes.length > 1 ? "s" : ""} rédigée{q.textes.length > 1 ? "s" : ""}</span>
+        </div>
+        {q.textes.length === 0 ? (
+          <p className="hint" style={{ margin: "6px 0 0" }}>Aucune réponse rédigée.</p>
+        ) : (
+          <div className="qcm-textes">
+            {q.textes.map((t, i) => (
+              <div key={i} className="qcm-texte">
+                {(t.nom || t.le) && (
+                  <div className="hint" style={{ fontSize: 11.5, marginBottom: 3 }}>
+                    {t.nom || "Stagiaire"}{t.le ? ` · ${dateHeure(t.le)}` : ""}
+                  </div>
+                )}
+                <div className="qcm-texte-corps">{t.texte}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (q.scale) {
     const maxN = Math.max(1, ...Object.values(q.scale.dist));
     return (
@@ -556,7 +585,14 @@ function PreuveModal({ etat, onClose }) {
               {(p.questions || []).map((q) => (
                 <div key={q.rang} style={{ borderTop: "1px solid var(--border-soft)", padding: "10px 0" }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, ...ENONCE }}>{q.rang}. {q.enonce}</div>
-                  {q.options ? (
+                  {q.type === "TEXT" ? (
+                    /* Le texte tel qu'envoyé, et la limite D'ALORS : une limite relevée depuis ne doit
+                       pas faire paraître conforme une réponse qui ne l'était pas. */
+                    <>
+                      <div className="qcm-texte-corps">{q.texte || "—"}</div>
+                      <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>{q.mots} mot{q.mots > 1 ? "s" : ""} · limite {q.mots_max}</p>
+                    </>
+                  ) : q.options ? (
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {q.options.map((o, k) => (
                         <li key={k} style={{ color: o.choisie ? "var(--text)" : "var(--muted)", fontWeight: o.choisie ? 600 : 400 }}>

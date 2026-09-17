@@ -12,6 +12,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
+import { MOTS_MAX_DEFAUT } from "../lib/mots.js";
 
 const KINDS = [
   { v: "GRADED", label: "Noté (correction + score)" },
@@ -23,6 +24,9 @@ const QTYPES = [
   { v: "SCALE", label: "Échelle / note" },
   { v: "GRID_SINGLE", label: "Grille, 1 réponse par ligne" },
   { v: "GRID_MULTI", label: "Grille, plusieurs réponses par ligne" },
+  /* RÉPONSE LIBRE (migration 164) : le stagiaire rédige, dans une limite de MOTS. Non notée
+     automatiquement — aucun calcul ne peut dire si une explication est juste. */
+  { v: "TEXT", label: "Réponse libre (texte)" },
 ];
 const isGrid = (t) => t === "GRID_SINGLE" || t === "GRID_MULTI";
 const blankQuestion = () => ({ text: "", type: "SINGLE", points: 1, partial_scoring: 0, scale_max: 5, options: [{ text: "", is_correct: false }, { text: "", is_correct: false }], rows: [{ text: "", correct: [], points: 1 }, { text: "", correct: [], points: 1 }] });
@@ -373,6 +377,12 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
             {q.type === "SCALE" ? (
               <div className="field"><label>Note max</label>
                 <input className="inp" type="number" min="2" max="10" value={q.scale_max ?? ""} onChange={(e) => setQ(i, { scale_max: e.target.value })} /></div>
+            ) : q.type === "TEXT" ? (
+              /* La limite se règle ICI, question par question : un « pourquoi ? » tient en trente mots,
+                 une description de geste en demande plus. Vide : 128 mots. */
+              <div className="field"><label>Mots maximum</label>
+                <input className="inp" type="number" min="1" max="1000" value={q.max_words ?? ""}
+                  placeholder={String(MOTS_MAX_DEFAUT)} onChange={(e) => setQ(i, { max_words: e.target.value })} /></div>
             ) : form.kind === "GRADED" && isGrid(q.type) ? (
               <div className="field"><label>Points</label><span className="hint" style={{ paddingTop: 8 }}>Définis par ligne (colonne « Pts »).</span></div>
             ) : form.kind === "GRADED" ? (
@@ -449,7 +459,7 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
             </>
           )}
 
-          {!isGrid(q.type) && q.type !== "SCALE" && (
+          {!isGrid(q.type) && q.type !== "SCALE" && q.type !== "TEXT" && (
             <div className="field">
               <label>Réponses {form.kind === "GRADED" && <span className="hint">(cochez la/les bonne(s))</span>}</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -468,6 +478,13 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
             </div>
           )}
           {q.type === "SCALE" && <p className="hint" style={{ margin: 0 }}>Le stagiaire choisira une note de 1 à {q.scale_max}.</p>}
+          {q.type === "TEXT" && (
+            <p className="hint" style={{ margin: 0 }}>
+              Le stagiaire rédige sa réponse, en {Number(q.max_words) > 0 ? Number(q.max_words) : MOTS_MAX_DEFAUT} mots au plus.
+              {form.kind === "GRADED" ? " Elle n'est pas notée automatiquement : elle ne compte ni dans le score ni dans le maximum." : ""}
+              {" "}Les réponses se lisent dans Résultats QCM.
+            </p>
+          )}
         </Card>
       ))}
 

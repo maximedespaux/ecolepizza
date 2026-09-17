@@ -4254,6 +4254,17 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
   background:var(--surface3);flex:none}
 
+/* RÉPONSE LIBRE D'UN QCM (question « TEXT », migration 164) — la saisie du stagiaire, sa relecture
+   dans la correction, et la lecture des réponses dans Résultats QCM. `pre-wrap` partout : un
+   stagiaire qui va à la ligne pour séparer deux idées doit les retrouver séparées. */
+.quiz-libre textarea{resize:vertical;min-height:140px;line-height:1.5}
+.quiz-libre-compte{margin-top:6px;font-size:12.5px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.quiz-libre-compte.trop{color:var(--ember1);font-weight:600}
+.quiz-libre-relue{white-space:pre-wrap;padding:8px 10px;border:1px solid var(--border-soft);border-radius:8px;background:var(--surface2);font-size:13.5px;line-height:1.5}
+.qcm-textes{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:420px;overflow-y:auto;padding-right:2px}
+.qcm-texte{padding:8px 10px;border:1px solid var(--border-soft);border-radius:8px;background:var(--surface)}
+.qcm-texte-corps{white-space:pre-wrap;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+
 /* FORMATIONS D'UN QCM (Modèles de QCM → Éditer, migration 163). Une case par formation, et le
    jour propre à chacune dans la même ligne : lire « NIV1H · J4 » d'un coup d'œil évite d'ouvrir
    quoi que ce soit pour savoir quand le QCM tombe. « Toutes » occupe la ligne entière — c'est le
