@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { getQcmResultats, getQcmResultatDetail, deleteQcmResponse, getPreuveReponse } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -201,7 +202,7 @@ function DetailQuestion({ q, num }) {
 
 // Par stagiaire : une ligne par réponse (score + réussi/échoué pour un QCM noté, date). Une reprise
 // apparaît comme une ligne de plus, avec sa date — on voit qui a repassé et progressé.
-function StagiairesTable({ learners, quiz, isAdmin, onDelete, onPreuve }) {
+function StagiairesTable({ learners, quiz, peutSupprimer, onDelete, onPreuve }) {
   const note = quiz.kind === "GRADED";
   if (!learners.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
   return (
@@ -224,7 +225,7 @@ function StagiairesTable({ learners, quiz, isAdmin, onDelete, onPreuve }) {
             ) : (
               <span className="hint" style={{ flex: "none", fontSize: 11 }} title="Réponse antérieure à l'enregistrement des preuves">—</span>
             )}
-            {isAdmin && l.id && (
+            {peutSupprimer && l.id && (
               <button type="button" className="icon-btn" title="Supprimer cette réponse" aria-label="Supprimer cette réponse"
                 onClick={() => onDelete(l.id)} style={{ flex: "none" }}><Icon name="x" size={14} /></button>
             )}
@@ -344,7 +345,8 @@ function ResultatsQCM() {
   const [semaine, setSemaine] = useState(undefined);
   const [selYear, setSelYear] = useState("");
   const { user } = useContext(UserContext);
-  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role); // l'auditeur ne supprime pas
+  // Supprimer une réponse : DELETE /quizzes/reponse, rubrique /qcm côté serveur (cf. peutEcrire).
+  const peutSupprimer = peutEcrire(user, "/qcm");
 
   /* LES FILTRES COURANTS, en un seul endroit : quatre appels les passaient à la main.
      L'ANNÉE NE VAUT QUE POUR « TOUTES LES SEMAINES » — une semaine désigne déjà son année, et
@@ -532,7 +534,7 @@ function ResultatsQCM() {
                             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
                               <button type="button" className="btn sm" onClick={exporterStagiaires} title="Exporter la liste par stagiaire (CSV)">⬇ Exporter (CSV)</button>
                             </div>
-                            <StagiairesTable learners={detail.learners} quiz={detail.quiz} isAdmin={isAdmin}
+                            <StagiairesTable learners={detail.learners} quiz={detail.quiz} peutSupprimer={peutSupprimer}
                               onDelete={supprimerReponse} onPreuve={ouvrirPreuve} />
                           </>
                         )}

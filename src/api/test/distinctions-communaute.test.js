@@ -52,18 +52,19 @@ test('la fiche stagiaire ne porte plus la carte', () => {
     assert.doesNotMatch(fiche, /lib\/cadres\.js/, 'plus aucune raison d\'importer les cadres');
 });
 
-test('la Communauté affiche le panneau — au bureau seulement', () => {
+test('la Communauté affiche le panneau — à qui peut modifier les fiches stagiaires', () => {
     const page = sansCommentaires(lire('src/app/ui/pages/Communaute.jsx'));
     assert.match(page, /\{peutDecerner && <Distinctions \/>\}/);
-    /* Les MÊMES rôles que l'écriture (PATCH /stagiaires/:id → ADMIN_ROLES). Plus large, le
-       formateur verrait un panneau dont chaque clic répondrait 403 ; plus étroit, le secrétariat
-       perdrait un geste qu'il avait sur la fiche. */
-    const m = /const peutDecerner = \[([^\]]+)\]\.includes\(user\?\.role\)/.exec(page);
-    assert.ok(m, 'peutDecerner est une liste de rôles explicite');
-    const auth = lire('src/api/middlewares/auth.middleware.js');
-    const admin = /const ADMIN_ROLES = \[([^\]]+)\]/.exec(auth);
-    const roles = (s) => s.split(',').map((x) => x.trim().replace(/['"]/g, '')).filter(Boolean).sort();
-    assert.deepStrictEqual(roles(m[1]), roles(admin[1]));
+    /* La MÊME règle que l'écriture : PATCH /stagiaires/:id, gardé par ADMIN_ROLES — OU par la
+       rubrique /stagiaires accordée en modification, depuis la délégation par le menu. Plus large,
+       un formateur verrait un panneau dont chaque clic répondrait 403 ; plus étroit, le secrétariat
+       perdrait un geste qu'il avait sur la fiche — et une LISTE DE RÔLES retirait ce geste au
+       formateur à qui l'organisme a accordé les fiches en modification, que le serveur, lui,
+       laisse écrire. L'équivalence avec le serveur est éprouvée dans acces-ecriture-rubriques. */
+    assert.match(page, /const peutDecerner = peutEcrire\(user, "\/stagiaires"\);/);
+    const routes = sansCommentaires(lire('src/api/routes/learner.routes.js'));
+    assert.match(routes, /router\.patch\('\/:id', authorizeRoles\(\.\.\.ADMIN_ROLES\)/,
+        'l\'écriture reste gardée par ADMIN_ROLES, donc délégable par la rubrique');
 });
 
 test('la route est déclarée AVANT /:id, et réservée au bureau', () => {

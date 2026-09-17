@@ -6,6 +6,7 @@ import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
 import ProgressPct from "./ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import { getEvaluationSession, saveNoteEvaluation } from "../api/apiClient.js";
 import { dureeLisible, lireDuree, dureeSaisissable } from "../lib/format.js";
 
@@ -33,7 +34,9 @@ const lirePaliers = (brut) => {
 
 function SessionEvaluation({ sessionId }) {
   const { user } = useContext(UserContext);
-  const peutConfigurer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  /* Le lien mène à la grille, dans Formations : la page doit s'ouvrir en modification, et
+     l'enregistrement passe par /evaluations, que le serveur range sous /sessions. */
+  const peutConfigurer = peutEcrire(user, "/formations") && peutEcrire(user, "/sessions");
   const [data, setData] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [status, setStatus] = useState(null);

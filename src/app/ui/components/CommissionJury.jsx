@@ -6,6 +6,7 @@ import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
 import { Icon } from "./Icon.jsx";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import {
   getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury,
 } from "../api/apiClient.js";
@@ -51,7 +52,11 @@ const membreVide = (premier) => ({
 
 function CommissionJury({ sessionId }) {
   const { user } = useContext(UserContext);
-  const peutEditer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  // Commission, décisions, clôture : /examens, que le serveur range sous /sessions (cf. peutEcrire).
+  const peutEditer = peutEcrire(user, "/sessions");
+  /* Le modèle de PV s'écrit dans /modeles, pas dans la session : le bouton était offert à tous,
+     et répondait « Accès refusé » à qui n'a pas Modèles en modification. */
+  const peutPoserModele = peutEcrire(user, "/modeles");
   const [data, setData] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [status, setStatus] = useState(null);
@@ -271,7 +276,9 @@ function CommissionJury({ sessionId }) {
                   {close ? "Procès-verbal figé." : `${prises.length} / ${(data.candidats || []).length} décision(s) · ${(f.jury || []).filter((m) => m.nom).length} membre(s)`}
                 </span>
                 <span style={{ flex: 1 }} />
-                <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle de PV</button>
+                {peutPoserModele && (
+                  <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle de PV</button>
+                )}
                 {/* LE PV S'ÉDITE APRÈS CLÔTURE SEULEMENT : un procès-verbal tiré d'une
                     délibération en cours porterait des décisions qui peuvent encore changer.
                     Désactivé plutôt que caché, avec la raison écrite à côté. */}

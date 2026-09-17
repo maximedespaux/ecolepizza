@@ -7,6 +7,7 @@ import {
   importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -347,7 +348,8 @@ function buildTree(rows) {
 
 function ArchivesView({ onError, onInfo }) {
   const { user } = useContext(UserContext);
-  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  // Importer, classer, supprimer : /suivi côté serveur (cf. peutEcrire), pas une liste de rôles.
+  const peutModifier = peutEcrire(user, "/suivi");
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState("");
   const [viewId, setViewId] = useState(null);
@@ -493,7 +495,7 @@ function ArchivesView({ onError, onInfo }) {
           <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
             onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
         )}
-        {isAdmin && d.source !== "piece" && (
+        {peutModifier && d.source !== "piece" && (
           <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
         )}
       </div>
@@ -532,7 +534,7 @@ function ArchivesView({ onError, onInfo }) {
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
         <input className="inp" placeholder="Rechercher un stagiaire, une entreprise, une formation, un document…" value={q}
           onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />
-        {isAdmin && (
+        {peutModifier && (
           <>
             <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple accept="application/pdf,.pdf"
               style={{ display: "none" }} onChange={onPick} />
@@ -542,26 +544,26 @@ function ArchivesView({ onError, onInfo }) {
           </>
         )}
       </div>
-      {isAdmin && (
+      {peutModifier && (
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           Dossier <b>année / semaine / formation / stagiaire</b> · PDF uniquement.
         </p>
       )}
 
-      {isAdmin && (
+      {peutModifier && (
         <input ref={classeurRef} type="file" multiple accept="application/pdf,.pdf"
           style={{ display: "none" }} onChange={onPickClasseur} />
       )}
 
       {/* CLASSEURS — ce qui n'appartient à aucune session. Placés AVANT l'arbre : ils sont peu
           nombreux et concernent l'organisme entier, quand l'arbre concerne les promotions. */}
-      {(classeurs.length > 0 || isAdmin) && (
+      {(classeurs.length > 0 || peutModifier) && (
         <details className="arch" open={classeurs.length > 0} style={{ marginBottom: 14 }}>
           <summary className="arch-sum arch-y">
             Classeurs <span className="arch-count">{classeurs.reduce((n, c) => n + c.docs.length, 0)}</span>
           </summary>
           <div className="arch-in">
-            {isAdmin && (
+            {peutModifier && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "8px 0 4px" }}>
                 <input className="inp" placeholder="Nom du classeur — Assurances, Agréments…" value={nouveauClasseur}
                   onChange={(e) => setNouveauClasseur(e.target.value)} style={{ maxWidth: 300 }} maxLength={160}
@@ -583,7 +585,7 @@ function ArchivesView({ onError, onInfo }) {
                   <summary className="arch-sum">
                     <Icon name="folder" size={13} style={{ marginRight: 5, verticalAlign: "-2px" }} />
                     {C.nom} <span className="arch-count">{C.docs.length}</span>
-                    {isAdmin && (
+                    {peutModifier && (
                       <>
                         <button type="button" className="iconbtn" title={`Ajouter des PDF dans « ${C.nom} »`}
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); deposerDans(C.nom); }}
@@ -601,7 +603,7 @@ function ArchivesView({ onError, onInfo }) {
         </details>
       )}
 
-      {isAdmin && <PanneauStockage onError={onError} onSupprime={(ids, quoi) => deleteDocs(
+      {peutModifier && <PanneauStockage onError={onError} onSupprime={(ids, quoi) => deleteDocs(
         ids.map((id) => ({ doc_id: id, source: "archive" })), quoi)} />}
 
       {tree.length === 0 ? (
@@ -615,7 +617,7 @@ function ArchivesView({ onError, onInfo }) {
                 {Y.weeksArr.map((W) => (
                   <details key={W.week}>
                     <summary className="arch-sum">{W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span>
-                      {isAdmin && <DelBtn title="Supprimer toute la semaine" onClick={() => deleteDocs(weekDocs(W), W.week ? `Semaine ${W.week}` : "Sans session")} />}
+                      {peutModifier && <DelBtn title="Supprimer toute la semaine" onClick={() => deleteDocs(weekDocs(W), W.week ? `Semaine ${W.week}` : "Sans session")} />}
                     </summary>
                     <div className="arch-in">
                       {W.formationsArr.map((F) => (
@@ -623,7 +625,7 @@ function ArchivesView({ onError, onInfo }) {
                           <summary className="arch-sum">
                             <span className="badge n mono" style={{ background: colorOf(F.code), color: "#fff", borderColor: "transparent" }}>{F.code}</span>
                             {" "}{F.title} <span className="arch-count">{F.total}</span>
-                            {isAdmin && <DelBtn title="Supprimer toute la formation" onClick={() => deleteDocs(formationDocs(F), F.title)} />}
+                            {peutModifier && <DelBtn title="Supprimer toute la formation" onClick={() => deleteDocs(formationDocs(F), F.title)} />}
                           </summary>
                           <div className="arch-in">
                             {F.learnersArr.map((L) => (
@@ -632,7 +634,7 @@ function ArchivesView({ onError, onInfo }) {
                                   {L.company && <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />}
                                   {L.session && <Icon name="calendar" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--dim)" }} />}
                                   {L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {isAdmin && <DelBtn title={L.company ? "Supprimer cette entreprise" : L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
+                                  {peutModifier && <DelBtn title={L.company ? "Supprimer cette entreprise" : L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
                                 <div className="arch-docs">
                                   {L.docs.map((d) => <DocLigne key={d.doc_id} d={d} />)}

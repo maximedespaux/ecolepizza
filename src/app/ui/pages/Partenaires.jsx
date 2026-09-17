@@ -7,6 +7,7 @@ import { finContrat, etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js
 import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
 import ExportPartenaire from "../components/ExportPartenaire.jsx";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -30,7 +31,6 @@ const CATEGORIES_REPLI = [
   { id: null, code: "FROMAGE", label: "Fromage" }, { id: null, code: "CONSERVE", label: "Conserve" },
   { id: null, code: "DISTRIBUTION", label: "Distribution" }, { id: null, code: "AUTRE", label: "Autre" },
 ];
-const ADMIN = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"];
 const EMPTY = {
   name: "", category: "AUTRE", contact_name: "", contact_email: "", contact_phone: "",
   website: "", town: "", discount_pct: "", offer: "", notes: "",
@@ -47,7 +47,10 @@ const sumKind = (ap) => ap.filter((a) => !apportType(a.type).cash).reduce((s, a)
 
 function Partenaires() {
   const { user } = useContext(UserContext);
-  const canEdit = ADMIN.includes(user?.role);
+  /* Ce que le SERVEUR accepte sur /partenaires — y compris les commissions (/comptabilite/revenus,
+     rattachées à cette rubrique) et l'export vers un partenaire. Une liste de rôles cachait tout
+     au formateur à qui l'organisme a accordé la page en modification (cf. peutEcrire). */
+  const canEdit = peutEcrire(user, "/partenaires");
   const [partners, setPartners] = useState([]);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null);   // partenaire édité ou { _new: true }
