@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-17** :
-**1414 tests — 1407 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1429 tests — 1422 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,15 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **162 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+## 4. Migrations — **162 et 163 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+
+**163 — À JOUER** (`163_qcm_plusieurs_formations.sql`) : table `quiz_program`, un QCM peut servir
+à PLUSIEURS formations, avec un jour propre à chacune. Sans elle, le code retombe sur
+`quiz.program_id` (une seule formation) et l'écran prévient si l'on en coche plusieurs. Elle se
+vérifie par l'API : `GET /quizzes` renvoie, pour un QCM coché dans deux formations après la
+migration, deux entrées dans `formations`. ⚠️ `created_at` y porte la DATE DE RATTACHEMENT, dont
+dépend la garde des anciens stagiaires (releaseAutoQuizzes) : ne jamais « supprimer puis
+réinsérer » ses lignes.
 
 **162 — À JOUER** (`162_villes_capitales.sql`) : met en capitales la ville des stagiaires et des
 entreprises DÉJÀ en base ; le code le fait à chaque écriture depuis. Migration de DONNÉES : rien

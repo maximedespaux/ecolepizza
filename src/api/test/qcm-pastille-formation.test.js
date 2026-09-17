@@ -59,8 +59,11 @@ test('l\'écran des RÉSULTATS porte la même pastille', () => {
     /* Le code devait être SÉPARÉ de l'intitulé : ils étaient fondus dans une seule chaîne
        (« NIV1H · Pizzaïolo… »), d'où l'impossibilité d'en faire une pastille sans redécouper du
        texte — et redécouper du texte, c'est se tromper le jour où un intitulé contient un point. */
-    assert.match(RESULTATS, /code: q\.program_id \? \(q\.program_code \|\| ""\) : "",/);
-    assert.match(RESULTATS, /titre: q\.program_id \? \(q\.program_title \|\| ""\) : "Autre — sans formation",/);
+    /* Depuis la migration 163, un QCM PARTAGÉ entre plusieurs formations forme son propre groupe,
+       sans pastille (il n'a pas UNE formation) : les deux lignes gagnent ce cas en tête, la
+       séparation code / intitulé reste la même. */
+    assert.match(RESULTATS, /code: !partage && q\.program_id \? \(q\.program_code \|\| ""\) : "",/);
+    assert.match(RESULTATS, /titre: partage \? "Plusieurs formations" : q\.program_id \? \(q\.program_title \|\| ""\) : "Autre — sans formation",/);
 });
 
 test('la couleur choisie voyage AVEC la ligne, sans second appel réseau', () => {

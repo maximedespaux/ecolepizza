@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import {
   getQuizzes, getQuiz, createQuiz, saveQuiz, deleteQuiz, duplicateQuiz, sendQuiz,
@@ -43,21 +43,29 @@ function dayPhrase(day) {
   return `le matin du jour ${d < 1 ? 1 : d}`;
 }
 
-// Regroupe les QCM par formation ; les QCM non rattachés en dernier, chaque groupe trié par jour.
+// Le jour qui s'applique dans le groupe : celui de SA formation pour un QCM d'une seule formation.
+const jourAffiche = (q) => (q.formations && q.formations.length === 1 ? q.formations[0].jour : q.day);
+
+/* Regroupe les QCM par formation ; chaque groupe trié par jour.
+   UN QCM PARTAGÉ (plusieurs formations, migration 163) a SON groupe, « Plusieurs formations ».
+   Rangé sous l'une d'elles, les autres ne le verraient pas ; répété sous chacune, on croirait
+   cinq QCM là où il n'y en a qu'un — et modifier « l'un » les modifierait tous. Ordre : les
+   formations, puis les partagés, puis les non rattachés. */
 function groupByFormation(quizzes) {
   const map = new Map();
   for (const q of quizzes) {
-    const key = q.program_id || "__none__";
-    if (!map.has(key)) map.set(key, { key, program_code: q.program_code || "", program_title: q.program_title || "", items: [] });
+    const fs = q.formations || [];
+    const key = fs.length > 1 ? "__plusieurs__" : fs.length === 1 ? fs[0].program_id : "__none__";
+    if (!map.has(key)) {
+      map.set(key, { key, plusieurs: fs.length > 1, program_code: fs.length === 1 ? fs[0].code : "",
+        program_title: fs.length === 1 ? fs[0].title : "", items: [] });
+    }
     map.get(key).items.push(q);
   }
   const groups = [...map.values()];
-  groups.forEach((g) => g.items.sort((a, b) => (a.day || 99) - (b.day || 99) || a.title.localeCompare(b.title)));
-  return groups.sort((a, b) => {
-    if (!a.program_code) return 1;
-    if (!b.program_code) return -1;
-    return a.program_code.localeCompare(b.program_code);
-  });
+  groups.forEach((g) => g.items.sort((a, b) => (jourAffiche(a) ?? 99) - (jourAffiche(b) ?? 99) || a.title.localeCompare(b.title)));
+  const rang = (g) => (g.program_code ? 0 : g.plusieurs ? 1 : 2);
+  return groups.sort((a, b) => rang(a) - rang(b) || a.program_code.localeCompare(b.program_code));
 }
 
 function Quiz() {
@@ -119,14 +127,14 @@ function Quiz() {
   if (editing) {
     return <QuizEditor quiz={editing} formations={formations}
       onClose={() => setEditing(null)}
-      onSaved={() => { setEditing(null); setStatus({ type: "success", message: "QCM enregistré." }); load(); }}
+      onSaved={(avertissement) => { setEditing(null); setStatus(avertissement ? { type: "error", message: `QCM enregistré. ${avertissement}` } : { type: "success", message: "QCM enregistré." }); load(); }}
       onError={(m) => setStatus({ type: "error", message: m })} />;
   }
 
   return (
     <>
       <PageHead eyebrow="Modèles" title="Modèles de QCM"
-        lead="Créez des questionnaires (test de positionnement, évaluation…) rattachés à une formation et à un jour. Envoi manuel ou automatique le matin du jour J ; le stagiaire y répond dans son espace."
+        lead="Créez des questionnaires (test de positionnement, évaluation…) rattachés à une ou plusieurs formations et à un jour. Envoi manuel ou automatique le matin du jour J ; le stagiaire y répond dans son espace."
         actions={<button className="btn primary" onClick={onNew}>＋ Nouveau QCM</button>} />
       <StatusMessage status={status} />
 
@@ -146,14 +154,25 @@ function Quiz() {
               <span className="lvl-chip" style={{ background: colorForLevel(g.program_code) }}>{g.program_code}</span>
               {g.program_title}
             </span>
-          ) : "Non rattachés à une formation"}
+          ) : g.plusieurs ? "Plusieurs formations" : "Non rattachés à une formation"}
             more={<Badge tone="n">{g.items.length}</Badge>}>
             <DataTable
               rows={g.items}
               rowKey={(q) => q.id}
               cols={[
                 { k: "title", t: "Titre", principal: true, cell: (q) => <b>{q.title}</b> },
-                { k: "day", t: "Jour", cell: (q) => <span className="chiffres">{dayTag(q.day)}</span> },
+                /* Partagé : CHAQUE formation avec son jour (« HYG J3 · NIV1H J4 ») — un jour unique
+                   dans une colonne mentirait pour celles qui ont le leur. */
+                ...(g.plusieurs ? [{ k: "formations", t: "Formations", cell: (q) => (
+                  <span className="qcm-formations-liste">
+                    {q.formations.map((f) => (
+                      <span key={f.program_id} className="qcm-formation-pastille" title={f.title}>
+                        <span className="lvl-chip" style={{ background: colorForLevel(f.code) }}>{f.code}</span>
+                        <span className="chiffres">{dayTag(f.jour)}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) }] : [{ k: "day", t: "Jour", cell: (q) => <span className="chiffres">{dayTag(jourAffiche(q))}</span> }]),
                 { k: "envoi", t: "Envoi", cell: (q) => (q.auto_send ? <Badge tone="g">Auto</Badge> : <span className="hint">Manuel</span>) },
                 { k: "kind", t: "Type", cell: (q) => (q.kind === "SURVEY" ? <Badge tone="n">Enquête</Badge> : <Badge tone="b">Noté</Badge>) },
                 { k: "n", t: "Questions", cell: (q) => <span className="chiffres">{q.n_questions}</span> },
@@ -182,12 +201,46 @@ function Quiz() {
 
 function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
   const [form, setForm] = useState({
-    title: quiz.title || "", kind: quiz.kind || "GRADED", program_id: quiz.program_id || "",
+    title: quiz.title || "", kind: quiz.kind || "GRADED",
+    // Les formations cochées, chacune avec son jour propre ("" = jour du QCM). Migration 163.
+    formations: (quiz.formations || (quiz.program_id ? [{ program_id: quiz.program_id, day: null }] : []))
+      .map((f) => ({ program_id: f.program_id, day: f.day ?? "" })),
     day: quiz.day ?? "", auto_send: !!quiz.auto_send, pass_score: quiz.pass_score ?? "",
     questions: quiz.questions && quiz.questions.length ? quiz.questions : [blankQuestion()],
   });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  /* LES FORMATIONS PROPOSÉES : les actives, plus toute formation inactive DÉJÀ cochée — la masquer
+     la décocherait en silence au prochain enregistrement. « Toutes » ne coche que les actives :
+     rattacher un QCM à une formation qu'on ne donne plus n'a pas de sens. */
+  const coche = (id) => form.formations.find((f) => f.program_id === id);
+  const estActive = (f) => f.active !== 0 && f.active !== false;
+  const proposees = formations.filter((f) => estActive(f) || coche(f.id));
+  const actives = formations.filter(estActive);
+  const toutes = actives.length > 0 && actives.every((f) => coche(f.id));
+  const certaines = !toutes && form.formations.length > 0;
+  const toutesRef = useRef(null);
+  useEffect(() => { if (toutesRef.current) toutesRef.current.indeterminate = certaines; }, [certaines]);
+  // L'ordre des cases est celui de la liste des formations : la première cochée devient la principale.
+  const ordonner = (liste) => [...liste].sort((a, b) =>
+    formations.findIndex((f) => f.id === a.program_id) - formations.findIndex((f) => f.id === b.program_id));
+  const basculerFormation = (id) => setForm((p) => ({
+    ...p,
+    formations: p.formations.some((f) => f.program_id === id)
+      ? p.formations.filter((f) => f.program_id !== id)
+      : ordonner([...p.formations, { program_id: id, day: "" }]),
+  }));
+  const basculerToutes = () => setForm((p) => ({
+    ...p,
+    // Tout cocher GARDE les jours propres déjà saisis ; tout décocher retire tout.
+    formations: toutes ? [] : ordonner([...p.formations,
+      ...actives.filter((f) => !p.formations.some((x) => x.program_id === f.id)).map((f) => ({ program_id: f.id, day: "" }))]),
+  }));
+  const setJourFormation = (id, v) => setForm((p) => ({
+    ...p, formations: p.formations.map((f) => (f.program_id === id ? { ...f, day: v } : f)),
+  }));
+  const joursPropres = form.formations.filter((f) => f.day !== "" && f.day != null);
 
   const setQ = (i, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => (j === i ? { ...q, ...patch } : q)) }));
   const setOpt = (qi, oi, patch) => setForm((p) => ({ ...p, questions: p.questions.map((q, j) => j !== qi ? q : { ...q, options: q.options.map((o, k) => (k === oi ? { ...o, ...patch } : o)) }) }));
@@ -217,7 +270,14 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
   async function save() {
     if (!form.title.trim()) { onError("Titre requis."); return; }
     setSaving(true);
-    try { await saveQuiz(quiz.id, { ...form, pass_score: form.pass_score === "" ? null : Number(form.pass_score) }); onSaved(); }
+    try {
+      const r = await saveQuiz(quiz.id, {
+        ...form,
+        formations: form.formations.map((f) => ({ program_id: f.program_id, day: f.day === "" || f.day == null ? null : Number(f.day) })),
+        pass_score: form.pass_score === "" ? null : Number(form.pass_score),
+      });
+      onSaved(r?.avertissement || null);
+    }
     catch (e) { onError(e.message); }
     finally { setSaving(false); }
   }
@@ -238,13 +298,41 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
           <div className="field"><label>Type</label>
             <select value={form.kind} onChange={set("kind")}>{KINDS.map((k) => <option key={k.v} value={k.v}>{k.label}</option>)}</select></div>
         </div>
+        {/* PLUSIEURS FORMATIONS (migration 163). Un menu à choix unique obligeait à dupliquer le QCM
+            pour chaque formation : 22 des 23 QCM de l'école étaient des copies. Chaque formation
+            cochée peut avoir SON jour (« Hygiène » : J3 en HYG, J4 en NIV1H) ; vide, elle prend le
+            jour du QCM, juste en dessous. */}
+        <div className="field">
+          <label>Formations</label>
+          <div className="qcm-formations">
+            <label className="qcm-formation qcm-formation-toutes">
+              <input type="checkbox" ref={toutesRef} checked={toutes} onChange={basculerToutes} />
+              <b>Toutes les formations</b>
+            </label>
+            {proposees.map((f) => {
+              const c = coche(f.id);
+              return (
+                <div key={f.id} className={"qcm-formation" + (c ? " on" : "")}>
+                  <label className="qcm-formation-nom">
+                    <input type="checkbox" checked={!!c} onChange={() => basculerFormation(f.id)} />
+                    <span className="lvl-chip" style={{ background: colorForLevel(f.code) }}>{f.code}</span>
+                    <span className="qcm-formation-titre" title={f.title}>{f.title}{!estActive(f) && <span className="hint"> · inactive</span>}</span>
+                  </label>
+                  {c && (
+                    <input className="inp qcm-formation-jour" type="number" value={c.day}
+                      onChange={(e) => setJourFormation(f.id, e.target.value)}
+                      placeholder={form.day === "" ? "Jour" : dayTag(form.day)}
+                      aria-label={`Jour propre à ${f.code} (vide = jour du QCM)`}
+                      title="Jour propre à cette formation. Vide : le jour du QCM." />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {form.formations.length === 0 && <span className="hint">Aucune formation cochée : le QCM n'est proposé dans aucun parcours et ne peut pas être envoyé.</span>}
+        </div>
         <div className="row3">
-          <div className="field"><label>Formation</label>
-            <select value={form.program_id} onChange={set("program_id")}>
-              <option value="">Choisir</option>
-              {formations.map((f) => <option key={f.id} value={f.id}>{f.code}, {f.title}</option>)}
-            </select></div>
-          <div className="field"><label>Jour de la formation</label>
+          <div className="field"><label>Jour de la formation{form.formations.length > 1 ? " (par défaut)" : ""}</label>
             <input className="inp" type="number" value={form.day} onChange={set("day")} placeholder="ex. 2, ou -3 (avant)" /></div>
           {form.kind === "GRADED" && (
             <div className="field"><label>Seuil de réussite (%)</label>
@@ -256,9 +344,9 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
           Envoi automatique {dayPhrase(form.day)} (sinon envoi manuel avec « Envoyer »)
         </label>
         <p className="hint" style={{ margin: 0 }}>
-          {form.day === "" || form.day == null
+          {(form.day === "" || form.day == null) && !joursPropres.length
             ? "Indiquez le jour où ce QCM doit être rempli : un nombre positif = jour de stage (J1 = 1er jour), un nombre négatif = jours avant le début (ex. -3 pour un test de positionnement 3 jours avant)."
-            : `Le QCM sera proposé aux stagiaires ${form.auto_send ? "automatiquement" : "après envoi manuel"} ${dayPhrase(form.day)}.`}
+            : `Le QCM sera proposé aux stagiaires ${form.auto_send ? "automatiquement" : "après envoi manuel"} ${form.day === "" || form.day == null ? "le jour prévu dans chaque formation" : dayPhrase(form.day)}${joursPropres.length ? ` (${joursPropres.map((f) => `${formations.find((x) => x.id === f.program_id)?.code || "?"} : ${dayTag(f.day)}`).join(", ")})` : ""}.`}
         </p>
       </Card>
 

@@ -234,6 +234,7 @@ function QcmRow({ q, on, onClick }) {
           {q.title}{!q.active && <span className="hint"> · inactif</span>}
         </span>
         <span className="hint" style={{ display: "block", fontSize: 11.5, ...coupe }}>
+          {estPartage(q) && `${q.formations.map((f) => f.code).join(", ")} · `}
           {!note && "Enquête · "}
           {q.responses} rép.
           {note && q.responses > 0 && ` · ${q.avg_pct ?? "—"} % moy.`}
@@ -246,28 +247,35 @@ function QcmRow({ q, on, onClick }) {
   );
 }
 
-// Regroupe les QCM par FORMATION (program_id) ; « Autre » pour ceux qui n'en ont pas.
+/* Regroupe les QCM par FORMATION (program_id) ; « Autre » pour ceux qui n'en ont pas.
+   UN QCM PARTAGÉ entre plusieurs formations (migration 163) va sous « Plusieurs formations » :
+   rangé sous sa seule formation principale, on croirait que ses réponses ne viennent que de
+   celle-là. */
+const estPartage = (q) => (q.formations || []).length > 1;
 function grouperParFormation(rows) {
   const parCle = new Map();
   for (const q of rows) {
-    const cle = q.program_id || "_autre";
+    const partage = estPartage(q);
+    const cle = partage ? "_plusieurs" : (q.program_id || "_autre");
     if (!parCle.has(cle)) {
       parCle.set(cle, {
         cle,
-        autre: !q.program_id,
+        autre: !partage && !q.program_id,
+        plusieurs: partage,
         /* Le CODE reste séparé de l'intitulé : fondus dans une seule chaîne, on ne pouvait plus
            en faire une pastille. La couleur vient de la ligne (choix de l'organisme) et retombe
            sur la palette commune sinon — même ordre de priorité que `setBadgeColors` ailleurs. */
-        code: q.program_id ? (q.program_code || "") : "",
-        titre: q.program_id ? (q.program_title || "") : "Autre — sans formation",
+        code: !partage && q.program_id ? (q.program_code || "") : "",
+        titre: partage ? "Plusieurs formations" : q.program_id ? (q.program_title || "") : "Autre — sans formation",
         couleur: q.program_color || null,
         items: [],
       });
     }
     parCle.get(cle).items.push(q);
   }
-  // « Autre » toujours en dernier (le serveur trie déjà program_id NULL en fin, on s'en assure).
-  return [...parCle.values()].sort((a, b) => (a.autre ? 1 : 0) - (b.autre ? 1 : 0));
+  // Les formations, puis « Plusieurs formations », puis « Autre » toujours en dernier.
+  const rang = (g) => (g.autre ? 2 : g.plusieurs ? 1 : 0);
+  return [...parCle.values()].sort((a, b) => rang(a) - rang(b));
 }
 
 /**
@@ -377,7 +385,8 @@ function ResultatsQCM() {
     // Ce qu'on voit, pas ce que le serveur a rendu : exporter vingt-deux lignes quand l'écran en
     // montre six ferait mentir le fichier sur ce qu'on a regardé.
     const lignes = visibles.map((q) => [
-      q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre",
+      estPartage(q) ? q.formations.map((f) => f.code).join(", ")
+        : q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre",
       q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? "",
     ]);
     telechargerCsv(`resultats-qcm${suffixeFiltre()}.csv`, entetes, lignes);

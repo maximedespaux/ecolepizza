@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { normaliserGroupesPieces } = require('../lib/groupesPieces.js');
-const { colonneOuNull } = require('../lib/colonnes.js');
+const { colonneOuNull, tableExiste } = require('../lib/colonnes.js');
+const { rattacherSiOrphelin, detacherFormation } = require('../lib/qcmFormations.js');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
@@ -129,16 +130,29 @@ async function formationSteps(conn, orgId, program) {
     /* `parcours_defaut` (migration 156) est facultative : sans elle on relit sans, et un QCM est
        réputé entrer dans les parcours — le comportement d'avant. Le parcours doit rester lisible
        que la migration soit jouée ou non. */
+    /* UN QCM PEUT SERVIR À PLUSIEURS FORMATIONS (migration 163) : il est candidat ici si CETTE
+       formation est l'une des siennes (`quiz_program`, ou sa formation principale), ou s'il n'en a
+       AUCUNE. Et son jour est celui de cette formation — « Hygiène » tombe au jour 3 en HYG, au
+       jour 4 en NIV1H. Sans la table, le filtre d'avant, inchangé. */
+    const avecLiens = await tableExiste(conn, 'quiz_program');
     let quizzes = [];
-    const selQuiz = (col) =>
-        `SELECT id, title, day${col} FROM quiz
+    const selQuiz = (col) => (avecLiens
+        ? `SELECT q.id, q.title, COALESCE(qp.day, q.day) AS day${col ? ', q.parcours_defaut' : ''}
+             FROM quiz q
+             LEFT JOIN quiz_program qp ON qp.quiz_id = q.id AND qp.program_id = ?
+            WHERE q.organization_id = ? AND q.active = 1
+              AND (qp.quiz_id IS NOT NULL OR q.program_id = ?
+                   OR (q.program_id IS NULL AND NOT EXISTS (SELECT 1 FROM quiz_program x WHERE x.quiz_id = q.id)))
+            ORDER BY (qp.quiz_id IS NULL AND q.program_id IS NULL), q.title`
+        : `SELECT id, title, day${col} FROM quiz
           WHERE organization_id = ? AND (program_id = ? OR program_id IS NULL) AND active = 1
-          ORDER BY (program_id IS NULL), title`;
+          ORDER BY (program_id IS NULL), title`);
+    const paramsQuiz = avecLiens ? [program.id, orgId, program.id] : [orgId, program.id];
     try {
-        [quizzes] = await conn.query(selQuiz(', parcours_defaut'), [orgId, program.id]);
+        [quizzes] = await conn.query(selQuiz(', parcours_defaut'), paramsQuiz);
     } catch (e) {
         if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
-        [quizzes] = await conn.query(selQuiz(''), [orgId, program.id]);
+        [quizzes] = await conn.query(selQuiz(''), paramsQuiz);
     }
     const quizSteps = quizzes.map((q) => {
         const slug = `quiz:${q.id}`;
@@ -492,8 +506,12 @@ const deleteProgram = async (req, res) => {
         if (c.n > 0) {
             return res.status(409).json({ error: `Impossible de supprimer : ${c.n} session(s) planifiée(s) utilisent cette formation. Supprimez-les d'abord.` });
         }
-        // Détache les QCM et retire le parcours documentaire propre à la formation.
-        await conn.query('UPDATE quiz SET program_id = NULL WHERE program_id = ? AND organization_id = ?', [req.params.id, orgId]).catch(() => {});
+        /* Détache les QCM — ils gardent leurs AUTRES formations (migration 163) — et retire le
+           parcours documentaire propre à la formation. AVANT la suppression, et SANS avaler
+           l'erreur : `quiz.program_id` porte ON DELETE CASCADE, et une formation supprimée alors
+           que le détachement a échoué emporterait ses QCM avec leurs réponses. Mieux vaut un
+           refus de supprimer qu'une perte silencieuse. */
+        await detacherFormation(conn, orgId, req.params.id);
         await conn.query('DELETE FROM program_step WHERE program_id = ? AND organization_id = ?', [req.params.id, orgId]).catch(() => {});
         await conn.query('DELETE FROM training_program WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         res.json({ success: true, message: 'Formation supprimée.' });
@@ -665,11 +683,9 @@ const saveFormationSteps = async (req, res) => {
                 await conn.query('UPDATE program_step SET applies_when = ? WHERE program_id = ? AND slug = ?',
                     [aw, req.params.id, slug]).catch(() => {});
             }
-            // QCM ajouté au parcours et non encore rattaché : on le lie à cette formation.
+            // QCM ajouté au parcours et rattaché à AUCUNE formation : on le lie à celle-ci.
             if (aEcrire[i].active && slug.startsWith('quiz:')) {
-                const quizId = slug.slice(5);
-                await conn.query('UPDATE quiz SET program_id = ? WHERE id = ? AND organization_id = ? AND program_id IS NULL',
-                    [req.params.id, quizId, req.user.organization_id]).catch(() => {});
+                await rattacherSiOrphelin(conn, req.user.organization_id, slug.slice(5), req.params.id).catch(() => {});
             }
         }
         // Point d'accès à l'émargement : slug de l'étape juste avant le point de rupture (ou null).

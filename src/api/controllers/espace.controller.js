@@ -16,6 +16,7 @@ const { encrypt, encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
+const { formationsDesQcm, jourPour } = require('../lib/qcmFormations.js');
 const { capitaliser, enCapitales, CAPITALES_STAGIAIRE } = require('../lib/saisie.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -52,24 +53,39 @@ function quizDayDate(startStr, day) {
 // Matérialise les QCM « auto » dont le jour de formation est arrivé (envoi paresseux).
 async function releaseAutoQuizzes(conn, learner) {
     const [enr] = await conn.query(
-        `SELECT e.id AS enrollment_id, s.program_id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date
+        `SELECT e.id AS enrollment_id, s.program_id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date
          FROM enrollment e JOIN training_session s ON s.id = e.session_id
          WHERE e.learner_id = ? AND s.program_id IS NOT NULL`,
         [learner.id]
     );
     if (!enr.length) return;
-    const progIds = [...new Set(enr.map((e) => e.program_id))];
     const [quizzes] = await conn.query(
-        `SELECT id, program_id, day, title FROM quiz
-         WHERE organization_id = ? AND active = 1 AND auto_send = 1 AND day IS NOT NULL AND program_id IN (?)`,
-        [learner.organization_id, progIds]
+        `SELECT id, day, title FROM quiz
+         WHERE organization_id = ? AND active = 1 AND auto_send = 1`,
+        [learner.organization_id]
     );
+    if (!quizzes.length) return;
+    // Chaque QCM, dans CHACUNE de ses formations et au jour de chacune (migration 163).
+    const liensDe = await formationsDesQcm(conn, learner.organization_id, quizzes.map((q) => q.id));
     const today = todayISO();
-    for (const q of quizzes) {
+    for (const q of quizzes) for (const lien of liensDe.get(q.id) || []) {
+        const jour = jourPour(q, lien);
+        if (jour == null) continue;
         for (const e of enr) {
-            if (e.program_id !== q.program_id) continue;
-            const dayDate = quizDayDate(e.start_date, q.day);
+            if (String(e.program_id) !== String(lien.program_id)) continue;
+            const dayDate = quizDayDate(e.start_date, jour);
             if (!dayDate || dayDate > today) continue; // pas encore le jour J
+            /* UN RATTACHEMENT NE CONCERNE QUE LES SESSIONS PAS ENCORE TERMINÉES À SA DATE. Cette
+               fonction tourne à chaque ouverture de l'espace, pour TOUS les dossiers du stagiaire,
+               y compris ceux d'une session finie depuis des mois — et « le jour J est passé » y est
+               toujours vrai. Rattacher un QCM à une formation l'envoyait donc à tous ses anciens
+               stagiaires à leur prochaine visite ; le partager entre cinq formations l'aurait envoyé
+               à des centaines de personnes qui ont déjà répondu à leur propre version.
+               La SESSION et non le jour : un test de positionnement « J-7 » créé deux jours avant le
+               début doit partir, alors que son jour est déjà passé. La date du rattachement vient
+               de la migration 163 (celle de la création du QCM pour l'existant). */
+            if (lien.lie_le && e.end_date && e.end_date < lien.lie_le) continue;
             const [[ex]] = await conn.query(
                 `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
                  WHERE gd.quiz_id = ? AND df.enrollment_id = ? LIMIT 1`,

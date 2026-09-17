@@ -43,4 +43,15 @@ async function colonneOuNull(conn, table, colonne, prefixe = '') {
         : `NULL AS ${colonne}`;
 }
 
-module.exports = { colonneExiste, colonneOuNull };
+/** La même question pour une TABLE entière (une migration qui en crée une, comme la 163). */
+async function tableExiste(conn, table) {
+    try {
+        const [r] = await conn.query(
+            `SELECT 1 FROM information_schema.tables
+              WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1`,
+            [table]);
+        return r.length > 0;
+    } catch { return false; }
+}
+
+module.exports = { colonneExiste, colonneOuNull, tableExiste };
