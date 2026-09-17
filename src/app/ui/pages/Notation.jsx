@@ -233,7 +233,7 @@ function Notation() {
       ) : (
         <>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "0 0 14px" }}>
-            <SelecteurSemaine sessions={sessions} valeur={semaine} onChoisir={setSemaine} />
+            <SelecteurSemaine sessions={sessions} valeur={semaine} onChoisir={setSemaine} vide="Aucune session à noter." />
             <div className="seg">
               <button type="button" className={"seg-btn" + (vue === "note" ? " on" : "")} onClick={() => setVue("note")}>Note</button>
               <button type="button" className={"seg-btn" + (vue === "resultat" ? " on" : "")} onClick={() => setVue("resultat")}>Résultat</button>
