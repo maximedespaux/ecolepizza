@@ -80,39 +80,40 @@ test('L\'ORDRE DES SEMAINES VIENT DU SERVEUR, ON NE LE REFAIT PAS', async () => 
         'et les autres gardent l\'ordre du serveur');
 });
 
-test('DEUX PRÉSENTATIONS, UN SEUL RANGEMENT', () => {
-    /* CE QUI A CHANGÉ, et pourquoi ce test ne dit plus « un seul sélecteur ». Notation est passé
-       au choix par SEMAINE — on y installe les épreuves une fois et on note tout le monde,
-       formations mêlées ; le Pipeline, lui, suit UNE session étape par étape : choisir la
-       session EST son sujet. Deux questions différentes, donc deux présentations.
+test('UNE SEULE PRÉSENTATION, UN SEUL RANGEMENT — pour les trois écrans', () => {
+    /* L'HISTOIRE DE CE TEST, parce qu'elle explique ce qu'il protège. Il disait d'abord « un seul
+       sélecteur » ; puis « deux présentations, un seul rangement », quand Notation est passé à la
+       semaine et que le Pipeline est resté à la session — « il suit UNE session, choisir la
+       session EST son sujet ». Cette raison visait le TABLEAU, pas le sélecteur. Le 2026-09-17 le
+       Pipeline est passé à la semaine à son tour, chaque session gardant son propre tableau : il
+       n'y a plus qu'UNE présentation, employée par trois écrans.
 
-       CE QUI NE DOIT PAS DIVERGER, en revanche, ce sont les RÈGLES de rangement — normalisation
-       des champs, regroupement par semaine, tri par formation. Elles vivent dans `lib/sessions.js`
-       et les deux composants les importent. C'était ça, le défaut d'origine : pas deux écrans,
-       deux copies de la même logique. */
-    for (const [f, composant] of [['pages/Notation.jsx', 'SelecteurSemaine'], ['pages/Pipeline.jsx', 'SelecteurSession']]) {
+       Ce qui n'a jamais changé, c'est l'invariant : les RÈGLES de rangement vivent dans
+       `lib/sessions.js`, et aucun écran ne les réécrit. */
+    for (const f of ['pages/Notation.jsx', 'pages/Pipeline.jsx', 'pages/ResultatsQCM.jsx']) {
         const src = lire(f);
-        assert.match(src, new RegExp(`import ${composant} from ["']\\.\\./components/${composant}\\.jsx["']`),
-            `${f} doit employer ${composant}`);
-        assert.match(src, new RegExp(`<${composant} `), `${f} doit le rendre`);
+        assert.match(src, /import SelecteurSemaine from ["']\.\.\/components\/SelecteurSemaine\.jsx["']/, `${f} doit employer SelecteurSemaine`);
+        assert.match(src, /<SelecteurSemaine /, `${f} doit le rendre`);
+        // Ouvrir sur la semaine en cours, par la MÊME règle : pas une copie par écran.
+        assert.match(src, /semaineParDefaut\(grouperParSemaine\(/, `${f} doit ouvrir sur la semaine en cours`);
         /* L'ANCIEN MENU EST SUPPRIMÉ, pas laissé à côté : deux chemins vers la même chose, c'est
            reprendre la dette qu'on vient de payer. */
-        assert.ok(!/<select[^>]*>[\s\S]{0,400}sessions\.map/.test(src),
-            `${f} ne doit plus lister les sessions dans un <select>`);
+        assert.ok(!/<select[^>]*>[\s\S]{0,400}sessions\.map/.test(src), `${f} ne doit plus lister les sessions dans un <select>`);
     }
-    assert.ok(!/const sessLabel/.test(lire('pages/Pipeline.jsx')),
-        'le libellé du menu supprimé ne doit pas rester orphelin — esbuild ne le signale pas');
+
+    /* L'ANCIEN SÉLECTEUR N'EXISTE PLUS. Resté sans utilisateur, il aurait invité le prochain écran à
+       reprendre le choix par session — c'est-à-dire à rouvrir exactement la question qu'on vient de
+       trancher trois fois. */
+    assert.ok(!fs.existsSync(path.join(UI, 'components/SelecteurSession.jsx')), 'SelecteurSession.jsx est supprimé');
+    for (const f of ['pages/Notation.jsx', 'pages/Pipeline.jsx', 'pages/ResultatsQCM.jsx']) {
+        assert.ok(!/SelecteurSession/.test(lire(f)), `${f} ne le mentionne plus`);
+    }
 
     /* ET LE COMPOSANT TIRE DE LA LIB, il ne réécrit pas les règles. C'est l'invariant central :
-       sans lui, on aurait DEUX rangements — celui qu'on teste, et celui qui s'affiche. Le test
-       est né d'une réintroduction restée verte : retirer cet import casse l'écran au runtime et
-       rien ne le signalait, `esbuild` ne voyant pas une référence non définie (CLAUDE.md § 2.4). */
-    for (const c of ['components/SelecteurSession.jsx', 'components/SelecteurSemaine.jsx']) {
-        const comp = lire(c);
-        assert.match(comp, /from ["']\.\.\/lib\/sessions\.js["']/, `${c} doit tirer les règles de la lib`);
-        assert.ok(!/function normaliser|\.sort\(\(a, b\) => \(a\.code/.test(comp),
-            `${c} : aucune copie du rangement dans le composant`);
-    }
+       sans lui, on aurait DEUX rangements — celui qu'on teste, et celui qui s'affiche. */
+    const comp = lire('components/SelecteurSemaine.jsx');
+    assert.match(comp, /from ["']\.\.\/lib\/sessions\.js["']/, 'SelecteurSemaine doit tirer les règles de la lib');
+    assert.ok(!/function normaliser|\.sort\(\(a, b\) => \(a\.code/.test(comp), 'aucune copie du rangement dans le composant');
 });
 
 test('RÉSULTATS QCM : la semaine, SANS perdre le « toutes » du filtre', () => {
