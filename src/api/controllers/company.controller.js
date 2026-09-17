@@ -21,7 +21,7 @@ const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
-const { companySignsDoc, stepSigners } = require('../lib/documents.js');
+const { companySignsDoc, stepSigners, typeDuModele } = require('../lib/documents.js');
 const { loadConditionMap, getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
@@ -566,6 +566,8 @@ const createCompanyDocument = async (req, res) => {
             } catch (e) { if (!isMissingSchema(e)) throw e; }
         }
 
+        // Jamais `step.doc_type` brut : il est vide sur un modèle sans « Type », et la colonne le refuse.
+        const type = typeDuModele(step);
         let created = 0;
         for (const g of groups.values()) {
             if (signedOpcos.has((g.opco || '').trim().toUpperCase())) continue; // déjà signé → conservé
@@ -577,12 +579,12 @@ const createCompanyDocument = async (req, res) => {
                     await conn.query(
                         `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id, opco)
                          VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?, ?)`,
-                        [id, orgId, step.doc_type, template_slug, title, company.id, session_id, g.opco]);
+                        [id, orgId, type, template_slug, title, company.id, session_id, g.opco]);
                 } else {
                     await conn.query(
                         `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
                          VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
-                        [id, orgId, step.doc_type, template_slug, title, company.id, session_id]);
+                        [id, orgId, type, template_slug, title, company.id, session_id]);
                 }
             } catch (e) {
                 if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
@@ -802,7 +804,7 @@ const generateGroupDocuments = async (req, res) => {
         const applicable = seulementEntreprise ? grp.enrollments : grp.enrollments.filter((e) => e.slugs.has(slug));
         let created = 0, sent = 0;
         for (const e of applicable) {
-            const docId = await prepareLearnerDoc(conn, orgId, { learnerId: e.learner_id, type: step.doc_type, templateSlug: slug, enrollmentIds: [e.id] });
+            const docId = await prepareLearnerDoc(conn, orgId, { learnerId: e.learner_id, type: typeDuModele(step), templateSlug: slug, enrollmentIds: [e.id] });
             created++;
             if (send) { try { await sendPreparedDoc(conn, orgId, docId); sent++; } catch (err) { console.error('Envoi groupe ignoré :', err.message); } }
         }

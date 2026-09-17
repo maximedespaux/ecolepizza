@@ -163,6 +163,25 @@ function orgSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('O
 function externalSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('EXTERNAL'); }
 
 /**
+ * LE TYPE D'UN DOCUMENT TIRÉ DE SON MODÈLE.
+ *
+ * `doc_type` est FACULTATIF sur un modèle — le champ « Type » de l'écran Modèles peut rester vide,
+ * et il l'est sur le « Règlement examen » créé par l'école — alors que `generated_document.type`
+ * est NOT NULL (migration 010). Les deux générations d'une entreprise (documents de groupe, et
+ * documents de chaque stagiaire du groupe) passaient `step.doc_type` tel quel : MariaDB refuse un
+ * NULL dans une colonne NOT NULL, et la génération répondait 500.
+ *
+ * LE REPLI EST CELUI DE LA FICHE STAGIAIRE : le slug en capitales, tirets en soulignés
+ * (`r-glement-examen` → `R_GLEMENT_EXAMEN`). Un même modèle doit produire le même type quel que
+ * soit l'écran qui le génère : quand le slug ne suffit pas, c'est le type qui relie un document à
+ * ses signataires et à son étape de parcours. Coupé à 40 caractères, la largeur de la colonne.
+ */
+function typeDuModele(step) {
+    if (step && step.doc_type) return step.doc_type;
+    return String((step && step.slug) || '').toUpperCase().replace(/-/g, '_').slice(0, 40) || 'AUTRE';
+}
+
+/**
  * CE DOCUMENT ATTEND-IL ENCORE QUELQU'UN ? Vrai s'il reste une signature — ou une réponse — à
  * recevoir d'un AUTRE que l'école : le stagiaire, l'entreprise, un signataire externe.
  *
@@ -194,4 +213,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stepSigners, docSignerRoles };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles };
