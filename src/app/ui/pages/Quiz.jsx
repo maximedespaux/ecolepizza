@@ -13,6 +13,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 import { MOTS_MAX_DEFAUT } from "../lib/mots.js";
+import { jourAffiche, parJour } from "../lib/qcmJours.js";
 
 const KINDS = [
   { v: "GRADED", label: "Noté (correction + score)" },
@@ -47,8 +48,6 @@ function dayPhrase(day) {
   return `le matin du jour ${d < 1 ? 1 : d}`;
 }
 
-// Le jour qui s'applique dans le groupe : celui de SA formation pour un QCM d'une seule formation.
-const jourAffiche = (q) => (q.formations && q.formations.length === 1 ? q.formations[0].jour : q.day);
 
 /* Regroupe les QCM par formation ; chaque groupe trié par jour.
    UN QCM PARTAGÉ (plusieurs formations, migration 163) a SON groupe, « Plusieurs formations ».
@@ -67,7 +66,7 @@ function groupByFormation(quizzes) {
     map.get(key).items.push(q);
   }
   const groups = [...map.values()];
-  groups.forEach((g) => g.items.sort((a, b) => (jourAffiche(a) ?? 99) - (jourAffiche(b) ?? 99) || a.title.localeCompare(b.title)));
+  groups.forEach((g) => g.items.sort(parJour));
   const rang = (g) => (g.program_code ? 0 : g.plusieurs ? 1 : 2);
   return groups.sort((a, b) => rang(a) - rang(b) || a.program_code.localeCompare(b.program_code));
 }

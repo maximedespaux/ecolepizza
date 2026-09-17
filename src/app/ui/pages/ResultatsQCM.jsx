@@ -12,6 +12,7 @@ import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 /* LE MÊME rangement que Notation, pas une copie : c'est la règle de rangement qui divergeait
    quand le code était recopié (cf. lib/sessions.js), pas le balisage. */
 import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
+import { parJour } from "../lib/qcmJours.js";
 import GrilleCorrigee from "../components/GrilleCorrigee.jsx";
 
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
@@ -302,6 +303,11 @@ function grouperParFormation(rows) {
     }
     parCle.get(cle).items.push(q);
   }
+  /* DANS CHAQUE GROUPE, L'ORDRE DES JOURS — le test de positionnement (J-7), puis mardi, mercredi…
+     Le serveur range au nombre de réponses : un tri qui change de semaine en semaine, et qui
+     donnait « Jeudi, Mardi, Mercredi, Test de positionnement ». La règle est celle des Modèles de
+     QCM (lib/qcmJours.js), pas une copie. */
+  for (const g of parCle.values()) g.items.sort(parJour);
   // Les formations, puis « Plusieurs formations », puis « Autre » toujours en dernier.
   const rang = (g) => (g.autre ? 2 : g.plusieurs ? 1 : 0);
   return [...parCle.values()].sort((a, b) => rang(a) - rang(b));
@@ -412,8 +418,9 @@ function ResultatsQCM() {
     if (!visibles.length) return;
     const entetes = ["Formation", "QCM", "Type", "Réponses", "Score moyen %", "Taux de réussite %"];
     // Ce qu'on voit, pas ce que le serveur a rendu : exporter vingt-deux lignes quand l'écran en
-    // montre six ferait mentir le fichier sur ce qu'on a regardé.
-    const lignes = visibles.map((q) => [
+    // montre six ferait mentir le fichier sur ce qu'on a regardé. Et DANS L'ORDRE où on le voit :
+    // par formation, puis par jour.
+    const lignes = grouperParFormation(visibles).flatMap((g) => g.items).map((q) => [
       estPartage(q) ? q.formations.map((f) => f.code).join(", ")
         : q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre",
       q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? "",
