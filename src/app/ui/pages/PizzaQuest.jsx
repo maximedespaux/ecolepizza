@@ -675,9 +675,13 @@ function Arcade({ prog, onGame }) {
 
 // Carte-formation (rectangle coloré façon schéma) → ouvre le monde.
 function FCard({ w, prog, onPick }) {
-  const done = prog ? Object.keys(prog).length : 0;
-  const stars = prog ? Object.values(prog).reduce((a, s) => a + s, 0) : 0;
   const nbCh = chaptersFor(w).length;
+  /* SEULS LES CHAPITRES QUI EXISTENT COMPTENT. La progression garde les étoiles par NUMÉRO de
+     chapitre ; un chapitre retiré de la formation y laissait les siennes, et la carte annonçait
+     « 3/2 chapitres » avec une jauge à 150 %. Un numéro au-delà du dernier chapitre ne compte plus. */
+  const faits = prog ? Object.keys(prog).filter((i) => Number(i) < nbCh) : [];
+  const done = faits.length;
+  const stars = faits.reduce((a, i) => a + (prog[i] || 0), 0);
   const diff = DIFFICULTE[roleOf(w)] || DIFFICULTE.autre;
   // Pastille « ! » dès que la formation a un prérequis, acquis ou non : elle SIGNALE, et le
   // détail se lit dans le récapitulatif placé sous le groupe où elle apparaît.

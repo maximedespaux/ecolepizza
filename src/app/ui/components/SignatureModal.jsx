@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Field } from "./Field.jsx";
+import { versCanevas, mesuresCanevas } from "../lib/canevasSignature.js";
 
 /**
  * Fenêtre de signature électronique simple (SES) : nom saisi + consentement +
@@ -29,11 +30,9 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
     ctx.strokeStyle = "#1e2140";
     let drawing = false;
     let last = null;
-    const pos = (e) => {
-      const r = c.getBoundingClientRect();
-      const t = e.touches ? e.touches[0] : e;
-      return { x: t.clientX - r.left, y: t.clientY - r.top };
-    };
+    /* Position du doigt en coordonnées du CANEVAS, pas de l'écran : affiché plus étroit que ses
+       520 points (téléphone), le canevas traçait l'encre à côté du doigt (cf. lib/canevasSignature). */
+    const pos = (e) => versCanevas(e.touches ? e.touches[0] : e, mesuresCanevas(c));
     const down = (e) => { drawing = true; last = pos(e); e.preventDefault(); };
     const move = (e) => {
       if (!drawing) return;
@@ -85,7 +84,11 @@ function SignatureModal({ doc, defaultName = "", onConfirm, onClose }) {
               ref={canvasRef}
               width={520}
               height={150}
-              style={{ width: "100%", height: 150, border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "#fff", touchAction: "none", cursor: "crosshair" }}
+              /* LES PROPORTIONS DU CANEVAS, À L'ÉCRAN AUSSI (520 / 150). Une hauteur fixe de 150 px
+                 sur une largeur de 325 aurait obligé à étirer le tracé en largeur seulement : la
+                 signature enregistrée serait sortie déformée. Sur téléphone la zone est moins haute,
+                 mais ce qu'on y trace est exactement ce qui part dans le document. */
+              style={{ width: "100%", height: "auto", aspectRatio: "520 / 150", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "#fff", touchAction: "none", cursor: "crosshair" }}
             />
             <button type="button" className="btn sm ghost" style={{ marginTop: 6 }} onClick={clearPad}>Effacer</button>
           </div>

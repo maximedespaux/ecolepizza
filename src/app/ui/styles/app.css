@@ -1667,6 +1667,9 @@ tbody tr:last-child td{border-bottom:none}
 .mhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border-soft)}
 .mhead h3{font-size:17px}
 .modal .x{background:none;border:none;font-size:24px;line-height:1;color:var(--muted);width:32px;height:32px;display:grid;place-items:center;border-radius:8px}
+/* La croix des cinquante-quatre fenêtres, à la taille du doigt sur téléphone : 26 × 32 px pour le
+   seul moyen de sortir d'une fenêtre. La marge négative garde l'en-tête à sa hauteur. */
+@media(max-width:600px){.modal .x{width:44px;height:44px;flex:none;margin:-6px -8px -6px 0}}
 .modal .x:hover{color:var(--text);background:var(--surface2)}
 .mbody{padding:18px 20px;overflow-y:auto}
 .mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
@@ -3134,6 +3137,10 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cmd-step.done .cmd-dot{background:var(--grad-ember);border-color:transparent;color:#fff}
 .cmd-step.on .cmd-dot{border-color:var(--ember1,#c0392b);color:var(--ember1,#c0392b)}
 .cmd-step-lbl{font-size:11px;color:var(--muted);line-height:1.2}
+/* LES SIX ÉTAPES TIENNENT DANS L'ÉCRAN. À 64 px minimum chacune, il en fallait 384 : sur téléphone
+   « Facturé » était coupé et « Remis » invisible sans faire défiler — or c'est justement la fin
+   du parcours qu'on vient regarder. Elles se partagent la largeur, et l'intitulé se coupe. */
+@media(max-width:600px){.cmd-step{min-width:0}.cmd-step-lbl{font-size:10px;hyphens:auto;overflow-wrap:anywhere}}
 .cmd-step.on .cmd-step-lbl{color:var(--text);font-weight:700}
 /* TROIS colonnes plutôt que quatre sur un écran large. À 158px de plancher, une quatrième
    colonne entrait et chaque carte tombait à 165px : la ligne de prix (barré · net · TTC · badge)
@@ -3985,6 +3992,15 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
 /* — Onglets segmentés : plus généreux au doigt ————————————————————————————————— */
 .stu-app .seg{padding:4px;border-radius:999px}
 .stu-app .seg-btn{padding:8px 16px;font-size:13.5px;min-height:38px}
+/* SUR TÉLÉPHONE, DEUX OU TROIS ONGLETS TIENNENT SUR UNE LIGNE. À 16 px de rembourrage, « Mes
+   formations (3) » et « Mes documents (4) » ne tenaient plus côte à côte et s'empilaient dans une
+   pilule étirée sur deux lignes. Le retour à la ligne des sélecteurs (`.seg`) reste le dernier
+   recours ; l'arrondi suit, pour qu'un bloc sur deux lignes ne prenne pas la forme d'une gélule. */
+@media(max-width:600px){.stu-app .seg-btn{padding-left:10px;padding-right:10px}.stu-app .seg{border-radius:14px}}
+/* Cases et boutons radio à la taille du doigt : 13 px natifs sous le pouce, dans une grille de QCM
+   ou au pied de la fenêtre de signature, c'est le voisin qu'on coche. `.modal` aussi : les fenêtres
+   sont rendues HORS de `.stu-app` (portail dans `document.body`), la première règle ne les atteint pas. */
+@media(max-width:600px){.stu-app input[type=radio],.stu-app input[type=checkbox],.modal input[type=radio],.modal input[type=checkbox]{width:20px;height:20px;flex:none}}
 
 /* Cible tactile confortable partout dans l'espace stagiaire (44px = seuil Apple/Material). */
 .stu-app .btn.sm{min-height:38px}
