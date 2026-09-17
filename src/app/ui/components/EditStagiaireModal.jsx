@@ -92,6 +92,9 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   // casse ne dépende pas de celle du poste — sans argument, un navigateur en turc écrirait
   // « İLE » pour « ile ».
   const setNom = (e) => setForm((p) => ({ ...p, last_name: e.target.value.toLocaleUpperCase("fr") }));
+  // VILLE en majuscules aussi, même règle et même locale — le serveur l'applique de toute façon
+  // (src/api/lib/saisie.js) ; la faire dès la frappe évite qu'elle change de casse à l'enregistrement.
+  const setVille = (e) => setForm((p) => ({ ...p, town: e.target.value.toLocaleUpperCase("fr") }));
   // E-MAIL en minuscules et sans espace : c'est aussi l'identifiant de connexion du stagiaire,
   // et « Jean@X.fr » puis « jean@x.fr » finiraient en deux comptes pour la même personne.
   const setEmail = (e) => setForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }));
@@ -163,6 +166,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
 
   const current = (form.levels || "").split(",").map((s) => s.trim()).filter(Boolean);
   const finished = (form.completed_levels || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // « Terminée » ne compte que parmi les formations cochées : décocher un accès retire aussi son « terminé ».
+  const nbTerminees = finished.filter((c) => current.includes(c)).length;
   const codes = [...new Set([...formations.map((f) => f.code).filter(Boolean), ...current])];
 
   return (
@@ -202,7 +207,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               <div className="row3">
                 <Field label="Adresse" value={form.address} onChange={set("address")} placeholder="12 rue des Lilas" />
                 <Field label="Code postal" value={form.zip_code} onChange={set("zip_code")} placeholder="65300" />
-                <Field label="Ville" value={form.town} onChange={set("town")} placeholder="Lannemezan" />
+                <Field label="Ville" value={form.town} onChange={setVille} placeholder="LANNEMEZAN" />
               </div>
 
               <div className="divider" />
@@ -258,31 +263,6 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                 </SelectField>
               </div>
 
-              <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 6px" }}>Niveaux / accès, codes formation · cochez <b>terminé</b> quand la formation est finie</label>
-              {codes.length === 0 ? (
-                <p className="hint">Aucune formation. Créez-en dans « Formations ».</p>
-              ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  {codes.map((code) => {
-                    const on = current.includes(code);
-                    const fin = finished.includes(code);
-                    return (
-                      <span key={code} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 8px", border: "1px solid var(--border-soft)", borderRadius: 8, background: on ? "var(--surface2)" : "transparent" }}>
-                        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 14, cursor: "pointer" }}>
-                          <input type="checkbox" checked={on} onChange={() => toggleLevel(code)} />
-                          <i style={{ width: 11, height: 11, borderRadius: "50%", background: codeColor(code), display: "inline-block" }} /> {code}
-                        </label>
-                        {on && (
-                          <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: fin ? "#2e9e5b" : "var(--muted)", cursor: "pointer" }}>
-                            <input type="checkbox" checked={fin} onChange={() => toggleFinished(code)} /> terminé
-                          </label>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
               <div className="divider" />
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet</h3>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
@@ -320,7 +300,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                       <div className="row3">
                         <Field label="Nom" requis value={newCo.name} onChange={(e) => setNewCo((n) => ({ ...n, name: e.target.value }))} />
                         <Field label="SIRET" requis placeholder="879 955 136 00012" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
-                        <Field label="Ville" placeholder="Lannemezan" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value }))} />
+                        <Field label="Ville" placeholder="LANNEMEZAN" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value.toLocaleUpperCase("fr") }))} />
                       </div>
                       <div className="row3">
                         <Field label="E-mail" requis type="email" placeholder="contact@lepetitfour.fr" value={newCo.email} onChange={(e) => setNewCo((n) => ({ ...n, email: e.target.value }))} />
@@ -335,6 +315,48 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   )}
                 </>
               )}
+
+              {/* NIVEAUX / ACCÈS — EN BAS, ET REPLIÉS (déplacés le 2026-09-17, à la demande de l'école).
+                  La section coupait « Statut & financement » de « Votre projet », au milieu de la
+                  fiche d'expression du stagiaire, alors qu'elle se remplit en grande partie seule :
+                  l'inscription en session ajoute l'accès (cf. enrollment.controller). On y revient
+                  pour corriger, ou pour cocher « terminé ». Repliée, elle garde son résumé visible —
+                  combien de formations, combien de terminées — pour qu'on sache sans l'ouvrir s'il
+                  y a quelque chose à voir. */}
+              <div className="divider" />
+              <details className="acces-formations">
+                <summary className="arch-sum arch-y">
+                  Niveaux / accès, codes formation
+                  <span className="arch-count">
+                    {current.length === 0 ? "aucune formation"
+                      : `${current.length} formation${current.length > 1 ? "s" : ""} · ${nbTerminees} terminée${nbTerminees > 1 ? "s" : ""}`}
+                  </span>
+                </summary>
+                <p className="hint" style={{ margin: "6px 0 10px" }}>Cochez <b>terminé</b> quand la formation est finie.</p>
+                {codes.length === 0 ? (
+                  <p className="hint">Aucune formation. Créez-en dans « Formations ».</p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    {codes.map((code) => {
+                      const on = current.includes(code);
+                      const fin = finished.includes(code);
+                      return (
+                        <span key={code} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 8px", border: "1px solid var(--border-soft)", borderRadius: 8, background: on ? "var(--surface2)" : "transparent" }}>
+                          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 14, cursor: "pointer" }}>
+                            <input type="checkbox" checked={on} onChange={() => toggleLevel(code)} />
+                            <i style={{ width: 11, height: 11, borderRadius: "50%", background: codeColor(code), display: "inline-block" }} /> {code}
+                          </label>
+                          {on && (
+                            <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: fin ? "#2e9e5b" : "var(--muted)", cursor: "pointer" }}>
+                              <input type="checkbox" checked={fin} onChange={() => toggleFinished(code)} /> terminé
+                            </label>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </details>
             </form>
           )}
         </div>

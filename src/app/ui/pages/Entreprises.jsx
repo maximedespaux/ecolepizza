@@ -156,15 +156,18 @@ export default function Entreprises() {
   );
 }
 
+// Même liste que CAPITALES_ENTREPRISE côté serveur (src/api/lib/saisie.js).
+const EN_CAPITALES = ["representative_name", "town"];
+
 function CreateCompanyModal({ onClose, onCreated, onError }) {
   const [f, setF] = useState({ name: "", siret: "", vat_number: "", date_creation: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
   const [busy, setBusy] = useState(false);
-  /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent en
-     capitales (il ressort sur les conventions et les liens de signature), e-mail normalisé —
+  /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent et ville en
+     capitales (ils ressortent sur les conventions et les liens de signature), e-mail normalisé —
      c'est l'adresse de la demande de signature. La raison sociale garde SA casse officielle. */
   const set = (k) => (e) => setF((p) => ({
     ...p,
-    [k]: k === "representative_name" ? e.target.value.toLocaleUpperCase("fr")
+    [k]: EN_CAPITALES.includes(k) ? e.target.value.toLocaleUpperCase("fr")
       : k === "email" ? e.target.value.trim().toLowerCase()
         : e.target.value,
   }));
@@ -215,7 +218,7 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
           <div className="field"><label>Adresse</label><input className="inp" value={f.address} onChange={set("address")} placeholder="12 rue des Lilas" /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>
             <div className="field"><label>Code postal</label><input className="inp" value={f.zip_code} onChange={set("zip_code")} placeholder="65300" /></div>
-            <div className="field"><label>Ville</label><input className="inp" value={f.town} onChange={set("town")} placeholder="Lannemezan" /></div>
+            <div className="field"><label>Ville</label><input className="inp" value={f.town} onChange={set("town")} placeholder="LANNEMEZAN" /></div>
           </div>
           <div className="field"><label>E-mail<Requis /></label><input className="inp" type="email" value={f.email} onChange={set("email")} placeholder="contact@lepetitfour.fr" /></div>
           <div className="grid cols-2" style={{ gap: 12 }}>

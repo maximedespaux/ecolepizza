@@ -100,8 +100,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-16** :
-**1300 tests — 1293 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-17** :
+**1404 tests — 1397 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,21 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **aucune en attente (vérifié le 2026-09-16)**
+## 4. Migrations — **162 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+
+**162 — À JOUER** (`162_villes_capitales.sql`) : met en capitales la ville des stagiaires et des
+entreprises DÉJÀ en base ; le code le fait à chaque écriture depuis. Migration de DONNÉES : rien
+ne se voit au schéma, elle se vérifie au contenu — plus aucune ville en minuscules dans la liste
+des stagiaires. Son revert ne fait rien, et l'explique : la casse d'origine n'est conservée nulle
+part, et le code d'avant accepte très bien une ville en capitales.
+
+**158, 159 et 160 sont jouées** : `GET /stagiaires/:id` et `GET /companies/:id` font un
+`SELECT *`, et renvoient les clés `project_improvement` (158) et `date_creation` (159) ; la 160
+(types de remise) a été constatée par l'utilisateur, qui a créé le type « OPCO ».
+
+⚠️ **161 (`remise_document.sans_objet`) ne se vérifie PAS par l'API** : la liste relit la colonne
+en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Une requête suffit — même forme
+que pour la 156 ci-dessous, avec `table_name='remise_document' AND column_name='sans_objet'`.
 
 Les migrations **153 à 157 sont jouées**. Elles avaient été annoncées « en attente » dans ce
 paragraphe et y sont restées après avoir été jouées : exactement le travers décrit plus bas.

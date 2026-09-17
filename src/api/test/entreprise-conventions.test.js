@@ -49,8 +49,10 @@ test('les deux écrans appliquent les mêmes conventions, et montrent un exemple
     // Fiche entreprise : la normalisation passe par le convertisseur, pas par un set() brut.
     assert.match(DETAIL, /function valeurNormalisee/);
     assert.match(DETAIL, /setForm\(\(p\) => \(\{ \.\.\.p, \[k\]: valeurNormalisee\(k, e\.target\.value\) \}\)\)/);
-    // Modale de création : même règle, appliquée sur place.
-    assert.match(LISTE, /representative_name" \? e\.target\.value\.toLocaleUpperCase\("fr"\)/);
+    // Modale de création : même règle, appliquée sur place — à la liste des champs en capitales,
+    // qui compte aussi la ville depuis le 2026-09-17 (cf. ville-capitales.test.js).
+    assert.match(LISTE, /const EN_CAPITALES = \[[^\]]*"representative_name"/);
+    assert.match(LISTE, /EN_CAPITALES\.includes\(k\) \? e\.target\.value\.toLocaleUpperCase\("fr"\)/);
     assert.match(LISTE, /\^\[\^\\s@\]\+@/, 'le format d\'e-mail est vérifié avant l\'envoi');
     // Des exemples de format sur les champs libres des deux écrans.
     for (const attendu of ['placeholder: "879 955 136 00012"', 'placeholder: "65300"', 'placeholder: "DUPONT"']) {

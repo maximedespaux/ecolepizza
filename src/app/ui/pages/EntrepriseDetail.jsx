@@ -35,7 +35,7 @@ const CFIELDS = [
   { k: "opco", label: "OPCO / financeur", type: "select", dyn: "opco" },
   { k: "address", label: "Adresse", full: true, placeholder: "12 rue des Lilas" },
   { k: "zip_code", label: "Code postal", placeholder: "65300" },
-  { k: "town", label: "Ville", placeholder: "Lannemezan" },
+  { k: "town", label: "Ville", placeholder: "LANNEMEZAN" },
   { k: "email", label: "E-mail", requis: true, placeholder: "contact@lepetitfour.fr" },
   { k: "phone", label: "Téléphone", requis: true, placeholder: "05 62 98 12 34" },
   { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
@@ -43,12 +43,12 @@ const CFIELDS = [
   { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
 ];
 
-/* Mêmes conventions qu'à la saisie d'un stagiaire : le NOM DU RÉFÉRENT passe en capitales (il
-   ressort tel quel sur les conventions et les liens de signature) et l'E-MAIL est normalisé —
-   c'est l'adresse à laquelle part la demande de signature. La RAISON SOCIALE garde SA casse :
-   « SARL Le Petit Four » est un nom officiel, pas une donnée à uniformiser. */
+/* Mêmes conventions qu'à la saisie d'un stagiaire : le NOM DU RÉFÉRENT et la VILLE passent en
+   capitales (ils ressortent tels quels sur les conventions et les liens de signature) et l'E-MAIL
+   est normalisé — c'est l'adresse à laquelle part la demande de signature. La RAISON SOCIALE
+   garde SA casse : « SARL Le Petit Four » est un nom officiel, pas une donnée à uniformiser. */
 function valeurNormalisee(k, v) {
-  if (k === "representative_name") return v.toLocaleUpperCase("fr");
+  if (k === "representative_name" || k === "town") return v.toLocaleUpperCase("fr");
   if (k === "email") return v.trim().toLowerCase();
   return v;
 }

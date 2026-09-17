@@ -17,10 +17,12 @@ import { Squelette } from "./Squelette.jsx";
  * · Les trois états (chargement, vide, contenu) sont ici plutôt que recopiés trente fois.
  *   `rows === null` = on charge · `[]` = c'est vide · sinon le contenu.
  *
- * LES COLONNES portent trois marqueurs qui ne servent QU'EN MODE CARTE :
+ * LES COLONNES portent quatre marqueurs qui ne servent QU'EN MODE CARTE :
  *   `principal` — la colonne qui identifie la ligne. Elle devient le titre de la carte et
  *      perd son intitulé : « Nom : Dupont » en tête d'une carte n'apprend rien.
  *   `actions`   — la colonne des boutons. Elle passe en pied de carte, séparée du contenu.
+ *   `poignee`   — la poignée de glissé (⠿). En mode carte elle se pose en haut à droite au lieu
+ *      d'occuper une ligne : c'est la seule prise du doigt, la carte servant à faire défiler.
  *   `sansCarte` — la colonne DISPARAÎT en mode carte. Pour ce qui n'a de sens qu'en tableau :
  *      un chevron « ouvrir » n'apprend rien au pied d'une carte que l'on ouvre en entier, il
  *      ressemble juste à un bouton qui ferait autre chose.
@@ -69,7 +71,8 @@ export default function DataTable({
                       // carte serait une pile de valeurs sans savoir de quoi elles parlent.
                       <td key={c.k} data-intitule={c.t || undefined}
                         className={[c.principal && "dt-principal", c.actions && "dt-actions",
-                                    c.sansCarte && "dt-sans-carte", vide && "dt-vide"].filter(Boolean).join(" ") || undefined}
+                                    c.sansCarte && "dt-sans-carte", c.poignee && "dt-poignee",
+                                    vide && "dt-vide"].filter(Boolean).join(" ") || undefined}
                         style={c.td}>
                         {v}
                       </td>

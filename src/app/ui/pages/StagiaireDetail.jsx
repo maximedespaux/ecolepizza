@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, updateStagiaire, importDocumentFile, downloadDocumentImporte, deposerPiece} from "../api/apiClient.js";
-import { CADRES, cadreClass } from "../lib/cadres.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, deposerPiece} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -55,60 +54,6 @@ function Row({ label, value }) {
 const T = (icon, text) => (
   <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>
 );
-
-/**
- * Cadres exclusifs — les trois distinctions que l'ÉCOLE accorde.
- *
- * Les cadres de parcours (Bronze → Maestro) se déduisent seuls des formations terminées et
- * n'ont donc rien à faire ici. Champion, Jury et Fondateur, eux, ne s'obtiennent pas en
- * cumulant : ils se reçoivent. Sans cet écran ils restaient verrouillés pour tout le monde,
- * affichés au stagiaire comme un objectif inaccessible.
- *
- * Registre SOBRE, pas la couche ludique : on est dans l'espace d'administration. La
- * récompense est visible côté stagiaire, ici on ne fait que la décerner.
- *
- * L'écriture passe par PATCH /learners/:id, donc par `authorizeRoles(...ADMIN_ROLES)` : un
- * formateur ne peut pas s'accorder un Champion. Elle entre aussi au journal d'audit.
- */
-function CadresExclusifs({ learner, onSaved, onError }) {
-  const accordes = String(learner.cadres_exclusifs || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const [busy, setBusy] = useState(false);
-
-  function basculer(id) {
-    const suivant = accordes.includes(id) ? accordes.filter((x) => x !== id) : [...accordes, id];
-    setBusy(true);
-    // Chaîne vide et non `null` : la colonne accepte les deux, mais une chaîne vide se relit
-    // sans distinction de cas côté front (`split` d'une chaîne vide donne une liste vide).
-    updateStagiaire(learner.id, { cadres_exclusifs: suivant.join(",") })
-      .then(() => { onSaved(); onError({ type: "ok", message: "Cadres mis à jour." }); })
-      .catch((err) => onError({ type: "error", message: err.message }))
-      .finally(() => setBusy(false));
-  }
-
-  return (
-    <Card title={T("star", "Cadres exclusifs")}>
-      <p className="hint" style={{ marginTop: 0 }}>
-        Distinctions accordées par l'école. Les cadres de parcours (Bronze à Maestro) se
-        gagnent seuls, aux formations terminées, ils n'apparaissent pas ici.
-      </p>
-      <div className="cadres-attrib">
-        {CADRES.filter((c) => c.exclusif).map((c) => {
-          const on = accordes.includes(c.id);
-          return (
-            <label key={c.id} className={"cadre-attrib" + (on ? " on" : "")}>
-              <input type="checkbox" checked={on} disabled={busy} onChange={() => basculer(c.id)} />
-              <span className={"cadre-attrib-rond " + cadreClass(c.id)} aria-hidden="true" />
-              <span className="cadre-attrib-txt">
-                <b>{c.nom}</b>
-                <span className="hint">{c.condition}</span>
-              </span>
-            </label>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
 
 function StagiaireDetail() {
   const { id } = useParams();
@@ -474,8 +419,6 @@ function StagiaireDetail() {
           {projects ? <p style={{ margin: 0 }}>{projects}</p> : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
         </Card>
 
-        <CadresExclusifs learner={l} onSaved={loadLearner} onError={setStatus} />
-
         {c && (
           <Card title={T("building", "Entreprise")} className="cols-2" >
             <Row label="Nom" value={c.name} />
@@ -526,74 +469,93 @@ function StagiaireDetail() {
           </>
         )}
 
-        <div id="sd-prepare" />
-        <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>Préparer un document</h3>
-        <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
-          <div className="row2">
-            <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
-              {templates.length === 0 && <option value="">Aucun modèle disponible</option>}
-              {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
-            </SelectField>
-            <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
+        {/* HORS SESSION, RIEN À PRÉPARER — et on ne fait plus semblant. Le formulaire restait
+            affiché pour une fiche inscrite nulle part : un modèle à choisir, un titre à saisir,
+            puis un bouton « Générer » grisé pour toujours. Un document se rattache à un dossier
+            d'inscription (le serveur le refuse sans), et un dossier n'existe que dans une
+            session : sans session, il n'y a ni parcours ni document, seulement une inscription
+            à faire. C'est donc elle qu'on propose. */}
+        {enrollments.length === 0 ? (
+          <div className="sd-hors-session">
+            <p style={{ margin: 0 }}>
+              <b>Ce stagiaire n'est inscrit à aucune session.</b> Ses documents se préparent une fois
+              inscrit : c'est l'inscription qui ouvre son parcours.
+            </p>
+            <button type="button" className="btn sm ghost" onClick={() => navigate("/sessions")}>
+              <Icon name="calendar" size={14} /> Inscrire depuis une session
+            </button>
           </div>
-          <div className="field">
-            <label>Formations couvertes (regrouper plusieurs = un seul document)</label>
-            {enrollments.length === 0 ? (
-              <p className="hint" style={{ margin: 0 }}>Ce stagiaire n'est inscrit à aucune formation. Inscrivez-le depuis une session.</p>
-            ) : (
-              <DataTable
-                className="enroll-table"
-                rows={enrollments}
-                rowKey={(e) => e.id}
-                /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
-                   `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
-                   visuellement. */
-                rowProps={(e) => ({
-                  className: prep.enrollment_ids.includes(e.id) ? "on" : "",
-                  style: { cursor: "pointer" },
-                  onClick: () => toggleEnroll(e.id),
-                })}
-                cols={[
-                  { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
-                    cell: (e) => (
-                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
-                        aria-label={`Inclure le dossier ${e.program_code}`}
-                        onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
-                    ) },
-                  { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
-                  { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
-                  { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
-                  { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
-                    cell: (e) => {
-                      /* Troisième format sur la MÊME page avant aujourd'hui : celui-ci rendait
-                         bien « 12/03/1987 », mais par `new Date(iso)`, qui se lit en UTC et rend
-                         la veille dans tout fuseau négatif. `dateFr` découpe la chaîne. */
-                      return e.start_date ? `${dateFr(e.start_date)}${e.end_date ? ` → ${dateFr(e.end_date)}` : ""}` : "-";
-                    } },
-                  { k: "type", t: "Type", td: { fontSize: 12.5 },
-                    cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
-                ]}
-              />
-            )}
-          </div>
-          {blockedRules.length > 0 && (
-            <div className="doc-rule-warning" role="alert">
-              <Icon name="ban" />
-              <div>
-                {blockedRules.map((r) => (
-                  <div key={r.slug}>Ce document ne peut pas être généré à cause de la règle : <strong>{r.label}</strong></div>
-                ))}
-              </div>
+        ) : (
+        <>
+          <div id="sd-prepare" />
+          <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>Préparer un document</h3>
+          <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
+            <div className="row2">
+              <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
+                {templates.length === 0 && <option value="">Aucun modèle disponible</option>}
+                {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
+              </SelectField>
+              <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
             </div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
-            {prep.enrollment_ids.length === 0 && enrollments.length > 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
-          </div>
-        </form>
+            <div className="field">
+              <label>Formations couvertes (regrouper plusieurs = un seul document)</label>
+              <DataTable
+                  className="enroll-table"
+                  rows={enrollments}
+                  rowKey={(e) => e.id}
+                  /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
+                     `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
+                     visuellement. */
+                  rowProps={(e) => ({
+                    className: prep.enrollment_ids.includes(e.id) ? "on" : "",
+                    style: { cursor: "pointer" },
+                    onClick: () => toggleEnroll(e.id),
+                  })}
+                  cols={[
+                    { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
+                      cell: (e) => (
+                        <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
+                          aria-label={`Inclure le dossier ${e.program_code}`}
+                          onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
+                      ) },
+                    { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
+                    { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
+                    { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
+                    { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
+                      cell: (e) => {
+                        /* Troisième format sur la MÊME page avant aujourd'hui : celui-ci rendait
+                           bien « 12/03/1987 », mais par `new Date(iso)`, qui se lit en UTC et rend
+                           la veille dans tout fuseau négatif. `dateFr` découpe la chaîne. */
+                        return e.start_date ? `${dateFr(e.start_date)}${e.end_date ? ` → ${dateFr(e.end_date)}` : ""}` : "-";
+                      } },
+                    { k: "type", t: "Type", td: { fontSize: 12.5 },
+                      cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
+                  ]}
+                />
+            </div>
+            {blockedRules.length > 0 && (
+              <div className="doc-rule-warning" role="alert">
+                <Icon name="ban" />
+                <div>
+                  {blockedRules.map((r) => (
+                    <div key={r.slug}>Ce document ne peut pas être généré à cause de la règle : <strong>{r.label}</strong></div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
+              {prep.enrollment_ids.length === 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
+            </div>
+          </form>
+        </>
+        )}
 
+        {/* Hors session et sans document, l'encart ci-dessus a déjà tout dit : « Aucun document
+            préparé » en dessous répéterait la même absence. Les documents d'une ANCIENNE
+            inscription, eux, restent affichés — ils existent. */}
         {docs.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>Aucun document préparé.</p>
+          enrollments.length > 0 && <p className="hint" style={{ margin: 0 }}>Aucun document préparé.</p>
         ) : (
           <>
             {/* L'AVANCEMENT SE VOIT AVANT DE SE LIRE. Une jauge, puis les documents rangés selon

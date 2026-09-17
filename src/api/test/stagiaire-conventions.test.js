@@ -70,7 +70,8 @@ test('« Contacté par » et le niveau de diplôme sont des LISTES, sans perdre 
 
 test('les champs libres portent un exemple (placeholder), pas une étiquette répétée', () => {
     for (const attendu of ['placeholder="DUPONT"', 'placeholder="marie.dupont@exemple.fr"',
-        'placeholder="06 12 34 56 78"', 'placeholder="65300"', 'placeholder="Lannemezan"']) {
+        // Ville en CAPITALES depuis le 2026-09-17 : l'exemple montre le format que le champ écrit.
+        'placeholder="06 12 34 56 78"', 'placeholder="65300"', 'placeholder="LANNEMEZAN"']) {
         assert.ok(MODALE.includes(attendu), `${attendu} manquant`);
     }
 });

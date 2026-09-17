@@ -828,15 +828,6 @@ const sendQuizToEnrollment = async (req, res) => {
 };
 
 /**
- * Agrégation PAR QUESTION — fonction PURE (sans base, donc testable seule). À partir des questions,
- * des options et des réponses brutes (quiz_answer.value : ids d'options en CSV, valeur d'échelle,
- * ou JSON de grille), produit la répartition affichée :
- *   · QCU/QCM : effectif + % par option, l'option correcte marquée, et le % de stagiaires ayant
- *     ENTIÈREMENT bien répondu (l'ensemble choisi = l'ensemble correct) ;
- *   · Échelle : répartition 1..max + moyenne ;
- *   · Grille : nombre de réponses seul (détail par cellule en v2).
- */
-/**
  * CONSTRUIT LA PREUVE D'UNE RÉPONSE — autonome, lisible sans aucune jointure.
  *
  * POURQUOI EN TOUTES LETTRES. Un QCM enregistré voit ses questions supprimées puis recréées avec
@@ -854,7 +845,12 @@ const sendQuizToEnrollment = async (req, res) => {
 function construirePreuve({ quiz, questions, optsByQ, rowsByQ, answerRows, score, maxScore }) {
     const parQuestion = new Map(answerRows.map((a) => [a.question_id, a.value]));
     return {
-        version: 1,
+        /* VERSION 2 (2026-09-17) : les lignes de GRILLE portent leur correction — `bonnes` et `juste`.
+           En version 1 elles n'avaient que le choix du stagiaire : la preuve disait « Gluten : Oui »
+           sans pouvoir dire si c'était juste. Les preuves de version 1 NE SONT PAS complétées après
+           coup : il faudrait relire la grille d'AUJOURD'HUI, et une grille corrigée depuis ferait
+           mentir une preuve — exactement ce que cet objet existe pour empêcher. */
+        version: 2,
         quiz: { titre: quiz.title, genre: quiz.kind, seuil: quiz.pass_score ?? null },
         score: score ?? null,
         score_max: maxScore ?? null,
@@ -870,10 +866,17 @@ function construirePreuve({ quiz, questions, optsByQ, rowsByQ, answerRows, score
                 let choix = {};
                 try { choix = JSON.parse(brut || '{}'); } catch { choix = {}; }
                 const lignes = rowsByQ[q.id] || [];
+                const libelleColonne = (ci) => (opts[ci] ? opts[ci].text : `colonne ${ci + 1}`);
                 return { ...base,
                     lignes: lignes.map((ligne, li) => ({
                         libelle: ligne.text,
-                        choisi: (choix[li] || []).map((ci) => (opts[ci] ? opts[ci].text : `colonne ${ci + 1}`)),
+                        choisi: (choix[li] || []).map(libelleColonne),
+                        /* LA CORRECTION TELLE QU'ELLE ÉTAIT À LA SECONDE DE L'ENVOI, en LIBELLÉS comme le
+                           reste : la bonne réponse d'aujourd'hui n'est pas forcément celle d'alors. La
+                           même règle que la note (`ligneJuste`) — la preuve ne peut pas dire « juste »
+                           sur une ligne qui n'a rapporté aucun point. */
+                        bonnes: (ligne.correct || []).map(Number).map(libelleColonne),
+                        juste: ligneJuste(ligne.correct, choix[li]),
                     })),
                     colonnes: opts.map((o) => o.text) };
             }
@@ -886,10 +889,20 @@ function construirePreuve({ quiz, questions, optsByQ, rowsByQ, answerRows, score
 }
 
 /**
- * Le RÉCAPITULATIF par question de l'écran Résultats QCM.
+ * Le RÉCAPITULATIF par question de l'écran Résultats QCM — fonction PURE (sans base, donc testable
+ * seule). À partir des questions, des options et des réponses brutes (quiz_answer.value : ids
+ * d'options en CSV, valeur d'échelle, ou JSON de grille), produit la répartition affichée :
+ *   · QCU/QCM : effectif + % par option, l'option correcte marquée, et le % de stagiaires ayant
+ *     ENTIÈREMENT bien répondu (l'ensemble choisi = l'ensemble correct) ;
+ *   · Échelle : répartition 1..max + moyenne ;
+ *   · Grille : par LIGNE, l'effectif de chaque colonne et la part de justes.
  *
  * `rowsByQ` : les lignes des grilles, avec leurs bonnes réponses. Facultatif — sans elles, une grille
- * se résume à son nombre de réponses, comme avant.
+ * n'a pas de lignes à détailler.
+ *
+ * (Ce commentaire vivait, orphelin, au-dessus de `construirePreuve`, et annonçait encore « Grille :
+ * nombre de réponses seul (détail par cellule en v2) » alors que la v2 existe. Une documentation
+ * séparée de sa fonction se périme sans que personne ne la relise.)
  */
 function aggregerQuestions(questions, options, answers, rowsByQ = {}) {
     const optsByQ = {}; for (const o of options) (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);

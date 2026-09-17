@@ -6,6 +6,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import DoughBar from "../components/DoughBar.jsx";
 import AvatarCadre from "../components/AvatarCadre.jsx";
+import Distinctions from "../components/Distinctions.jsx";
 import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
@@ -393,6 +394,9 @@ export default function Communaute() {
   // Qui parle AU NOM DE L'ÉCOLE — même liste que `STAFF` dans community.controller. Le
   // formateur en est exclu : il est en salle avec eux, il n'engage pas l'organisme.
   const peutAnnoncer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  // Qui DÉCERNE les cadres exclusifs — les rôles de PATCH /stagiaires/:id (ADMIN_ROLES), par où
+  // passe l'écriture. Même liste que ci-dessus aujourd'hui, mais pas pour la même raison.
+  const peutDecerner = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).
@@ -623,6 +627,10 @@ export default function Communaute() {
           )}
         </section>
       )}
+
+      {/* Les cadres exclusifs se décernent ICI depuis le 2026-09-17 — ils vivaient sur la fiche
+          stagiaire, au milieu du dossier administratif (cf. Distinctions.jsx). */}
+      {peutDecerner && <Distinctions />}
 
       {list.length === 0 && echanges.length === 0 ? (
         <EmptyState icon="users" title="La communauté est encore vide"

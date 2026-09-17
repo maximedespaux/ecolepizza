@@ -64,7 +64,10 @@ test('le score et le seuil du jour sont dans la preuve', () => {
     assert.strictEqual(p.score, 2);
     assert.strictEqual(p.score_max, 2);
     assert.strictEqual(p.quiz.seuil, 60, 'le seuil de réussite peut changer : on garde celui du jour');
-    assert.strictEqual(p.version, 1, 'une preuve relue dans trois ans doit dire de quel format elle est');
+    /* VERSION 2 depuis le 2026-09-17 : les lignes de grille portent leur correction. C'est exactement
+       le cas pour lequel ce numéro existe — l'écran doit distinguer une preuve qui a CONSERVÉ la
+       correction d'une preuve qui ne l'a jamais eue, sans aller la chercher dans la grille actuelle. */
+    assert.strictEqual(p.version, 2, 'une preuve relue dans trois ans doit dire de quel format elle est');
 });
 
 test('une grille est traduite en libellés, pas en positions', () => {
@@ -77,8 +80,27 @@ test('une grille est traduite en libellés, pas en positions', () => {
         rowsByQ: { g1: [{ text: 'La pâte lève au froid' }] },
         answerRows: [{ question_id: 'g1', value: '{"0":[1]}' }],
     });
-    assert.deepStrictEqual(p.questions[0].lignes, [{ libelle: 'La pâte lève au froid', choisi: ['Faux'] }]);
+    /* Une ligne SANS bonne réponse déclarée n'est pas notée : `bonnes` vide, `juste` à null — jamais
+       `false`, qui compterait comme une faute ce que l'école n'a pas corrigé. */
+    assert.deepStrictEqual(p.questions[0].lignes, [{ libelle: 'La pâte lève au froid', choisi: ['Faux'], bonnes: [], juste: null }]);
     assert.deepStrictEqual(p.questions[0].colonnes, ['Vrai', 'Faux']);
+});
+
+test('une grille NOTÉE fige sa correction dans la preuve, en libellés', () => {
+    /* Jusqu'au 2026-09-17 la preuve disait « Gluten : Oui » sans pouvoir dire si c'était juste. La
+       correction est désormais recopiée À LA SECONDE DE L'ENVOI, et en LIBELLÉS comme le reste : si
+       l'école corrige sa grille plus tard, la preuve continue de dire ce qui était attendu ce jour-là. */
+    const p = construirePreuve({
+        ...jeu(),
+        questions: [{ id: 'g1', text: 'Allergènes', type: 'GRID_SINGLE', points: 1 }],
+        optsByQ: { g1: [{ id: 'cNon', text: 'Non' }, { id: 'cOui', text: 'Oui' }] },
+        rowsByQ: { g1: [{ text: 'Gluten', correct: [1] }, { text: 'Sésame', correct: [1] }] },
+        answerRows: [{ question_id: 'g1', value: '{"0":[1],"1":[0]}' }],
+    });
+    assert.deepStrictEqual(p.questions[0].lignes, [
+        { libelle: 'Gluten', choisi: ['Oui'], bonnes: ['Oui'], juste: true },
+        { libelle: 'Sésame', choisi: ['Non'], bonnes: ['Oui'], juste: false },
+    ]);
 });
 
 test('la preuve est écrite dans la MÊME requête que la réponse', () => {
