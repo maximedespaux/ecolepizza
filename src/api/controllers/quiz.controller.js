@@ -1140,6 +1140,11 @@ const resultatsOverview = async (req, res) => {
         const f = clauseFiltre(sessionId, year, req.query.semaine);
         const [rows] = await conn.query(
             `SELECT q.id, q.title, q.kind, q.pass_score, q.active, q.program_id,
+                    /* LE JOUR DU QCM : l'écran range chaque formation dans l'ordre des jours, et c'est
+                       aussi le repli du jour propre à une formation (jourPour). Sans lui, un QCM
+                       rattaché sans jour à sa formation arrivait « sans jour » et passait en fin de
+                       liste. */
+                    q.day,
                     p.code AS program_code, p.title AS program_title,
                     /* La COULEUR choisie sur la formation voyage avec la ligne : l'écran des
                        résultats affiche la même pastille que partout ailleurs, sans avoir à
@@ -1155,7 +1160,7 @@ const resultatsOverview = async (req, res) => {
                             FROM quiz_response r
                            WHERE r.organization_id = ?${f.sql}) fr ON fr.quiz_id = q.id
               WHERE q.organization_id = ?
-              GROUP BY q.id, q.title, q.kind, q.pass_score, q.active, q.program_id, p.code, p.title
+              GROUP BY q.id, q.title, q.kind, q.pass_score, q.active, q.day, q.program_id, p.code, p.title
               ORDER BY (q.program_id IS NULL), p.code, q.active DESC, responses DESC, q.title`,
             [orgId, ...f.params, orgId]);
         /* Sessions et années qui ONT des réponses (pour les menus de filtre).

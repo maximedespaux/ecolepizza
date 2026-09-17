@@ -151,7 +151,8 @@ test('par semaine, seuls les QCM qui ONT des réponses s\'affichent — sur « t
     assert.match(src, /const visibles = rows \? \(semaine \? rows\.filter\(\(q\) => q\.responses > 0\) : rows\) : \[\];/);
     assert.match(src, /grouperParFormation\(visibles\)/, 'la liste rend ce qui est visible');
     // L'export suit l'écran : exporter vingt-deux lignes quand on en montre six ferait mentir le fichier.
-    assert.match(src, /const lignes = visibles\.map/);
+    // Et dans l'ORDRE de l'écran (par formation, puis par jour) : même liste, même rangement.
+    assert.match(src, /const lignes = grouperParFormation\(visibles\)\.flatMap\(\(g\) => g\.items\)\.map/);
     // L'année ne vaut que pour « toutes » : une semaine désigne déjà la sienne.
     assert.match(src, /semaine \? null : \(selYear \|\| null\)/);
 });

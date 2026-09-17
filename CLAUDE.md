@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-17** :
-**1460 tests — 1453 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1469 tests — 1462 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **162 à 165 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+## 4. Migrations — **164 et 165 à jouer, 161 à vérifier (relevé le 2026-09-17)**
 
 **165 — À JOUER** (`165_titres_documents.sql`) : les documents titrés d'un CODE (« LIVRET_ACCUEIL »,
 « R_GLEMENT_EXAMEN ») prennent l'intitulé de leur modèle ; le code le fait à la création depuis.
@@ -168,20 +168,20 @@ MOTS, 128 par défaut) dans l'ENUM de `quiz_question.type`, et colonne `max_word
 REFUSE d'enregistrer une réponse libre (422) : un ENUM qui ignore une valeur la range en chaîne vide
 hors mode strict. Elle se vérifie à l'usage : enregistrer un QCM avec une question « Réponse libre »
 réussit. Son revert SUPPRIME les questions TEXT (leur texte reste dans les preuves figées).
+⚠️ Elle ne se vérifie PAS par l'API : les lectures demandent `max_words` par `colonneOuNull`, qui rend
+la clé dans les deux branches.
 
-**163 — À JOUER** (`163_qcm_plusieurs_formations.sql`) : table `quiz_program`, un QCM peut servir
-à PLUSIEURS formations, avec un jour propre à chacune. Sans elle, le code retombe sur
-`quiz.program_id` (une seule formation) et l'écran prévient si l'on en coche plusieurs. Elle se
-vérifie par l'API : `GET /quizzes` renvoie, pour un QCM coché dans deux formations après la
-migration, deux entrées dans `formations`. ⚠️ `created_at` y porte la DATE DE RATTACHEMENT, dont
-dépend la garde des anciens stagiaires (releaseAutoQuizzes) : ne jamais « supprimer puis
-réinsérer » ses lignes.
+**162 et 163 sont jouées — constaté le 2026-09-17 par l'API, sans SQL :**
 
-**162 — À JOUER** (`162_villes_capitales.sql`) : met en capitales la ville des stagiaires et des
-entreprises DÉJÀ en base ; le code le fait à chaque écriture depuis. Migration de DONNÉES : rien
-ne se voit au schéma, elle se vérifie au contenu — plus aucune ville en minuscules dans la liste
-des stagiaires. Son revert ne fait rien, et l'explique : la casse d'origine n'est conservée nulle
-part, et le code d'avant accepte très bien une ville en capitales.
+- **163** (`quiz_program`, un QCM pour plusieurs formations) : `GET /quizzes` rend DEUX formations
+  (NIV1H et RS7404) pour « Évaluation de satisfaction ». Sans la table, le repli ne lit que
+  `quiz.program_id` et n'en rendrait jamais qu'une. ⚠️ `created_at` y porte la DATE DE
+  RATTACHEMENT, dont dépend la garde des anciens stagiaires (releaseAutoQuizzes) : ne jamais
+  « supprimer puis réinsérer » ses lignes.
+- **162** (villes en capitales, migration de DONNÉES) : plus aucune ville en minuscules — 0 sur les
+  990 stagiaires qui en ont une, 0 entreprise — contre 7 stagiaires et 1 entreprise le matin même.
+  Le code ne met une ville en capitales qu'à l'enregistrement d'une fiche : huit fiches rouvertes
+  une à une dans la journée n'expliquent pas ce zéro, la migration si.
 
 **158, 159 et 160 sont jouées** : `GET /stagiaires/:id` et `GET /companies/:id` font un
 `SELECT *`, et renvoient les clés `project_improvement` (158) et `date_creation` (159) ; la 160
