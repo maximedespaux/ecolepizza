@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -350,7 +350,7 @@ const listDocuments = async (req, res) => {
     try {
         const conn = db.promise();
         const [documents] = await conn.query(
-            `SELECT d.id, d.type, d.title, d.status,
+            `SELECT d.id, d.type, d.template_slug, d.quiz_id, d.title, d.status,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
                     GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
@@ -374,6 +374,12 @@ const listDocuments = async (req, res) => {
              ORDER BY d.created_at DESC`,
             [learnerId, req.user.organization_id]
         );
+        /* QUI DOIT ENCORE AGIR, document par document. Le statut seul ne le dit pas : un livret
+           d'accueil envoyé reste « Envoyé » à vie, parce qu'il n'a pas de signataire — l'écran le
+           rangeait « en attente de signature » et comptait le dossier incomplet. La règle vit dans
+           lib/documents.js ; le serveur la tranche, parce que lui seul connaît les modèles. */
+        const orgSteps = await loadOrgSteps(req.user.organization_id);
+        for (const d of documents) d.signature_attendue = signatureAttendue(orgSteps, d);
         const [enrollments] = await conn.query(
             `SELECT e.id, e.financing, p.code AS program_code, p.title AS program_title,
                     s.year, s.week,

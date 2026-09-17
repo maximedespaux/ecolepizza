@@ -17,22 +17,12 @@ import RemisesReview from "../components/RemisesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
+import { GROUPES_DOC, repartirDocuments, sansSignature } from "../lib/documentsDossier.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
-/* Les documents ne sont pas les étapes d'un parcours unique — ce sont N pièces indépendantes,
-   chacune dans son état. Six états côte à côte en liste plate n'apprennent donc rien : il fallait
-   lire chaque ligne pour savoir où en était le dossier, alors que c'est précisément ce qu'on
-   vient y chercher.
-   Le regroupement suit QUI A LA BALLE, la seule question que se pose le secrétariat : ce qui
-   est sur mon bureau, ce que j'attends du stagiaire, ce qui est clos. « Préparé » et « Généré »
-   tombent ensemble parce qu'ils appellent le même geste — envoyer ; « Envoyé » et « Consulté »
-   aussi — patienter ou relancer. */
-const GROUPES_DOC = [
-  { cle: "faire",   titre: "À envoyer",         aide: "sur votre bureau",         ton: "ember", etats: ["A_FAIRE", "GENERE"] },
-  { cle: "attente", titre: "Chez le stagiaire", aide: "en attente de signature",  ton: "gold",  etats: ["ENVOYE", "CONSULTE"] },
-  { cle: "fait",    titre: "Signés",            aide: "rien à faire",             ton: "green", etats: ["SIGNE", "ARCHIVE"] },
-];
+/* Le rangement des documents (« à envoyer », « chez le stagiaire », « terminés ») vit dans
+   lib/documentsDossier.js : il dépend de qui doit encore signer, pas du seul statut. */
 
 function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
@@ -68,17 +58,8 @@ function StagiaireDetail() {
   const [viewId, setViewId] = useState(null);
 
   // Répartition des documents selon qui doit agir (cf. GROUPES_DOC).
-  const parGroupe = useMemo(() => {
-    const m = Object.fromEntries(GROUPES_DOC.map((g) => [g.cle, []]));
-    for (const d of docs) {
-      // Un état inconnu tombe dans « à envoyer » plutôt que de disparaître : mieux vaut un
-      // document rangé au mauvais endroit qu'un document invisible.
-      const g = GROUPES_DOC.find((x) => x.etats.includes(d.status));
-      m[g ? g.cle : "faire"].push(d);
-    }
-    return m;
-  }, [docs]);
-  const signes = parGroupe.fait.length;
+  const parGroupe = useMemo(() => repartirDocuments(docs), [docs]);
+  const termines = parGroupe.fait.length;
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
@@ -563,10 +544,10 @@ function StagiaireDetail() {
                 quelque chose. */}
             <div className="docs-jauge">
               <div className="docs-barre" role="img"
-                aria-label={`${signes} document(s) signé(s) sur ${docs.length}`}>
-                <span style={{ width: `${docs.length ? Math.round((signes / docs.length) * 100) : 0}%` }} />
+                aria-label={`${termines} document(s) terminé(s) sur ${docs.length}`}>
+                <span style={{ width: `${docs.length ? Math.round((termines / docs.length) * 100) : 0}%` }} />
               </div>
-              <span><b className="chiffres">{signes}</b> signé{signes > 1 ? "s" : ""} sur <b className="chiffres">{docs.length}</b></span>
+              <span><b className="chiffres">{termines}</b> terminé{termines > 1 ? "s" : ""} sur <b className="chiffres">{docs.length}</b></span>
             </div>
 
             {GROUPES_DOC.map((g) => {
@@ -589,6 +570,11 @@ function StagiaireDetail() {
                           <b>{d.title}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                             {d.formations || "-"}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : ""}
+                        {/* DIT POURQUOI UN « ENVOYÉ » EST RANGÉ DANS « TERMINÉS » : sans la mention,
+                            le badge bleu au milieu du groupe vert passerait pour une erreur de
+                            rangement. Affichée dès la préparation, elle annonce aussi qu'il
+                            suffira de l'envoyer. */}
+                        {sansSignature(d) && d.status !== "SIGNE" && <span> · rien à signer</span>}
                         {/* REÇU PAR E-MAIL, ET ON LE DIT. L'étape compte comme signée, mais aucune
                             signature électronique n'a eu lieu ici : sans cette mention, on ne
                             saurait plus distinguer, six mois plus tard, un document signé dans
