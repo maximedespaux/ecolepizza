@@ -4254,6 +4254,25 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
   background:var(--surface3);flex:none}
 
+/* FORMATIONS D'UN QCM (Modèles de QCM → Éditer, migration 163). Une case par formation, et le
+   jour propre à chacune dans la même ligne : lire « NIV1H · J4 » d'un coup d'œil évite d'ouvrir
+   quoi que ce soit pour savoir quand le QCM tombe. « Toutes » occupe la ligne entière — c'est le
+   geste le plus fréquent, il ne doit pas se chercher parmi les formations. */
+/* Préfixées par `.qcm-formations` : la liste vit dans un `.field`, dont la règle `.field label`
+   (bloc, marge, graisse) est plus spécifique qu'une classe seule — elle empilait la case, la
+   pastille et l'intitulé les uns sous les autres. Vu sur banc d'essai avant livraison. */
+.qcm-formations{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
+.qcm-formations .qcm-formation{display:flex;align-items:center;gap:8px;min-height:42px;margin:0;padding:5px 8px;
+  border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);font-size:13px;font-weight:500}
+.qcm-formations .qcm-formation.on{border-color:color-mix(in srgb,var(--ember1) 45%,var(--border));background:color-mix(in srgb,var(--ember1) 6%,var(--surface))}
+.qcm-formations .qcm-formation-toutes{grid-column:1/-1;cursor:pointer}
+.qcm-formations .qcm-formation-nom{display:flex;align-items:center;gap:8px;flex:1;min-width:0;margin:0;font-weight:500;cursor:pointer}
+.qcm-formations input[type=checkbox]{width:17px;height:17px;flex:none;margin:0}
+.qcm-formations .qcm-formation-titre{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qcm-formations .qcm-formation-jour{width:70px;flex:none;padding:6px 8px}
+.qcm-formations-liste{display:inline-flex;flex-wrap:wrap;gap:6px}
+.qcm-formation-pastille{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+
 /* FICHE INSCRITE À AUCUNE SESSION — l'encart remplace « Préparer un document » (StagiaireDetail) :
    sans session, pas de dossier, donc rien à générer. Pointillés, comme une place encore vide. */
 .sd-hors-session{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;

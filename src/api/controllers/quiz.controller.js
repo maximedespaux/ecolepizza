@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+// Un QCM peut servir à PLUSIEURS formations (migration 163) : toute lecture du rattachement passe par là.
+const { formationsDesQcm, jourPour, formationsDemandees, enregistrerFormations } = require('../lib/qcmFormations.js');
 
 const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
 const GRID_TYPES = new Set(['GRID_SINGLE', 'GRID_MULTI']);
@@ -88,20 +90,23 @@ function quizDayDate(startStr, day) {
     return businessDayISO(startStr, d <= 1 ? 0 : d - 1);
 }
 
-// Sessions de la formation où le QCM peut être envoyé AUJOURD'HUI :
+// Sessions où le QCM peut être envoyé AUJOURD'HUI, dans CHACUNE de ses formations et au jour
+// de chacune (`liens` = [{ program_id, day }], jour déjà résolu par `jourPour`) :
 // le jour J est arrivé (dayDate <= today) et la session n'est pas terminée.
-async function eligibleSessionsFor(conn, orgId, programId, day) {
-    if (!programId || day == null || day === '') return [];
+async function eligibleSessionsFor(conn, orgId, liens) {
+    const avecJour = liens.filter((l) => l.program_id && l.day != null && l.day !== '');
+    if (!avecJour.length) return [];
+    const jourDe = new Map(avecJour.map((l) => [String(l.program_id), l.day]));
     const [sessions] = await conn.query(
-        `SELECT s.id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+        `SELECT s.id, s.program_id, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date
          FROM training_session s
-         WHERE s.organization_id = ? AND s.program_id = ?`,
-        [orgId, programId]
+         WHERE s.organization_id = ? AND s.program_id IN (?)`,
+        [orgId, [...jourDe.keys()]]
     );
     const today = todayISO();
     return sessions.filter((s) => {
-        const dayDate = quizDayDate(s.start_date, day);
+        const dayDate = quizDayDate(s.start_date, jourDe.get(String(s.program_id)));
         if (!dayDate) return false;
         if (dayDate > today) return false;                 // le jour J n'est pas encore arrivé
         if (s.end_date && s.end_date < today) return false; // session terminée
@@ -110,6 +115,28 @@ async function eligibleSessionsFor(conn, orgId, programId, day) {
 }
 
 /* ------------------------------ Administration ------------------------------ */
+
+/**
+ * Les formations des QCM `rows`, prêtes à afficher : Map quizId → [{ program_id, code, title,
+ * color, day, jour }] triées par code. `day` = jour propre à la formation (ou null), `jour` = le
+ * jour qui s'applique vraiment (le sien, sinon celui du QCM).
+ */
+async function formationsDesFiches(conn, orgId, rows) {
+    const liens = await formationsDesQcm(conn, orgId, rows.map((r) => r.id));
+    if (!liens.size) return new Map();
+    const [programmes] = await conn.query(
+        'SELECT id, code, title, color FROM training_program WHERE organization_id = ?', [orgId]);
+    const parId = new Map(programmes.map((p) => [String(p.id), p]));
+    const out = new Map();
+    for (const r of rows) {
+        const liste = (liens.get(r.id) || []).map((l) => {
+            const p = parId.get(String(l.program_id));
+            return p ? { program_id: l.program_id, code: p.code, title: p.title, color: p.color || null, day: l.day, jour: jourPour(r, l) } : null;
+        }).filter(Boolean).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+        if (liste.length) out.set(r.id, liste);
+    }
+    return out;
+}
 
 /** GET /api/quizzes — liste des QCM de l'organisme. */
 const listQuizzes = async (req, res) => {
@@ -123,14 +150,20 @@ const listQuizzes = async (req, res) => {
              WHERE q.organization_id = ? ORDER BY q.created_at DESC`,
             [req.user.organization_id]
         );
+        /* SES FORMATIONS, chacune avec son jour : l'écran les affiche, et c'est sur elles que se
+           calcule l'envoi. `program_id` / `program_code` restent (formation principale) pour les
+           écrans qui ne lisent qu'une formation. */
+        const formations = await formationsDesFiches(conn, req.user.organization_id, rows);
         // Calcule, pour chaque QCM, s'il est envoyable aujourd'hui (session du bon jour).
         for (const q of rows) {
+            q.formations = formations.get(q.id) || [];
             let eligible_count = 0, send_reason = null;
-            if (!q.program_id) send_reason = 'Rattachez ce QCM à une formation.';
-            else if (q.day == null) send_reason = 'Définissez le jour de la formation.';
+            if (!q.formations.length) send_reason = 'Rattachez ce QCM à une formation.';
+            else if (!q.formations.some((f) => f.jour != null)) send_reason = 'Définissez le jour de la formation.';
             else {
-                const sessions = await eligibleSessionsFor(conn, req.user.organization_id, q.program_id, q.day);
-                if (!sessions.length) send_reason = `Aucune session de ${q.program_code || 'cette formation'} au jour ${q.day} en cours aujourd'hui.`;
+                const sessions = await eligibleSessionsFor(conn, req.user.organization_id,
+                    q.formations.map((f) => ({ program_id: f.program_id, day: f.jour })));
+                if (!sessions.length) send_reason = `Aucune session de ${q.formations.map((f) => f.code).join(', ')} au jour prévu en cours aujourd'hui.`;
                 else {
                     const [[c]] = await conn.query('SELECT COUNT(*) AS n FROM enrollment WHERE session_id IN (?)', [sessions.map((s) => s.id)]);
                     eligible_count = c.n;
@@ -171,7 +204,10 @@ const getQuiz = async (req, res) => {
         for (const o of options) (byQ[o.question_id] = byQ[o.question_id] || []).push({ id: o.id, text: o.text, is_correct: !!o.is_correct });
         const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
         const rowsByQ = await loadGridRows(conn, gridQids, true);
-        res.json({ data: { ...quiz, questions: questions.map((q) => ({ ...q, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [] })) } });
+        // Les formations cochées dans l'éditeur, avec le jour propre à chacune (null = jour du QCM).
+        const formations = ((await formationsDesQcm(conn, req.user.organization_id, [quiz.id])).get(quiz.id) || [])
+            .map((l) => ({ program_id: l.program_id, day: l.day }));
+        res.json({ data: { ...quiz, formations, questions: questions.map((q) => ({ ...q, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [] })) } });
     } catch (err) {
         console.error('Erreur lecture QCM :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -184,11 +220,12 @@ const createQuiz = async (req, res) => {
     if (!b.title || !String(b.title).trim()) return res.status(422).json({ error: 'Titre requis.' });
     try {
         const id = crypto.randomUUID();
+        const formations = await formationsDemandees(db.promise(), req.user.organization_id, b);
         /* UN QCM NEUF N'ENTRE DANS AUCUN PARCOURS (migration 156). Le rattachement à une
            formation dit qui PEUT l'utiliser ; ce réglage dit s'il y entre tout seul, et la
            réponse est non — on l'active dans la formation voulue, d'un clic. Colonne
            facultative : sans elle, on réinsère sans, et le comportement d'avant revient. */
-        const vals = [id, req.user.organization_id, b.program_id || null,
+        const vals = [id, req.user.organization_id, formations.length ? formations[0].program_id : null,
             b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
             String(b.title).slice(0, 255),
             b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED', b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null];
@@ -200,8 +237,9 @@ const createQuiz = async (req, res) => {
             if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e;
             await insere(false);
         }
+        const { avertissement } = await enregistrerFormations(db.promise(), id, formations, true);
         logAudit(req, 'quiz.create', 'Quiz', id);
-        res.status(201).json({ id, message: 'QCM créé' });
+        res.status(201).json({ id, message: 'QCM créé', ...(avertissement ? { avertissement } : {}) });
     } catch (err) {
         console.error('Erreur création QCM :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -216,13 +254,19 @@ const saveQuiz = async (req, res) => {
         const [[quiz]] = await conn.query('SELECT id FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
 
+        /* LES FORMATIONS COCHÉES (migration 163). La première devient la formation principale
+           (`program_id`), que le code d'avant la migration sait encore lire. `formations` absent
+           = un écran d'avant, encore ouvert dans un onglet : il ne connaît que `program_id`, et
+           ne doit pas effacer les autres formations en l'enregistrant (cf. enregistrerFormations). */
+        const formations = await formationsDemandees(conn, req.user.organization_id, b);
         await conn.query(
             `UPDATE quiz SET title = ?, kind = ?, program_id = ?, day = ?, auto_send = ?, pass_score = ?, active = ? WHERE id = ?`,
             [String(b.title || '').slice(0, 255), b.kind === 'SURVEY' ? 'SURVEY' : 'GRADED',
-             b.program_id || null, b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
+             formations.length ? formations[0].program_id : null, b.day != null && b.day !== '' ? Number(b.day) : null, b.auto_send ? 1 : 0,
              b.pass_score != null && b.pass_score !== '' ? Number(b.pass_score) : null,
              b.active === false ? 0 : 1, req.params.id]
         );
+        const { avertissement } = await enregistrerFormations(conn, req.params.id, formations, Array.isArray(b.formations));
         /* RÉCONCILIER, PAS REMPLACER — et c'est tout le correctif.
            Avant, enregistrer un QCM faisait `DELETE FROM quiz_question` puis réinsérait TOUT sous de
            nouveaux identifiants, même quand on n'avait changé que le titre. Or `quiz_answer.question_id`
@@ -353,7 +397,7 @@ const saveQuiz = async (req, res) => {
         else await conn.query('DELETE FROM quiz_question WHERE quiz_id = ?', [req.params.id]);
 
         logAudit(req, 'quiz.save', 'Quiz', req.params.id);
-        res.json({ success: true, message: 'QCM enregistré' });
+        res.json({ success: true, message: 'QCM enregistré', ...(avertissement ? { avertissement } : {}) });
     } catch (err) {
         console.error('Erreur enregistrement QCM :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -750,15 +794,18 @@ const sendQuiz = async (req, res) => {
         const conn = db.promise();
         const [[quiz]] = await conn.query('SELECT id, program_id, day, title FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
-        if (!quiz.program_id) return res.status(422).json({ error: 'Rattachez d\'abord ce QCM à une formation.' });
-        if (quiz.day == null) return res.status(422).json({ error: 'Définissez d\'abord le jour de la formation.' });
+        // TOUTES ses formations, chacune à son jour (migration 163).
+        const liens = ((await formationsDesQcm(conn, req.user.organization_id, [quiz.id])).get(quiz.id) || [])
+            .map((l) => ({ program_id: l.program_id, day: jourPour(quiz, l) }));
+        if (!liens.length) return res.status(422).json({ error: 'Rattachez d\'abord ce QCM à une formation.' });
+        if (!liens.some((l) => l.day != null)) return res.status(422).json({ error: 'Définissez d\'abord le jour de la formation.' });
 
         // Seules les sessions dont le jour J est arrivé (et non terminées) sont éligibles.
-        let sessions = await eligibleSessionsFor(conn, req.user.organization_id, quiz.program_id, quiz.day);
+        let sessions = await eligibleSessionsFor(conn, req.user.organization_id, liens);
         const sessionId = req.body && req.body.session_id;
         if (sessionId) sessions = sessions.filter((s) => s.id === sessionId);
         if (!sessions.length) {
-            return res.status(422).json({ error: `Aucune session de cette formation n'est au jour ${quiz.day} aujourd'hui.` });
+            return res.status(422).json({ error: 'Aucune session de ses formations n\'est au jour prévu aujourd\'hui.' });
         }
         const [enr] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id FROM enrollment e WHERE e.session_id IN (?)`,
@@ -1079,6 +1126,10 @@ const resultatsOverview = async (req, res) => {
         const [years] = await conn.query(
             `SELECT DISTINCT YEAR(completed_at) AS year FROM quiz_response
               WHERE organization_id = ? AND completed_at IS NOT NULL ORDER BY year DESC`, [orgId]);
+        /* Un QCM partagé (migration 163) se range sous « Plusieurs formations » : le laisser sous sa
+           seule formation principale ferait croire que ses réponses ne viennent que de celle-là. */
+        const formations = await formationsDesFiches(conn, orgId, rows);
+        for (const r of rows) r.formations = formations.get(r.id) || [];
         res.json({ data: rows, filtres: { sessions, years: years.map((y) => y.year) } });
     } catch (err) {
         console.error('Erreur résultats QCM (vue d\'ensemble) :', err);
