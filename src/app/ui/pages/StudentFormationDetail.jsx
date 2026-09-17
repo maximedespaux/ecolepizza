@@ -12,6 +12,7 @@ import SignatureModal from "../components/SignatureModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
+import { etatPourLeStagiaire } from "../lib/documentsDossier.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -125,7 +126,10 @@ function StudentFormationDetail() {
 
   // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
   const etapesPieces = pieces.map((p) => ({ kind: "piece", key: `p-${p.piece_type_id}`, p, etat: PIECE_ETAT[p.statut] || "todo" }));
-  const etapesDocs = (data?.documents || []).map((d) => ({ kind: "doc", key: `d-${d.id}`, d, etat: d.status === "SIGNE" ? "done" : "todo" }));
+  /* « SIGNÉ OU PAS » NE SUFFISAIT PAS : un livret d'accueil, qui n'a aucun signataire, restait
+     « À signer » et « à faire » pour toujours — et prenait la pastille « À faire » à l'étape qui
+     en avait vraiment besoin. L'état vient désormais de qui doit signer (cf. lib/documentsDossier.js). */
+  const etapesDocs = (data?.documents || []).map((d) => ({ kind: "doc", key: `d-${d.id}`, d, etat: etatPourLeStagiaire(d) }));
   /* Les remises viennent APRÈS les documents : on fournit ses pièces au début, on signe pendant,
      on reçoit son attestation à la fin. L'ordre de la liste raconte le déroulé. */
   const etapesRemises = remises.map((r) => ({ kind: "remise", key: `r-${r.remise_type_id}`, r, etat: REMISE_ETAT[r.statut] || "wait" }));
@@ -275,8 +279,14 @@ function StudentFormationDetail() {
                             </>
                           ) : (
                             <>
-                              <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Signé" : "À signer"}</Badge>
-                              <button className="btn sm primary" onClick={() => setViewId(e.d.id)}>{e.d.status === "SIGNE" ? "Consulter" : "Consulter / signer"}</button>
+                              {/* Mêmes mots que « Mes documents » : « À signer » seulement quand
+                                  LUI doit signer. Un document que signe son entreprise, ou que
+                                  personne ne signe, se consulte. */}
+                              {e.d.status === "SIGNE" ? <Badge tone="g">Signé</Badge>
+                                : e.etat === "todo" ? <Badge tone="b">À signer</Badge>
+                                : e.etat === "wait" ? <Badge tone="a">À signer par l'entreprise</Badge>
+                                : <Badge tone="n">À consulter</Badge>}
+                              <button className="btn sm primary" onClick={() => setViewId(e.d.id)}>{e.d.status !== "SIGNE" && e.etat === "todo" ? "Consulter / signer" : "Consulter"}</button>
                             </>
                           )}
                         </div>

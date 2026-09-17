@@ -325,6 +325,30 @@ async function emargementGate(conn, e, orgId, agefice = false) {
 }
 
 /**
+ * Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
+ * Exception : les documents « signés par l'entreprise » quand LE DOSSIER de ce document
+ * est rattaché à une entreprise → c'est le représentant qui signe.
+ *
+ * Cette exception se décidait auparavant une fois pour toutes, à partir de
+ * learner.company_id. Ce champ étant posé à vie au premier rattachement, un stagiaire
+ * déjà venu par son employeur ne pouvait plus jamais signer un document, même sur une
+ * inscription qu'il portait seul.
+ *
+ * UNE FONCTION, DEUX ÉCRANS : « Mes documents » et le parcours d'une formation. Le second ne
+ * recevait AUCUN de ces drapeaux et affichait « À signer » sur tout document non signé — le livret
+ * d'accueil et les CGV compris, qu'aucun bouton ne permet de signer puisqu'ils n'ont pas de
+ * signataire. Et l'étape restait « à faire » pour toujours, pastille comprise.
+ */
+function marquerSignataires(orgSteps, documents) {
+    for (const d of documents) {
+        const byCompany = !!d.doc_company_id && companySignsDoc(orgSteps, d);
+        d.company_sign = byCompany;
+        d.signable = d.quiz_id ? false : (!byCompany && (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d)));
+        delete d.doc_company_id; // donnée de calcul, pas d'affichage
+    }
+}
+
+/**
  * GET /api/mon-espace — documents ENVOYÉS au stagiaire (à consulter / signer).
  */
 const getMonEspace = async (req, res) => {
@@ -356,21 +380,7 @@ const getMonEspace = async (req, res) => {
             [learner.id]
         );
 
-        // Le stagiaire doit-il signer chaque document ? Piloté par le modèle (Modeles).
-        // Exception : les documents « signés par l'entreprise » quand LE DOSSIER de ce document
-        // est rattaché à une entreprise → c'est le représentant qui signe.
-        //
-        // Cette exception se décidait auparavant une fois pour toutes, à partir de
-        // learner.company_id. Ce champ étant posé à vie au premier rattachement, un stagiaire
-        // déjà venu par son employeur ne pouvait plus jamais signer un document, même sur une
-        // inscription qu'il portait seul.
-        const orgSteps = await loadOrgSteps(req.user.organization_id);
-        for (const d of documents) {
-            const byCompany = !!d.doc_company_id && companySignsDoc(orgSteps, d);
-            d.company_sign = byCompany;
-            d.signable = d.quiz_id ? false : (!byCompany && (d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d)));
-            delete d.doc_company_id; // donnée de calcul, pas d'affichage
-        }
+        marquerSignataires(await loadOrgSteps(req.user.organization_id), documents);
 
         res.json({
             data: {
@@ -792,14 +802,21 @@ const getMyFormation = async (req, res) => {
 
         // Tous les documents partagés du dossier (envoyés / consultés / signés).
         const [documents] = await conn.query(
-            `SELECT gd.id, gd.type, gd.title, gd.status, gd.quiz_id,
-                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at
+            `SELECT gd.id, gd.type, gd.template_slug, gd.title, gd.status, gd.quiz_id,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    /* Même rattachement que « Mes documents » : celui DE TOUS LES DOSSIERS du
+                       document, pas du seul dossier ouvert — un document multi-formations doit
+                       se lire pareil depuis chacune. */
+                    (SELECT MAX(e2.company_id) FROM document_formation df2
+                       JOIN enrollment e2 ON e2.id = df2.enrollment_id
+                      WHERE df2.document_id = gd.id) AS doc_company_id
              FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
              WHERE df.enrollment_id = ? AND gd.status IN ('ENVOYE','CONSULTE','SIGNE')
              ORDER BY gd.created_at`,
             [e.enrollment_id]
         );
+        marquerSignataires(steps, documents);
 
         // Émargement de la session (demi-journées à signer par le stagiaire).
         const [emargement] = e.session_id ? await conn.query(

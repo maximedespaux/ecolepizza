@@ -162,6 +162,27 @@ function companySignsDoc(steps, doc) { return docSignerRoles(steps, doc).include
 function orgSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('ORG'); }
 function externalSignsDoc(steps, doc) { return docSignerRoles(steps, doc).includes('EXTERNAL'); }
 
+/**
+ * CE DOCUMENT ATTEND-IL ENCORE QUELQU'UN ? Vrai s'il reste une signature — ou une réponse — à
+ * recevoir d'un AUTRE que l'école : le stagiaire, l'entreprise, un signataire externe.
+ *
+ * POURQUOI. La fiche stagiaire rangeait les documents d'après leur seul statut : tout document
+ * envoyé et pas « Signé » tombait « chez le stagiaire, en attente de signature ». Or le livret
+ * d'accueil, le règlement d'examen et les CGV n'ont AUCUN signataire — ils se remettent, ils ne se
+ * signent pas, et rien ne les fera jamais passer à « Signé ». Un dossier complet affichait
+ * « 9 signés sur 12 » pour toujours (constaté le 2026-09-17 sur un stagiaire RS7404).
+ *
+ * L'ÉCOLE N'EN FAIT PAS PARTIE : sa signature se pose À L'ENVOI (cf. sendPreparedDoc). Un document
+ * qu'elle seule signe — convocation, certificat de réalisation — est complet dès qu'il part.
+ * Le QCM attend sa réponse, qui le passe à « Signé » ; l'émargement attend le stagiaire quel que
+ * soit son modèle — les deux exceptions que la lecture d'un document connaît déjà.
+ */
+function signatureAttendue(steps, doc) {
+    if (!doc) return false;
+    if (doc.quiz_id || doc.type === 'EMARGEMENT') return true;
+    return docSignerRoles(steps, doc).some((r) => r !== 'ORG');
+}
+
 // Conditions AU NIVEAU FORMATION uniquement (rs / hygiène / jours). On ignore
 // financing/agefice (propres au dossier) : c'est la liste des documents candidats
 // d'une formation, avant application des conditions du dossier.
@@ -173,4 +194,4 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, stepSigners, docSignerRoles };
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stepSigners, docSignerRoles };

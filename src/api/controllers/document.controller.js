@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -350,7 +350,7 @@ const listDocuments = async (req, res) => {
     try {
         const conn = db.promise();
         const [documents] = await conn.query(
-            `SELECT d.id, d.type, d.title, d.status,
+            `SELECT d.id, d.type, d.template_slug, d.quiz_id, d.title, d.status,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
                     GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
@@ -374,6 +374,12 @@ const listDocuments = async (req, res) => {
              ORDER BY d.created_at DESC`,
             [learnerId, req.user.organization_id]
         );
+        /* QUI DOIT ENCORE AGIR, document par document. Le statut seul ne le dit pas : un livret
+           d'accueil envoyé reste « Envoyé » à vie, parce qu'il n'a pas de signataire — l'écran le
+           rangeait « en attente de signature » et comptait le dossier incomplet. La règle vit dans
+           lib/documents.js ; le serveur la tranche, parce que lui seul connaît les modèles. */
+        const orgSteps = await loadOrgSteps(req.user.organization_id);
+        for (const d of documents) d.signature_attendue = signatureAttendue(orgSteps, d);
         const [enrollments] = await conn.query(
             `SELECT e.id, e.financing, p.code AS program_code, p.title AS program_title,
                     s.year, s.week,
@@ -394,6 +400,27 @@ const listDocuments = async (req, res) => {
 };
 
 /**
+ * Titre d'un document quand personne n'en a saisi.
+ *
+ * LE CODE DU TYPE N'EST PAS UN TITRE. La table des libellés ne connaît que les types d'origine ;
+ * pour tous les autres — livret d'accueil, attestation d'assiduité, et chaque modèle créé par
+ * l'école, dont le type est son slug en capitales — le titre retombait sur le code brut. La fiche
+ * d'un stagiaire affichait « R_GLEMENT_EXAMEN » et « LIVRET_ACCUEIL », et c'est ce nom-là que
+ * portaient ensuite le courriel d'envoi et le fichier téléchargé.
+ *
+ * L'intitulé du MODÈLE vient donc avant le code. Pas avant la table : un devis s'appelle
+ * « Devis » depuis toujours, et changer le titre des types connus n'était pas demandé.
+ */
+async function titreParDefaut(orgId, type, templateSlug) {
+    if (TYPE_LABELS[type]) return TYPE_LABELS[type];
+    if (templateSlug) {
+        const etape = (await loadOrgSteps(orgId)).find((s) => s.slug === templateSlug);
+        if (etape && etape.label) return etape.label;
+    }
+    return type;
+}
+
+/**
  * Prépare un document pour UN stagiaire (A_FAIRE) en remplaçant sa version en attente
  * (non signée). Réutilisable (fiche stagiaire ET génération de groupe). Renvoie l'id.
  */
@@ -411,7 +438,7 @@ async function prepareLearnerDoc(conn, orgId, { learnerId, type, templateSlug, t
     await conn.query(
         `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status)
          VALUES (?, ?, ?, ?, ?, ?, 'A_FAIRE')`,
-        [documentId, orgId, learnerId, type, templateSlug || null, title || TYPE_LABELS[type] || type]
+        [documentId, orgId, learnerId, type, templateSlug || null, title || await titreParDefaut(orgId, type, templateSlug)]
     );
     for (const eid of enrollmentIds) await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [documentId, eid]);
     if (type === 'FICHE_SEMAINE') await advanceEnrollments(conn, orgId, documentId, 'CONTACTE');

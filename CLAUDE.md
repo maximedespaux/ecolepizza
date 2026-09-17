@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-17** :
-**1441 tests — 1434 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1460 tests — 1453 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,14 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **162, 163 et 164 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+## 4. Migrations — **162 à 165 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+
+**165 — À JOUER** (`165_titres_documents.sql`) : les documents titrés d'un CODE (« LIVRET_ACCUEIL »,
+« R_GLEMENT_EXAMEN ») prennent l'intitulé de leur modèle ; le code le fait à la création depuis.
+9 documents en production, tous envoyés. Migration de DONNÉES : elle se vérifie sur la fiche d'un
+stagiaire RS7404 — plus aucun titre en capitales soulignées. Les documents SIGNÉS ne sont pas
+renommés (le titre entre dans le HTML dont la signature prend l'empreinte). Son revert ne fait rien,
+et l'explique.
 
 **164 — À JOUER** (`164_qcm_reponse_libre.sql`) : type de question `TEXT` (réponse libre limitée en
 MOTS, 128 par défaut) dans l'ENUM de `quiz_question.type`, et colonne `max_words`. Sans elle, l'éditeur
