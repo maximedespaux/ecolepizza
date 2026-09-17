@@ -140,7 +140,9 @@ function StudentFormationDetail() {
   return (
     <>
       <div className="hero" style={{ background: "var(--grad-navy)" }}>
-        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
+        {/* 16 px de haut : le seul chemin de retour de la page était une cible de moins d'un
+            demi-doigt. La marge négative rend la hauteur gagnée par le rembourrage — rien ne bouge. */}
+        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: "12px 0", margin: "-12px 0", color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
           <Icon name="chevron-left" size={14} /> Mes documents
         </button>
         <h1>{data ? data.program_title : "Formation"}</h1>
@@ -192,7 +194,12 @@ function StudentFormationDetail() {
                       {e.kind === "piece" ? (
                         <>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <b style={{ flex: 1, minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
+                            {/* `flex: 1 1 160px` et non `flex: 1` : une base nulle laissait le titre se
+                                réduire à la place restante — sur téléphone, badge, « Voir » et
+                                « Renvoyer » sur la même ligne le tassaient à un mot par ligne
+                                (« Justificatif / de / domicile… »). Sous 160 px, ce sont les boutons
+                                qui passent à la ligne, pas le titre qui s'écrase. */}
+                            <b style={{ flex: "1 1 160px", minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
                             <Badge tone={{ done: "g", wait: "a", refused: "r", todo: "n", current: "b" }[etat]}>{pas.label}</Badge>
                             {/* UN SEUL FICHIER : un bouton « Voir » suffit, la ligne reste courte.
                                 PLUSIEURS : ils sont listés en dessous, chacun avec son nom — le
@@ -237,7 +244,7 @@ function StudentFormationDetail() {
                         <>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="file-text" size={16} /></span>
-                            <b style={{ flex: 1, minWidth: 0 }}>{e.r.label}</b>
+                            <b style={{ flex: "1 1 160px", minWidth: 0 }}>{e.r.label}</b>
                             <Badge tone={{ done: "g", wait: "n", todo: "b", current: "b" }[etat] || "n"}>
                               {REMISE_LABEL[etat] || REMISE_LABEL.wait}
                             </Badge>
@@ -271,7 +278,7 @@ function StudentFormationDetail() {
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name={e.d.quiz_id ? "list-checks" : "file-text"} size={16} /></span>
-                          <b style={{ flex: 1, minWidth: 0 }}>{e.d.title}{e.d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)", fontWeight: 400 }}>Signé le {dateHeure(e.d.signed_at)}</span>}</b>
+                          <b style={{ flex: "1 1 160px", minWidth: 0 }}>{e.d.title}{e.d.signed_at && <span style={{ display: "block", fontSize: 12, color: "var(--muted)", fontWeight: 400 }}>Signé le {dateHeure(e.d.signed_at)}</span>}</b>
                           {e.d.quiz_id ? (
                             <>
                               <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>

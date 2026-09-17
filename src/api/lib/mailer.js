@@ -66,6 +66,19 @@ function appUrl() {
 }
 
 /**
+ * Un e-mail de ce type PARTIRAIT-IL ? — l'interrupteur de l'organisme et le SMTP, sans rien envoyer.
+ *
+ * `sendMail` ne rejette jamais et part en tâche de fond : l'appelant n'apprend pas qu'un envoi a
+ * été sauté. Or un mot de passe généré n'est gardé qu'en empreinte — s'il ne part pas par e-mail
+ * et n'est pas montré à l'écran, PERSONNE ne le connaît. L'appelant qui en a un demande donc ici,
+ * AVANT, s'il doit le montrer.
+ */
+function envoiPossible(kind) {
+    if (kind && !require('./orgContext.js').mailActif(kind)) return false;
+    return !!getTransport();
+}
+
+/**
  * Envoie un e-mail. Ne rejette JAMAIS. Renvoie { sent: bool, reason?: string }.
  * `text` est optionnel : à défaut, une version texte est dérivée du HTML (les clients sans HTML,
  * et les filtres anti-spam, veulent une alternative texte).
@@ -107,4 +120,4 @@ function htmlToText(html) {
         .trim();
 }
 
-module.exports = { sendMail, appUrl, htmlToText, LOGO_CID, _getTransport: getTransport };
+module.exports = { sendMail, envoiPossible, appUrl, htmlToText, LOGO_CID, _getTransport: getTransport };

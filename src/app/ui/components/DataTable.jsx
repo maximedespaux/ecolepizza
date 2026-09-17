@@ -26,8 +26,17 @@ import { Squelette } from "./Squelette.jsx";
  *   `sansCarte` — la colonne DISPARAÎT en mode carte. Pour ce qui n'a de sens qu'en tableau :
  *      un chevron « ouvrir » n'apprend rien au pied d'une carte que l'on ouvre en entier, il
  *      ressemble juste à un bouton qui ferait autre chose.
+ *   `intitule`  — l'intitulé de la carte, en TEXTE, quand l'en-tête `t` n'en est pas un (un bouton
+ *      de tri, par exemple). La carte l'affiche par un attribut, qui ne sait porter qu'une
+ *      chaîne : un élément React y devenait « [object Object] » — c'est ce qu'affichaient les
+ *      cartes des Entreprises, sur téléphone, devant chaque date de création.
  * En mode tableau ces marqueurs ne changent rien : les colonnes restent dans leur ordre.
  */
+/* L'intitulé d'une cellule en carte, TOUJOURS en texte : celui de la colonne (`intitule`), sinon
+   son en-tête s'il est une chaîne. Un attribut ne sait porter qu'une chaîne — un en-tête-bouton y
+   devenait « [object Object] ». Une seule règle pour le corps ET la ligne de totaux. */
+const intituleDe = (c) => (c.intitule ?? (typeof c.t === "string" ? c.t : null)) || undefined;
+
 export default function DataTable({
   rows, cols, vide, rowKey = (r, i) => r.id ?? i, rowProps,
   detail, pied, className = "", lignesSquelette = 5,
@@ -69,7 +78,7 @@ export default function DataTable({
                       // `data-intitule` porte l'en-tête jusqu'à la cellule : c'est lui que la
                       // CSS affiche en mode carte, là où le `<thead>` a disparu. Sans lui, une
                       // carte serait une pile de valeurs sans savoir de quoi elles parlent.
-                      <td key={c.k} data-intitule={c.t || undefined}
+                      <td key={c.k} data-intitule={intituleDe(c)}
                         className={[c.principal && "dt-principal", c.actions && "dt-actions",
                                     c.sansCarte && "dt-sans-carte", c.poignee && "dt-poignee",
                                     vide && "dt-vide"].filter(Boolean).join(" ") || undefined}
@@ -105,7 +114,7 @@ export default function DataTable({
             <tfoot>
               <tr className="dt-total">
                 {cols.map((c) => (
-                  <td key={c.k} data-intitule={c.t || undefined}
+                  <td key={c.k} data-intitule={intituleDe(c)}
                     className={c.actions ? "dt-actions" : undefined} style={c.td}>
                     {pied[c.k]}
                   </td>

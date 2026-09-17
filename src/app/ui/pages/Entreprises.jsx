@@ -93,7 +93,22 @@ export default function Entreprises() {
         {shown.length === 0 ? (
           <EmptyState icon="building">{rows.length === 0 ? "Aucune entreprise. Crée-en une pour inscrire un groupe de stagiaires." : "Aucune entreprise ne correspond à ta recherche."}</EmptyState>
         ) : (
-          <>
+          <div className="dt-tri-zone">
+          {/* SUR TÉLÉPHONE, LE TRI SE CHOISIT ICI. En cartes, `DataTable` retire l'en-tête, et avec
+              lui les deux boutons de tri : on ne pouvait plus trier du tout. Ce choix n'apparaît
+              qu'à ce moment-là (cf. `.dt-tri-choix`) et pilote le MÊME état `tri` — passer du
+              téléphone à l'ordinateur ne change pas l'ordre. */}
+          <label className="dt-tri-choix">
+            <span>Trier par</span>
+            <select className="inp" value={`${tri.col}:${tri.sens}`}
+              onChange={(e) => { const [col, sens] = e.target.value.split(":"); setTri({ col, sens: Number(sens) }); }}>
+              {/* Courts : sur 375 px, « Date de création, les plus récentes » était coupé. */}
+              <option value="name:1">Nom, de A à Z</option>
+              <option value="name:-1">Nom, de Z à A</option>
+              <option value="date_creation:-1">Création, plus récentes</option>
+              <option value="date_creation:1">Création, plus anciennes</option>
+            </select>
+          </label>
           <DataTable
             rows={shown.slice(0, max)}
             rowKey={(c) => c.id}
@@ -108,7 +123,7 @@ export default function Entreprises() {
               onKeyDown: (e) => { if (e.key === "Enter") navigate(`/entreprises/${c.id}`); },
             })}
             cols={[
-              { k: "name", t: enTete("name", "Entreprise"), principal: true,
+              { k: "name", t: enTete("name", "Entreprise"), intitule: "Entreprise", principal: true,
                 cell: (c) => (
                   <>
                     <b>{c.name}</b>
@@ -135,7 +150,7 @@ export default function Entreprises() {
                  personne : les quatre cent soixante et onze fiches importées portent toutes la
                  même seconde, et ça ne dit rien des entreprises. Vide tant que la date n'est
                  pas renseignée : on ne devine pas une immatriculation. */
-              { k: "date_creation", t: enTete("date_creation", "Date de création"),
+              { k: "date_creation", t: enTete("date_creation", "Date de création"), intitule: "Date de création",
                 td: { fontSize: 12, whiteSpace: "nowrap" },
                 cell: (c) => dateFr(c.date_creation) || null },
               // Le chevron ne sert qu'au mode TABLEAU : en carte, c'est la carte entière qui
@@ -145,7 +160,7 @@ export default function Entreprises() {
             ]}
           />
           {borne && <ListePlus montres={max} total={shown.length} reste={reste} onPlus={plus} />}
-          </>
+          </div>
         )}
       </Card>
 

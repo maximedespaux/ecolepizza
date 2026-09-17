@@ -263,7 +263,10 @@ const createEnrollment = async (req, res) => {
             }
         }
 
-        // À l'inscription : garantit un compte de connexion au stagiaire (si e-mail).
+        /* À l'inscription : garantit un compte de connexion au stagiaire (si e-mail). C'est
+           désormais le SEUL moment où il naît de lui-même — plus à la création de la fiche,
+           cf. createLearner : c'est ici que l'espace a enfin quelque chose à montrer. */
+        let compte = null;
         if (l && !l.user_id && l.email) {
             const account = await createStagiaireAccount(conn, orgId, {
                 email: l.email, first_name: l.first_name, last_name: l.last_name, phone: l.phone,
@@ -271,10 +274,15 @@ const createEnrollment = async (req, res) => {
             if (account) {
                 await conn.query('UPDATE learner SET user_id = ? WHERE id = ? AND organization_id = ?',
                     [account.userId, learner_id, orgId]);
+                /* LE MOT DE PASSE N'EST RENDU QUE S'IL NE PART PAS. La fiche le montrait une fois à
+                   sa création ; l'inscription ne le montrait jamais, et comptait sur l'e-mail. Si
+                   l'envoi des identifiants est coupé (Mailing) ou le SMTP absent, il n'y aurait plus
+                   personne pour le connaître. */
+                compte = { email: l.email, envoye: account.envoye, password: account.envoye ? null : account.password };
             }
         }
 
-        res.status(201).json({ message: 'Dossier créé' });
+        res.status(201).json({ message: 'Dossier créé', compte });
     } catch (err) {
         console.error('Erreur création dossier :', err);
         res.status(500).json({ error: 'Internal Server Error' });

@@ -520,7 +520,8 @@ function CatRow({ cat, axe, used, run, premier, dernier, onMonter, onDescendre }
         </button>
       </span>
       <span style={{ width: 12, height: 12, borderRadius: 4, background: couleur, flex: "0 0 auto" }} />
-      <b style={{ flex: 1 }}>{cat.name}</b>
+      {/* `minWidth: 0` : « Spécialisations », un seul mot, poussait la corbeille hors de l'écran. */}
+      <b style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{cat.name}</b>
       <span className="hint">{used === 0 ? "aucune formation" : `${used} formation${used > 1 ? "s" : ""}`}</span>
       {/* Ces deux boutons sont RÉPÉTÉS à chaque ligne et ne portaient qu'une icône : dix
           boutons sans nom d'affilée dans l'arbre d'accessibilité. Le nom porte la CIBLE. */}

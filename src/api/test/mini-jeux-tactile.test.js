@@ -70,7 +70,9 @@ test('l\'arcade est une grille en auto-FILL, pas en auto-fit', () => {
     /* 210px NE DONNE QU'UNE COLONNE sur un téléphone : l'arcade y reprendrait les 445 px de
        haut qu'elle occupait avant, au prix de la carte des formations. D'où les deux colonnes
        en dur sous 640px. */
-    assert.match(css, /@media \(max-width:640px\)\{\s*\.pq-minis\{grid-template-columns:repeat\(2,1fr\)\}/,
+    /* `minmax(0,1fr)` et non `1fr` : un `fr` nu a pour minimum la largeur de son contenu, et une
+       tuile au titre insécable élargissait la page (cf. telephone-debordements.test.js). */
+    assert.match(css, /@media \(max-width:640px\)\{\s*\.pq-minis\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/,
         'Deux par ligne sur téléphone, quoi qu\'il arrive.');
     assert.doesNotMatch(regle('.pq-mini'), /flex:\s*1\s+1/,
         'Un flex-grow sur la tuile rétablirait l\'étirement de l\'orpheline.');

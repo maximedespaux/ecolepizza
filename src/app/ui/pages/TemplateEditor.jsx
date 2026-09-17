@@ -325,7 +325,7 @@ function TemplateEditor() {
         <div className="tpl-editor-head">
           <button className="btn ghost sm" onClick={() => navigate("/modeles")}>← Modèles</button>
           <h2 style={{ margin: 0, fontSize: 17 }}>Éditeur, <span className="mono">{slug}</span></h2>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <div className="tpl-editor-actions">
             <button className="btn sm ghost" onClick={() => setShowFields(true)} title="Gérer les champs disponibles du dossier">Champs documents</button>
             <button className="btn sm ghost" onClick={() => setShowCustom(true)} title="Créer des jetons calculés (dates, combinaisons…)">Jetons perso</button>
             <button className={"btn sm ghost" + (showPreview ? " on" : "")} onClick={() => setShowPreview((v) => !v)}>
