@@ -43,13 +43,71 @@ function Stat({ label, value, tone }) {
 }
 
 // Répartition d'UNE question : options (QCU/QCM), échelle, ou grille (v1 : compte seul).
+/* L'ÉNONCÉ GARDE SES RETOURS À LA LIGNE. La question des allergènes est écrite en liste —
+   « - 20 % de pâte fermentée / - 5 % de graines torréfiées / … » — et s'affichait en un seul
+   paragraphe : « - 20 % de pâte fermentée - 5 % de graines torréfiées - 10 % de farine de soja
+   Et les ingrédients suivants : - Tomate - Champignons… ». La liste EST la question : c'est en
+   lisant « graines torréfiées » qu'on trouve le sésame. */
+const ENONCE = { whiteSpace: "pre-line" };
+
+/* Couleur de la part de justes : on repère la ligne qui pose problème sans lire chaque chiffre. */
+const tonJustes = (pct) => (pct == null ? "var(--muted)" : pct >= 75 ? "var(--green,#2e9e5b)" : pct >= 50 ? "var(--amber,#b8860b)" : "#c0392b");
+
+/**
+ * Le récapitulatif d'une question en GRILLE : une ligne par ligne de la grille, le nombre de
+ * stagiaires par colonne, la bonne colonne marquée, et la part de réponses justes.
+ */
+function TableauGrille({ grille }) {
+  const cell = { padding: "5px 8px", borderBottom: "1px solid var(--border-soft)", fontSize: 13 };
+  return (
+    <div style={{ overflowX: "auto", marginTop: 8 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={{ ...cell, textAlign: "left", color: "var(--muted)", fontWeight: 600 }}></th>
+            {grille.colonnes.map((c, ci) => (
+              <th key={ci} style={{ ...cell, textAlign: "center", color: "var(--muted)", fontWeight: 600 }}>{c}</th>
+            ))}
+            <th style={{ ...cell, textAlign: "right", color: "var(--muted)", fontWeight: 600 }}>Justes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grille.lignes.map((l, li) => (
+            <tr key={li}>
+              <td style={{ ...cell, fontWeight: 600 }}>{l.texte}</td>
+              {grille.colonnes.map((_, ci) => {
+                const bonne = l.bonnes.includes(ci);
+                const n = l.comptes[ci] || 0;
+                /* La bonne colonne en vert, avec sa coche ; un compte dans une MAUVAISE colonne en
+                   rouge — c'est lui qui dit combien se sont trompés, et dans quel sens. */
+                return (
+                  <td key={ci} style={{ ...cell, textAlign: "center", fontVariantNumeric: "tabular-nums",
+                    background: bonne ? "rgba(22,163,74,.10)" : undefined,
+                    color: bonne ? "var(--green,#2e9e5b)" : n > 0 ? "#c0392b" : "var(--dim)",
+                    fontWeight: bonne || n > 0 ? 600 : 400 }}
+                    title={bonne ? "Bonne réponse" : undefined}>
+                    {bonne && <Icon name="check" size={12} style={{ verticalAlign: "-1px", marginRight: 3 }} />}{n}
+                  </td>
+                );
+              })}
+              <td style={{ ...cell, textAlign: "right", fontWeight: 700, color: tonJustes(l.juste_pct), fontVariantNumeric: "tabular-nums" }}>
+                {l.juste_pct == null ? "—" : `${l.juste_pct} %`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function DetailQuestion({ q, num }) {
   if (q.scale) {
     const maxN = Math.max(1, ...Object.values(q.scale.dist));
     return (
       <div>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <b>{num}. {q.text}</b>
+          <b style={ENONCE}>{num}. {q.text}</b>
           <span className="hint" style={{ flex: "none" }}>{q.responses} rép.{q.scale.avg != null ? ` · moyenne ${q.scale.avg}/${q.scale.max}` : ""}</span>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end", marginTop: 8 }}>
@@ -66,13 +124,29 @@ function DetailQuestion({ q, num }) {
       </div>
     );
   }
+  /* UNE GRILLE SE LIT EN TABLEAU, puisque c'en est un. L'écran affichait « grille · 4 réponse(s)
+     (détail par cellule à venir) » — depuis la création des grilles, rien d'autre. Sur la question
+     des allergènes (RS7404, jeudi S38), le tableau dit d'un coup d'œil ce qu'elle cachait : Sésame
+     25 % de justes, Soja 50 %. C'est la seule chose que ce récapitulatif existe pour montrer.
+     Ancienne réponse du serveur (`grille === true`, sans détail) : on garde l'ancienne ligne. */
   if (q.grille) {
-    return <div><b>{num}. {q.text}</b> <span className="hint">· grille · {q.responses} réponse(s) (détail par cellule à venir)</span></div>;
+    if (q.grille === true || !q.grille.lignes) {
+      return <div><b style={ENONCE}>{num}. {q.text}</b> <span className="hint">· grille · {q.responses} réponse(s)</span></div>;
+    }
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <b style={ENONCE}>{num}. {q.text}</b>
+          <span className="hint" style={{ flex: "none" }}>{q.responses} rép.</span>
+        </div>
+        <TableauGrille grille={q.grille} />
+      </div>
+    );
   }
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-        <b>{num}. {q.text}</b>
+        <b style={ENONCE}>{num}. {q.text}</b>
         <span className="hint" style={{ flex: "none" }}>{q.responses} rép.{q.correct_pct != null ? ` · ${q.correct_pct}% de bonnes réponses` : ""}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
@@ -471,7 +545,7 @@ function PreuveModal({ etat, onClose }) {
               </p>
               {(p.questions || []).map((q) => (
                 <div key={q.rang} style={{ borderTop: "1px solid var(--border-soft)", padding: "10px 0" }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>{q.rang}. {q.enonce}</div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, ...ENONCE }}>{q.rang}. {q.enonce}</div>
                   {q.options ? (
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {q.options.map((o, k) => (

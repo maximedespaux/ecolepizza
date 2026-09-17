@@ -57,13 +57,21 @@ test('Échelle : répartition 1..max + moyenne au dixième', () => {
     assert.strictEqual(r.scale.avg, 4.7, '(5+4+5)/3 arrondi au dixième');
 });
 
-test('Grille : seulement le nombre de réponses (v1, pas de détail par cellule)', () => {
+test('Grille : le détail PAR LIGNE, qui n\'était qu\'annoncé', () => {
+    /* CE TEST GELAIT UNE LIMITE, et le disait : « seulement le nombre de réponses (v1, pas de détail
+       par cellule) ». L'écran affichait en conséquence « détail par cellule à venir ». Le 2026-09-17,
+       l'école a demandé ce détail sur une vraie grille d'allergènes, où il était le seul à pouvoir
+       dire lesquels posaient problème. La v2 est arrivée ; les deux assertions encore vraies restent.
+       Le cas réel complet est gelé dans `qcm-grille-lisible.test.js`. */
     const questions = [{ id: 'q1', position: 0, text: 'Grille', type: 'GRID_SINGLE' }];
+    const colonnes = [{ id: 'c0', question_id: 'q1', text: 'Non' }, { id: 'c1', question_id: 'q1', text: 'Oui' }];
     const answers = [{ question_id: 'q1', value: '{"0":[1]}' }, { question_id: 'q1', value: '{"0":[0]}' }];
-    const [r] = aggregerQuestions(questions, [], answers);
-    assert.strictEqual(r.grille, true);
+    const [r] = aggregerQuestions(questions, colonnes, answers, { q1: [{ text: 'Gluten', correct: [1] }] });
     assert.strictEqual(r.responses, 2);
-    assert.ok(!r.options, 'pas de répartition par option pour une grille en v1');
+    assert.ok(!r.options, 'une grille ne se répartit pas « par option » : ses options sont ses colonnes');
+    assert.deepStrictEqual(r.grille.colonnes, ['Non', 'Oui']);
+    assert.deepStrictEqual(r.grille.lignes[0].comptes, [1, 1]);
+    assert.strictEqual(r.grille.lignes[0].juste_pct, 50);
 });
 
 test('le détail expose aussi les résultats PAR STAGIAIRE (nom, %, date)', () => {
