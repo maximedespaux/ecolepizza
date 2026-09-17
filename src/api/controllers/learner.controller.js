@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { encrypt, decrypt, generatePassword } = require('../lib/crypto.js');
-const { sendMail, appUrl } = require('../lib/mailer.js');
+const { sendMail, envoiPossible, appUrl } = require('../lib/mailer.js');
 const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
 /* NI LA CRÉATION NI LA SUPPRESSION D'UN STAGIAIRE N'ÉTAIENT JOURNALISÉES. Le journal d'audit
    couvrait les factures, les modèles, les partenaires — mais pas la fiche autour de laquelle
@@ -40,7 +40,9 @@ async function createStagiaireAccount(conn, organizationId, { email, first_name,
     // configuré, c'est un no-op — le mot de passe reste communiqué à la main comme avant.
     const { subject, html } = credentialsEmail({ firstName: first_name, email, password, loginUrl: `${appUrl()}/login` });
     sendMail({ to: email, subject, html, kind: 'credentials' });
-    return { userId, password };
+    /* `envoye` : les identifiants partent-ils vraiment ? Sinon l'appelant MONTRE le mot de passe,
+       seule trace en clair qui en restera (cf. envoiPossible). */
+    return { userId, password, envoye: envoiPossible('credentials') };
 }
 
 /**
@@ -263,13 +265,13 @@ const createLearner = async (req, res) => {
      * justement de réparer les données. Les fiches NEUVES sont complètes, l'existant reste
      * modifiable, et se complète au fil de l'eau.
      *
-     * L'e-mail n'est pas un ornement : il SERT d'identifiant de connexion. Sans lui,
-     * `createStagiaireAccount` renvoie null et la fiche existe sans que la personne puisse
-     * jamais ouvrir son espace. */
+     * L'e-mail n'est pas un ornement : il SERVIRA d'identifiant de connexion, quand le compte
+     * sera créé à l'inscription à une session. Sans lui, `createStagiaireAccount` renverra null
+     * ce jour-là, et la personne inscrite ne pourra jamais ouvrir son espace. */
     if (!String(body.phone || '').trim() || !String(body.email || '').trim()) {
         return res.status(422).json({ error: 'Téléphone et adresse e-mail requis pour créer un stagiaire.' });
     }
-    // L'e-mail sert de compte de connexion : mieux vaut le refuser ici que créer un accès mort.
+    // L'e-mail sera le compte de connexion : mieux vaut le refuser ici que préparer un accès mort.
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
@@ -299,13 +301,17 @@ const createLearner = async (req, res) => {
             logAudit(req, 'company.create', 'Company', companyId);
         }
 
-        // Compte de connexion du stagiaire (rôle STAGIAIRE) à partir de son email.
-        const account = await createStagiaireAccount(conn, organizationId, {
-            email: clean(body.email),
-            first_name: body.first_name,
-            last_name: body.last_name,
-            phone: clean(body.phone),
-        });
+        /* PAS DE COMPTE DE CONNEXION ICI — il naît à l'INSCRIPTION À UNE SESSION
+           (enrollment.controller). Décidé le 2026-09-17.
+
+           Une fiche est souvent celle d'un PROSPECT : quelqu'un qui a appelé, demandé un devis, et
+           ne viendra peut-être jamais. Lui créer un compte, c'était lui envoyer un mot de passe
+           pour un espace VIDE : sans session, il n'a ni dossier, ni document à signer, ni pièce à
+           déposer, et Pizza Quest comme la Communauté restent fermés jusqu'à l'inscription. Des
+           accès dormants, et des mots de passe en clair dans des boîtes aux lettres, pour des
+           personnes qui n'en ont pas l'usage.
+           Pour une exception — un client de la seule boutique —, le bouton « ＋ Compte » de la
+           liste des stagiaires le crée à la main. Les comptes déjà créés ne sont pas touchés. */
 
         // Stagiaire. Le n° de sécurité sociale est chiffré au repos (AES-256-GCM).
         const cols = (await champsEcrivables(conn)).filter((f) => body[f] !== undefined);
@@ -321,11 +327,11 @@ const createLearner = async (req, res) => {
         await conn.query(
             `INSERT INTO learner (id, organization_id, company_id, user_id, ${cols.join(', ')})
              VALUES (?, ?, ?, ?, ${placeholders})`,
-            [learnerId, organizationId, companyId, account?.userId || null, ...values]
+            [learnerId, organizationId, companyId, null, ...values]
         );
         logAudit(req, 'learner.create', 'Learner', learnerId);
 
-        res.status(201).json({ message: 'Stagiaire créé', password: account?.password || null });
+        res.status(201).json({ message: 'Stagiaire créé' });
     } catch (err) {
         console.error('Erreur création stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });

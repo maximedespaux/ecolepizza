@@ -45,8 +45,10 @@ bureau restent simplement vides.
 qui affiche/masque le formulaire d'ajout (fiche complète : identité, coordonnées,
 parcours, financement, n° de sécu chiffré), et **édition en ligne** par un bouton à
 droite de chaque nom. Endpoints : `getStagiaires`, `createStagiaire`,
-`updateStagiaire`, `resetStagiairePassword`. Un compte de connexion stagiaire est
-créé automatiquement (mot de passe généré, visible côté admin).
+`updateStagiaire`, `resetStagiairePassword`. Le compte de connexion stagiaire naît à
+l'**inscription à une session** — plus à la création de la fiche (décidé le 2026-09-17 : un
+prospect recevait un mot de passe pour un espace vide). Identifiants envoyés par e-mail ; le mot
+de passe ne s'affiche que si l'envoi est coupé. Le bouton « ＋ Compte » le crée à la main.
 
 ### Détail stagiaire — `pages/StagiaireDetail.jsx`
 **Accès : bureau (lecture STAFF).** Fiche du stagiaire, ses **documents**

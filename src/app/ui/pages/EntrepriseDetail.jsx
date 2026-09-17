@@ -351,6 +351,11 @@ export default function EntrepriseDetail() {
                 <div key={c.learner_id} className="ent-cred">
                   <span style={{ flex: 1, minWidth: 0 }}><b>{c.name}</b> {c.email && <span className="hint">· {c.email}</span>}</span>
                   <span className="hint">{c.enrolled ? "inscrit" : "déjà inscrit"}</span>
+                  {/* Le compte naît à l'inscription : on dit qu'il existe, et le mot de passe
+                      n'apparaît que si les identifiants n'ont pas pu partir par e-mail. */}
+                  {c.password
+                    ? <span className="hint" style={{ flexBasis: "100%" }}>Compte créé, mot de passe : <b className="mono">{c.password}</b> (notez-le)</span>
+                    : c.identifiants_envoyes && <span className="hint">· identifiants envoyés</span>}
                 </div>
               ))}
             </div>

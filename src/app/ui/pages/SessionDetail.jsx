@@ -109,11 +109,22 @@ function SessionDetail() {
       .slice(0, 10);
   }, [available, query]);
 
+  /* LE COMPTE NAÎT À L'INSCRIPTION (et non plus à la création de la fiche) : l'écran dit donc ici
+     qu'il vient d'être créé. Le mot de passe n'arrive que si les identifiants n'ont PAS pu partir
+     par e-mail — c'est alors la seule occasion de le connaître. */
+  const messageCompte = (compte, nom) => {
+    if (!compte) return "";
+    const qui = nom ? ` de ${nom}` : "";
+    return compte.envoye
+      ? ` Compte de connexion${qui} créé, identifiants envoyés à ${compte.email}.`
+      : ` Compte de connexion${qui} créé, mot de passe : ${compte.password} (notez-le, il ne sera plus affiché).`;
+  };
+
   async function addStagiaire(learnerId) {
     setStatus(null);
     try {
-      await createEnrollment({ learner_id: learnerId, session_id: id, crm_stage: "INSCRIT" });
-      setStatus({ type: "success", message: "Stagiaire inscrit." });
+      const r = await createEnrollment({ learner_id: learnerId, session_id: id, crm_stage: "INSCRIT" });
+      setStatus({ type: "success", message: `Stagiaire inscrit.${messageCompte(r?.compte)}` });
       load();
     } catch (err) {
       setStatus({ type: "error", message: err.message });
@@ -173,11 +184,13 @@ function SessionDetail() {
       // documents de groupe.
       const r = await registerCompanyStagiaires(companyId, { session_id: id, learner_ids: ids });
       const n = (r.data?.created || []).filter((c) => c.enrolled).length;
+      const comptes = (r.data?.created || []).filter((c) => c.identifiants_envoyes !== null && c.identifiants_envoyes !== undefined);
       setStatus({
         type: "success",
-        message: n
+        message: (n
           ? `${n} stagiaire${n > 1 ? "s" : ""} inscrit${n > 1 ? "s" : ""} pour ${nomEntreprise || "l'entreprise"}.`
-          : "Aucun nouveau stagiaire à inscrire (déjà inscrits).",
+          : "Aucun nouveau stagiaire à inscrire (déjà inscrits).")
+          + comptes.map((c) => messageCompte({ email: c.email, envoye: c.identifiants_envoyes, password: c.password }, c.name)).join(""),
       });
       setPicked(new Set());
       load();

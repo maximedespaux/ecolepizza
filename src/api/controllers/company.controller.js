@@ -386,6 +386,13 @@ const registerCompanyStagiaires = async (req, res) => {
         }
 
         const created = [];
+        /* Ce que l'écran doit savoir d'un compte créé : les identifiants sont-ils partis ? Le mot de
+           passe n'est rendu QUE s'ils ne partent pas (cf. createEnrollment) — l'écran l'ignorait
+           jusqu'ici, et il était donc perdu quand l'envoi était coupé. */
+        const identifiants = (account) => ({
+            password: account && !account.envoye ? account.password : null,
+            identifiants_envoyes: account ? account.envoye : null,
+        });
 
         // 1) Stagiaires EXISTANTS : rattachés à l'entreprise + inscrits.
         if (learnerIds.length) {
@@ -395,14 +402,17 @@ const registerCompanyStagiaires = async (req, res) => {
             );
             for (const l of rows) {
                 await conn.query("UPDATE learner SET company_id = ?, financing = 'PROFESSIONNEL' WHERE id = ? AND organization_id = ?", [company.id, l.id, orgId]);
-                // Compte de connexion si absent et e-mail disponible.
+                const enrolled = await enrollLearner(l.id);
+                /* Compte de connexion si absent — et SEULEMENT avec une session. Rattacher quelqu'un à
+                   son entreprise ne lui ouvre rien : c'est l'inscription qui donne un espace à
+                   remplir (cf. createLearner). Sans session, « rattacher un stagiaire existant »
+                   lui envoyait quand même ses identifiants. */
                 let account = null;
-                if (!l.user_id && l.email) {
+                if (sessionId && !l.user_id && l.email) {
                     account = await createStagiaireAccount(conn, orgId, { email: l.email, first_name: l.first_name, last_name: l.last_name, phone: l.phone });
                     if (account) await conn.query('UPDATE learner SET user_id = ? WHERE id = ?', [account.userId, l.id]);
                 }
-                const enrolled = await enrollLearner(l.id);
-                created.push({ learner_id: l.id, name: [l.first_name, l.last_name].filter(Boolean).join(' '), email: l.email || null, password: account?.password || null, account: !!(l.user_id || account), enrolled, existing: true });
+                created.push({ learner_id: l.id, name: [l.first_name, l.last_name].filter(Boolean).join(' '), email: l.email || null, ...identifiants(account), account: !!(l.user_id || account), enrolled, existing: true });
             }
         }
 
@@ -413,7 +423,8 @@ const registerCompanyStagiaires = async (req, res) => {
             const first = clean(n.first_name), last = clean(n.last_name);
             if (!first && !last) continue; // ligne vide d'un copier-coller — les incomplètes ont déjà été refusées
             const email = clean(n.email);
-            const account = email ? await createStagiaireAccount(conn, orgId, { email, first_name: first, last_name: last, phone: clean(n.phone) }) : null;
+            // Même règle : un compte pour qui entre dans une session, pas pour une fiche seule.
+            const account = sessionId && email ? await createStagiaireAccount(conn, orgId, { email, first_name: first, last_name: last, phone: clean(n.phone) }) : null;
             const learnerId = crypto.randomUUID();
             await conn.query(
                 `INSERT INTO learner (id, organization_id, company_id, user_id, civility, first_name, last_name, email, phone, financing, opco, levels)
@@ -436,7 +447,7 @@ const registerCompanyStagiaires = async (req, res) => {
                les lignes identiques à l'affichage (cf. lib/activite.js) : la trace reste fine,
                la cloche reste lisible. */
             logAudit(req, 'learner.create', 'Learner', learnerId);
-            created.push({ learner_id: learnerId, name: [first, last].filter(Boolean).join(' '), email: email || null, password: account?.password || null, account: !!account, enrolled, existing: false });
+            created.push({ learner_id: learnerId, name: [first, last].filter(Boolean).join(' '), email: email || null, ...identifiants(account), account: !!account, enrolled, existing: false });
         }
 
         res.status(201).json({ message: `${created.length} stagiaire(s) inscrit(s).`, data: { created } });

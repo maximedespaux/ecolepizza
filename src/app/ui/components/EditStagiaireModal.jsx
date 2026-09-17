@@ -155,10 +155,11 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
         await updateStagiaire(id, payload);
         onSaved?.("Stagiaire mis à jour.");
       } else {
-        const res = await createStagiaire(payload);
-        onSaved?.(res && res.password
-          ? `Stagiaire ajouté. Compte créé, mot de passe : ${res.password} (notez-le, il ne sera plus affiché).`
-          : "Stagiaire ajouté.");
+        /* PLUS DE COMPTE À LA CRÉATION DE LA FICHE : il naît à l'inscription à une session, quand
+           l'espace a enfin quelque chose à montrer (cf. createLearner). On le dit, sinon on
+           chercherait le mot de passe qu'affichait ce message. */
+        await createStagiaire(payload);
+        onSaved?.("Stagiaire ajouté. Son compte de connexion sera créé à son inscription à une session.");
       }
     } catch (err) { onError?.(err.message); }
     finally { setSaving(false); }
