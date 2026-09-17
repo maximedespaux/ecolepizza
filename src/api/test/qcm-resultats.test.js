@@ -84,9 +84,37 @@ test('la vue d\'ensemble rattache chaque QCM à sa FORMATION, « Autre » en der
 test('clauseFiltre : session et année passées DEUX fois (motif « ? IS NULL OR … = ? »)', () => {
     // Chaque valeur revient deux fois : une pour le test NULL, une pour l'égalité. L'oublier
     // décalerait les paramètres (l'année irait au test de session) — bug silencieux.
-    assert.deepStrictEqual(clauseFiltre('s1', 2026).params, ['s1', 's1', 2026, 2026]);
-    assert.deepStrictEqual(clauseFiltre(null, null).params, [null, null, null, null], 'sans filtre : les NULL neutralisent la clause');
+    /* LA SEMAINE A ÉTÉ AJOUTÉE LE 2026-09-17, À LA FIN. Ce test épinglait la liste ENTIÈRE ; il
+       vérifie désormais ce qu'elle protégeait vraiment — que les quatre premiers paramètres n'ont
+       pas bougé — puis ce qui s'ajoute. Insérée au milieu, la semaine aurait envoyé l'année au
+       test de session, exactement le décalage silencieux que ce test décrit. */
+    assert.deepStrictEqual(clauseFiltre('s1', 2026).params.slice(0, 4), ['s1', 's1', 2026, 2026]);
+    assert.deepStrictEqual(clauseFiltre(null, null).params, [null, null, null, null, null, null, null],
+        'sans filtre : les NULL neutralisent la clause, semaine comprise');
     assert.match(clauseFiltre('s1', null).sql, /session_id = \?[\s\S]*YEAR\(r\.completed_at\) = \?/, 'session via enrollment, année via YEAR');
+});
+
+test('clauseFiltre : la SEMAINE est celle de la SESSION, ajoutée en fin de paramètres', () => {
+    /* Deux sessions tournaient la même semaine en production le 2026-09-17 — NIV1H et RS7404, toutes
+       deux en S38, toutes deux avec des réponses. Filtrer par session obligeait à les lire l'une après
+       l'autre. La semaine les réunit. */
+    const f = clauseFiltre(null, null, '2026-38');
+    assert.deepStrictEqual(f.params.slice(4), [2026, 2026, 38], 'test NULL, année, semaine — dans cet ordre');
+    /* LA SEMAINE DE LA SESSION, PAS CELLE DE LA RÉPONSE : un QCM rempli le lundi suivant appartient à
+       la session de la semaine d'avant. Filtrer sur `completed_at` l'aurait fait basculer. */
+    assert.match(f.sql, /JOIN training_session s ON s\.id = e\.session_id WHERE s\.year = \? AND s\.week = \?/);
+    assert.ok(!/WEEK\(r\.completed_at/.test(f.sql), 'jamais la semaine de la date de réponse');
+});
+
+test('lireSemaine : ce qui ne ressemble pas à une semaine est ignoré, pas refusé', () => {
+    const { lireSemaine } = require('../controllers/quiz.controller.js');
+    assert.deepStrictEqual(lireSemaine('2026-38'), { annee: 2026, semaine: 38 });
+    assert.deepStrictEqual(lireSemaine('2026-05'), { annee: 2026, semaine: 5 }, 'la clé de lib/sessions.js est sur deux chiffres');
+    /* Retomber sur « pas de filtre » plutôt que rendre une page vide qu'on prendrait pour « aucune
+       réponse cette semaine ». */
+    for (const v of ['2026-54', '2026-0', '38', '', null, "2026-38' OR 1=1"]) {
+        assert.deepStrictEqual(lireSemaine(v), { annee: null, semaine: null }, `« ${v} » n'est pas une semaine`);
+    }
 });
 
 test('supprimer une réponse : bornée à l\'organisation, réservée au bureau', () => {
@@ -105,4 +133,32 @@ test('Aucune réponse : effectifs à 0, correct_pct null (jamais de division par
     assert.strictEqual(r.responses, 0);
     assert.strictEqual(r.options[0].pct, 0);
     assert.strictEqual(r.correct_pct, null);
+});
+
+test('par semaine, seuls les QCM qui ONT des réponses s\'affichent — sur « toutes », tous', () => {
+    /* Le serveur rend TOUS les QCM (jointure à gauche) : sur vingt-deux, on en parcourait seize à zéro
+       pour trouver les six de la semaine — l'inverse d'« avoir les réponses vite ». Mais sur « toutes
+       les semaines », un QCM jamais rempli est une information en soi, celle d'un bilan : on le garde. */
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'pages', 'ResultatsQCM.jsx'), 'utf8');
+    assert.match(src, /const visibles = rows \? \(semaine \? rows\.filter\(\(q\) => q\.responses > 0\) : rows\) : \[\];/);
+    assert.match(src, /grouperParFormation\(visibles\)/, 'la liste rend ce qui est visible');
+    // L'export suit l'écran : exporter vingt-deux lignes quand on en montre six ferait mentir le fichier.
+    assert.match(src, /const lignes = visibles\.map/);
+    // L'année ne vaut que pour « toutes » : une semaine désigne déjà la sienne.
+    assert.match(src, /semaine \? null : \(selYear \|\| null\)/);
+});
+
+test('la liste des semaines porte de quoi les RANGER, dans l\'ordre que le rangement suppose', () => {
+    /* `grouperParSemaine` lit `year`, `week`, `code` et `inscrits`, et regroupe dans l'ORDRE REÇU. La
+       liste d'origine ne portait que `id`, `code` et `start_date` : le sélecteur n'aurait rien pu en
+       faire, et chaque session serait tombée dans une semaine « null-null ». */
+    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'quiz.controller.js'), 'utf8');
+    const bloc = src.slice(src.indexOf('const resultatsOverview'), src.indexOf('const resultatsDetail'));
+    assert.match(bloc, /SELECT s\.id, p\.code AS code, p\.title AS title, s\.year, s\.week,/);
+    assert.match(bloc, /AS inscrits/);
+    assert.match(bloc, /ORDER BY s\.start_date DESC`, \[orgId, orgId\]\)/, 'date décroissante : c\'est un contrat du rangement');
+    // Toujours limité aux sessions QUI ONT DES RÉPONSES : une semaine vide ne se choisit pas.
+    assert.match(bloc, /AND EXISTS \(SELECT 1 FROM quiz_response r JOIN enrollment e/);
+    // Et les DEUX écrans filtrent sur la semaine.
+    assert.strictEqual((src.match(/clauseFiltre\(sessionId, year, req\.query\.semaine\)/g) || []).length, 2);
 });

@@ -862,16 +862,51 @@ function aggregerQuestions(questions, options, answers) {
 }
 
 /**
- * Filtre optionnel des réponses par SESSION et/ou ANNÉE, sur l'alias `r` (= quiz_response).
+ * Filtre optionnel des réponses par SESSION, ANNÉE et/ou SEMAINE, sur l'alias `r` (= quiz_response).
  * Renvoie { sql, params } à concaténer dans une clause WHERE. Vide (NULL) = pas de filtre.
  * La session passe par une sous-requête sur enrollment (pas de jointure à ajouter aux requêtes).
+ *
+ * LA SEMAINE (ajoutée le 2026-09-17) — pourquoi elle existe. Deux sessions tournent souvent la
+ * même semaine : en production ce jour-là, NIV1H et RS7404 avaient toutes deux des réponses, et
+ * toutes deux en S38. Filtrer par SESSION obligeait à choisir l'une, lire, puis choisir l'autre —
+ * pour une question que la semaine tranche déjà : « qu'ont-ils répondu cette semaine ? ».
+ *
+ * POURQUOI CÔTÉ SERVEUR, et pas en chargeant chaque session puis en fusionnant à l'écran. Les
+ * écrans lisent des AGRÉGATS — score moyen, taux de réussite — calculés en SQL. Deux moyennes ne
+ * se combinent pas en les moyennant : 80 % sur 2 réponses et 40 % sur 18 ne font pas 60 %, mais
+ * 44 %. Seul le calcul sur l'union des réponses est juste, et seule la base la voit.
+ *
+ * C'EST LA SEMAINE DE LA SESSION, PAS CELLE DE LA RÉPONSE. Un QCM rempli le lundi suivant appartient
+ * toujours à la session de la semaine d'avant ; filtrer sur `completed_at` l'aurait fait basculer.
+ *
+ * L'ORDRE DES PARAMÈTRES EST UN CONTRAT : chaque valeur revient deux fois (test NULL, égalité), et
+ * la semaine est AJOUTÉE À LA FIN. Insérée au milieu, elle aurait décalé l'année vers le test de
+ * session — un bug qui ne lève aucune erreur, il rend juste de mauvais chiffres.
  */
-function clauseFiltre(sessionId, year) {
+function clauseFiltre(sessionId, year, semaine = null) {
+    const sem = lireSemaine(semaine);
     return {
         sql: ' AND (? IS NULL OR r.enrollment_id IN (SELECT id FROM enrollment WHERE session_id = ?))'
-            + ' AND (? IS NULL OR YEAR(r.completed_at) = ?)',
-        params: [sessionId, sessionId, year, year],
+            + ' AND (? IS NULL OR YEAR(r.completed_at) = ?)'
+            + ' AND (? IS NULL OR r.enrollment_id IN (SELECT e.id FROM enrollment e'
+            + ' JOIN training_session s ON s.id = e.session_id WHERE s.year = ? AND s.week = ?))',
+        params: [sessionId, sessionId, year, year, sem.annee, sem.annee, sem.semaine],
     };
+}
+
+/**
+ * « 2026-38 » → { annee: 2026, semaine: 38 } — le format de clé de `lib/sessions.js`
+ * (`${annee}-${semaine sur deux chiffres}`), que l'écran renvoie tel quel.
+ *
+ * TOUT CE QUI NE RESSEMBLE PAS À UNE SEMAINE EST IGNORÉ, pas refusé : un paramètre malformé
+ * retombe sur « pas de filtre » plutôt que de rendre une page vide qu'on prendrait pour « aucune
+ * réponse cette semaine ». Les valeurs sont liées en paramètres, jamais concaténées.
+ */
+function lireSemaine(v) {
+    const m = /^(\d{4})-(\d{1,2})$/.exec(String(v || '').trim());
+    if (!m) return { annee: null, semaine: null };
+    const semaine = Number(m[2]);
+    return semaine >= 1 && semaine <= 53 ? { annee: Number(m[1]), semaine } : { annee: null, semaine: null };
 }
 
 /**
@@ -887,7 +922,7 @@ const resultatsOverview = async (req, res) => {
         const orgId = req.user.organization_id;
         const sessionId = req.query.session || null;
         const year = req.query.year || null;
-        const f = clauseFiltre(sessionId, year);
+        const f = clauseFiltre(sessionId, year, req.query.semaine);
         const [rows] = await conn.query(
             `SELECT q.id, q.title, q.kind, q.pass_score, q.active, q.program_id,
                     p.code AS program_code, p.title AS program_title,
@@ -908,15 +943,26 @@ const resultatsOverview = async (req, res) => {
               GROUP BY q.id, q.title, q.kind, q.pass_score, q.active, q.program_id, p.code, p.title
               ORDER BY (q.program_id IS NULL), p.code, q.active DESC, responses DESC, q.title`,
             [orgId, ...f.params, orgId]);
-        // Sessions et années qui ONT des réponses (pour les menus de filtre).
+        /* Sessions et années qui ONT des réponses (pour les menus de filtre).
+
+           ANNÉE, SEMAINE ET INTITULÉ VOYAGENT MAINTENANT AVEC LA SESSION : l'écran les range par
+           semaine avec le sélecteur de Notation (`lib/sessions.js`), qui ne sait rien faire d'une
+           session sans `year` ni `week`. Il les regroupe dans l'ORDRE REÇU — d'où le tri par date
+           décroissante, qui est un contrat, pas une préférence.
+
+           `inscrits` et non le nombre de réponses : c'est ce que le sélecteur affiche sous
+           l'étiquette « inscrit(s) », et le nombre de réponses se lit déjà QCM par QCM juste en
+           dessous. Un compte différent sous le même mot, d'un écran à l'autre, serait faux. */
         const [sessions] = await conn.query(
-            `SELECT DISTINCT s.id, p.code AS code, DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date
-               FROM quiz_response r
-               JOIN enrollment e ON e.id = r.enrollment_id
-               JOIN training_session s ON s.id = e.session_id
+            `SELECT s.id, p.code AS code, p.title AS title, s.year, s.week,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    (SELECT COUNT(*) FROM enrollment e2 WHERE e2.session_id = s.id) AS inscrits
+               FROM training_session s
                LEFT JOIN training_program p ON p.id = s.program_id
-              WHERE r.organization_id = ?
-              ORDER BY s.start_date DESC`, [orgId]);
+              WHERE s.organization_id = ?
+                AND EXISTS (SELECT 1 FROM quiz_response r JOIN enrollment e ON e.id = r.enrollment_id
+                             WHERE e.session_id = s.id AND r.organization_id = ?)
+              ORDER BY s.start_date DESC`, [orgId, orgId]);
         const [years] = await conn.query(
             `SELECT DISTINCT YEAR(completed_at) AS year FROM quiz_response
               WHERE organization_id = ? AND completed_at IS NOT NULL ORDER BY year DESC`, [orgId]);
@@ -940,7 +986,7 @@ const resultatsDetail = async (req, res) => {
         const conn = db.promise();
         const sessionId = req.query.session || null;
         const year = req.query.year || null;
-        const f = clauseFiltre(sessionId, year); // même filtre session/année que la vue d'ensemble
+        const f = clauseFiltre(sessionId, year, req.query.semaine); // même filtre que la vue d'ensemble
         const [[quiz]] = await conn.query(
             'SELECT id, title, kind, pass_score FROM quiz WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
@@ -1045,4 +1091,4 @@ const deleteResponse = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, deleteResponse, clauseFiltre, getPreuveReponse, construirePreuve };
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, deleteResponse, clauseFiltre, lireSemaine, getPreuveReponse, construirePreuve };

@@ -20,7 +20,15 @@ import { grouperParSemaine } from "../lib/sessions.js";
  * LA SEMAINE MONTRE CE QU'ELLE CONTIENT : les badges de ses formations, aux mêmes couleurs que
  * partout ailleurs. On choisit une semaine en voyant ce qu'on y trouvera — pas un numéro nu.
  */
-function SelecteurSemaine({ sessions, valeur, onChoisir, label = "Semaine" }) {
+/* `vide` : ce que dit la liste quand elle n'a rien. Le texte était « Aucune session à noter »,
+   écrit pour Notation — juste là-bas, faux ailleurs. Chaque écran dit le sien.
+
+   `toutes` : un libellé, et alors la liste s'ouvre sur une entrée « toutes les semaines » qui rend
+   la valeur "". Notation ne la passe pas — on note une semaine, jamais toutes. Les Résultats QCM la
+   passent : le bilan annuel et l'export Qualiopi portent sur l'ensemble, et le perdre en gagnant la
+   semaine aurait été une régression. Sans cette entrée, l'en-tête afficherait « Aucune semaine »
+   pour dire « toutes » — l'exact contraire. */
+function SelecteurSemaine({ sessions, valeur, onChoisir, label = "Semaine", vide = "Aucune semaine.", toutes = null }) {
     const semaines = useMemo(() => grouperParSemaine(sessions), [sessions]);
     const courante = useMemo(() => semaines.find((g) => g.cle === valeur) || null, [semaines, valeur]);
     const [ouvert, setOuvert] = useState(false);
@@ -44,12 +52,19 @@ function SelecteurSemaine({ sessions, valeur, onChoisir, label = "Semaine" }) {
                         <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>{badges(courante)}</span>
                         <span className="sub" style={{ color: "var(--dim)" }}>{courante.inscrits} inscrit(s)</span>
                     </>
-                ) : <span style={{ color: "var(--dim)" }}>Aucune semaine</span>}
+                ) : <span style={{ color: toutes ? "var(--text)" : "var(--dim)" }}>{toutes || "Aucune semaine"}</span>}
                 <Icon name="chevron-down" size={14} style={{ marginLeft: "auto", flexShrink: 0 }} />
             </summary>
             <div className="sess-pick-corps">
+                {toutes && semaines.length > 0 && (
+                    <button type="button" className={"sess-pick-item" + (!valeur ? " on" : "")}
+                        onClick={() => { onChoisir(""); setOuvert(false); }}>
+                        <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}><b style={{ fontSize: 13 }}>{toutes}</b></span>
+                        {!valeur && <Icon name="check" size={15} />}
+                    </button>
+                )}
                 {semaines.length === 0 ? (
-                    <p className="hint" style={{ margin: 8 }}>Aucune session à noter.</p>
+                    <p className="hint" style={{ margin: 8 }}>{vide}</p>
                 ) : semaines.map((g) => (
                     <button key={g.cle} type="button"
                         className={"sess-pick-item" + (g.cle === valeur ? " on" : "")}

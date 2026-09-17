@@ -10,9 +10,14 @@
  * phrase est le symptôme exact d'une logique recopiée : personne ne sait plus combien
  * d'exemplaires existent. D'où UN composant, et ces règles dans une lib qu'on peut éprouver.
  *
- * ON A LAISSÉ `ResultatsQCM` TRANQUILLE, et c'est un choix : son `<select>` est un FILTRE, avec
- * « Toutes les sessions » comme valeur légitime. Un arbre de choix n'a pas de « toutes » — le
- * convertir aurait remplacé un bon filtre par un mauvais sélecteur.
+ * `ResultatsQCM` A D'ABORD ÉTÉ LAISSÉ TRANQUILLE, et c'était un choix : son `<select>` est un
+ * FILTRE, avec « Toutes les sessions » comme valeur légitime, et le sélecteur de semaine n'avait
+ * pas de « toutes ». Le convertir aurait remplacé un bon filtre par un mauvais sélecteur.
+ *
+ * LA DÉCISION A CHANGÉ LE 2026-09-17, sur demande — et parce que l'objection a été LEVÉE, pas
+ * contournée. Le sélecteur a gagné une entrée « toutes » (prop `toutes`), que Notation ne passe pas
+ * et que les Résultats QCM passent. Le test ci-dessous ne vérifie donc plus « on n'y touche pas »,
+ * mais ce que cette règle protégeait vraiment : que le « toutes » reste EXPRIMABLE.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -110,10 +115,30 @@ test('DEUX PRÉSENTATIONS, UN SEUL RANGEMENT', () => {
     }
 });
 
-test('LE FILTRE DE RÉSULTATS QCM N\'EST PAS TOUCHÉ', () => {
-    /* Il porte « Toutes les sessions », une valeur qu'un arbre de choix ne sait pas exprimer.
-       Le laisser tel quel est une décision, pas un oubli. */
+test('RÉSULTATS QCM : la semaine, SANS perdre le « toutes » du filtre', () => {
+    /* CE QUI A DÉCLENCHÉ LE CHANGEMENT, mesuré en production le 2026-09-17 : NIV1H et RS7404
+       avaient toutes deux des réponses, toutes deux en S38. Le filtre par session obligeait à lire
+       l'une, puis à re-choisir l'autre, pour une question que la semaine tranche déjà. */
     const src = lire('pages/ResultatsQCM.jsx');
-    assert.match(src, /Toutes les sessions/);
-    assert.ok(!/SelecteurSession/.test(src));
+    assert.match(src, /import SelecteurSemaine from ["']\.\.\/components\/SelecteurSemaine\.jsx["']/);
+    // Le même rangement que Notation, importé — pas recopié.
+    assert.match(src, /import \{ grouperParSemaine, semaineParDefaut \} from ["']\.\.\/lib\/sessions\.js["']/);
+    assert.ok(!/selSession|Toutes les sessions/.test(src), 'l\'ancien menu de sessions est retiré, pas laissé à côté');
+
+    /* L'OBJECTION D'ORIGINE, TOUJOURS TENUE : un filtre doit pouvoir dire « tout ». Le bilan annuel et
+       l'export Qualiopi portent sur l'ensemble ; les perdre en gagnant la semaine aurait été une
+       régression déguisée en amélioration. */
+    assert.match(src, /toutes="Toutes les semaines"/, 'le « toutes » reste exprimable');
+    const sel = lire('components/SelecteurSemaine.jsx');
+    assert.match(sel, /toutes = null/, 'optionnel : Notation note UNE semaine, jamais toutes');
+    assert.match(sel, /onClick=\{\(\) => \{ onChoisir\(""\); setOuvert\(false\); \}\}/, 'et il rend la valeur vide');
+    assert.ok(!/<SelecteurSemaine [^>]*toutes=/.test(lire('pages/Notation.jsx')), 'Notation ne le passe pas');
+});
+
+test('le sélecteur de semaine ne parle plus la langue d\'un seul écran', () => {
+    /* Son texte vide était « Aucune session à noter » — juste dans Notation, faux dans les
+       Résultats QCM, où l'on ne note rien. Chaque écran passe le sien. */
+    const sel = lire('components/SelecteurSemaine.jsx');
+    assert.ok(!/Aucune session à noter/.test(sel), 'plus de texte propre à Notation dans le composant partagé');
+    assert.match(lire('pages/Notation.jsx'), /vide="Aucune session à noter\."/, 'Notation garde le sien, explicitement');
 });

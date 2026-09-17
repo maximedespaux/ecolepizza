@@ -8,6 +8,10 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { colorForLevel } from "../lib/levels.js";
+import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
+/* LE MÊME rangement que Notation, pas une copie : c'est la règle de rangement qui divergeait
+   quand le code était recopié (cf. lib/sessions.js), pas le balisage. */
+import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
 
 // Couleur d'un pourcentage de réussite : vert / ambre / rouge.
 const pctTone = (p) => (p == null ? "n" : p >= 75 ? "g" : p >= 50 ? "a" : "r");
@@ -213,18 +217,45 @@ function ResultatsQCM() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [vue, setVue] = useState("questions"); // "questions" | "stagiaires"
   const [filtres, setFiltres] = useState({ sessions: [], years: [] }); // options disponibles
-  const [selSession, setSelSession] = useState("");
+  /* LA SEMAINE REMPLACE LA SESSION. Deux sessions tournent souvent la même semaine — en production
+     le 2026-09-17, NIV1H et RS7404 avaient toutes deux des réponses en S38 — et il fallait choisir
+     l'une, lire, puis choisir l'autre. On vient voir « ce qu'ils ont répondu cette semaine » :
+     c'est la semaine qui répond, pas la session.
+     `undefined` = pas encore choisie (on attend la liste) ; "" = toutes les semaines ; sinon la
+     clé « 2026-38 » de lib/sessions.js. */
+  const [semaine, setSemaine] = useState(undefined);
   const [selYear, setSelYear] = useState("");
   const { user } = useContext(UserContext);
   const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role); // l'auditeur ne supprime pas
 
-  // Recharge la vue d'ensemble à chaque changement de filtre ; un détail ouvert suit le filtre.
+  /* LES FILTRES COURANTS, en un seul endroit : quatre appels les passaient à la main.
+     L'ANNÉE NE VAUT QUE POUR « TOUTES LES SEMAINES » — une semaine désigne déjà son année, et
+     cumuler les deux permettrait de demander la S38 de 2026 « en 2025 », une page vide qu'on
+     prendrait pour une absence de réponses. */
+  const args = () => [null, semaine ? null : (selYear || null), semaine || null];
+
+  /* 1) OUVRIR SUR LA SEMAINE EN COURS — la même règle que Notation (`semaineParDefaut`) : celle
+     d'aujourd'hui si elle a des réponses, sinon la plus récente qui en a. On attend la liste
+     avant de charger quoi que ce soit, sans quoi l'écran afficherait d'abord TOUT, puis
+     sauterait à la semaine — un clignotement de plusieurs centaines de réponses. */
   useEffect(() => {
-    getQcmResultats(selSession || null, selYear || null)
+    getQcmResultats(null, null, null)
+      .then((r) => {
+        const f = r.filtres || { sessions: [], years: [] };
+        setFiltres(f);
+        setSemaine(semaineParDefaut(grouperParSemaine(f.sessions)) || "");
+      })
+      .catch((e) => { setStatus({ type: "error", message: e.message }); setSemaine(""); });
+  }, []);
+
+  // 2) Recharge la vue d'ensemble à chaque changement de filtre ; un détail ouvert suit le filtre.
+  useEffect(() => {
+    if (semaine === undefined) return;
+    getQcmResultats(...args())
       .then((r) => { setRows(r.data || []); if (r.filtres) setFiltres(r.filtres); })
       .catch((e) => setStatus({ type: "error", message: e.message }));
-    if (sel) getQcmResultatDetail(sel, selSession || null, selYear || null).then((r) => setDetail(r.data)).catch(() => {});
-  }, [selSession, selYear]);
+    if (sel) getQcmResultatDetail(sel, ...args()).then((r) => setDetail(r.data)).catch(() => {});
+  }, [semaine, selYear]);
 
   /* Sous 940 px les deux colonnes s'empilent : le détail repasse SOUS la liste, hors du
      champ de vision. On l'y ramène — sans quoi le clic ne montrerait toujours rien, ce qui
@@ -234,7 +265,7 @@ function ResultatsQCM() {
   function ouvrir(id) {
     if (id === sel) { setSel(null); setDetail(null); return; } // re-clic = replier
     setSel(id); setDetail(null); setVue("questions"); setLoadingDetail(true);
-    getQcmResultatDetail(id, selSession || null, selYear || null)
+    getQcmResultatDetail(id, ...args())
       .then((r) => {
         setDetail(r.data);
         if (window.matchMedia("(max-width: 1220px)").matches) {
@@ -250,24 +281,27 @@ function ResultatsQCM() {
     try {
       await deleteQcmResponse(id);
       // Le compteur du QCM change aussi : on recharge la vue d'ensemble ET le détail ouvert.
-      const [ov, det] = await Promise.all([getQcmResultats(selSession || null, selYear || null), getQcmResultatDetail(sel, selSession || null, selYear || null)]);
+      const [ov, det] = await Promise.all([getQcmResultats(...args()), getQcmResultatDetail(sel, ...args())]);
       setRows(ov.data || []);
       setDetail(det.data);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  // Suffixe de nom de fichier reflétant le filtre courant (session lisible + année).
+  /* Suffixe du fichier exporté : la semaine (« S38-2026 ») ou l'année. Un CSV sans son filtre
+     dans le nom se confond, dans un dossier de téléchargements, avec celui de la semaine d'avant. */
   function suffixeFiltre() {
-    const s = selSession ? filtres.sessions.find((x) => x.id === selSession) : null;
-    const parts = [];
-    if (s) parts.push([s.code, s.start_date].filter(Boolean).join("-"));
-    if (selYear) parts.push(selYear);
-    return parts.length ? "-" + parts.join("-").replace(/[^\w-]+/g, "-") : "";
+    if (semaine) {
+      const [an, sem] = semaine.split("-");
+      return `-S${Number(sem)}-${an}`;
+    }
+    return selYear ? `-${selYear}` : "";
   }
   function exporterVue() {
-    if (!rows || !rows.length) return;
+    if (!visibles.length) return;
     const entetes = ["Formation", "QCM", "Type", "Réponses", "Score moyen %", "Taux de réussite %"];
-    const lignes = rows.map((q) => [
+    // Ce qu'on voit, pas ce que le serveur a rendu : exporter vingt-deux lignes quand l'écran en
+    // montre six ferait mentir le fichier sur ce qu'on a regardé.
+    const lignes = visibles.map((q) => [
       q.program_id ? [q.program_code, q.program_title].filter(Boolean).join(" · ") : "Autre",
       q.title, q.kind === "GRADED" ? "Noté" : "Enquête", q.responses, q.avg_pct ?? "", q.pass_rate ?? "",
     ]);
@@ -285,6 +319,13 @@ function ResultatsQCM() {
     telechargerCsv(`${base}${suffixeFiltre()}.csv`, entetes, lignes);
   }
 
+  /* EN VUE SEMAINE, SEULS LES QCM QUI ONT DES RÉPONSES. Le serveur rend TOUS les QCM, jointure à
+     gauche oblige — y compris ceux que personne n'a remplis cette semaine-là. Sur vingt-deux QCM,
+     on en parcourait seize à zéro pour trouver les six qui comptaient, ce qui est l'inverse
+     d'« avoir les réponses vite ». Sur « toutes les semaines », on les garde : un QCM jamais
+     rempli est une information en soi, celle qu'on vient chercher pour un bilan. */
+  const visibles = rows ? (semaine ? rows.filter((q) => q.responses > 0) : rows) : [];
+
   return (
     <>
       <PageHead eyebrow="Qualité & conformité" title="Résultats QCM"
@@ -293,25 +334,22 @@ function ResultatsQCM() {
 
       {rows && rows.length > 0 && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
-          {filtres.sessions.length > 0 && (
-            <select className="inp" value={selSession} onChange={(e) => setSelSession(e.target.value)} style={{ maxWidth: 300 }}
-              aria-label="Filtrer par session">
-              <option value="">Toutes les sessions</option>
-              {filtres.sessions.map((s) => <option key={s.id} value={s.id}>{[s.code, s.start_date].filter(Boolean).join(" · ")}</option>)}
-            </select>
-          )}
-          {filtres.years.length > 0 && (
+          {/* LE SÉLECTEUR DE NOTATION, avec son entrée « toutes » en plus. Il montre sur chaque
+              semaine les badges de ses formations — on choisit en voyant ce qu'on va trouver. */}
+          <div style={{ flex: "1 1 320px", maxWidth: 460 }}>
+            <SelecteurSemaine sessions={filtres.sessions} valeur={semaine || ""} onChoisir={setSemaine}
+              label="Semaine des réponses" toutes="Toutes les semaines" vide="Aucune réponse enregistrée." />
+          </div>
+          {/* L'année ne sert que sur « toutes les semaines » : une semaine désigne déjà la sienne. */}
+          {!semaine && filtres.years.length > 0 && (
             <select className="inp" value={selYear} onChange={(e) => setSelYear(e.target.value)} style={{ maxWidth: 150 }}
               aria-label="Filtrer par année">
               <option value="">Toutes les années</option>
               {filtres.years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
             </select>
           )}
-          {(selSession || selYear) && (
-            <button type="button" className="btn sm ghost" onClick={() => { setSelSession(""); setSelYear(""); }}>Réinitialiser</button>
-          )}
           <div style={{ flex: 1 }} />
-          <button type="button" className="btn sm" onClick={exporterVue} title="Exporter la vue d'ensemble filtrée (CSV)">⬇ Exporter (CSV)</button>
+          <button type="button" className="btn sm" onClick={exporterVue} title="Exporter la vue affichée (CSV)">⬇ Exporter (CSV)</button>
         </div>
       )}
 
@@ -319,10 +357,12 @@ function ResultatsQCM() {
         <p className="hint">Chargement…</p>
       ) : rows.length === 0 ? (
         <Card title="Résultats QCM"><p className="hint" style={{ margin: 0 }}>Aucun QCM au référentiel. Créez-en dans Configuration → Modèles de QCM.</p></Card>
+      ) : visibles.length === 0 ? (
+        <Card title="Résultats QCM"><p className="hint" style={{ margin: 0 }}>Aucune réponse cette semaine. Choisissez-en une autre, ou « Toutes les semaines ».</p></Card>
       ) : (
         <div className={sel ? "qcm-split" : undefined}>
-        <Card className="qcm-liste" title={`QCM (${rows.length})`}>
-          {grouperParFormation(rows).map((g) => (
+        <Card className="qcm-liste" title={semaine ? `QCM répondus cette semaine (${visibles.length})` : `QCM (${visibles.length})`}>
+          {grouperParFormation(visibles).map((g) => (
             <div key={g.cle} style={{ marginBottom: 14 }}>
               {/* La couleur passe du TEXTE à la PASTILLE : garder les deux ferait deux signaux
                   pour une seule information, et le rouge de l'en-tête entrait en concurrence
