@@ -4161,19 +4161,33 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
   background:var(--surface3);flex:none}
 
-/* Attribution des cadres exclusifs (fiche stagiaire, espace ADMIN).
-   Registre sobre : ni relief, ni ressort — on décerne une distinction, on ne joue pas.
+/* DISTINCTIONS — les cadres exclusifs que l'école décerne (Communauté, bureau seulement).
+   Ils se décernaient sur la fiche stagiaire jusqu'au 2026-09-17 (cf. Distinctions.jsx).
+   Registre sobre : ni relief, ni ressort — on décerne une distinction, on ne joue pas. Même
+   gabarit que le bandeau d'annonces juste au-dessus, en OR : la teinte des distinctions.
    ⚠️ La pastille d'aperçu porte `position:relative` et des dimensions : l'anneau de cadre est
-   un `::before` absolu qui, sans ancêtre positionné, s'accroche à la carte entière. */
-.cadres-attrib{display:flex;flex-direction:column;gap:6px;margin-top:4px}
-.cadre-attrib{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--border);
-  border-radius:var(--r-sm);background:var(--surface);cursor:pointer;transition:.14s var(--ease)}
-.cadre-attrib:hover{border-color:var(--muted)}
-.cadre-attrib.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 9%,var(--surface))}
-.cadre-attrib input{width:17px;height:17px;flex:none;cursor:pointer}
+   un `::before` absolu qui, sans ancêtre positionné, s'accroche au panneau entier. */
+.comm-distinctions{margin-bottom:18px;padding:12px 16px;border:1px solid color-mix(in srgb,var(--gold) 34%,var(--border));
+  border-left:3px solid var(--gold);border-radius:14px;background:color-mix(in srgb,var(--gold) 5%,var(--surface))}
+.comm-distinctions>summary{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:13px;cursor:pointer;list-style:none}
+.comm-distinctions>summary::-webkit-details-marker{display:none}
+.comm-distinctions>summary b{font:800 13px/1 var(--font-b);letter-spacing:.02em;text-transform:uppercase}
+.dist-chevron{margin-left:auto;transition:transform .16s var(--ease)}
+.comm-distinctions[open] .dist-chevron{transform:rotate(180deg)}
+.dist-liste{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.dist-ligne{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface)}
 .cadre-attrib-rond{position:relative;width:26px;height:26px;flex:none;border-radius:50%;background:var(--surface2)}
-.cadre-attrib-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
-.cadre-attrib-txt b{font-size:13.5px}
+.dist-corps{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.dist-tete{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+.dist-tete b{font-size:13.5px}
+.dist-porteurs{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.dist-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 3px 2px 10px;border:1px solid color-mix(in srgb,var(--gold) 45%,var(--border));
+  border-radius:999px;background:color-mix(in srgb,var(--gold) 9%,var(--surface));font-size:12.5px;font-weight:600}
+.dist-chip a{color:var(--text);text-decoration:none}
+.dist-chip a:hover{text-decoration:underline}
+.dist-chip button{display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:50%;background:none;color:var(--muted);cursor:pointer}
+.dist-chip button:hover:not(:disabled){background:var(--surface2);color:var(--text)}
+@media (prefers-reduced-motion:reduce){.dist-chevron{transition:none}}
 
 /* Intitulé de famille dans le sélecteur de cadres. Reprend la forme des autres en-têtes de
    section de l'app (capitales étroites, `.pf-add-title`) : c'est le même objet, il doit se

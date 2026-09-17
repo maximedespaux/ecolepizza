@@ -480,6 +480,10 @@ export function createStagiaire(payload) {
   return request("/stagiaires", { method: "POST", body: JSON.stringify(payload) });
 }
 
+// Porteurs des cadres exclusifs, pour le panneau « Distinctions » de la Communauté (bureau).
+export function getDistinctions() {
+  return request("/stagiaires/distinctions");
+}
 export function updateStagiaire(id, payload) {
   return request(`/stagiaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }

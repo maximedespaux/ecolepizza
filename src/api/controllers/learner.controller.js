@@ -184,6 +184,37 @@ const getLearners = (req, res) => {
 };
 
 /**
+ * GET /api/stagiaires/distinctions — qui porte quel cadre exclusif (Champion, Podium, Jury…).
+ *
+ * Pour le panneau « Distinctions » de la Communauté, où l'école décerne ces cadres depuis le
+ * 2026-09-17 — ils se décernaient sur la fiche stagiaire, au milieu du dossier administratif.
+ *
+ * Ne renvoie QUE les porteurs, et seulement leur nom : le panneau n'a besoin de rien d'autre, et
+ * la liste générale publierait e-mail et téléphone de mille personnes pour en afficher trois.
+ * C'est aussi ce qui permet d'écrire juste : quiconque n'est pas dans cette liste ne porte aucun
+ * cadre, donc la chaîne à envoyer pour lui en attribuer un se déduit sans relire sa fiche.
+ */
+const getDistinctions = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, first_name, last_name, cadres_exclusifs FROM learner
+              WHERE organization_id = ? AND cadres_exclusifs IS NOT NULL AND TRIM(cadres_exclusifs) <> ''
+              ORDER BY last_name, first_name`,
+            [req.user.organization_id]);
+        res.json({
+            data: rows.map((r) => ({
+                ...r, cadres_exclusifs: String(r.cadres_exclusifs).split(',').map((x) => x.trim()).filter(Boolean),
+            })),
+        });
+    } catch (err) {
+        // Colonne absente (migration 113 non jouée) : personne ne porte de cadre, ce n'est pas une panne.
+        if (err.code === 'ER_BAD_FIELD_ERROR') return res.json({ data: [] });
+        console.error('Erreur lecture des distinctions :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * GET /api/stagiaires/:id — dossier complet (avec l'entreprise liée si devis pro).
  */
 const getLearner = async (req, res) => {
@@ -630,6 +661,6 @@ const deleteStagiaireAccount = async (req, res) => {
 };
 
 module.exports = {
-    getLearners, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
+    getLearners, getDistinctions, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
     deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL,
 };
