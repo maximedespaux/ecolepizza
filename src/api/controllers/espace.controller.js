@@ -16,6 +16,7 @@ const { encrypt, encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
+const { capitaliser, enCapitales, CAPITALES_STAGIAIRE } = require('../lib/saisie.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -1940,7 +1941,10 @@ const updateMyInfos = async (req, res) => {
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
-        const b = req.body || {};
+        /* Les MÊMES conventions que la fiche tenue par l'école (lib/saisie.js). Ce chemin n'en
+           appliquait aucune : un stagiaire écrivait son nom et la ville de son entreprise tels
+           que tapés, et défaisait en un clic la casse que l'école venait d'imposer. */
+        const b = capitaliser(req.body || {}, CAPITALES_STAGIAIRE);
         const vals = {};
         INFO_FIELDS.forEach((f) => { if (b[f] !== undefined) vals[f] = clean(b[f]); });
         const birthday = b.birthday !== undefined ? (b.birthday ? String(b.birthday).slice(0, 10) : null) : undefined;
@@ -1962,7 +1966,7 @@ const updateMyInfos = async (req, res) => {
             if (b.company_name !== undefined) cvals.name = clean(b.company_name);
             if (b.company_address !== undefined) cvals.address = clean(b.company_address);
             if (b.company_zip !== undefined) cvals.zip_code = clean(b.company_zip);
-            if (b.company_town !== undefined) cvals.town = clean(b.company_town);
+            if (b.company_town !== undefined) cvals.town = clean(enCapitales(b.company_town)); // cf. CAPITALES_ENTREPRISE
             if (Object.keys(cvals).length) {
                 if (learner.company_id) {
                     const cs = Object.keys(cvals).map((k) => `${k} = ?`);

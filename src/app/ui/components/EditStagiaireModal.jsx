@@ -92,6 +92,9 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   // casse ne dépende pas de celle du poste — sans argument, un navigateur en turc écrirait
   // « İLE » pour « ile ».
   const setNom = (e) => setForm((p) => ({ ...p, last_name: e.target.value.toLocaleUpperCase("fr") }));
+  // VILLE en majuscules aussi, même règle et même locale — le serveur l'applique de toute façon
+  // (src/api/lib/saisie.js) ; la faire dès la frappe évite qu'elle change de casse à l'enregistrement.
+  const setVille = (e) => setForm((p) => ({ ...p, town: e.target.value.toLocaleUpperCase("fr") }));
   // E-MAIL en minuscules et sans espace : c'est aussi l'identifiant de connexion du stagiaire,
   // et « Jean@X.fr » puis « jean@x.fr » finiraient en deux comptes pour la même personne.
   const setEmail = (e) => setForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }));
@@ -202,7 +205,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               <div className="row3">
                 <Field label="Adresse" value={form.address} onChange={set("address")} placeholder="12 rue des Lilas" />
                 <Field label="Code postal" value={form.zip_code} onChange={set("zip_code")} placeholder="65300" />
-                <Field label="Ville" value={form.town} onChange={set("town")} placeholder="Lannemezan" />
+                <Field label="Ville" value={form.town} onChange={setVille} placeholder="LANNEMEZAN" />
               </div>
 
               <div className="divider" />
@@ -320,7 +323,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                       <div className="row3">
                         <Field label="Nom" requis value={newCo.name} onChange={(e) => setNewCo((n) => ({ ...n, name: e.target.value }))} />
                         <Field label="SIRET" requis placeholder="879 955 136 00012" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
-                        <Field label="Ville" placeholder="Lannemezan" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value }))} />
+                        <Field label="Ville" placeholder="LANNEMEZAN" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value.toLocaleUpperCase("fr") }))} />
                       </div>
                       <div className="row3">
                         <Field label="E-mail" requis type="email" placeholder="contact@lepetitfour.fr" value={newCo.email} onChange={(e) => setNewCo((n) => ({ ...n, email: e.target.value }))} />

@@ -15,6 +15,7 @@ const { logAudit } = require('../lib/audit.js');
    — un lot de douze arrivait en « dupont », « Dupont », « DUPONT » selon ce qu'avait tapé
    l'entreprise, et c'est exactement le mélange que la convention existe pour empêcher. */
 const { normaliserSaisie, RE_EMAIL } = require('./learner.controller.js');
+const { capitaliser, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
@@ -174,6 +175,7 @@ async function colonnesEntreprise(conn) {
    appliquées ici aussi parce que le formulaire n'est pas le seul chemin d'entrée :
    · NOM DU RÉFÉRENT en majuscules : il ressort tel quel sur les conventions et les liens de
      signature, et « dupont » / « Dupont » / « DUPONT » empêchent tout tri comme tout regroupement ;
+   · VILLE en majuscules aussi (2026-09-17), pour la même raison et comme celle du stagiaire ;
    · E-MAIL en minuscules, sans espaces, refusé s'il est malformé : c'est l'adresse à laquelle
      partent la convention et le lien de signature du représentant.
    La RAISON SOCIALE, en revanche, n'est PAS mise en capitales : « SARL Le Petit Four » a une
@@ -195,8 +197,9 @@ const RE_EMAIL_ENT = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const RE_TVA = /^(FR[0-9]{11}|[0-9]{13})$/;
 
 function normaliserEntreprise(b) {
-    const out = { ...b };
-    if (out.representative_name != null) out.representative_name = String(out.representative_name).trim().toLocaleUpperCase('fr');
+    // Nom du référent et ville en capitales : la liste est dans lib/saisie.js, partagée avec les
+    // deux autres chemins qui écrivent une entreprise (saisie en ligne, espace stagiaire).
+    const out = capitaliser(b, CAPITALES_ENTREPRISE);
     if (out.name != null) out.name = String(out.name).trim();
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
     if (out.vat_number != null) {

@@ -11,6 +11,7 @@ const { credentialsEmail, resetEmail } = require('../lib/mailTemplates.js');
 const { logAudit } = require('../lib/audit.js');
 const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
 const { resolveurBadges, resoudreCsv } = require('../lib/badges.js');
+const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -102,19 +103,24 @@ const clean = (v) => (v === undefined || v === '' ? null : v);
    pas le seul chemin d'entrée (reprise de données, second écran, appel direct). Une base où
    « despaux », « Despaux » et « DESPAUX » cohabitent ne se trie plus, ne se dédoublonne plus, et
    ressort telle quelle sur les attestations.
-   · NOM en majuscules — l'usage administratif français. Les accents sont conservés de toute
-     façon (« déspaux » donne « DÉSPAUX », vérifié : toUpperCase() le fait déjà) ; ce qu'on
+   · NOM et VILLE en majuscules — l'usage administratif français. Les accents sont conservés de
+     toute façon (« déspaux » donne « DÉSPAUX », vérifié : toUpperCase() le fait déjà) ; ce qu'on
      épingle avec `toLocaleUpperCase('fr')`, c'est la LOCALE, pour que la casse ne dépende jamais
-     de celle du serveur — sans argument, un hôte turc écrirait « İLE » pour « ile » ;
+     de celle du serveur — sans argument, un hôte turc écrirait « İLE » pour « ile ». La liste des
+     champs concernés vit dans lib/saisie.js, partagée avec l'entreprise et l'espace stagiaire ;
    · E-MAIL en minuscules et sans espaces : c'est aussi l'identifiant de connexion du stagiaire,
      et « Jean@X.fr » puis « jean@x.fr » finiraient en DEUX comptes pour la même personne. */
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function normaliserSaisie(b) {
-    const out = { ...b };
-    if (out.last_name != null) out.last_name = String(out.last_name).trim().toLocaleUpperCase('fr');
+    const out = capitaliser(b, CAPITALES_STAGIAIRE);
     if (out.first_name != null) out.first_name = String(out.first_name).trim();
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
+    /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
+       updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus
+       aucun écran ne l'envoie, mais la route l'accepte toujours : la ville et le référent y
+       entraient tels que tapés. */
+    if (out.company && typeof out.company === 'object') out.company = capitaliser(out.company, CAPITALES_ENTREPRISE);
     return out;
 }
 
