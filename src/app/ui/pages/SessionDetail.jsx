@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -22,6 +22,10 @@ import ProgressPct from "../components/ProgressPct.jsx";
 
 function SessionDetail() {
   const { id } = useParams();
+  /* `?emargement=<feuille>` : posé par l'alerte « Émargement à signer ». Sans lui, le lien menait
+     en haut d'une page dont l'émargement est la DERNIÈRE carte, sous les inscrits, les formateurs
+     et les intervenants — on ouvrait l'alerte, et il fallait encore chercher quoi signer. */
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
   const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
@@ -492,7 +496,7 @@ function SessionDetail() {
       )}
 
       <div style={{ marginTop: 16 }}>
-        <Emargement sessionId={id} />
+        <Emargement sessionId={id} feuilleVisee={params.get("emargement")} />
       </div>
 
       {notesFor && (

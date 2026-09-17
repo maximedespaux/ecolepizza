@@ -17,8 +17,10 @@ const ROLES_SUPPRESSION_DOFFICE = ['SUPER_ADMIN', 'ADMIN_ORGANISME'];
 
 /**
  * Crée une notification (best-effort). user_id null = visible par tout l'organisme.
+ * `email: false` retire le double par e-mail — pour une alerte RÉPÉTÉE, comme les relances
+ * d'émargement (deux par demi-journée de cours, cf. lib/relancesEmargement.js).
  */
-function notify(orgId, { userId = null, type = 'INFO', title, body = null, link = null }) {
+function notify(orgId, { userId = null, type = 'INFO', title, body = null, link = null, email = true }) {
     /* Renvoie une PROMESSE, pour que l'appelant puisse attendre l'insertion avant de répondre.
      *
      * Pourquoi ça compte : toute réponse réussie déclenche une diffusion SSE `refresh` à
@@ -38,7 +40,7 @@ function notify(orgId, { userId = null, type = 'INFO', title, body = null, link 
             // Miroir e-mail — UNIQUEMENT pour une notification adressée à une personne (userId).
             // Une notification d'organisme (userId null) est visible par tous dans l'app ; l'envoyer
             // par mail écrirait à tout le monde, ce qu'on ne veut pas. Best-effort, jamais bloquant.
-            if (userId) emailNotification(orgId, userId, { title, body, link });
+            if (userId && email) emailNotification(orgId, userId, { title, body, link });
         })
         .catch((err) => { console.error('notification:', err.message); });
 }
