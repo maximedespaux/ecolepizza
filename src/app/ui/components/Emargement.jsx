@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import { getAttendance, generateAttendance, signAttendanceSheet, regenerateEmargement } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
@@ -10,8 +10,11 @@ import { initials, dateHeure } from "../lib/format.js";
 
 const SLOT_SHORT = { MATIN: "Matin", APRES_MIDI: "Après-m.", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 
-/** Feuille d'émargement d'une session : grille stagiaires × demi-journées. */
-function Emargement({ sessionId }) {
+/** Feuille d'émargement d'une session : grille stagiaires × demi-journées.
+ *  `feuilleVisee` (facultatif) : la demi-journée d'une alerte « Émargement à signer ». La carte
+ *  vient à l'écran une fois les feuilles chargées, et la colonne se surligne — le bouton
+ *  « Signer » attendu est dedans. */
+function Emargement({ sessionId, feuilleVisee = null }) {
   const { user } = useContext(UserContext);
   const [sheets, setSheets] = useState([]);
   const [records, setRecords] = useState([]);
@@ -21,6 +24,8 @@ function Emargement({ sessionId }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [signSheetRec, setSignSheetRec] = useState(null); // feuille que le formateur signe
+  const carteRef = useRef(null);
+  const dejaPlace = useRef(null); // la feuille vers laquelle on a déjà défilé (une seule fois)
 
   async function load() {
     try {
@@ -36,6 +41,17 @@ function Emargement({ sessionId }) {
   }
   useEffect(() => { load(); }, [sessionId]);
   useAutoRefresh(load, { interval: 15000 }); // signatures (stagiaire / formateur) en direct
+
+  /* UNE SEULE FOIS par feuille visée : le rafraîchissement automatique recharge la grille toutes
+     les quinze secondes, et ramener l'écran sur la carte à chaque fois empêcherait de lire le
+     reste de la page. */
+  const visee = feuilleVisee && sheets.some((s) => s.id === feuilleVisee) ? feuilleVisee : null;
+  useEffect(() => {
+    if (!visee || dejaPlace.current === visee) return;
+    dejaPlace.current = visee;
+    carteRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [visee]);
+  const surligne = (sheetId) => (sheetId === visee ? { background: "color-mix(in srgb, var(--ember1) 10%, transparent)" } : null);
 
   // Stagiaires distincts (depuis les présences).
   const learners = useMemo(() => {
@@ -97,6 +113,7 @@ function Emargement({ sessionId }) {
   }
 
   return (
+    <div ref={carteRef} style={{ scrollMarginTop: 72 }}>
     <Card
       title="Émargement"
       more={
@@ -126,7 +143,7 @@ function Emargement({ sessionId }) {
               <tr>
                 <th>Stagiaire</th>
                 {sheets.map((s) => (
-                  <th key={s.id} style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                  <th key={s.id} style={{ textAlign: "center", whiteSpace: "nowrap", ...surligne(s.id) }}>
                     {s.date.slice(8, 10)}/{s.date.slice(5, 7)}<br /><span style={{ fontWeight: 400, textTransform: "none" }}>{SLOT_SHORT[s.slot]}</span>
                   </th>
                 ))}
@@ -176,7 +193,7 @@ function Emargement({ sessionId }) {
                     const sg = trainerByKey[`${s.id}|${t.id}`];
                     const isMe = user?.id === t.id;
                     return (
-                      <td key={s.id} style={{ textAlign: "center" }}>
+                      <td key={s.id} style={{ textAlign: "center", ...surligne(s.id) }}>
                         {sg && sg.signed ? (
                           <span title={`Signé par ${sg.signer_name || ""}${sg.signed_at ? ` · ${dateHeure(sg.signed_at)}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
                         ) : isMe ? (
@@ -239,6 +256,7 @@ function Emargement({ sessionId }) {
         />
       )}
     </Card>
+    </div>
   );
 }
 

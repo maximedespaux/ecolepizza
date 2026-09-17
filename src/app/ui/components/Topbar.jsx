@@ -47,10 +47,10 @@ function Topbar({ onMenu }) {
       .then((r) => {
         setUnread(r.unread || 0);
         const alertes = (r.data || []).filter((x) => !x.is_read).length;
-        /* LA GARDE ANTI-ÉCHO RESTE, pour les alertes que je provoque moi-même : m'ajouter comme
-           formateur me crée « Émargement à signer », signer à la place d'un stagiaire crée
-           « Document signé » pour tout l'organisme. Le repère est posé par apiClient, partagé
-           entre les onglets du navigateur. */
+        /* LA GARDE ANTI-ÉCHO RESTE, pour les alertes que je provoque moi-même : signer à la place
+           d'un stagiaire crée « Document signé » pour tout l'organisme. Le repère est posé par
+           apiClient, partagé entre les onglets du navigateur. Les relances d'émargement, elles,
+           ne sont l'écho d'aucun geste : elles partent de l'horloge, et sonnent. */
         if (prevAlertes.current !== null && alertes > prevAlertes.current && msDepuisMutationLocale() > 2500) {
           playNotif();
           setRinging(true);

@@ -19,8 +19,9 @@ export const API_BASE_URL = String(import.meta.env.VITE_API_URL || "http://local
 
 /* Instant de la DERNIÈRE mutation faite depuis CE NAVIGATEUR (POST/PUT/PATCH/DELETE, uploads
    compris). Sert au Topbar à ne pas faire sonner une alerte qui n'est que l'ÉCHO de mon propre
-   geste — m'ajouter comme formateur d'une session me crée « Émargement à signer » ; signer un
-   document à la place d'un stagiaire crée « Document signé » pour tout l'organisme.
+   geste — signer un document à la place d'un stagiaire crée « Document signé » pour tout
+   l'organisme. (L'ajout comme formateur créait « Émargement à signer » ; depuis le 2026-09-17
+   cette alerte part le jour du cours, cf. lib/relancesEmargement.js côté API.)
 
    PARTAGÉ ENTRE LES ONGLETS, et c'est l'ajout du 2026-09-17. Le repère vivait dans une variable
    de module, donc PAR ONGLET : un geste dans l'onglet de devant sonnait dans celui de derrière,

@@ -3,6 +3,7 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { encrypt } = require('../lib/crypto.js');
+const { lienEmargement } = require('../lib/relancesEmargement.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI'];
 
@@ -239,6 +240,12 @@ const signSheet = async (req, res) => {
             [crypto.randomUUID(), req.params.id, req.user.id, name, encrypt(signature_data || null)]
         );
         logAudit(req, 'attendance.sign', 'AttendanceSheet', req.params.id);
+        /* L'ALERTE « Émargement à signer » de cette demi-journée s'éteint d'elle-même : elle
+           demandait ce geste, il est fait. Retrouvée par son lien, qui est aussi sa clé
+           (lib/relancesEmargement.js). AVANT la réponse — celle-ci déclenche le rechargement des
+           postes, qui doivent déjà la lire comme lue. Un échec ici n'annule pas la signature. */
+        await conn.query('UPDATE notification SET is_read = 1 WHERE organization_id = ? AND user_id = ? AND link = ?',
+            [req.user.organization_id, req.user.id, lienEmargement(sheet.session_id, req.params.id)]).catch(() => {});
         res.json({ success: true, message: 'Feuille signée.' });
 
         // Régénère les feuilles d'émargement archivées des stagiaires de la session (non bloquant).

@@ -231,4 +231,16 @@ app.listen(port, () => {
     const org = require('./lib/orgContext.js');
     org.charger();
     setInterval(() => org.charger(), 10 * 60 * 1000).unref?.();
+    /* RELANCES D'ÉMARGEMENT — « Émargement à signer » le jour même, à chaque demi-journée commencée
+       et non signée (lib/relancesEmargement.js). Toutes les cinq minutes : l'alerte arrive au
+       plus tard cinq minutes après le début du cours. Un passage peu après le démarrage, pour
+       qu'un redéploiement en pleine matinée ne fasse pas attendre le suivant. Ici et pas à
+       l'import, pour la même raison que ci-dessus : les tests ne doivent rien lancer. */
+    const { relancerEmargements } = require('./lib/relancesEmargement.js');
+    const { notify } = require('./controllers/notification.controller.js');
+    const { publish } = require('./lib/events.js');
+    const relancer = () => relancerEmargements({ conn: require('./config/database.js').promise(), notifier: notify, publier: publish })
+        .catch((err) => console.error('Relances d\u2019émargement :', err.message));
+    setTimeout(relancer, 30 * 1000).unref?.();
+    setInterval(relancer, 5 * 60 * 1000).unref?.();
 });
