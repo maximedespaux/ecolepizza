@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-17** :
-**1429 tests — 1422 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1441 tests — 1434 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,13 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **162 et 163 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+## 4. Migrations — **162, 163 et 164 à jouer, 161 à vérifier (relevé le 2026-09-17)**
+
+**164 — À JOUER** (`164_qcm_reponse_libre.sql`) : type de question `TEXT` (réponse libre limitée en
+MOTS, 128 par défaut) dans l'ENUM de `quiz_question.type`, et colonne `max_words`. Sans elle, l'éditeur
+REFUSE d'enregistrer une réponse libre (422) : un ENUM qui ignore une valeur la range en chaîne vide
+hors mode strict. Elle se vérifie à l'usage : enregistrer un QCM avec une question « Réponse libre »
+réussit. Son revert SUPPRIME les questions TEXT (leur texte reste dans les preuves figées).
 
 **163 — À JOUER** (`163_qcm_plusieurs_formations.sql`) : table `quiz_program`, un QCM peut servir
 à PLUSIEURS formations, avec un jour propre à chacune. Sans elle, le code retombe sur

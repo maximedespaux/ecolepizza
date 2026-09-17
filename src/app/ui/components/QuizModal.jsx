@@ -3,6 +3,7 @@ import { takeQuiz, submitQuiz } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import GrilleCorrigee from "./GrilleCorrigee.jsx";
+import { compterMots, MOTS_MAX_DEFAUT } from "../lib/mots.js";
 
 // Correction d'un QCM : bonnes réponses (vert) + réponses données (croix si fausse).
 function ReviewList({ review }) {
@@ -20,6 +21,9 @@ function ReviewList({ review }) {
           {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 160, objectFit: "contain", borderRadius: 6, margin: "0 0 8px", display: "block" }} /> : null}
           {q.type === "SCALE" ? (
             <div className="hint">Votre réponse : {q.scaleValue ?? "-"}{q.scale_max ? ` / ${q.scale_max}` : ""}</div>
+          ) : q.type === "TEXT" ? (
+            /* Réponse libre : relue telle qu'écrite, sans verdict — elle n'est pas corrigée ici. */
+            <div className="quiz-libre-relue">{q.reponse || "—"}</div>
           ) : q.lignes ? (
             <GrilleCorrigee colonnes={q.colonnes} lignes={q.lignes} />
           ) : (
@@ -41,6 +45,28 @@ function ReviewList({ review }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * RÉPONSE LIBRE (question « TEXT ») : une zone de texte et son compteur de mots.
+ *
+ * ON NE COUPE PAS LA FRAPPE à la limite : un texte collé serait tronqué en silence, au milieu d'une
+ * phrase, sans que le stagiaire s'en aperçoive. Il peut dépasser ; le compteur passe au rouge, dit
+ * de combien, et « Suivant » attend qu'il ait raccourci. Le compteur est annoncé aux lecteurs d'écran
+ * (`aria-live`), sinon la limite n'existerait que pour ceux qui voient la couleur.
+ */
+function ReponseLibre({ valeur, max, onChange }) {
+  const mots = compterMots(valeur);
+  const trop = mots > max;
+  return (
+    <div className="quiz-libre">
+      <textarea className="inp" rows={7} value={valeur} onChange={(e) => onChange(e.target.value)}
+        placeholder="Votre réponse…" aria-describedby="quiz-libre-compte" />
+      <div id="quiz-libre-compte" className={"quiz-libre-compte" + (trop ? " trop" : "")} aria-live="polite">
+        {trop ? `${mots} / ${max} mots — retirez-en ${mots - max} pour continuer` : `${mots} / ${max} mots`}
+      </div>
     </div>
   );
 }
@@ -87,6 +113,8 @@ function QuizModal({ documentId, onClose, onDone }) {
   });
   const answered = (qq) => {
     const v = answers[qq.id];
+    // Réponse libre : écrite, et dans la limite — le serveur recompte de toute façon à l'envoi.
+    if (qq.type === "TEXT") { const n = compterMots(v); return n > 0 && n <= (qq.max_words || MOTS_MAX_DEFAUT); }
     if (isGrid(qq.type)) {
       const g = v && typeof v === "object" ? v : {};
       return (qq.rows || []).length > 0 && (qq.rows || []).every((rw) => Array.isArray(g[rw.id]) && g[rw.id].length > 0);
@@ -153,7 +181,9 @@ function QuizModal({ documentId, onClose, onDone }) {
                 <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12, whiteSpace: "pre-line" }}>{q.text}</div>
                 {q.image ? <img src={q.image} alt="" style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", borderRadius: 8, marginBottom: 12, display: "block" }} /> : null}
 
-                {q.type === "SCALE" ? (
+                {q.type === "TEXT" ? (
+                  <ReponseLibre valeur={answers[q.id] || ""} max={q.max_words || MOTS_MAX_DEFAUT} onChange={setAns} />
+                ) : q.type === "SCALE" ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {Array.from({ length: q.scale_max }, (_, n) => n + 1).map((n) => (
                       <button key={n} type="button"

@@ -1,7 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { colonneExiste } = require('../lib/colonnes.js');
+const { colonneExiste, colonneOuNull } = require('../lib/colonnes.js');
+// Réponse libre (type TEXT, migration 164) : compte des mots et limite, les mêmes partout.
+const { compterMots, motsMaxDe, reponseLibreDisponible, CARACTERES_MAX } = require('../lib/reponseLibre.js');
 // Un QCM peut servir à PLUSIEURS formations (migration 163) : toute lecture du rattachement passe par là.
 const { formationsDesQcm, jourPour, formationsDemandees, enregistrerFormations } = require('../lib/qcmFormations.js');
 
@@ -188,11 +190,12 @@ const getQuiz = async (req, res) => {
         const [[quiz]] = await conn.query('SELECT * FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
         let questions;
+        const motsMaxCol = await colonneOuNull(conn, 'quiz_question', 'max_words'); // migration 164
         try {
-            [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+            [questions] = await conn.query(`SELECT id, position, text, type, scale_max, points, partial_scoring, image, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [quiz.id]);
         } catch (e) {
             if (e && e.code === 'ER_BAD_FIELD_ERROR') { // colonne image absente (migration 062)
-                [questions] = await conn.query('SELECT id, position, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [quiz.id]);
+                [questions] = await conn.query(`SELECT id, position, text, type, scale_max, points, partial_scoring, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [quiz.id]);
             } else { throw e; }
         }
         const qids = questions.map((q) => q.id);
@@ -254,6 +257,15 @@ const saveQuiz = async (req, res) => {
         const [[quiz]] = await conn.query('SELECT id FROM quiz WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!quiz) return res.status(404).json({ message: 'QCM introuvable' });
 
+        /* RÉPONSE LIBRE : REFUSÉE TANT QUE LA MIGRATION 164 N'EST PAS JOUÉE, et AVANT toute écriture.
+           Un ENUM qui ne connaît pas `TEXT` ne le refuse pas forcément : hors mode strict, MariaDB range
+           une chaîne vide — la question deviendrait une question sans type ni options, impossible à
+           remplir. Mieux vaut un refus qui dit quoi faire qu'un QCM abîmé en silence. */
+        const texteDispo = await reponseLibreDisponible(conn);
+        if (!texteDispo && (Array.isArray(b.questions) ? b.questions : []).some((q) => q && q.type === 'TEXT' && String(q.text || '').trim())) {
+            return res.status(422).json({ error: 'La question « Réponse libre » demande la migration 164 : jouez-la, puis enregistrez de nouveau. Rien n\'a été modifié.' });
+        }
+
         /* LES FORMATIONS COCHÉES (migration 163). La première devient la formation principale
            (`program_id`), que le code d'avant la migration sait encore lire. `formations` absent
            = un écran d'avant, encore ouvert dans un onglet : il ne connaît que `program_id`, et
@@ -306,31 +318,38 @@ const saveQuiz = async (req, res) => {
             const reutilise = !!q.id && idsQ.has(q.id);
             const qid = reutilise ? q.id : crypto.randomUUID();
             gardees.push(qid);
-            const qType = ['SINGLE', 'MULTI', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI'].includes(q.type) ? q.type : 'SINGLE';
+            const qType = ['SINGLE', 'MULTI', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI', 'TEXT'].includes(q.type) ? q.type : 'SINGLE';
             // Points : on autorise 0 (question sans note / informative).
             const pts = Number(q.points);
-            const points = Number.isFinite(pts) && pts >= 0 ? Math.floor(pts) : 1;
+            /* Une réponse libre ne se corrige pas automatiquement : 0 point, pour que rien — score,
+               maximum, preuve — ne lui en prête un qu'elle ne peut pas rapporter. */
+            const points = qType === 'TEXT' ? 0 : Number.isFinite(pts) && pts >= 0 ? Math.floor(pts) : 1;
+            const motsMax = qType === 'TEXT' ? motsMaxDe(q) : null; // limite en MOTS, 128 par défaut
             // « Points par bonne réponse » : pertinent seulement pour les QCM (MULTI).
             const partial = qType === 'MULTI' && q.partial_scoring ? 1 : 0;
             const img = q.image && /^data:image\//.test(q.image) ? q.image : null;
             const texte = String(q.text).slice(0, 2000);
             const echelle = Number(q.scale_max) || 5;
+            // `max_words` n'existe qu'après la migration 164 — et `texteDispo` dit précisément cela.
+            const motsSql = texteDispo ? ', max_words = ?' : '';
+            const motsVal = texteDispo ? [motsMax] : [];
             if (reutilise) {
                 await conn.query(
-                    `UPDATE quiz_question SET position = ?, text = ?, type = ?, scale_max = ?, points = ?, partial_scoring = ?${hasImage ? ', image = ?' : ''} WHERE id = ? AND quiz_id = ?`,
-                    [i, texte, qType, echelle, points, partial].concat(hasImage ? [img] : []).concat([qid, req.params.id]));
+                    `UPDATE quiz_question SET position = ?, text = ?, type = ?, scale_max = ?, points = ?, partial_scoring = ?${hasImage ? ', image = ?' : ''}${motsSql} WHERE id = ? AND quiz_id = ?`,
+                    [i, texte, qType, echelle, points, partial].concat(hasImage ? [img] : []).concat(motsVal).concat([qid, req.params.id]));
             } else if (hasImage) {
                 await conn.query(
-                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [qid, req.params.id, i, texte, qType, echelle, points, partial, img]);
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image${texteDispo ? ', max_words' : ''}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?${texteDispo ? ', ?' : ''})`,
+                    [qid, req.params.id, i, texte, qType, echelle, points, partial, img].concat(motsVal));
             } else {
                 await conn.query(
-                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [qid, req.params.id, i, texte, qType, echelle, points, partial]);
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring${texteDispo ? ', max_words' : ''}) VALUES (?, ?, ?, ?, ?, ?, ?, ?${texteDispo ? ', ?' : ''})`,
+                    [qid, req.params.id, i, texte, qType, echelle, points, partial].concat(motsVal));
             }
 
             // Colonnes (grilles) OU options (SINGLE/MULTI) : même table quiz_option.
-            if (qType === 'SCALE') {
+            // Une échelle et une réponse libre n'en ont pas : ce qui traînait d'un ancien type part.
+            if (qType === 'SCALE' || qType === 'TEXT') {
                 await conn.query('DELETE FROM quiz_option WHERE question_id = ?', [qid]);
             } else {
                 const [dejaO] = await conn.query('SELECT id FROM quiz_option WHERE question_id = ?', [qid]);
@@ -422,9 +441,10 @@ const duplicateQuiz = async (req, res) => {
 
         // Questions source.
         let questions;
-        const qCols = hasImage
+        const avecMots = await colonneExiste(conn, 'quiz_question', 'max_words'); // migration 164
+        const qCols = (hasImage
             ? 'id, position, text, type, scale_max, points, partial_scoring, image'
-            : 'id, position, text, type, scale_max, points, partial_scoring';
+            : 'id, position, text, type, scale_max, points, partial_scoring') + (avecMots ? ', max_words' : '');
         [questions] = await conn.query(`SELECT ${qCols} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [src.id]);
         const qids = questions.map((q) => q.id);
         let options = [];
@@ -455,13 +475,13 @@ const duplicateQuiz = async (req, res) => {
             const qid = crypto.randomUUID();
             if (hasImage) {
                 await conn.query(
-                    'INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring, q.image || null]
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring, image${avecMots ? ', max_words' : ''}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?${avecMots ? ', ?' : ''})`,
+                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring, q.image || null].concat(avecMots ? [q.max_words] : [])
                 );
             } else {
                 await conn.query(
-                    'INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring]
+                    `INSERT INTO quiz_question (id, quiz_id, position, text, type, scale_max, points, partial_scoring${avecMots ? ', max_words' : ''}) VALUES (?, ?, ?, ?, ?, ?, ?, ?${avecMots ? ', ?' : ''})`,
+                    [qid, newId, q.position, q.text, q.type, q.scale_max, q.points, q.partial_scoring].concat(avecMots ? [q.max_words] : [])
                 );
             }
             for (const o of (optsByQ[q.id] || [])) {
@@ -566,6 +586,11 @@ function buildReview(questions, optsByQ, selByQ, rowsByQ = {}) {
             const v = selByQ[q.id];
             return { id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, scaleValue: (v == null || v === '') ? null : Number(v) };
         }
+        /* RÉPONSE LIBRE : on la RELIT au stagiaire, sans verdict — rien ne dit ici si elle est juste,
+           et un « ✗ » par défaut sanctionnerait ce qu'aucune correction n'a jugé. */
+        if (q.type === 'TEXT') {
+            return { id: q.id, text: q.text, type: q.type, reponse: String(selByQ[q.id] ?? ''), correct: null };
+        }
         const opts = optsByQ[q.id] || [];
         const sel = selByQ[q.id] instanceof Set ? selByQ[q.id] : new Set();
         const correctSet = new Set(opts.filter((o) => o.is_correct).map((o) => o.id));
@@ -582,8 +607,9 @@ const takeQuiz = async (req, res) => {
         const r = await quizForDocument(conn, req.params.documentId, req.user);
         if (r.error) return res.status(r.error).json({ message: r.message });
         let questions;
-        try { [questions] = await conn.query('SELECT id, text, type, scale_max, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); }
-        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query('SELECT id, text, type, scale_max FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); } else { throw e; } }
+        const motsMaxCol = await colonneOuNull(conn, 'quiz_question', 'max_words'); // migration 164
+        try { [questions] = await conn.query(`SELECT id, text, type, scale_max, image, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [r.quiz.id]); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query(`SELECT id, text, type, scale_max, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [r.quiz.id]); } else { throw e; } }
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
@@ -605,7 +631,7 @@ const takeQuiz = async (req, res) => {
             const selByQ = {};
             const qtype = Object.fromEntries(questions.map((q) => [q.id, q.type]));
             for (const a of ans) {
-                if (qtype[a.question_id] === 'SCALE') selByQ[a.question_id] = a.value;
+                if (qtype[a.question_id] === 'SCALE' || qtype[a.question_id] === 'TEXT') selByQ[a.question_id] = a.value;
                 /* Une grille est stockée en JSON : la DÉCOUPER sur les virgules donnait des morceaux
                    comme `{"0":[1]`, pris pour des identifiants d'options. */
                 else if (GRID_TYPES.has(qtype[a.question_id])) selByQ[a.question_id] = lireGrille(a.value);
@@ -618,7 +644,8 @@ const takeQuiz = async (req, res) => {
 
         res.json({ data: {
             quiz: { id: r.quiz.id, title: r.quiz.title, kind: r.quiz.kind },
-            questions: questions.map((q) => ({ id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, image: q.image || null, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [] })),
+            questions: questions.map((q) => ({ id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, image: q.image || null, options: byQ[q.id] || [], rows: rowsByQ[q.id] || [],
+                ...(q.type === 'TEXT' ? { max_words: motsMaxDe(q) } : {}) })),
             done: !!prev, previous: prev || null, review,
         } });
     } catch (err) {
@@ -637,8 +664,9 @@ const submitQuiz = async (req, res) => {
         const graded = r.quiz.kind === 'GRADED';
 
         let questions;
-        try { [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring, image FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); }
-        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query('SELECT id, text, type, scale_max, points, partial_scoring FROM quiz_question WHERE quiz_id = ? ORDER BY position', [r.quiz.id]); } else { throw e; } }
+        const motsMaxCol = await colonneOuNull(conn, 'quiz_question', 'max_words'); // migration 164
+        try { [questions] = await conn.query(`SELECT id, text, type, scale_max, points, partial_scoring, image, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [r.quiz.id]); }
+        catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') { [questions] = await conn.query(`SELECT id, text, type, scale_max, points, partial_scoring, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [r.quiz.id]); } else { throw e; } }
         const qids = questions.map((q) => q.id);
         let options = [];
         if (qids.length) [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
@@ -658,11 +686,26 @@ const submitQuiz = async (req, res) => {
         let score = 0, maxScore = 0;
         const answerRows = [];
         const grillesEnvoyees = {};
-        for (const q of questions) {
+        for (const [rang, q] of questions.entries()) {
             const raw = answers[q.id];
             let value = '';
             if (q.type === 'SCALE') {
                 value = raw != null ? String(Number(raw) || '') : '';
+            } else if (q.type === 'TEXT') {
+                /* RÉPONSE LIBRE : recomptée ICI, quoi que dise l'écran — un compteur se contourne en
+                   collant du texte après coup, ou en appelant la route directement. Le refus tombe
+                   AVANT la transaction : rien n'est écrit, et le stagiaire peut raccourcir puis
+                   renvoyer. Non notée : elle n'ajoute rien au score ni au maximum. */
+                const texte = typeof raw === 'string' ? raw.trim() : '';
+                const mots = compterMots(texte);
+                const max = motsMaxDe(q);
+                if (mots > max) {
+                    return res.status(422).json({ error: `Question ${rang + 1} : ${mots} mots, pour ${max} au plus. Raccourcissez votre réponse.` });
+                }
+                if (texte.length > CARACTERES_MAX) {
+                    return res.status(422).json({ error: `Question ${rang + 1} : réponse trop longue (${CARACTERES_MAX} caractères au plus).` });
+                }
+                value = texte;
             } else if (GRID_TYPES.has(q.type)) {
                 // raw = { <rowId>: [<colId>,...] } -> stocké compact { <rowIndex>: [<colIndex>,...] }.
                 const gridAns = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
@@ -772,6 +815,7 @@ const submitQuiz = async (req, res) => {
             for (const q of questions) {
                 const raw = answers[q.id];
                 if (q.type === 'SCALE') selByQ[q.id] = raw;
+                else if (q.type === 'TEXT') selByQ[q.id] = typeof raw === 'string' ? raw.trim() : '';
                 /* La grille brute arrive en `{ idLigne: [idColonne] }` : la glisser dans un ensemble
                    faisait un ensemble d'UN objet. On prend la forme compacte calculée pour la note —
                    la correction porte ainsi exactement sur ce qui a été compté. */
@@ -906,6 +950,10 @@ function construirePreuve({ quiz, questions, optsByQ, rowsByQ, answerRows, score
             const opts = optsByQ[q.id] || [];
             const base = { rang: i + 1, enonce: q.text, type: q.type, points: q.points ?? null, reponse_brute: brut };
             if (q.type === 'SCALE') return { ...base, echelle_max: q.scale_max || 5, valeur: brut };
+            /* RÉPONSE LIBRE : le texte tel qu'envoyé, son compte de mots et la limite d'ALORS — une limite
+               relevée depuis ne doit pas faire paraître conforme une réponse qui ne l'était pas. Aucun
+               point : elle n'en rapporte pas. */
+            if (q.type === 'TEXT') return { ...base, points: null, texte: brut || '', mots: compterMots(brut), mots_max: motsMaxDe(q) };
             if (GRID_TYPES.has(q.type)) {
                 /* Grille : la valeur est un objet compact { ligne: [colonnes] } indexé par POSITION.
                    On le traduit en libellés, sinon la preuve se relit avec la grille d'aujourd'hui
@@ -957,6 +1005,13 @@ function aggregerQuestions(questions, options, answers, rowsByQ = {}) {
     return questions.map((q) => {
         const vals = ansByQ[q.id] || [];
         const n = vals.length;
+        /* RÉPONSE LIBRE : pas de répartition possible, on LIT les réponses — avec leur auteur et leur
+           date quand la requête les fournit. Les réponses vides ne sont pas listées. */
+        if (q.type === 'TEXT') {
+            const textes = answers.filter((a) => a.question_id === q.id && String(a.value || '').trim())
+                .map((a) => ({ texte: String(a.value).trim(), nom: a.nom || null, le: a.le || null }));
+            return { id: q.id, position: q.position, text: q.text, type: q.type, responses: n, textes };
+        }
         if (q.type === 'SCALE') {
             const dist = {}; for (let i = 1; i <= (q.scale_max || 5); i++) dist[i] = 0;
             let sum = 0, cnt = 0;
@@ -1169,7 +1224,15 @@ const resultatsDetail = async (req, res) => {
         let options = [], answers = [];
         if (qids.length) {
             [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
-            [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?' + f.sql, [quiz.id, ...f.params]);
+            /* `nom` et `le` : une réponse libre se lit avec son auteur — « 40 % ont choisi B » n'a pas
+               besoin de noms, « voici ce qu'ils ont écrit » si. Le reste des types les ignore. */
+            [answers] = await conn.query(
+                `SELECT qa.question_id, qa.value,
+                        COALESCE(NULLIF(TRIM(CONCAT(COALESCE(l.first_name,''), ' ', COALESCE(l.last_name,''))), ''), 'Stagiaire') AS nom,
+                        DATE_FORMAT(r.completed_at, '%Y-%m-%d %H:%i') AS le
+                   FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id
+                   LEFT JOIN learner l ON l.id = r.learner_id
+                  WHERE r.quiz_id = ?` + f.sql, [quiz.id, ...f.params]);
         }
         const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
         const out = aggregerQuestions(questions, options, answers, await loadGridRows(conn, gridQids, true));
