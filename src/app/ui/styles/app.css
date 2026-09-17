@@ -4161,6 +4161,11 @@ button.av-wrap:active{transform:scale(.94)}
 .pf-cadre-ex{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;
   background:var(--surface3);flex:none}
 
+/* FICHE INSCRITE À AUCUNE SESSION — l'encart remplace « Préparer un document » (StagiaireDetail) :
+   sans session, pas de dossier, donc rien à générer. Pointillés, comme une place encore vide. */
+.sd-hors-session{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;
+  padding:12px 14px;border:1px dashed var(--border);border-radius:var(--r-sm);background:var(--surface2);font-size:13.5px}
+
 /* DISTINCTIONS — les cadres exclusifs que l'école décerne (Communauté, bureau seulement).
    Ils se décernaient sur la fiche stagiaire jusqu'au 2026-09-17 (cf. Distinctions.jsx).
    Registre sobre : ni relief, ni ressort — on décerne une distinction, on ne joue pas. Même
