@@ -17,20 +17,38 @@ import { startLoading, stopLoading } from "../lib/loading.js";
  */
 export const API_BASE_URL = String(import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
 
-// Instant de la DERNIÈRE mutation déclenchée par CE client (POST/PUT/PATCH/DELETE, uploads
-// compris). Le serveur diffuse un « refresh » temps réel à TOUTE l'organisation sur chaque
-// mutation — y compris les miennes : ce repère permet de distinguer « quelqu'un d'autre a
-// agi » de l'écho de ma propre action, et de ne pas se jouer à soi-même le son d'activité
-// (cf. Topbar). On le pose à l'ENVOI (avant la réponse) pour couvrir tout l'aller-retour.
+/* Instant de la DERNIÈRE mutation faite depuis CE NAVIGATEUR (POST/PUT/PATCH/DELETE, uploads
+   compris). Sert au Topbar à ne pas faire sonner une alerte qui n'est que l'ÉCHO de mon propre
+   geste — m'ajouter comme formateur d'une session me crée « Émargement à signer » ; signer un
+   document à la place d'un stagiaire crée « Document signé » pour tout l'organisme.
+
+   PARTAGÉ ENTRE LES ONGLETS, et c'est l'ajout du 2026-09-17. Le repère vivait dans une variable
+   de module, donc PAR ONGLET : un geste dans l'onglet de devant sonnait dans celui de derrière,
+   qui ne l'avait pas vu passer. Exactement « un son sans savoir d'où il vient ». Le stockage local
+   est commun aux onglets d'un même navigateur ; il ne couvre pas un autre appareil — le téléphone
+   ouvert à côté — et rien de raisonnable ne le peut sans que le serveur dise qui a agi, ce qu'il
+   ne fait plus depuis le pentest.
+
+   POSÉ À L'ENVOI ET À L'ARRIVÉE. À l'envoi seulement, une action lente — sceller un PDF signé
+   prend plusieurs secondes — voyait sa diffusion arriver après la fenêtre de garde, et sonnait. */
+const CLE_MUTATION = "impastio.derniereMutation";
 let derniereMutationLocale = 0;
-function marquerMutationLocale() { derniereMutationLocale = Date.now(); } // interne (appelé ici même)
-export function msDepuisMutationLocale() { return Date.now() - derniereMutationLocale; }
+function marquerMutationLocale() { // interne (appelé ici même)
+  derniereMutationLocale = Date.now();
+  try { localStorage.setItem(CLE_MUTATION, String(derniereMutationLocale)); } catch { /* stockage indisponible */ }
+}
+export function msDepuisMutationLocale() {
+  let t = derniereMutationLocale;
+  try { t = Math.max(t, Number(localStorage.getItem(CLE_MUTATION)) || 0); } catch { /* stockage indisponible */ }
+  return Date.now() - t;
+}
 
 async function request(path, options = {}) {
   const { silent, ...opts } = options; // `silent` = pas de barre de chargement (polls)
   if (!silent) startLoading();
   const methode = String(opts.method || "GET").toUpperCase();
-  if (methode !== "GET" && methode !== "HEAD") marquerMutationLocale();
+  const mutation = methode !== "GET" && methode !== "HEAD";
+  if (mutation) marquerMutationLocale();
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       credentials: "include",
@@ -49,6 +67,8 @@ async function request(path, options = {}) {
 
     return data;
   } finally {
+    // À l'arrivée aussi : la diffusion du serveur part à la FIN de la requête (cf. plus haut).
+    if (mutation) marquerMutationLocale();
     if (!silent) stopLoading();
   }
 }

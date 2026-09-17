@@ -5,6 +5,31 @@ const { colonneExiste } = require('../lib/colonnes.js');
 
 const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
 const GRID_TYPES = new Set(['GRID_SINGLE', 'GRID_MULTI']);
+
+/**
+ * UNE LIGNE DE GRILLE EST-ELLE JUSTE ? — la règle, écrite UNE fois.
+ *
+ * Exactement les bonnes colonnes, ni plus ni moins. Une ligne sans bonne réponse déclarée n'est pas
+ * notée : elle rend `null`, jamais `false`, pour ne pas compter comme une faute ce que l'école n'a
+ * pas corrigé.
+ *
+ * TROIS ENDROITS L'APPLIQUENT : la NOTE au moment de l'envoi, la CORRECTION montrée au stagiaire, et
+ * le RÉCAPITULATIF de l'école. S'ils la réécrivaient chacun, un stagiaire pourrait lire « juste » sur
+ * une ligne qui ne lui a rapporté aucun point.
+ */
+function ligneJuste(bonnes, choisies) {
+    const b = new Set((bonnes || []).map(Number));
+    if (!b.size) return null;
+    const c = new Set((choisies || []).map(Number));
+    return b.size === c.size && [...b].every((x) => c.has(x));
+}
+
+/** La valeur stockée d'une grille — `{ "<ligne>": [<colonnes>] }` par POSITION — ou `{}`. */
+function lireGrille(v) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Set)) return v;
+    try { const o = JSON.parse(v || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; }
+    catch { return {}; }
+}
 const parseJSON = (v, dflt) => { if (v == null || v === '') return dflt; try { const x = JSON.parse(v); return x == null ? dflt : x; } catch { return dflt; } };
 
 // Lignes des questions « grille » (quiz_row). Renvoie { [questionId]: [{id,text,correct:[positions]}] }.
@@ -462,8 +487,37 @@ async function quizForDocument(conn, documentId, user) {
  * questions: [{id,text,type,scale_max}] ; optsByQ: {qid:[{id,text,is_correct}]} ;
  * selByQ: {qid: Set(optionIds) | valeur d'échelle}.
  */
-function buildReview(questions, optsByQ, selByQ) {
+/**
+ * La CORRECTION montrée au stagiaire après un QCM noté.
+ *
+ * `rowsByQ` : les lignes des grilles, AVEC leurs bonnes réponses. `selByQ[q]` : pour une grille, la
+ * forme compacte `{ ligne: [colonnes] }` ; sinon un ensemble d'identifiants d'options.
+ *
+ * LA GRILLE ÉTAIT TRAITÉE COMME UNE QUESTION À CHOIX, et la correction ne montrait RIEN. Mesuré le
+ * 2026-09-17 sur la vraie réponse de Miguel MARQUEZ à « Évaluation Formative du Jeudi » (RS7404) —
+ * quatorze allergènes, tous justes : sa correction affichait deux puces, « Non » et « Oui », ni
+ * cochées ni bonnes, et aucun ✓ sur la question. Les « options » d'une grille sont ses COLONNES :
+ * les lignes, donc les allergènes eux-mêmes, n'apparaissaient nulle part. Et la valeur stockée,
+ * `{"0":[1],"1":[1],…}`, était découpée sur les virgules — `{"0":[1]` pris pour un identifiant.
+ */
+function buildReview(questions, optsByQ, selByQ, rowsByQ = {}) {
     return questions.map((q) => {
+        if (GRID_TYPES.has(q.type)) {
+            const choix = lireGrille(selByQ[q.id]);
+            const lignes = ((rowsByQ || {})[q.id] || []).map((row, ri) => ({
+                texte: row.text,
+                choisies: (choix[ri] || []).map(Number),
+                bonnes: (row.correct || []).map(Number),
+                juste: ligneJuste(row.correct, choix[ri]),
+            }));
+            const notees = lignes.filter((l) => l.juste !== null);
+            return {
+                id: q.id, text: q.text, type: q.type,
+                colonnes: (optsByQ[q.id] || []).map((o) => o.text),
+                lignes,
+                correct: notees.length ? notees.every((l) => l.juste) : null,
+            };
+        }
         if (q.type === 'SCALE') {
             const v = selByQ[q.id];
             return { id: q.id, text: q.text, type: q.type, scale_max: q.scale_max, scaleValue: (v == null || v === '') ? null : Number(v) };
@@ -508,9 +562,14 @@ const takeQuiz = async (req, res) => {
             const qtype = Object.fromEntries(questions.map((q) => [q.id, q.type]));
             for (const a of ans) {
                 if (qtype[a.question_id] === 'SCALE') selByQ[a.question_id] = a.value;
+                /* Une grille est stockée en JSON : la DÉCOUPER sur les virgules donnait des morceaux
+                   comme `{"0":[1]`, pris pour des identifiants d'options. */
+                else if (GRID_TYPES.has(qtype[a.question_id])) selByQ[a.question_id] = lireGrille(a.value);
                 else selByQ[a.question_id] = new Set(String(a.value || '').split(',').map((s) => s.trim()).filter(Boolean));
             }
-            review = buildReview(questions, optsByQ, selByQ);
+            // Les lignes chargées plus haut le sont SANS les bonnes réponses (passage du QCM) :
+            // la correction, elle, en a besoin.
+            review = buildReview(questions, optsByQ, selByQ, await loadGridRows(conn, gridQids, true));
         }
 
         res.json({ data: {
@@ -554,6 +613,7 @@ const submitQuiz = async (req, res) => {
 
         let score = 0, maxScore = 0;
         const answerRows = [];
+        const grillesEnvoyees = {};
         for (const q of questions) {
             const raw = answers[q.id];
             let value = '';
@@ -576,15 +636,13 @@ const submitQuiz = async (req, res) => {
                    qu'il côtoyait, puisque celui-là, au moins, se voyait. La colonne est un TEXT
                    depuis la migration 151. */
                 value = JSON.stringify(compact);
+                grillesEnvoyees[q.id] = compact; // la MÊME valeur que celle qui est notée et stockée
                 if (graded && rows.length) {
                     rows.forEach((row, ri) => {
                         const rp = Number(row.points);
                         const per = Number.isFinite(rp) ? rp : 1; // points de la ligne
                         maxScore += per;
-                        const correct = new Set((row.correct || []).map(Number));
-                        const sel = new Set(compact[ri] || []);
-                        const ok = correct.size > 0 && correct.size === sel.size && [...correct].every((c) => sel.has(c));
-                        if (ok) score += per;
+                        if (ligneJuste(row.correct, compact[ri]) === true) score += per;
                     });
                 }
             } else {
@@ -670,9 +728,13 @@ const submitQuiz = async (req, res) => {
             for (const q of questions) {
                 const raw = answers[q.id];
                 if (q.type === 'SCALE') selByQ[q.id] = raw;
+                /* La grille brute arrive en `{ idLigne: [idColonne] }` : la glisser dans un ensemble
+                   faisait un ensemble d'UN objet. On prend la forme compacte calculée pour la note —
+                   la correction porte ainsi exactement sur ce qui a été compté. */
+                else if (GRID_TYPES.has(q.type)) selByQ[q.id] = grillesEnvoyees[q.id] || {};
                 else selByQ[q.id] = new Set(Array.isArray(raw) ? raw : (raw ? [raw] : []));
             }
-            review = buildReview(questions, optsByQ, selByQ);
+            review = buildReview(questions, optsByQ, selByQ, rowsByQ);
         }
 
         res.json({ data: { kind: r.quiz.kind, score: graded ? score : null, max_score: graded ? maxScore : null, percent, pass, review } });
@@ -823,7 +885,13 @@ function construirePreuve({ quiz, questions, optsByQ, rowsByQ, answerRows, score
     };
 }
 
-function aggregerQuestions(questions, options, answers) {
+/**
+ * Le RÉCAPITULATIF par question de l'écran Résultats QCM.
+ *
+ * `rowsByQ` : les lignes des grilles, avec leurs bonnes réponses. Facultatif — sans elles, une grille
+ * se résume à son nombre de réponses, comme avant.
+ */
+function aggregerQuestions(questions, options, answers, rowsByQ = {}) {
     const optsByQ = {}; for (const o of options) (optsByQ[o.question_id] = optsByQ[o.question_id] || []).push(o);
     const ansByQ = {}; for (const a of answers) (ansByQ[a.question_id] = ansByQ[a.question_id] || []).push(a.value);
     return questions.map((q) => {
@@ -837,7 +905,39 @@ function aggregerQuestions(questions, options, answers) {
                 scale: { max: q.scale_max || 5, dist, avg: cnt ? Math.round((sum / cnt) * 10) / 10 : null } };
         }
         if (GRID_TYPES.has(q.type)) {
-            return { id: q.id, position: q.position, text: q.text, type: q.type, responses: n, grille: true };
+            /* « DÉTAIL PAR CELLULE À VENIR » : c'est tout ce que l'école lisait sur une grille, depuis
+               sa création. Sur quatorze allergènes répondus par quatre stagiaires, rien ne disait
+               lesquels posaient problème — alors que c'est la seule question que ce récapitulatif
+               existe pour trancher.
+
+               PAR LIGNE : combien ont coché chaque colonne, et la part de réponses JUSTES — selon la
+               même règle que la note (`ligneJuste`), sans quoi le récapitulatif contredirait les
+               scores affichés juste à côté. */
+            const rows = (rowsByQ || {})[q.id] || [];
+            const cols = (optsByQ[q.id] || []);
+            const lignes = rows.map((row) => ({ texte: row.text, bonnes: (row.correct || []).map(Number),
+                comptes: cols.map(() => 0), justes: 0 }));
+            let lues = 0;
+            for (const v of vals) {
+                const choix = lireGrille(v);
+                lues++;
+                lignes.forEach((l, ri) => {
+                    const ch = (choix[ri] || []).map(Number);
+                    for (const ci of ch) if (l.comptes[ci] != null) l.comptes[ci]++;
+                    if (ligneJuste(l.bonnes, ch) === true) l.justes++;
+                });
+            }
+            return {
+                id: q.id, position: q.position, text: q.text, type: q.type, responses: n,
+                grille: {
+                    colonnes: cols.map((o) => o.text),
+                    lignes: lignes.map((l) => ({
+                        texte: l.texte, bonnes: l.bonnes, comptes: l.comptes,
+                        // Une ligne sans bonne réponse déclarée n'est pas notée : pas de pourcentage.
+                        juste_pct: l.bonnes.length && lues ? Math.round((l.justes / lues) * 100) : null,
+                    })),
+                },
+            };
         }
         // QCU / QCM : les réponses sont des ids d'options en CSV.
         const opts = optsByQ[q.id] || [];
@@ -1007,7 +1107,8 @@ const resultatsDetail = async (req, res) => {
             [options] = await conn.query('SELECT id, question_id, text, is_correct FROM quiz_option WHERE question_id IN (?) ORDER BY position', [qids]);
             [answers] = await conn.query('SELECT qa.question_id, qa.value FROM quiz_answer qa JOIN quiz_response r ON r.id = qa.response_id WHERE r.quiz_id = ?' + f.sql, [quiz.id, ...f.params]);
         }
-        const out = aggregerQuestions(questions, options, answers);
+        const gridQids = questions.filter((q) => GRID_TYPES.has(q.type)).map((q) => q.id);
+        const out = aggregerQuestions(questions, options, answers, await loadGridRows(conn, gridQids, true));
 
         // PAR STAGIAIRE : une ligne par réponse (les reprises apparaissent, avec leur date).
         // pct calculé côté base (NULL pour une enquête sans note) ; le front en tire réussi/échoué.
@@ -1091,4 +1192,4 @@ const deleteResponse = async (req, res) => {
     }
 };
 
-module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, deleteResponse, clauseFiltre, lireSemaine, getPreuveReponse, construirePreuve };
+module.exports = { listQuizzes, getQuiz, createQuiz, saveQuiz, duplicateQuiz, deleteQuiz, takeQuiz, submitQuiz, sendQuiz, sendQuizToEnrollment, resultatsOverview, resultatsDetail, aggregerQuestions, buildReview, ligneJuste, lireGrille, deleteResponse, clauseFiltre, lireSemaine, getPreuveReponse, construirePreuve };

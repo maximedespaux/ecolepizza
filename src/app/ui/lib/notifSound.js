@@ -31,9 +31,10 @@ let dernierSon = 0;
 /** Joue un carillon discret (sauf si coupé). */
 export function playNotif() {
   if (isNotifMuted()) return;
-  // Anti-doublon : un même événement temps réel peut déclencher DEUX appels (nouvelle
-  // notification pour moi ET activité d'un autre utilisateur). Un seul « pop » par courte
-  // fenêtre — le déclencheur de notification est asynchrone (fetch), d'où 500 ms.
+  /* Anti-doublon : un seul « pop » par courte fenêtre. Il protégeait d'abord contre DEUX
+     déclencheurs sur un même événement (alerte + activité) ; le son d'activité n'existe plus
+     depuis le 2026-09-17, mais plusieurs rechargements peuvent encore se croiser sur une même
+     alerte — le retour sur l'onglet et le signal temps réel arrivant ensemble. 500 ms. */
   const t = Date.now();
   if (t - dernierSon < 500) return;
   dernierSon = t;
