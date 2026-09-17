@@ -3,6 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -28,7 +29,9 @@ function SessionDetail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
-  const isAdmin = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  /* Modifier la session — ce que le serveur accepte sur /sessions, pas une liste de rôles : un
+     formateur à qui l'organisme a accordé Sessions en modification y écrit (cf. peutEcrire). */
+  const peutModifier = peutEcrire(user, "/sessions");
   const [session, setSession] = useState(null);
   const [allLearners, setAllLearners] = useState([]);
   const [team, setTeam] = useState([]);
@@ -432,7 +435,7 @@ function SessionDetail() {
 
       <div style={{ marginTop: 16 }}>
         <Card title={`Formateurs (${(session.trainers || []).length})`}>
-          {isAdmin ? (
+          {peutModifier ? (
             team.length === 0 ? (
               <p className="hint" style={{ margin: 0 }}>Aucun membre d'équipe. Ajoutez des formateurs depuis Équipe & accès.</p>
             ) : (
@@ -472,11 +475,12 @@ function SessionDetail() {
             listes SESSION PAR SESSION, et c'est ici qu'il vient au moment de le faire. Une page
             de conformité rangée ailleurs ne s'ouvre que quand on la cherche — donc jamais au
             moment où la question se pose vraiment.
-            Réservé au bureau : `isAdmin` reflète ce que le serveur autorise déjà (formateur
-            exclu), et savoir qui a refusé de céder ses coordonnées n'aide en rien à enseigner. */}
-        {isAdmin && <SessionConsentements sessionId={id} canEdit={isAdmin} />}
+            Réservé à qui peut MODIFIER la session : savoir qui a refusé de céder ses coordonnées
+            n'aide en rien à enseigner. Un formateur n'y accède que si l'organisme lui a accordé
+            Sessions en modification — c'est alors ce que le serveur lui accorde aussi. */}
+        {peutModifier && <SessionConsentements sessionId={id} canEdit={peutModifier} />}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
-        <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={isAdmin} />
+        <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={peutModifier} />
       </div>
 
       {/* LA SAISIE DES NOTES A ÉTÉ RETIRÉE D'ICI — elle vit dans Notation → Note. Elle
@@ -488,10 +492,10 @@ function SessionDetail() {
       {/* LE PROCÈS-VERBAL DE LA COMMISSION, replié par défaut : la plupart des sessions n'en
           ont pas, et un formulaire de dix champs ouvert sur chaque session noierait le reste
           de la page. Il s'ouvre d'un clic, et se résume en une ligne quand il existe. */}
-      {isAdmin && (
+      {peutModifier && (
         <div style={{ marginTop: 16 }}>
           <CommissionJury sessionId={id} />
-          <DocumentsExternes sessionId={id} isAdmin={isAdmin} onStatus={setStatus} />
+          <DocumentsExternes sessionId={id} onStatus={setStatus} />
         </div>
       )}
 

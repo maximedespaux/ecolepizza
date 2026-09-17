@@ -77,7 +77,7 @@ test('une suppression en lot annonce les pièces qu\'elle NE supprime pas', () =
     assert.match(COFFRE, /const pieces = docs\.filter\(\(d\) => d\.source === "piece"\)\.length;/);
     assert.match(COFFRE, /ne seront PAS supprimées/,
         'les compter en silence laisserait croire que les scans d\'identité sont partis');
-    assert.match(COFFRE, /isAdmin && d\.source !== "piece"/,
+    assert.match(COFFRE, /peutModifier && d\.source !== "piece"/,
         'pas de bouton de suppression sur une pièce : son effacement appartient au dossier');
 });
 

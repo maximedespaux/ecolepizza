@@ -262,7 +262,9 @@ test('L\'ORGANISME PEUT SUPPRIMER CE QU\'IL A ENVOYÉ', () => {
        pour toujours et la carte accumulait des lignes qu'on ne savait plus lire.
        CÔTÉ ORGANISME SEULEMENT — l'intervenant n'efface pas ce qu'on lui demande de signer. */
     assert.match(EXTERNES, /await deleteDocument\(d\.id\)/);
-    assert.match(EXTERNES, /\{isAdmin && \(\s*\n\s*<button type="button" className="iconbtn del"/);
+    assert.match(EXTERNES, /\{peutSupprimer && \(\s*\n\s*<button type="button" className="iconbtn del"/);
+    // Supprimer passe par DELETE /documents/:id — rubrique /stagiaires côté serveur, pas /sessions.
+    assert.match(EXTERNES, /const peutSupprimer = peutEcrire\(user, "\/stagiaires"\);/);
     assert.ok(!/deleteDocument/.test(ESPACE), 'aucune suppression dans l\'espace intervenant');
 
     /* LA CONFIRMATION NOMME LE DOCUMENT ET SON ÉTAT : effacer un contrat DÉJÀ SIGNÉ n'est pas le

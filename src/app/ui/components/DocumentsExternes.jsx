@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import Card from "./Card.jsx";
 import Badge from "./Badge.jsx";
 import EmptyState from "./EmptyState.jsx";
@@ -26,7 +28,13 @@ import { getDocumentsSession, envoyerDocumentSession, deleteDocument } from "../
  * rien d'envoyé. La plupart des sessions sont dans ce cas : une carte vide sur chacune ferait
  * du bruit pour rien, comme la commission de jury juste à côté.
  */
-function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
+function DocumentsExternes({ sessionId, onStatus }) {
+  /* DEUX RUBRIQUES, DEUX DROITS : l'envoi passe par /sessions, la suppression par /documents,
+     que le serveur range sous /stagiaires. Un seul drapeau « admin » reçu du parent ne pouvait
+     dire ni l'un ni l'autre à un formateur dont l'accès est réglé rubrique par rubrique. */
+  const { user } = useContext(UserContext);
+  const peutEnvoyer = peutEcrire(user, "/sessions");
+  const peutSupprimer = peutEcrire(user, "/stagiaires");
   const [data, setData] = useState(null);
   const [modele, setModele] = useState("");
   const [qui, setQui] = useState("");
@@ -70,7 +78,7 @@ function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
 
   return (
     <Card title={<span className="card-ttl"><Icon name="send" size={16} /> Documents à signer par un intervenant</span>}>
-      {isAdmin && (
+      {peutEnvoyer && (
         modeles.length === 0 ? (
           <p className="hint" style={{ marginTop: 0 }}>
             Aucun modèle n'est signable par un intervenant externe. Cochez « Externe » parmi les
@@ -124,7 +132,7 @@ function DocumentsExternes({ sessionId, isAdmin, onStatus }) {
               </span>
               {d.signe_le ? <Badge tone="g">Signé</Badge> : <Badge tone="a">En attente</Badge>}
               <BoutonsDocument id={d.id} nom={d.title} />
-              {isAdmin && (
+              {peutSupprimer && (
                 <button type="button" className="iconbtn del" title="Supprimer ce document"
                   aria-label={`Supprimer ${d.title}`} onClick={() => supprimer(d)}>
                   <Icon name="trash" size={15} />

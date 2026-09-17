@@ -15,6 +15,7 @@ import { QuestionCard, QuestionModal, QuestionForm, AnnonceCard } from "../compo
 import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
 import { cadreFor, cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
 import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
 
@@ -394,9 +395,11 @@ export default function Communaute() {
   // Qui parle AU NOM DE L'ÉCOLE — même liste que `STAFF` dans community.controller. Le
   // formateur en est exclu : il est en salle avec eux, il n'engage pas l'organisme.
   const peutAnnoncer = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
-  // Qui DÉCERNE les cadres exclusifs — les rôles de PATCH /stagiaires/:id (ADMIN_ROLES), par où
-  // passe l'écriture. Même liste que ci-dessus aujourd'hui, mais pas pour la même raison.
-  const peutDecerner = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT"].includes(user?.role);
+  /* Qui DÉCERNE les cadres exclusifs — ce que le serveur accepte sur PATCH /stagiaires/:id, par où
+     passe l'écriture : la rubrique /stagiaires en modification (cf. peutEcrire). Ce n'est PAS la
+     règle de l'annonce ci-dessus, qui reste au seul rôle côté serveur : parler au nom de l'école
+     ne se délègue pas par le menu, modifier une fiche stagiaire si. */
+  const peutDecerner = peutEcrire(user, "/stagiaires");
   // Le choix de cadre vit dans le navigateur de chacun : on ne le connaît donc QUE pour
   // l'utilisateur courant. Pour les autres, on retombe sur leur cadre de parcours, seule
   // information dont le serveur dispose aujourd'hui (cf. CHANTIERS.md §4.2 point 6).

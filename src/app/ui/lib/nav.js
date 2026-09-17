@@ -229,6 +229,46 @@ export function navMode(user, path) {
   return v === "read" ? "read" : (v ? "write" : null);
 }
 
+/* Les rôles dont l'accès se règle dans « Équipe & accès » — la liste `CONFIGURABLE_ROLES` du
+   serveur (sectionAccess.middleware), recopiée ici parce que l'écran ne peut pas l'importer ;
+   un test vérifie qu'elles restent égales. */
+export const ROLES_CONFIGURABLES = ["SECRETARIAT", "FORMATEUR", "AUDITEUR"];
+
+/**
+ * CETTE PERSONNE PEUT-ELLE MODIFIER DANS CETTE RUBRIQUE ? La réponse du SERVEUR, pas du rôle.
+ *
+ * LE DÉFAUT. Les pages montraient leurs boutons de modification d'après une liste de rôles écrite
+ * en dur — super admin, admin d'organisme, secrétariat. Or le serveur ne décide plus au seul rôle
+ * depuis la délégation par le menu (`authorizeRoles` → `accesAccordeParMenu`) : un FORMATEUR à qui
+ * l'organisme accorde « Partenaires » en modification y écrit bel et bien. Constaté le 2026-09-17
+ * sur un compte formateur ayant Partenaires, Sessions, Stagiaires et QCM en modification : pas de
+ * « Ajouter un partenaire », ni formateurs, ni consentements, ni jury sur la session — des pages
+ * en lecture seule qui ne le disaient pas. À l'inverse, un secrétariat passé en LECTURE voyait des
+ * boutons que le serveur lui refuse.
+ *
+ * LA RÈGLE, celle des deux gardes de l'API réunies :
+ *   · propriétaires (SUPER_ADMIN, ADMIN_ORGANISME) : toujours ;
+ *   · rôles configurables : la rubrique accordée EN ÉCRITURE dans l'accès ENREGISTRÉ —
+ *     `enforceSectionMode` refuse toute autre écriture, secrétariat compris ;
+ *   · accès jamais enregistré (null) : non. Le MENU retombe sur les accès par défaut du rôle, pour
+ *     qu'un compte neuf ne tombe pas sur une page vide ; le serveur, lui, ne lit que ce qui est
+ *     enregistré, et n'accepte donc aucune écriture ;
+ *   · rubriques qui distribuent les droits (`NAV_LECTURE_SEULE`) : jamais par délégation ;
+ *   · tout autre rôle : jamais.
+ *
+ * LA RUBRIQUE EST CELLE DE LA ROUTE D'API APPELÉE (cf. `SECTION_BY_BASE` côté serveur), pas
+ * toujours celle de la page : le jury se tient sur la session, mais « Créer le modèle de PV » écrit
+ * dans /modeles ; un document d'intervenant s'envoie par /sessions et se supprime par /documents,
+ * donc /stagiaires.
+ */
+export function peutEcrire(user, rubrique) {
+  if (!user) return false;
+  if (OWNER_ROLES.includes(user.role)) return true;
+  if (!ROLES_CONFIGURABLES.includes(user.role) || user.nav_access == null) return false;
+  if (NAV_LECTURE_SEULE.includes(rubrique)) return false;
+  return navMode(user, rubrique) === "write";
+}
+
 // Chemin de navigation (rubrique) correspondant à un chemin de route.
 // Les sous-pages (détails) partagent la rubrique parente.
 const SECTION_OF = {
