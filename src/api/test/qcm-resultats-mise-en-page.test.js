@@ -41,7 +41,8 @@ test('LE PALIER EST LE MÊME des deux côtés — sinon le défaut revient', () 
     /* Il est répété : une fois en CSS pour empiler, une fois en JS pour décider s'il faut ramener
        le détail dans le champ de vision. Désaccordés, il existe une bande de largeurs où la page
        s'empile SANS défiler : le clic ne montre rien, exactement comme avant. */
-    const enCss = /@media \(max-width: (\d+)px\) \{\s*\.qcm-split \{ grid-template-columns: 1fr; \}/.exec(CSS);
+    // `minmax(0, 1fr)` : la colonne unique peut rétrécir (cf. telephone-debordements.test.js).
+    const enCss = /@media \(max-width: (\d+)px\) \{\s*\.qcm-split \{ grid-template-columns: minmax\(0, 1fr\); \}/.exec(CSS);
     assert.ok(enCss, 'media query de .qcm-split introuvable');
     const enJs = /matchMedia\("\(max-width: (\d+)px\)"\)/.exec(PAGE);
     assert.ok(enJs, 'matchMedia introuvable dans la page');

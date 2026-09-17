@@ -28,8 +28,11 @@ function Row({ label, value }) {
   if (value === null || value === undefined || value === "" || value === "0.00") return null;
   return (
     <div style={{ display: "flex", gap: 12, padding: "6px 0", borderBottom: "1px solid var(--border-soft)" }}>
-      <span style={{ flex: "0 0 220px", color: "var(--muted)", fontSize: 13 }}>{label}</span>
-      <span style={{ flex: 1, fontWeight: 500 }}>{value}</span>
+      {/* 220 px d'intitulé sur un écran de 375 : la valeur n'avait plus que 110 px, et un e-mail
+          — un seul mot — faisait défiler la page de côté. L'intitulé suit la largeur ; la valeur
+          peut rétrécir et se couper où il faut. */}
+      <span style={{ flex: "0 0 clamp(96px, 36%, 220px)", color: "var(--muted)", fontSize: 13 }}>{label}</span>
+      <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere", fontWeight: 500 }}>{value}</span>
     </div>
   );
 }

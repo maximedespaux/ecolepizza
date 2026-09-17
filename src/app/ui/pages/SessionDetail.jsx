@@ -391,14 +391,18 @@ function SessionDetail() {
             const enrollRow = (e) => (
               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
                 <span className="avatar">{initials(e.first_name, e.last_name)}</span>
+                {/* `minWidth: 0` : sans lui, un bouton flexible ne rétrécit jamais sous la largeur
+                    de son contenu, et un e-mail est un seul mot. Sur téléphone, la ligne poussait
+                    alors « Notes de suivi » et « Retirer de la session » hors de l'écran. Le nom
+                    passe à la ligne ; l'e-mail, lui, se termine en « … ». */}
                 <button
                   type="button"
                   onClick={() => navigate(`/stagiaires/${e.learner_id}`)}
-                  style={{ flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
                   title="Voir la fiche du stagiaire"
                 >
-                  <b style={{ color: "var(--text)" }}>{e.last_name} {e.first_name}</b>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{e.email || "-"}</span>
+                  <b style={{ display: "block", color: "var(--text)", overflowWrap: "anywhere" }}>{e.last_name} {e.first_name}</b>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.email || "-"}</span>
                 </button>
                 {/* Même remplacement qu'au tableau de bord : `conformite_score` n'est jamais
                     recalculé, il affichait « ROUGE » pour tout le monde. */}
