@@ -11,6 +11,7 @@ import { Squelette } from "../components/Squelette.jsx";
 import ProgressPct from "../components/ProgressPct.jsx";
 import SessionEvaluation from "../components/SessionEvaluation.jsx";
 import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
+import EnTeteSession from "../components/EnTeteSession.jsx";
 import { getSessionsANoter, getNotationSession } from "../api/apiClient.js";
 import { initials, colorOf } from "../lib/format.js";
 import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
@@ -83,13 +84,9 @@ function CarteNote({ session }) {
   return (
     <details className="arch" open={ouvert} onToggle={(e) => setOuvert(e.currentTarget.open)}
       style={{ marginBottom: 14 }}>
-      <summary className="arch-sum arch-y">
-        {session.code && (
-          <span className="badge n mono" style={{ background: colorOf(session.code), color: "#fff", borderColor: "transparent" }}>{session.code}</span>
-        )}
-        {" "}{session.title || "Session"}
-        <span className="arch-count">{session.inscrits} inscrit(s)</span>
-      </summary>
+      {/* L'en-tête partagé lit `titre` — la carte lisait `title`, absent des sessions
+          normalisées, et affichait « Session » à la place du nom de la formation. */}
+      <summary className="arch-sum arch-y"><EnTeteSession session={session} /></summary>
       {/* `key` : changer de semaine doit REMONTER la grille, sinon les notes du groupe précédent
           resteraient affichées le temps du chargement — et une coche à cet instant partirait sur
           le mauvais dossier. */}
