@@ -254,11 +254,24 @@ const cloturerCommission = async (req, res) => {
     }
 };
 
-/** Contexte de rendu du PV : la commission, ses candidats, l'organisme. */
-async function contextePv(conn, orgId, sessionId) {
+/**
+ * LES VALEURS D'EXAMEN D'UNE SESSION, pour le rendu d'un document : la commission, la liste de
+ * ses candidats avec leur décision, et — si l'on nomme un candidat — la décision qui le concerne.
+ *
+ * SORTI DE `contextePv` PARCE QUE LE PV NE SE REND PLUS D'UN SEUL ENDROIT. Il naissait ici et
+ * nulle part ailleurs ; or l'organisme a aussi le modèle `pv-jury` dans le parcours, et un
+ * document de dossier passe, lui, par `loadContext` (document.controller) — qui ne chargeait
+ * AUCUNE donnée d'examen. Résultat : un procès-verbal généré depuis la fiche d'un stagiaire
+ * sortait entièrement VIDE (ni numéro, ni date, ni jury, ni candidats), et rien à l'écran ne
+ * disait pourquoi. Les deux chemins lisent désormais la même fonction : recopier ici les règles
+ * « inscrits / présentés / admis » aurait fait deux PV différents pour une même session.
+ *
+ * `learnerId` nomme le candidat dont on remplit les jetons individuels ({Décision},
+ * {Observations}) : nul pour le PV de session, qui ne parle de personne en particulier.
+ */
+async function contexteExamen(conn, orgId, sessionId, learnerId = null) {
     const commission = await commissionDeLaSession(conn, orgId, sessionId);
     if (!commission) return null;
-    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
     const [candidats] = await conn.query(
         `SELECT l.id AS learner_id, l.first_name, l.last_name, l.civility,
                 DATE_FORMAT(l.birthday, '%d/%m/%Y') AS birthday
@@ -270,7 +283,20 @@ async function contextePv(conn, orgId, sessionId) {
         ...c, decision: (parCandidat.get(c.learner_id) || {}).decision || 'EN_COURS',
         observations: (parCandidat.get(c.learner_id) || {}).observations || '',
     }));
-    return { org: org || {}, exam: commission, pvCandidats: lignes };
+    const sien = learnerId ? parCandidat.get(learnerId) : null;
+    return {
+        exam: commission,
+        pvCandidats: lignes,
+        examResult: sien ? { decision: sien.decision, observations: sien.observations || '' } : null,
+    };
+}
+
+/** Contexte de rendu du PV : la commission, ses candidats, l'organisme. */
+async function contextePv(conn, orgId, sessionId) {
+    const ctx = await contexteExamen(conn, orgId, sessionId);
+    if (!ctx) return null;
+    const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [orgId]);
+    return { org: org || {}, ...ctx };
 }
 
 /** POST /api/examens/session/:id/pv — rend le procès-verbal en PDF. */
@@ -308,5 +334,5 @@ const pvPdf = async (req, res) => {
 
 module.exports = {
     getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf,
-    commissionDeLaSession, contextePv, ADMIS, DECISIONS,
+    commissionDeLaSession, contexteExamen, contextePv, ADMIS, DECISIONS,
 };
