@@ -249,13 +249,23 @@ function Stagiaires() {
           <>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filtered.slice(0, max).map((l) => (
-              <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+              /* Mise en page dans app.css (.stagiaire-ligne) : sur téléphone, les actions passent
+                 SOUS le nom, qui récupère la largeur. */
+              <div key={l.id} className="stagiaire-ligne">
                 <Link to={`/stagiaires/${l.id}`} className="rowlink" title="Ouvrir le dossier (workflow documents)"
                   style={{ display: "flex", alignItems: "center", gap: 11, flex: 1, minWidth: 0, color: "inherit" }}>
                   <span className="avatar">{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     {rappels.has(l.id) && <Badge tone="a" className="rappel-chip" title="Cochée « à recontacter » : elle figure dans la liste en tête">À recontacter</Badge>}
+                    {/* FICHE INCOMPLÈTE : le repère seulement (règle du serveur, lib/ficheIncomplete.js) ;
+                        le détail et le bouton pour compléter sont en tête de la fiche. Neutre, l'icône
+                        seule en orange : sur une base importée, il peut revenir sur bien des lignes. */}
+                    {l.champs_manquants?.length > 0 && (
+                      <Badge tone="n" className="fiche-chip" title={`Fiche incomplète : ${l.champs_manquants.join(", ")}`}>
+                        <Icon name="alert-triangle" size={11} aria-hidden="true" />Fiche incomplète
+                      </Badge>
+                    )}
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"} · {l.phone || "-"}</span>
                   </span>
                 </Link>
@@ -275,54 +285,57 @@ function Stagiaires() {
                 {l.professional_status && (
                   <Badge tone="n" className="statut-chip" title={l.professional_status}>{l.professional_status}</Badge>
                 )}
-                {/* Rattaché à une entreprise : petit lien vers sa fiche. `stopPropagation` inutile
-                    ici — la ligne n'a pas d'onClick, seul le NOM est un lien voisin. */}
-                {l.company_id && (
-                  <Link to={`/entreprises/${l.company_id}`} className="iconbtn"
-                    title={l.company_name ? `Entreprise : ${l.company_name}` : "Voir l'entreprise"}
-                    aria-label={l.company_name ? `Voir l'entreprise ${l.company_name}` : "Voir l'entreprise"}>
-                    <Icon name="building" size={15} />
-                  </Link>
-                )}
-                {/* L'IDENTIFIANT A DÉCROCHÉ DE LA FICHE, et rien ne le disait. Corriger l'e-mail
-                    d'une fiche ne changeait pas celui du COMPTE : la personne ne pouvait plus se
-                    connecter, et la connexion répondait « Email ou mot de passe incorrect » —
-                    message volontairement ambigu, pour ne pas révéler l'existence d'un compte.
-                    On réinitialisait donc le mot de passe en boucle, sans effet possible.
-                    Depuis, l'e-mail suit ; cette alerte reste pour les fiches déjà décrochées. */}
-                {l.compte_email_different && (
-                  <span className="badge r" title={`Ce stagiaire se connecte avec « ${l.compte_email_different} », pas avec l'e-mail de sa fiche. Réenregistrez la fiche pour aligner les deux.`}
-                    style={{ cursor: "help" }}>
-                    <Icon name="alert-triangle" size={12} style={{ verticalAlign: "-2px" }} /> identifiant ≠ fiche
-                  </span>
-                )}
-                {l.has_account ? (
-                  <>
-                    <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
-                    <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
-                      aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}><Icon name="ban" size={16} /></button>
-                  </>
-                ) : (
-                  <button type="button" className="btn sm ghost" title="Créer un compte de connexion pour ce stagiaire" onClick={() => resetPassword(l)}>＋ Compte</button>
-                )}
-                <button
-                  type="button"
-                  className="iconbtn"
-                  title="Modifier le stagiaire"
-                  aria-label={`Modifier ${l.first_name} ${l.last_name}`}
-                  onClick={() => openEdit(l.id)}
-                >
-                  <Icon name="pencil" size={15} />
-                </button>
-                <button
-                  type="button"
-                  className="iconbtn del"
-                  title="Supprimer le stagiaire"
-                  aria-label={`Supprimer ${l.first_name} ${l.last_name}`}
-                  onClick={() => removeLearner(l)}
-                >
-                  <Icon name="trash" size={15} />
-                </button>
+                {/* LES ACTIONS EN UN SEUL BLOC : c'est lui qui passe sous le nom sur téléphone. */}
+                <span className="stagiaire-actions">
+                  {/* Rattaché à une entreprise : petit lien vers sa fiche. `stopPropagation` inutile
+                      ici — la ligne n'a pas d'onClick, seul le NOM est un lien voisin. */}
+                  {l.company_id && (
+                    <Link to={`/entreprises/${l.company_id}`} className="iconbtn"
+                      title={l.company_name ? `Entreprise : ${l.company_name}` : "Voir l'entreprise"}
+                      aria-label={l.company_name ? `Voir l'entreprise ${l.company_name}` : "Voir l'entreprise"}>
+                      <Icon name="building" size={15} />
+                    </Link>
+                  )}
+                  {/* L'IDENTIFIANT A DÉCROCHÉ DE LA FICHE, et rien ne le disait. Corriger l'e-mail
+                      d'une fiche ne changeait pas celui du COMPTE : la personne ne pouvait plus se
+                      connecter, et la connexion répondait « Email ou mot de passe incorrect » —
+                      message volontairement ambigu, pour ne pas révéler l'existence d'un compte.
+                      On réinitialisait donc le mot de passe en boucle, sans effet possible.
+                      Depuis, l'e-mail suit ; cette alerte reste pour les fiches déjà décrochées. */}
+                  {l.compte_email_different && (
+                    <span className="badge r" title={`Ce stagiaire se connecte avec « ${l.compte_email_different} », pas avec l'e-mail de sa fiche. Réenregistrez la fiche pour aligner les deux.`}
+                      style={{ cursor: "help" }}>
+                      <Icon name="alert-triangle" size={12} style={{ verticalAlign: "-2px" }} /> identifiant ≠ fiche
+                    </span>
+                  )}
+                  {l.has_account ? (
+                    <>
+                      <button type="button" className="iconbtn" title="Réinitialiser le mot de passe" aria-label={`Réinitialiser le mot de passe de ${l.last_name} ${l.first_name}`} onClick={() => resetPassword(l)}><Icon name="key" size={15} /></button>
+                      <button type="button" className="iconbtn" title="Supprimer le compte de connexion (fiche conservée)"
+                        aria-label={`Supprimer le compte de ${l.first_name} ${l.last_name}`} onClick={() => removeAccount(l)}><Icon name="ban" size={16} /></button>
+                    </>
+                  ) : (
+                    <button type="button" className="btn sm ghost" title="Créer un compte de connexion pour ce stagiaire" onClick={() => resetPassword(l)}>＋ Compte</button>
+                  )}
+                  <button
+                    type="button"
+                    className="iconbtn"
+                    title="Modifier le stagiaire"
+                    aria-label={`Modifier ${l.first_name} ${l.last_name}`}
+                    onClick={() => openEdit(l.id)}
+                  >
+                    <Icon name="pencil" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="iconbtn del"
+                    title="Supprimer le stagiaire"
+                    aria-label={`Supprimer ${l.first_name} ${l.last_name}`}
+                    onClick={() => removeLearner(l)}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </span>
               </div>
             ))}
           </div>

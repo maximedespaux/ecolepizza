@@ -5488,6 +5488,39 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* LISTE DES STAGIAIRES — une ligne par fiche : avatar et nom (le lien), puis les actions.
+   SUR TÉLÉPHONE, CETTE LIGNE NE TENAIT PAS, le même défaut que les lignes du suivi : le lien vers
+   l'entreprise, « + Compte » (ou les deux boutons du compte), modifier et supprimer prenaient
+   environ 220 px des 300 disponibles, et la colonne du nom tombait vers 70 px — nom sur deux lignes,
+   téléphone coupé au milieu, et « À recontacter » ou un e-mail un peu long mordant sur « + Compte ».
+   Sous 640 px, les actions — groupées en un bloc — passent SOUS le nom, alignées sur lui (34 px
+   d'avatar + 11 d'écart), et le nom récupère toute la largeur. Le bloc peut lui-même passer à la
+   ligne : l'alerte « identifiant ≠ fiche » et les quatre boutons d'un compte dépassaient d'un pixel
+   la largeur restante — cas rare, qui prend alors deux lignes plutôt que de déborder. */
+.stagiaire-ligne{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--border-soft)}
+.stagiaire-actions{display:flex;align-items:center;gap:11px;flex-shrink:0}
+@media (max-width:640px){
+  .stagiaire-ligne{flex-wrap:wrap;row-gap:6px}
+  .stagiaire-actions{flex:1 1 100%;flex-wrap:wrap;row-gap:6px;padding-left:45px}
+}
+/* Le repère « Fiche incomplète » de la liste des stagiaires : même place que « À recontacter », mais
+   il garde le inline-flex de .badge — l'icône et le texte doivent rester alignés. */
+.fiche-chip{margin-left:8px;vertical-align:1px;white-space:nowrap}
+.fiche-chip svg{color:var(--orange)}
+/* FICHE STAGIAIRE INCOMPLÈTE — le bandeau qui nomme ce qui manque (FicheIncomplete.jsx). Même
+   famille que .alerte-conditions, en orange : « à compléter », la teinte des dossiers à compléter du
+   tableau de bord. L'orange ne sert qu'à l'icône et à la teinte : en texte, #ff6900 sur blanc ne se
+   lit pas (moins de 3:1) ; le texte garde les couleurs du thème. */
+.fiche-incomplete{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;
+  border-radius:12px;border:1px solid color-mix(in srgb,var(--orange) 40%,var(--border));
+  background:color-mix(in srgb,var(--orange) 8%,var(--surface))}
+/* L'icône suit la PREMIÈRE ligne (le titre) : centrée sur deux ou trois lignes de texte, elle flottait. */
+.fiche-incomplete>svg{color:var(--orange);flex-shrink:0;margin-top:1px}
+.fiche-incomplete>.btn{align-self:center}
+.fiche-incomplete-corps{flex:1 1 240px;min-width:0}
+.fiche-incomplete-corps b{display:block;font-size:14px;color:var(--text)}
+.fiche-incomplete-corps p{margin:3px 0 0;font-size:13px;line-height:1.5;color:var(--muted)}
+.fiche-incomplete-corps p span{color:var(--text);font-weight:600}
 /* Tableau de bord, « Derniers dossiers » : une ligne par dossier, et le lien vers la fiche qui la
    remplit. Le lien déborde de sa ligne (marges négatives, compensées par son padding) : le survol
    (.rowlink) respire autour du texte sans le déplacer, et le filet de séparation reste droit — posé
