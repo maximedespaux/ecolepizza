@@ -1,5 +1,7 @@
 const db = require('../config/database.js');
 const consentements = require('../lib/consentements.js');
+const { accesParMenuAutorise, modeFor, CONFIGURABLE_ROLES } = require('../middlewares/sectionAccess.middleware.js');
+const { OWNER_ROLES } = require('../lib/activite.js');
 
 // Compte résilient : renvoie 0 si la table n'existe pas encore (migration non jouée).
 async function count(conn, sql, params) {
@@ -64,6 +66,34 @@ async function sansReponsePartenaires(conn, org) {
 }
 
 /**
+ * PEUT-IL DÉCOCHER UN RAPPEL ? Décocher « à recontacter », c'est écrire sur /stagiaires (PATCH) :
+ * la réponse est donc celle des gardes de l'API, pas celle d'un rôle écrit ici. Les propriétaires,
+ * toujours ; les rôles configurables (secrétariat, formateur…) selon la rubrique accordée EN
+ * ÉCRITURE dans « Équipe & accès » — `accesParMenuAutorise`, la décision même de l'API, et
+ * `modeFor`, la même lecture de `nav_access`. Tout autre rôle, jamais.
+ */
+async function peutDecocherUnRappel(conn, user) {
+    if (!user) return false;
+    if (OWNER_ROLES.includes(user.role)) return true;
+    if (!CONFIGURABLE_ROLES.includes(user.role)) return false;
+    try {
+        const [[u]] = await conn.query('SELECT nav_access FROM user WHERE id = ?', [user.id]);
+        return accesParMenuAutorise({ role: user.role, method: 'PATCH', section: '/stagiaires', mode: modeFor(u ? u.nav_access : null, '/stagiaires') });
+    } catch { return false; }
+}
+
+/**
+ * LES FICHES « À RECONTACTER » (migration 169), pour qui peut agir. Une pastille réclame un
+ * geste : montrée à un formateur qui ne peut pas décocher la case, elle afficherait un chiffre
+ * qu'il ne ferait jamais descendre — et qu'il apprendrait à ne plus lire. Colonne absente
+ * (migration non jouée) : `count` rend 0, pas de pastille.
+ */
+async function aRecontacter(conn, user) {
+    if (!(await peutDecocherUnRappel(conn, user))) return 0;
+    return count(conn, 'SELECT COUNT(*) AS n FROM learner WHERE organization_id = ? AND a_recontacter = 1', [user.organization_id]);
+}
+
+/**
  * GET /api/badges — pastilles de la navigation (par chemin de page).
  */
 const getBadges = async (req, res) => {
@@ -81,12 +111,13 @@ const getBadges = async (req, res) => {
 
        `Promise.all` ramène le tout au coût du plus lent, soit un aller-retour. Le pool en accepte
        dix simultanées (`connectionLimit`), les cinq passent sans file d'attente. */
-    const [lowStock, unpaid, shopPending, consentManquant] = await Promise.all([
+    const [lowStock, unpaid, shopPending, consentManquant, rappels] = await Promise.all([
         count(conn, 'SELECT COUNT(*) AS n FROM inventory_item WHERE organization_id = ? AND quantity <= threshold', [org]),
         count(conn, "SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type IN ('FACTURE','ACOMPTE') AND status IN ('EMISE','IMPAYEE')", [org]),
         // Demandes boutique en cours : ni remises (terminées) ni annulées.
         count(conn, "SELECT COUNT(*) AS n FROM shop_request WHERE organization_id = ? AND status NOT IN ('REMISE', 'ANNULEE')", [org]),
         sansReponsePartenaires(conn, org),
+        aRecontacter(conn, req.user),
     ]);
     res.json({
         data: {
@@ -94,8 +125,9 @@ const getBadges = async (req, res) => {
             '/factures': unpaid,
             '/demandes-boutique': shopPending,
             '/sessions': consentManquant,
+            '/stagiaires': rappels,
         },
     });
 };
 
-module.exports = { getBadges };
+module.exports = { getBadges, peutDecocherUnRappel };

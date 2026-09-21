@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getLearners, getDistinctions, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword, deleteStagiaireAccount,
+    getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword, deleteStagiaireAccount,
 } = require('../controllers/learner.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -12,6 +12,10 @@ router.get('/', authorizeRoles(...STAFF_ROLES), getLearners);
 /* AVANT `/:id`, sinon « distinctions » serait pris pour un identifiant de stagiaire. Réservé au
    bureau, comme l'écriture qu'il prépare (PATCH /:id) : le formateur ne décerne pas de cadre. */
 router.get('/distinctions', authorizeRoles(...ADMIN_ROLES), getDistinctions);
+/* AVANT `/:id` aussi. Le bureau, comme l'écriture qui décoche le rappel (PATCH /:id) : une liste de
+   personnes à rappeler n'a de sens que pour qui peut les rappeler — et la décocher. Un accès
+   délégué sur la rubrique Stagiaires y donne droit, comme partout ailleurs. */
+router.get('/a-recontacter', authorizeRoles(...ADMIN_ROLES), getARecontacter);
 router.get('/:id', authorizeRoles(...STAFF_ROLES), getLearner);
 // Écriture / comptes : bureau uniquement (pas le formateur).
 router.post('/', authorizeRoles(...ADMIN_ROLES), createLearner);

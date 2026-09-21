@@ -526,6 +526,11 @@ function StagiaireDetail() {
           <Row label="Adresse" value={[l.address, l.zip_code, l.town].filter(Boolean).join(", ")} />
           <Row label="Contact le" value={dateFr(l.contacted_at)} />
           <Row label="Contacté par" value={l.contacted_by} />
+          {/* LE RAPPEL (migration 169), sous la prise de contact comme dans le formulaire — et
+              seulement s'il est posé : une ligne « À recontacter : - » sur chaque fiche ne dirait rien. */}
+          {!!l.a_recontacter && (
+            <Row label="À recontacter" value={l.a_recontacter_depuis ? `Oui, depuis le ${dateFr(l.a_recontacter_depuis)}` : "Oui"} />
+          )}
         </Card>
 
         <Card title={T("graduation", "Parcours scolaire")}>

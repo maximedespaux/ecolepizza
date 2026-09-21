@@ -4,6 +4,7 @@ import { Field, SelectField } from "./Field.jsx";
 import { OPCOS } from "../lib/opco.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 import { compterMots, NOTE_STAGIAIRE_MOTS_MAX } from "../lib/mots.js";
+import { bumpBadges } from "../lib/events.js";
 
 const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
@@ -13,7 +14,9 @@ const STATUTS_ENTREPRISE = ["SARL", "SAS", "SASU", "EURL", "EI", "Auto-entrepren
 /* DEUX CHAMPS LIBRES PASSÉS EN LISTES. Saisis à la main, ils accumulaient « mail », « Mail »,
    « e-mail », « tel », « Tél. », « bac+2 », « Bac + 2 » : impossible de compter d'où viennent les
    contacts, ni de filtrer sur un niveau. Une liste tranche la question à la saisie. */
-const CONTACTS = ["Mail", "Téléphone"];
+/* « EDOF » (2026-09-21) : la plateforme du CPF, par où arrivent les demandes de formation financées
+   par le compte personnel — un canal à part entière, qu'on veut pouvoir compter comme les deux autres. */
+const CONTACTS = ["Mail", "Téléphone", "EDOF"];
 /* « BTS » est rangé à côté de « BAC +2 », qui EST son niveau : la liste mêle des NOMS de
    diplôme (CAP, BEP, BAC, BTS) et des NIVEAUX (BAC +1 … +8), et c'est voulu — on demande ici
    le plus haut diplôme, que les gens nomment tantôt d'une façon, tantôt de l'autre. Les
@@ -34,13 +37,14 @@ const EMPTY = {
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
   project_improvement: false,
   note_libre: "", // migration 168 : la note en texte simple, sous « Votre projet »
+  a_recontacter: false, // migration 169 : le rappel (liste de priorité, tableau de bord, pastille du menu)
 };
 
 /* LA LISTE DOIT SUIVRE `EMPTY` : `toForm` lit les autres clés en `?? ""`, si bien qu'un booléen
    oublié ici arriverait à `false`… puis à la chaîne vide au premier enregistrement. Trois listes
    disent le même ensemble dans ce fichier (EMPTY, BOOL_FIELDS, les cases rendues) — un test le
    vérifie, parce qu'elles ont vocation à diverger. */
-const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job", "project_improvement"];
+const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job", "project_improvement", "a_recontacter"];
 const dateOnly = (v) => (v ? String(v).slice(0, 10) : "");
 
 function toForm(d) {
@@ -163,7 +167,14 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
       /* LE SERVEUR DIT CE QU'IL A LAISSÉ TOMBER (`ignores` : colonne absente, migration non jouée).
          Même règle que l'écran de l'organisme : un « enregistré » qui tairait la note perdue serait
          un succès qui ment — elle aurait disparu à la réouverture, sans un mot. */
-      const sauf = (r) => ((r?.ignores || []).includes("note_libre") ? ", sauf la note : la migration 168 n'est pas jouée." : null);
+      const PERDUS = { note_libre: ["la note", 168], a_recontacter: ["le rappel « à recontacter »", 169] };
+      const sauf = (r) => {
+        const p = (r?.ignores || []).filter((k) => PERDUS[k]);
+        if (!p.length) return null;
+        const plusieurs = p.length > 1;
+        return `, sauf ${p.map((k) => PERDUS[k][0]).join(" et ")} : ${plusieurs ? "les migrations" : "la migration"} `
+          + `${p.map((k) => PERDUS[k][1]).join(" et ")} ${plusieurs ? "ne sont pas jouées" : "n'est pas jouée"}.`;
+      };
       if (id) {
         const r = await updateStagiaire(id, payload);
         onSaved?.(sauf(r) ? `Stagiaire mis à jour${sauf(r)}` : "Stagiaire mis à jour.", sauf(r) ? "info" : "success");
@@ -176,6 +187,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
           ? `Stagiaire ajouté${sauf(r)} Son compte de connexion sera créé à son inscription à une session.`
           : "Stagiaire ajouté. Son compte de connexion sera créé à son inscription à une session.", sauf(r) ? "info" : "success");
       }
+      bumpBadges(); // la pastille « Stagiaires » du menu suit la case « à recontacter », sans attendre la minute
     } catch (err) { onError?.(err.message); }
     finally { setSaving(false); }
   }
@@ -204,6 +216,13 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   {optionsAvec(CONTACTS, form.contacted_by).map((c) => <option key={c} value={c}>{c}</option>)}
                 </SelectField>
               </div>
+              {/* LE RAPPEL (2026-09-21), dans la prise de contact : c'est en notant l'appel qu'on sait
+                  s'il faudra rappeler. Cochée, la fiche passe en tête de la page des stagiaires, sur
+                  le tableau de bord, et dans la pastille du menu. */}
+              <label className="case-rappel">
+                <input type="checkbox" checked={!!form.a_recontacter} onChange={toggle("a_recontacter")} />
+                <span><b>À recontacter</b> : un rappel en tête de la liste des stagiaires et sur le tableau de bord</span>
+              </label>
               <div className="row3">
                 <SelectField label="Civilité" value={form.civility} onChange={set("civility")}>
                   <option value="">-</option>

@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-21** :
-**1596 tests — 1589 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1612 tests — 1605 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,16 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **aucune à jouer (relevé le 2026-09-21, au soir)**
+## 4. Migrations — **169 à jouer (relevé le 2026-09-21, au soir)**
+
+**169 — À JOUER** (`169_stagiaire_a_recontacter.sql`) : colonnes `learner.a_recontacter` (la case
+« À recontacter » de la fiche, 0 ou 1) et `learner.a_recontacter_depuis` (posée par le SERVEUR à la
+coche, gardée tant qu'elle reste cochée, effacée à la décoche — l'ordre de la liste de priorité).
+Sans elles, la fiche s'enregistre et DIT que la case n'a pas été prise (`ignores`), la liste de
+rappel est vide et la pastille « Stagiaires » du menu n'apparaît pas. Elle se vérifie par l'API :
+`GET /stagiaires/a-recontacter` répond (liste, vide au début), et `GET /stagiaires/:id` (`SELECT *`)
+renvoie les clés `a_recontacter` et `a_recontacter_depuis`. Son revert retire les deux colonnes — les
+rappels en cours sont perdus.
 
 ⚠️ **UNE SAISIE RESTE À FAIRE, pas une migration : la forme juridique de l'organisme est VIDE.**
 La colonne existe (167 jouée), mais `GET /organisation` rend `legal_status: null` : les deux

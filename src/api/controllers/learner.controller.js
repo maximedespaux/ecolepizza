@@ -15,6 +15,7 @@ const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../l
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -98,7 +99,14 @@ const LEARNER_FIELDS = [
        d'ÉVALUATION — le nom dit un texte, pas un chiffre. Écrite par l'école seule : l'espace du
        stagiaire a sa propre liste (INFO_FIELDS), et aucune de ses réponses ne rend la fiche entière. */
     'note_libre',
+    /* `a_recontacter` (migration 169) : le RAPPEL — la case cochée met la fiche en tête de la liste
+       de priorité (page des stagiaires, tableau de bord) et dans la pastille du menu. Sa date,
+       `a_recontacter_depuis`, n'est PAS ici : c'est le serveur qui la pose (cf. la mise à jour). */
+    'a_recontacter',
 ];
+
+// La case telle qu'elle arrive : un booléen du formulaire, ou 1 / « true » d'un autre appelant.
+const estCoche = (v) => v === true || v === 1 || v === '1' || v === 'true';
 
 /* LA NOTE LIBRE : 128 MOTS AU PLUS, demandé le 2026-09-21. Vérifiée ICI et pas seulement à
    l'écran : la route n'est pas le seul chemin d'entrée (reprise de données, appel direct). Le
@@ -116,9 +124,15 @@ function refusNote(body) {
 /* CE QUI A ÉTÉ ENVOYÉ SANS POUVOIR ÊTRE ÉCRIT — colonne absente, migration pas encore jouée : dit
    à l'écran (`ignores`) plutôt que perdu en silence. Une note tapée, puis « Stagiaire mis à jour »,
    et plus rien à la réouverture : le succès aurait menti. */
+/* UNE CASE N'EST PERDUE QUE COCHÉE : décochée, elle ne dit rien que la base ignore. Et la case du
+   rappel arrive déjà ramenée à 0 ou 1 (normaliserSaisie) : sans cette règle, décocher avant la
+   migration 169 aurait annoncé « sauf le rappel » pour une case qui ne disait rien. */
+const CASES = new Set(['project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
+    'project_improvement', 'a_recontacter']);
 function champsIgnores(body, champs) {
-    const ignores = LEARNER_FIELDS.filter((f) => !champs.includes(f)
-        && body[f] !== undefined && body[f] !== null && body[f] !== '' && body[f] !== false);
+    const perdu = (f) => (CASES.has(f) ? estCoche(body[f])
+        : body[f] !== undefined && body[f] !== null && body[f] !== '' && body[f] !== false);
+    const ignores = LEARNER_FIELDS.filter((f) => !champs.includes(f) && perdu(f));
     return ignores.length ? { ignores } : {};
 }
 
@@ -149,6 +163,7 @@ function normaliserSaisie(b) {
     if (out.first_name != null) out.first_name = String(out.first_name).trim();
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
     if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
+    if (out.a_recontacter !== undefined) out.a_recontacter = estCoche(out.a_recontacter) ? 1 : 0;
     /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
        updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus
        aucun écran ne l'envoie, mais la route l'accepte toujours : la ville et le référent y
@@ -243,6 +258,40 @@ const getDistinctions = async (req, res) => {
         // Colonne absente (migration 113 non jouée) : personne ne porte de cadre, ce n'est pas une panne.
         if (err.code === 'ER_BAD_FIELD_ERROR') return res.json({ data: [] });
         console.error('Erreur lecture des distinctions :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/stagiaires/a-recontacter — les fiches cochées « à recontacter » (migration 169) : la liste
+ * de priorité de la page des stagiaires et du tableau de bord, et de quoi rappeler — nom, téléphone,
+ * e-mail, canal du premier contact, la note. LA PLUS ANCIENNE ATTENTE EN TÊTE : c'est elle, la
+ * priorité ; une fiche cochée avant que la date n'existe passe après les datées.
+ *
+ * UNE ROUTE À ELLE, comme les distinctions, et pour deux raisons : la liste générale suit la
+ * recherche (le rappel doit rester en tête quoi qu'on tape), et elle nomme ses colonnes — y ajouter
+ * `a_recontacter` l'aurait fait tomber en erreur tant que la migration n'est pas jouée. Ici, colonne
+ * absente = personne à rappeler, pas une panne.
+ */
+const getARecontacter = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [depuis, note] = await Promise.all([
+            colonneExiste(conn, 'learner', 'a_recontacter_depuis'),
+            colonneExiste(conn, 'learner', 'note_libre'),
+        ]);
+        const [rows] = await conn.query(
+            `SELECT id, civility, first_name, last_name, phone, email, contacted_by,
+                    ${depuis ? "DATE_FORMAT(a_recontacter_depuis, '%Y-%m-%d %H:%i')" : 'NULL'} AS a_recontacter_depuis,
+                    ${note ? 'note_libre' : 'NULL'} AS note_libre
+               FROM learner
+              WHERE organization_id = ? AND a_recontacter = 1
+              ORDER BY ${depuis ? 'a_recontacter_depuis IS NULL, a_recontacter_depuis, ' : ''}last_name, first_name`,
+            [req.user.organization_id]);
+        res.json({ data: rows });
+    } catch (err) {
+        if (err.code === 'ER_BAD_FIELD_ERROR') return res.json({ data: [] }); // migration 169 non jouée
+        console.error('Erreur lecture des rappels :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -364,6 +413,12 @@ const createLearner = async (req, res) => {
             [learnerId, organizationId, companyId, null, ...values]
         );
         logAudit(req, 'learner.create', 'Learner', learnerId);
+        /* NÉE « À RECONTACTER » : le rappel date de maintenant. Posée ici et jamais par le
+           formulaire — un rappel ne se déclare pas plus ancien qu'il n'est. */
+        if (body.a_recontacter === 1 && champs.includes('a_recontacter')
+            && await colonneExiste(conn, 'learner', 'a_recontacter_depuis')) {
+            await conn.query('UPDATE learner SET a_recontacter_depuis = NOW() WHERE id = ? AND organization_id = ?', [learnerId, organizationId]);
+        }
 
         res.status(201).json({ message: 'Stagiaire créé', ...champsIgnores(body, champs) });
     } catch (err) {
@@ -442,6 +497,14 @@ const updateLearner = async (req, res) => {
             updates.push(`${field} = ?`);
             const raw = body[field];
             values.push(raw === '' ? null : (field === 'social_security' ? encrypt(raw) : raw));
+        }
+        /* LA DATE DU RAPPEL SUIT LA CASE, sans relire la fiche : posée quand la case se coche,
+           GARDÉE tant qu'elle le reste (`COALESCE`) — réenregistrer une fiche cochée ne la fait pas
+           rajeunir, sinon la plus ancienne attente ne serait jamais en tête —, effacée à la décoche. */
+        if (body.a_recontacter !== undefined && champs.includes('a_recontacter')
+            && await colonneExiste(conn, 'learner', 'a_recontacter_depuis')) {
+            updates.push('a_recontacter_depuis = CASE WHEN ? = 1 THEN COALESCE(a_recontacter_depuis, NOW()) ELSE NULL END');
+            values.push(body.a_recontacter);
         }
         if (companyId !== rows[0].company_id) {
             updates.push('company_id = ?');
@@ -704,6 +767,6 @@ const deleteStagiaireAccount = async (req, res) => {
 };
 
 module.exports = {
-    getLearners, getDistinctions, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
+    getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
     deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL,
 };

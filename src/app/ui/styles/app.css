@@ -5461,3 +5461,22 @@ label .requis {
 .sd-note{margin-top:12px;padding-top:10px;border-top:1px solid var(--border-soft)}
 .sd-note-t{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
 .sd-note p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+/* « À RECONTACTER » (migration 169) : la liste de priorité, en tête de la page des stagiaires et sur
+   le tableau de bord. Un liseré de la couleur des actions — c'est une liste de choses à faire — et
+   des lignes qui passent sur deux étages sur un téléphone plutôt que de déborder. */
+.rappels{border-left:3px solid var(--ember1)}
+.rappels-n{margin-left:6px;padding:1px 8px;border-radius:99px;background:var(--amber-bg);color:var(--ember2);font-size:12px}
+.rappels-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.rappel{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:1px solid var(--border-soft)}
+.rappel:last-child{border-bottom:0;padding-bottom:0}
+.rappel-qui{display:flex;align-items:center;gap:10px;flex:1 1 220px;min-width:0;color:inherit}
+.rappel-nom{display:flex;flex-direction:column;min-width:0}
+.rappel-nom b{overflow-wrap:anywhere}
+.rappel-nom span{font-size:12px;color:var(--muted)}
+.rappel-note{flex:1 1 180px;min-width:0;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rappel-gestes{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+/* La case du formulaire, sous « Contact le / Contacté par ». */
+.case-rappel{display:flex;align-items:flex-start;gap:8px;margin:0 0 12px;font-size:14px;cursor:pointer}
+.case-rappel input{margin-top:3px}
+/* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
+.rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}

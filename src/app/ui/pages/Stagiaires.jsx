@@ -9,6 +9,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import ARecontacter from "../components/ARecontacter.jsx";
 import ListePlus from "../components/ListePlus.jsx";
 import { initials } from "../lib/format.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
@@ -26,6 +27,10 @@ function Stagiaires() {
   const [filters, setFilters] = useState({ level: [], financing: "", status: "", opco: "", account: "" });
   const [badgeOpen, setBadgeOpen] = useState(false);
   const [filtresOuverts, setFiltresOuverts] = useState(false);
+  /* Les fiches « à recontacter » (migration 169) : la liste de priorité en tête, et une pastille
+     sur leur ligne plus bas — la recherche peut les faire réapparaître au milieu des autres. */
+  const [rappels, setRappels] = useState(() => new Set());
+  const [rappelsRefresh, setRappelsRefresh] = useState(0);
   const badgeRef = useRef(null);
   useEffect(() => {
     if (!badgeOpen) return;
@@ -149,6 +154,12 @@ function Stagiaires() {
       />
       <StatusMessage status={status} />
 
+      {/* LA LISTE DE PRIORITÉ, EN TÊTE (demandée le 2026-09-21) : les fiches cochées « à recontacter »,
+          la plus ancienne attente d'abord, de quoi appeler, et « Rappelé » pour les retirer. Elle
+          ne dépend pas de la recherche — un rappel reste en tête quoi qu'on tape —, et disparaît
+          quand il n'y a personne à rappeler. */}
+      <ARecontacter refresh={rappelsRefresh} onCharge={(l) => setRappels(new Set(l.map((x) => x.id)))} style={{ marginBottom: 14 }} />
+
       {/* LA RECHERCHE EST LE SUJET DE LA PAGE. On y vient pour retrouver UNE personne, pas pour
           parcourir mille fiches — le champ prend donc toute la largeur et reçoit le curseur à
           l'ouverture : on tape, sans avoir à viser.
@@ -244,6 +255,7 @@ function Stagiaires() {
                   <span className="avatar">{initials(l.first_name, l.last_name)}</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
+                    {rappels.has(l.id) && <Badge tone="a" className="rappel-chip" title="Cochée « à recontacter » : elle figure dans la liste en tête">À recontacter</Badge>}
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"} · {l.phone || "-"}</span>
                   </span>
                 </Link>
@@ -323,7 +335,7 @@ function Stagiaires() {
         <EditStagiaireModal
           id={editId}
           onClose={() => setEditId(undefined)}
-          onSaved={(msg, type = "success") => { setEditId(undefined); setStatus({ type, message: msg }); load(query); }}
+          onSaved={(msg, type = "success") => { setEditId(undefined); setStatus({ type, message: msg }); load(query); setRappelsRefresh((n) => n + 1); }}
           onError={(m) => setStatus({ type: "error", message: m })}
         />
       )}

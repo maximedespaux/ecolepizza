@@ -58,7 +58,9 @@ test('la modale applique les mêmes conventions à la frappe', () => {
 });
 
 test('« Contacté par » et le niveau de diplôme sont des LISTES, sans perdre l\'existant', () => {
-    assert.match(MODALE, /const CONTACTS = \["Mail", "Téléphone"\]/);
+    /* « EDOF » s'y ajoute le 2026-09-21 : la plateforme du CPF, un canal de premier contact à part
+       entière. La liste reste FERMÉE — c'est elle qui empêche « mail », « Mail » et « e-mail ». */
+    assert.match(MODALE, /const CONTACTS = \["Mail", "Téléphone", "EDOF"\]/);
     assert.match(MODALE, /const DIPLOMES = \[[^\]]*"CAP"[^\]]*"BAC"[^\]]*"BAC \+1"/, 'CAP, BAC, BAC +1…');
     assert.match(MODALE, /<SelectField label="Contacté par"/, 'plus un champ libre');
     assert.match(MODALE, /<SelectField label="Niveau du diplôme le plus élevé"/, 'plus un champ libre');
