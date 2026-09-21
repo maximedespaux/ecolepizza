@@ -13,6 +13,7 @@ import SessionEvaluation from "../components/SessionEvaluation.jsx";
 import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 import EnTeteSession from "../components/EnTeteSession.jsx";
 import { getSessionsANoter, getNotationSession } from "../api/apiClient.js";
+import { lienDossier } from "../lib/lienDossier.js";
 import { initials, colorOf } from "../lib/format.js";
 import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
 
@@ -169,7 +170,8 @@ function Notation() {
           <span className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>
             {initials(s.first_name, s.last_name)}
           </span>
-          <Link to={`/stagiaires/${s.learner_id}`} style={{ fontWeight: 600, color: "var(--text)" }}>
+          {/* La fiche s'ouvre sur le dossier de CETTE session, pas sur le premier (lib/lienDossier.js). */}
+          <Link to={lienDossier(s.learner_id, s.enrollment_id)} style={{ fontWeight: 600, color: "var(--text)" }}>
             {s.nom || "—"}
           </Link>
         </span>

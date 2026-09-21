@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getSessions, getSessionBoard } from "../api/apiClient.js";
+import { lienDossier } from "../lib/lienDossier.js";
 import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 import EnTeteSession from "../components/EnTeteSession.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -169,7 +170,8 @@ function TableauSession({ session, onErreur }) {
                       <p className="pipe-vide">Personne à cette étape</p>
                     ) : items.map((r) => (
                       <div className="pipe-card" key={r.enrollment_id}>
-                        <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">{r.name}</Link>
+                        {/* La fiche s'ouvre sur le dossier de CETTE carte, pas sur le premier (lib/lienDossier.js). */}
+                        <Link to={lienDossier(r.learner_id, r.enrollment_id)} className="pipe-name">{r.name}</Link>
                         <div className="pipe-docs" style={{ marginTop: 6 }}>Étape {Math.min((r.etape ?? r.done) + 1, r.total)}/{r.total}{r.percent != null ? ` · ${r.percent}%` : ""}</div>
                       </div>
                     ))}

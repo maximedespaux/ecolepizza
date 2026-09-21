@@ -20,6 +20,7 @@ import DocumentsExternes from "../components/DocumentsExternes.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
+import { lienDossier } from "../lib/lienDossier.js";
 
 function SessionDetail() {
   const { id } = useParams();
@@ -410,7 +411,9 @@ function SessionDetail() {
                     passe à la ligne ; l'e-mail, lui, se termine en « … ». */}
                 <button
                   type="button"
-                  onClick={() => navigate(`/stagiaires/${e.learner_id}`)}
+                  /* La fiche s'ouvre sur le dossier de CETTE session, pas sur le premier du
+                     stagiaire (lib/lienDossier.js) : il a pu en suivre une autre avant. */
+                  onClick={() => navigate(lienDossier(e.learner_id, e.id))}
                   style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
                   title="Voir la fiche du stagiaire"
                 >
