@@ -77,6 +77,26 @@ export function documentsHorsParcours(docs, idsEtapes, codeFormation) {
 }
 
 /**
+ * LA MÊME RÈGLE POUR LA FICHE ENTREPRISE (2026-09-21), avec deux différences qui tiennent aux
+ * documents de GROUPE :
+ *   · une étape en montre PLUSIEURS : le serveur produit un document par OPCO quand les stagiaires
+ *     n'ont pas tous le même (« Convention de formation — AKTO », « … — OCAPIAT »), et l'étape ne
+ *     désigne que le plus récent. On rattache donc par MODÈLE, dans la session affichée — sinon la
+ *     convention du second OPCO tomberait dans « Autres documents », loin de son étape ;
+ *   · la SESSION remplace la formation : un document d'une autre session s'affiche sous la sienne.
+ * Un document dont la session n'est plus celle de l'entreprise n'aurait de place nulle part : il
+ * reste listé, sous toutes les sessions — mieux vaut le voir deux fois que ne plus le voir.
+ */
+export function documentsDeLEtape(docs, slug, sessionId) {
+  return (docs || []).filter((d) => d.session_id === sessionId && d.template_slug === slug);
+}
+export function documentsEntrepriseHorsParcours(docs, slugsEtapes, sessionId, sessionsConnues) {
+  const slugs = slugsEtapes instanceof Set ? slugsEtapes : new Set(slugsEtapes || []);
+  const connues = sessionsConnues instanceof Set ? sessionsConnues : new Set(sessionsConnues || []);
+  return (docs || []).filter((d) => (d.session_id === sessionId ? !slugs.has(d.template_slug) : !connues.has(d.session_id)));
+}
+
+/**
  * État d'un document dans le PARCOURS VU PAR LE STAGIAIRE (valeurs de sa pastille) :
  *   · « done » : signé, ou reçu sans rien à signer ;
  *   · « todo » : à lui de jouer — un QCM à remplir, un document à signer ;

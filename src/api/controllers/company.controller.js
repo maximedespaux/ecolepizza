@@ -503,7 +503,8 @@ const listCompanyDocuments = async (req, res) => {
         const [rows] = await conn.query(
             `SELECT id, type, template_slug, title, status, session_id,
                     DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at,
-                    DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i') AS sent_at
+                    DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i') AS sent_at,
+                    DATE_FORMAT(signed_at, '%Y-%m-%d %H:%i') AS signed_at
              FROM generated_document WHERE ${where} ORDER BY created_at DESC`, params);
         res.json({ data: rows });
     } catch (err) {

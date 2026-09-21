@@ -1,5 +1,5 @@
 /**
- * LES DOCUMENTS DANS LES ÉTAPES DU PARCOURS (fiche stagiaire).
+ * LES DOCUMENTS DANS LES ÉTAPES DU PARCOURS (fiche stagiaire, puis fiche entreprise).
  *
  * Demandé le 2026-09-21 : « intégrer les boutons voir, télécharger, supprimer (ceux de la liste
  * du dessous) aux cartes des étapes, pour réduire la hauteur de la page, et intégrer “Préparer un
@@ -11,6 +11,10 @@
  * rend le nouveau rangement sûr : aucun document ne disparaît (ceux qu'aucune étape ne montre
  * restent listés), une corbeille désormais sous la main demande confirmation, et le formulaire
  * s'ouvre dans l'étape.
+ *
+ * LA FICHE ENTREPRISE a reçu le même traitement le même jour (« same for the company page »),
+ * avec ses documents de GROUPE : une étape peut en montrer plusieurs (un par OPCO), et la décision
+ * du 2026-07-15 reste en place — l'étape de groupe n'offre que « Préparer le document ».
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -112,9 +116,62 @@ test('une étape de REMISE ne propose plus de préparer un document', () => {
     assert.match(PARCOURS, /if \(s\.piece \|\| s\.remise\) return null;/);
 });
 
-test('la fiche entreprise garde son chemin : sans formulaire fourni, « Préparer » appelle la page', () => {
-    const ENTREPRISE = fs.readFileSync(path.join(UI, 'pages', 'EntrepriseDetail.jsx'), 'utf8');
-    const appel = ENTREPRISE.slice(ENTREPRISE.indexOf('<EnrollmentParcours'), ENTREPRISE.indexOf('/>', ENTREPRISE.indexOf('<EnrollmentParcours')));
-    assert.doesNotMatch(appel, /renderPreparation|renderGestes/);
-    assert.match(appel, /onPrepare=\{prepareCompanyDoc\}/);
+// ── La fiche entreprise, même traitement (demandé le 2026-09-21) ───────────────────────────
+const ENTREPRISE = fs.readFileSync(path.join(UI, 'pages', 'EntrepriseDetail.jsx'), 'utf8');
+const appelParcours = ENTREPRISE.slice(ENTREPRISE.indexOf('<EnrollmentParcours'), ENTREPRISE.indexOf('/>', ENTREPRISE.indexOf('<EnrollmentParcours')));
+
+test('ENTREPRISE : une étape de groupe montre TOUS ses documents — un par OPCO', async () => {
+    /* Le serveur produit un document par OPCO quand les stagiaires n'ont pas tous le même, et
+       l'étape ne désigne que le plus récent. Rattacher au seul `docId` aurait envoyé la convention
+       du second OPCO dans « Autres documents », loin de son étape. */
+    const { documentsDeLEtape, documentsEntrepriseHorsParcours } = await import('../../app/ui/lib/documentsDossier.js');
+    const DOCS = [
+        { id: 'c1', title: 'Convention de formation — AKTO', template_slug: 'convention-groupe', session_id: 's38' },
+        { id: 'c2', title: 'Convention de formation — OCAPIAT', template_slug: 'convention-groupe', session_id: 's38' },
+        { id: 'c3', title: 'Convention de formation — AKTO', template_slug: 'convention-groupe', session_id: 's12' },
+        { id: 'l1', title: 'Liste d\'émargement groupe', template_slug: 'emargement-groupe', session_id: 's38' },
+        { id: 'x1', title: 'Convention d\'une session disparue', template_slug: 'convention-groupe', session_id: 's-ancienne' },
+    ];
+    assert.deepStrictEqual(documentsDeLEtape(DOCS, 'convention-groupe', 's38').map((d) => d.id), ['c1', 'c2'],
+        'les deux OPCO de la session affichée, pas la convention de l\'autre session');
+    // Session s38 : les conventions sont sur leur étape ; restent le modèle hors parcours et la session disparue.
+    assert.deepStrictEqual(documentsEntrepriseHorsParcours(DOCS, new Set(['convention-groupe']), 's38', ['s38', 's12']).map((d) => d.id),
+        ['l1', 'x1'], 'la session s12 s\'affiche sous la sienne ; une session disparue n\'a de place nulle part : listée');
+    assert.deepStrictEqual(documentsEntrepriseHorsParcours(DOCS, [], 's12', ['s38', 's12']).map((d) => d.id), ['c3', 'x1'],
+        'parcours sans étape de groupe : tout ce qui est de la session est listé');
+});
+
+test('ENTREPRISE : les cartes portent les gestes, le formulaire s\'ouvre dans l\'étape', () => {
+    assert.match(appelParcours, /renderGestes=\{gestesEtapeGroupe\}/);
+    assert.match(appelParcours, /renderPreparation=\{formulaireGroupe\}/);
+    assert.match(appelParcours, /onCharge=\{\(d\) => setSlugsEtapes\(new Set\(\(d\?\.steps \|\| \[\]\)\.filter\(\(x\) => x\.company_level\)\.map\(\(x\) => x\.key\)\)\)\}/);
+    const gestes = fonction(ENTREPRISE, 'function gestesEtapeGroupe');
+    assert.match(gestes, /if \(!s\.company_level\) return null;/, 'une étape « stagiaire » se génère depuis chaque fiche');
+    assert.match(gestes, /documentsDeLEtape\(companyDocs, s\.key, viewSessionId\)/, 'par modèle et par session, pas par le seul docId');
+    assert.match(fonction(ENTREPRISE, 'function boutonsDocumentEntreprise'), /deleteCompanyDoc\(d\.id, d\.title, d\.status === "SIGNE"\)/,
+        'la corbeille garde la confirmation de la page, plus ferme pour un document signé');
+    // Plus de carte « Préparer un document » vers laquelle défiler, et un seul formulaire.
+    assert.doesNotMatch(ENTREPRISE, /ent-prepare/);
+    assert.doesNotMatch(fonction(ENTREPRISE, 'function prepareCompanyDoc'), /scrollIntoView/);
+    assert.strictEqual(ENTREPRISE.split('<form onSubmit={(ev) => prepareGroupDoc(ev, fermer)}').length - 1, 1);
+    const generer = fonction(ENTREPRISE, 'async function prepareGroupDoc');
+    assert.ok(generer.indexOf('fermer?.();') > generer.indexOf('await createCompanyDocument('), 'refermé après la génération');
+    // La liste du bas : seulement ce qu'aucune étape ne montre, et rien tant que le parcours n'est pas arrivé.
+    assert.match(ENTREPRISE, /slugsEtapes \? documentsEntrepriseHorsParcours\(companyDocs, slugsEtapes, viewSessionId,/);
+    assert.match(ENTREPRISE, /onChange=\{\(e\) => \{ setViewSessionId\(e\.target\.value\); setSlugsEtapes\(null\); \}\}/);
+});
+
+test('ENTREPRISE : l\'étape de groupe n\'offre toujours que « Préparer le document »', () => {
+    /* Décision de l'école du 2026-07-15 (f041f830) : ni « Regénérer », ni lien de signature sur
+       l'étape — préparer à nouveau remplace la version non signée (nettoyage côté serveur). Les
+       gestes du document vivent sur la carte ; l'action de l'étape, elle, ne change pas. */
+    assert.match(PARCOURS, /if \(s\.company_level\) return \{ label: "Préparer le document", kind: "prepare" \};/);
+    assert.doesNotMatch(appelParcours, /onSignLink/);
+});
+
+test('ENTREPRISE : la liste des documents de groupe rend la date de signature', () => {
+    /* « signé le … » sur la carte : sans la colonne dans la réponse, la trace s'arrêtait à l'envoi. */
+    const CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
+    const liste = CTRL.slice(CTRL.indexOf('const listCompanyDocuments'), CTRL.indexOf('const createCompanyDocument'));
+    assert.match(liste, /DATE_FORMAT\(signed_at, '%Y-%m-%d %H:%i'\) AS signed_at/);
 });
