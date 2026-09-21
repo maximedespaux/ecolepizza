@@ -78,6 +78,10 @@ const getEnrollments = async (req, res) => {
             e.done = a ? a.done : 0;
             e.total = a ? a.total : 0;
             e.score = a ? a.score : 'ROUGE';
+            /* Le point de rupture du parcours franchi (lib/pointDeRupture.js) : c'est lui qui garde
+               sur le tableau de bord un dossier INCOMPLET dont la session est terminée. Sans calcul,
+               on ne l'affirme pas. (Une formation SANS point le rend vrai, dans le calcul même.) */
+            e.point_franchi = !!(a && a.point_franchi);
         }
 
         res.json({ data: results });

@@ -15,6 +15,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
+import { sansLesComplets } from "../lib/dossiersASuivre.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
@@ -98,6 +99,11 @@ function Suivi() {
 
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const count = (score) => dossiers.filter((d) => d.score === score).length;
+  /* LES DOSSIERS COMPLETS QUITTENT LA LISTE (demandé le 2026-09-21) : à 100 %, il n'y a plus rien à
+     y faire, et ils noyaient ceux qui restent à finir. Ils ne disparaissent pas pour autant : le
+     compteur « complets » les compte — chaque dossier terminé l'y fait monter d'un — et, d'un clic,
+     les réaffiche (un auditeur peut vouloir en ouvrir un). La règle : lib/dossiersASuivre.js. */
+  const [voirComplets, setVoirComplets] = useState(false);
 
   /* CE QUI MANQUE, nommé. Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est
      LA PIÈCE ABSENTE. Un « 94 % » rassurant cache précisément les 6 % qu'il faut aller chercher,
@@ -173,6 +179,10 @@ function Suivi() {
     }
     return out;
   }, [dossiersVus]);
+  // Ce que la liste affiche : sans les complets, sauf à la demande — les agrégats ci-dessus
+  // restent ceux de TOUT le groupe.
+  const affiches = useMemo(() => sansLesComplets(groups, voirComplets), [groups, voirComplets]);
+  const nbAffiches = affiches.reduce((n, g) => n + (g.type === "solo" ? 1 : g.membresVus.length), 0);
 
   return (
     <>
@@ -240,15 +250,25 @@ function Suivi() {
           <div className="compteurs">
             <span><b className="chiffres">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
             <span><b className="chiffres">{count("ORANGE")}</b> en cours</span><i />
-            <span><b className="chiffres">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}</span>
+            {/* Le compteur des complets est aussi l'interrupteur qui les réaffiche. */}
+            <button type="button" className="compteur-bascule" aria-pressed={voirComplets}
+              disabled={count("VERT") === 0} onClick={() => setVoirComplets((v) => !v)}
+              title={voirComplets ? "Masquer les dossiers complets" : "Afficher aussi les dossiers complets"}>
+              <b className="chiffres">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}
+              {count("VERT") > 0 && <i>{voirComplets ? " · masquer" : " · voir"}</i>}
+            </button>
           </div>
 
-          <Card title={`Dossiers (${dossiersVus.length}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>
-            {dossiersVus.length === 0 ? (
-              <EmptyState icon="clipboard-check">{dossiers.length === 0 ? "Aucun dossier à suivre." : "Aucun dossier ne manque cette pièce."}</EmptyState>
+          <Card title={`Dossiers (${nbAffiches}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>
+            {nbAffiches === 0 ? (
+              <EmptyState icon="clipboard-check">
+                {dossiers.length === 0 ? "Aucun dossier à suivre."
+                  : manqueFiltre ? "Aucun dossier ne manque cette pièce."
+                  : "Tous les dossiers sont complets. Le compteur « complets » les réaffiche."}
+              </EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {groups.map((g) => {
+                {affiches.map((g) => {
                   if (g.type === "solo") {
                     const d = g.d;
                     return (
@@ -256,7 +276,8 @@ function Suivi() {
                         onToggle={() => toggle(d.enrollment_id)} navigate={navigate} />
                     );
                   }
-                  // Groupe entreprise : entête agrégé + stagiaires imbriqués.
+                  // Groupe entreprise : entête agrégé (tout le groupe) + stagiaires encore à finir.
+                  const { membresVus, complets } = g;
                   const ckey = `c:${g.company_id}`;
                   const cOpen = !!open[ckey];
                   return (
@@ -268,7 +289,7 @@ function Suivi() {
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b>{g.company_name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {g.members.length} stagiaire(s) · {g.done}/{g.total} étape(s)
+                            {g.members.length} stagiaire(s){complets > 0 ? ` dont ${complets} complet${complets > 1 ? "s" : ""}` : ""} · {g.done}/{g.total} étape(s)
                           </span>
                         </span>
                         <ProgressPct percent={g.percent} score={g.score} />
@@ -282,7 +303,7 @@ function Suivi() {
                               <CompanyRoadmap steps={g.documents} />
                             </div>
                           )}
-                          {g.members.map((d) => (
+                          {membresVus.map((d) => (
                             <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
                               onToggle={() => toggle(d.enrollment_id)} navigate={navigate} nested />
                           ))}

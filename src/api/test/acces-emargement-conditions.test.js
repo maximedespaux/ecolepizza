@@ -76,6 +76,16 @@ test('le seuil vient toujours du parcours de la FORMATION', () => {
 });
 
 test('les QCM et l\'émargement ne se barrent pas eux-mêmes', () => {
+    /* La règle a quitté la garde le 2026-09-21 pour lib/pointDeRupture.js, partagée avec
+       l'avancement des dossiers (tableau de bord) : on vérifie que la garde s'en sert, et la règle
+       elle-même, par son COMPORTEMENT plutôt que par une ligne de source. */
     const bloc = ESPACE.slice(ESPACE.indexOf('async function dossierEmargementGate'));
-    assert.match(bloc, /s\.doc_type !== 'QCM' && s\.doc_type !== 'EMARGEMENT'/);
+    assert.match(bloc, /PointDeRupture\.exigencesDossier\(etapesDuDossier, threshold\)/);
+    const { exigencesDossier } = require('../lib/pointDeRupture.js');
+    const etapes = [
+        { slug: 'contrat', doc_type: 'CONTRAT', stagiaire_sign: 1, sort_order: 10 },
+        { slug: 'qcm', doc_type: 'QCM', stagiaire_sign: 1, sort_order: 20 },
+        { slug: 'emarg', doc_type: 'EMARGEMENT', stagiaire_sign: 1, sort_order: 30 },
+    ];
+    assert.deepStrictEqual(exigencesDossier(etapes, 40).map((x) => x.slug), ['contrat']);
 });

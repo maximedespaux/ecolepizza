@@ -9,9 +9,10 @@ import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
 import { auditLabel } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
-import { euro, colorOf, dateHeure } from "../lib/format.js";
+import { euro, colorOf, dateHeure, dateFr } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import ARecontacter from "../components/ARecontacter.jsx";
+import { dossiersASuivre } from "../lib/dossiersASuivre.js";
 
 /* `T00:00:00` FORCE LA LECTURE EN HEURE LOCALE. Sans lui, `new Date("2026-09-14")` se lit en
    UTC et l'affichage reculerait d'un jour sur tout fuseau négatif. Même idiome que les cinq
@@ -88,7 +89,8 @@ function Dashboard() {
 
         // On ne compte que les formations à venir / en cours : une session est
         // « passée » si sa date de fin (ou de début à défaut) est antérieure à
-        // aujourd'hui. Les dossiers rattachés à une session passée sont exclus.
+        // aujourd'hui. Les dossiers rattachés à une session passée sont exclus — sauf
+        // ceux restés incomplets après le point de rupture (`dossiersASuivre`, plus bas).
         const pad = (n) => String(n).padStart(2, "0");
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -109,6 +111,11 @@ function Dashboard() {
 
         const enr = val(e, { data: [] }).data;
         const activeEnr = enr.filter((x) => activeIds.has(x.session_id));
+        /* LES DOSSIERS À SUIVRE (demandé le 2026-09-21) : ceux des sessions en cours ou à venir, ET
+           ceux d'une session TERMINÉE restés sous 100 % après le point de rupture du parcours — un
+           dossier ne se quitte pas des yeux parce que sa session s'achève. Règle, ordre et coupe :
+           lib/dossiersASuivre.js. */
+        const { aSuivre, derniers } = dossiersASuivre(enr, activeIds, isPast);
 
         setCaConnu(v.status === "fulfilled");
         setStats({
@@ -118,7 +125,7 @@ function Dashboard() {
           dossiers: activeEnr.length,
           ca: val(v, { total: 0 }).total || 0,
         });
-        setRecent(activeEnr.slice(0, 5));
+        setRecent(derniers);
         setActivity(val(a, { data: [] }).data.slice(0, 6));
         setOrg(val(o, { data: null }).data);
 
@@ -137,7 +144,7 @@ function Dashboard() {
            LE TEST PORTAIT SUR `conformite_score`, qui vaut « ROUGE » — une CHAÎNE. `Number()`
            en tirait NaN, et `NaN < 100` est faux : le compte restait à zéro quoi qu'il arrive,
            et la vignette « dossiers à compléter » ne s'affichait jamais. */
-        const incomplets = activeEnr.filter((x) => (Number(x.percent) || 0) < 100);
+        const incomplets = aSuivre.filter((x) => (Number(x.percent) || 0) < 100);
         const imminentes = activeSessions.filter((sess) =>
           sess.start_date && sess.start_date >= todayStr && sess.start_date <= j7Str);
 
@@ -312,6 +319,10 @@ function Dashboard() {
                 <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {e.program_title || "Formation"}
                 </span>
+                {/* Pourquoi un dossier plus ancien est là : sa session est finie, lui pas encore. Sa
+                    propre ligne : à la suite de l'intitulé, l'ellipse la coupait sur téléphone, date
+                    comprise — justement ce qu'il fallait lire. */}
+                {e.echu && <span className="dossier-echu">Session terminée le {dateFr(e.end_date || e.start_date)}</span>}
               </span>
               {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
                   à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y

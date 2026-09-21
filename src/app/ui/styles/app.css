@@ -870,6 +870,10 @@ tbody tr:last-child td{border-bottom:none}
 .rm-body b{font-size:13.5px}
 .rm-tag{display:block;font-size:11.5px;font-weight:600;margin-top:1px}
 .rm-tag.todo{color:var(--dim)} .rm-tag.progress{color:var(--ember1)} .rm-tag.done{color:var(--green)}
+/* L'état « progress » porte le NOM de la barre d'avancement (.progress, plus haut : 9 px de haut,
+   fond gris, débordement masqué). Le libellé « En cours · 1/2 stagiaire(s) » en héritait, coupé à
+   mi-hauteur sous une barre grise — dans les deux feuilles de route du suivi. On défait la barre. */
+.rm-tag.progress{height:auto;background:none;border-radius:0;overflow:visible}
 /* « Sans objet » : en retrait, sans couleur d'etat. Ni un manque (donc pas d'alerte), ni un
    acquis (donc pas de vert) — l'etape ne concerne simplement pas cette personne. */
 .rm-tag.skip{color:var(--dim);font-style:italic} .rm-dot.skip{background:var(--surface2);border-style:dashed;color:var(--dim)}
@@ -5480,3 +5484,15 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* Tableau de bord : un dossier d'une session terminée, gardé en vue parce qu'il n'est pas complet. */
+.dossier-echu{display:block;font-size:12px;font-weight:600;color:var(--ember1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Suivi Qualiopi : le compteur des complets, qui les réaffiche d'un clic. */
+/* Même allure que les compteurs liens (.compteurs a), sans bouton plein. Au survol, on souligne
+   plutôt que de passer au bleu marine : --navy n'a pas de valeur sombre, il disparaîtrait sur le
+   fond du thème sombre. */
+.compteur-bascule{display:inline-flex;align-items:baseline;gap:5px;background:none;border:0;font:inherit;
+  color:inherit;cursor:pointer;border-radius:5px;padding:1px 3px}
+.compteur-bascule:hover:not(:disabled) i{text-decoration:underline;text-underline-offset:3px}
+.compteur-bascule:disabled{cursor:default}
+.compteur-bascule i{font-style:normal;font-weight:600;color:var(--ember1)}
+.compteur-bascule[aria-pressed="true"] i{color:var(--muted)}
