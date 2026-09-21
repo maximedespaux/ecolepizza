@@ -109,3 +109,43 @@ test('L\'ÉCRAN AFFICHE L\'ÉTAT, plus le rang : ni coche orange, ni gris « à 
     const css = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'styles', 'app.css'), 'utf8');
     assert.match(css, /\.parc-tuile\.valide\{background:var\(--green-bg\);color:var\(--green\)\}/, 'couleurs du thème, clair et sombre');
 });
+
+test('DISPOSITION : l\'étape sélectionnée EN HAUT, sur toute la largeur, puis les étapes en grille', () => {
+    /* Demandé le 2026-09-21, le même jour : « au lieu d'avoir l'étape courante sur le côté, la
+       mettre en haut, sous le Parcours et son pourcentage, et utiliser toute la place ». Le détail
+       vivait dans une colonne de droite, collante, qui prenait près de la moitié de la largeur ;
+       les étapes s'empilaient dans l'autre moitié. */
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'components', 'EnrollmentParcours.jsx'), 'utf8');
+    assert.doesNotMatch(src, /gridTemplateColumns: "minmax\(0,1\.15fr\) minmax\(0,1fr\)"/, 'plus de colonne de droite');
+    assert.doesNotMatch(src, /position: "sticky"/, 'plus de panneau collant sur le côté');
+    const compte = src.indexOf('<div className="parc-compte">');
+    const detail = src.indexOf('className="parc-detail"');
+    const grille = src.indexOf('<div className="parc-grille">');
+    assert.ok(compte > 0 && compte < detail && detail < grille, 'l\'avancement, PUIS l\'étape sélectionnée, PUIS les étapes');
+    /* Le détail étant au-dessus, choisir une étape du bas sur un téléphone (une seule colonne)
+       changerait un panneau hors de vue : il revient à l'écran, sans bouger s'il y est déjà. */
+    assert.match(src, /scrollIntoView\(\{ block: "nearest"/);
+    const css = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'styles', 'app.css'), 'utf8');
+    assert.match(css, /\.parc-grille\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(min\(260px,100%\),1fr\)\)/,
+        'toute la largeur — et une seule colonne sur un téléphone, sans déborder de la carte');
+    assert.match(css, /\.parc-section\{grid-column:1\/-1;/, 'un séparateur de section (parcours entreprise) couvre toute la rangée');
+});
+
+test('AUCUNE PHRASE DU PARCOURS N\'OUVRE UNE PARENTHÈSE SANS LA FERMER', () => {
+    /* DÉFAUT RÉEL, visible sur le parcours d'entreprise jusqu'au 2026-09-21 : « Document de groupe)
+       à faire signer (organisme + entreprise). » Le remplacement automatique des tirets cadratins
+       (5bc392e4, 2026-08-03) avait pris les tirets des DEUX branches d'un ternaire pour une seule
+       incise « A — b — D » → « A (b) D », et ouvert la parenthèse dans une phrase pour la fermer
+       dans l'autre. Le contrôle porte sur chaque chaîne du composant, commentaires retirés. */
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'components', 'EnrollmentParcours.jsx'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|\s)\/\/[^\n]*/g, '$1');
+    const chaines = [...src.matchAll(/"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g)].map((m) => m[0]);
+    assert.ok(chaines.some((c) => c.includes('Document de groupe')), 'les phrases de groupe sont bien lues');
+    const bancales = chaines.filter((c) => {
+        let n = 0;
+        for (const car of c) { n += car === '(' ? 1 : car === ')' ? -1 : 0; if (n < 0) return true; }
+        return n !== 0;
+    });
+    assert.deepStrictEqual(bancales, []);
+});

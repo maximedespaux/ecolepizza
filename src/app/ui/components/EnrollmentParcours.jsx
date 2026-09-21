@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { getEnrollmentParcours } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import Badge from "./Badge.jsx";
@@ -50,7 +50,10 @@ function lineFor(s) {
   if (isGroup(s)) {
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
-      return s.signed >= 1 ? "Document de groupe (signé (organisme + entreprise)." : "Document de groupe) à faire signer (organisme + entreprise).";
+      /* Deux-points et non tiret cadratin (règle du 2026-08-03). Cette ligne portait « groupe (signé (… » et
+         « groupe) à faire… » : le remplacement automatique avait pris les tirets des DEUX phrases pour
+         une seule incise, et ouvert la parenthèse dans l'une pour la fermer dans l'autre. */
+      return s.signed >= 1 ? "Document de groupe : signé (organisme + entreprise)." : "Document de groupe : à faire signer (organisme + entreprise).";
     }
     return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
   }
@@ -63,7 +66,7 @@ function lineFor(s) {
   // pas par un document. Le dépôt/validation se fait dans le panneau « Pièces justificatives ».
   if (s.piece) {
     return { VALIDEE: "Pièce validée.", DEPOSEE: "Reçue du stagiaire, à vérifier ci-dessous.",
-      REFUSEE: "Refusée — le stagiaire doit en renvoyer une.", ATTENDUE: "En attente du dépôt par le stagiaire." }[s.pieceStatus]
+      REFUSEE: "Refusée : le stagiaire doit en renvoyer une.", ATTENDUE: "En attente du dépôt par le stagiaire." }[s.pieceStatus]
       || "Pièce à fournir.";
   }
   if (s.remise) {
@@ -114,14 +117,21 @@ function repartition(steps) {
 const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
 
 /**
- * Parcours documentaire d'un dossier : chronologie à gauche (les documents/QCM de
- * la formation, dans l'ordre), détail de l'étape sélectionnée à droite.
- * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onGoto('documents')` remonte à la section Documents.
+ * Parcours documentaire d'un dossier, de haut en bas : l'avancement, puis l'ÉTAPE SÉLECTIONNÉE
+ * (la prochaine, à l'ouverture), puis toutes les étapes, en grille.
+ *
+ * DISPOSITION DEMANDÉE LE 2026-09-21. Le détail vivait dans une colonne de droite, collante : il
+ * prenait près de la moitié de la largeur, et les étapes s'empilaient dans l'autre moitié, une
+ * douzaine de lignes à faire défiler. Il passe EN HAUT, juste sous le pourcentage — c'est là que
+ * l'œil arrive en ouvrant la fiche —, et les étapes prennent toute la largeur.
+ * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onPrepare`, `onSendQuiz`, `onImport` et
+ * `onSignLink` sont les gestes proposés sur l'étape sélectionnée.
  */
 function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
+  const detailRef = useRef(null);
   // Clé de réinitialisation : dossier stagiaire (enrollmentId) ou clé fournie (ex. session entreprise).
   const key = resetKey ?? enrollmentId;
 
@@ -159,82 +169,62 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
     else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
   }
 
+  /* LE DÉTAIL EST AU-DESSUS DES ÉTAPES. Sur un écran étroit, la grille tient sur une seule colonne :
+     choisir une étape du bas changerait un détail resté hors de vue, et rien ne semblerait se
+     passer. On le ramène donc à l'écran — sans rien bouger s'il y est déjà (`nearest`). */
+  function choisir(cle) {
+    setSel(cle);
+    const doux = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: "nearest", behavior: doux ? "smooth" : "auto" }));
+  }
+
   const h = data.header || {};
   const headLine = [h.code, h.session, h.financing, h.opco].filter(Boolean).join(" · ");
   const n = repartition(data.steps);
   const total = data.steps.length;
   const part = (k) => `${(n[k] / total) * 100}%`;
+  // Séparateurs de section (parcours entreprise) : seulement si l'API renvoie les DEUX sections.
+  const hasSections = data.steps.some((x) => x.section === "company") && data.steps.some((x) => x.section === "learner");
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.15fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
-      {/* Chronologie */}
-      <div className="card" style={{ padding: 18 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0, fontSize: 18 }}>Parcours</h3>
-          <b style={{ color: "var(--green)", fontSize: 18 }} title="Étapes faites, dans n'importe quel ordre">{data.percent}%</b>
-        </div>
-        {headLine && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{headLine}</div>}
-        {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est
-            validé, ce qui attend l'école (reçu), ce qui attend le stagiaire (envoyé). */}
-        <div className="parc-barre" role="img"
-          aria-label={`${n.VALIDE + n.SANS_OBJET} validée(s), ${n.RECU} reçue(s), ${n.ENVOYE} envoyée(s), ${n.A_FAIRE} à faire, sur ${total}`}>
-          <span className="valide" style={{ width: `${((n.VALIDE + n.SANS_OBJET) / total) * 100}%` }} />
-          <span className="recu" style={{ width: part("RECU") }} />
-          <span className="envoye" style={{ width: part("ENVOYE") }} />
-        </div>
-        <div className="parc-compte">
-          <span><i className="valide" />{pluriel(n.VALIDE, "validée", "validées")}</span>
-          {n.RECU > 0 && <span><i className="recu" />{pluriel(n.RECU, "reçue, à vérifier", "reçues, à vérifier")}</span>}
-          {n.ENVOYE > 0 && <span><i className="envoye" />{pluriel(n.ENVOYE, "envoyée", "envoyées")}</span>}
-          <span><i className="a-faire" />{pluriel(n.A_FAIRE, "à faire", "à faire")}</span>
-          {n.SANS_OBJET > 0 && <span><i className="sans-objet" />{pluriel(n.SANS_OBJET, "sans objet", "sans objet")}</span>}
-        </div>
-        <div>
-          {data.steps.map((s, idx, arr) => {
-            const on = s.key === sel;
-            const e = ETATS[etatDe(s)] || ETATS.A_FAIRE;
-            // Séparateur de section (parcours entreprise) : uniquement si l'API
-            // renvoie deux sections distinctes (company / learner).
-            const hasSections = arr.some((x) => x.section === "company") && arr.some((x) => x.section === "learner");
-            const showDivider = hasSections && s.section && (idx === 0 || arr[idx - 1].section !== s.section);
-            const divider = showDivider ? (
-              <div key={`sec-${s.section}`} style={{ display: "flex", alignItems: "center", gap: 8, margin: idx === 0 ? "2px 2px 8px" : "14px 2px 8px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)" }}>
-                <span>{s.section === "company" ? "🏢 À L'ARRIVÉE VIA L'ENTREPRISE" : "SUITE DU PARCOURS · STAGIAIRE"}</span>
-                <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
-              </div>
-            ) : null;
-            return (
-              <div key={s.key}>
-              {divider}
-              <button type="button" onClick={() => setSel(s.key)}
-                className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}
-                title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
-                <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block" }}>{s.label}</b>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
-                </span>
-                <Badge tone={e.ton}>{e.libelle}</Badge>
-              </button>
-              </div>
-            );
-          })}
-        </div>
+    <div className="card" style={{ padding: 18 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0, fontSize: 18 }}>Parcours</h3>
+        <b style={{ color: "var(--green)", fontSize: 18 }} title="Étapes faites, dans n'importe quel ordre">{data.percent}%</b>
+      </div>
+      {headLine && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{headLine}</div>}
+      {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est
+          validé, ce qui attend l'école (reçu), ce qui attend le stagiaire (envoyé). */}
+      <div className="parc-barre" role="img"
+        aria-label={`${n.VALIDE + n.SANS_OBJET} validée(s), ${n.RECU} reçue(s), ${n.ENVOYE} envoyée(s), ${n.A_FAIRE} à faire, sur ${total}`}>
+        <span className="valide" style={{ width: `${((n.VALIDE + n.SANS_OBJET) / total) * 100}%` }} />
+        <span className="recu" style={{ width: part("RECU") }} />
+        <span className="envoye" style={{ width: part("ENVOYE") }} />
+      </div>
+      <div className="parc-compte">
+        <span><i className="valide" />{pluriel(n.VALIDE, "validée", "validées")}</span>
+        {n.RECU > 0 && <span><i className="recu" />{pluriel(n.RECU, "reçue, à vérifier", "reçues, à vérifier")}</span>}
+        {n.ENVOYE > 0 && <span><i className="envoye" />{pluriel(n.ENVOYE, "envoyée", "envoyées")}</span>}
+        <span><i className="a-faire" />{pluriel(n.A_FAIRE, "à faire", "à faire")}</span>
+        {n.SANS_OBJET > 0 && <span><i className="sans-objet" />{pluriel(n.SANS_OBJET, "sans objet", "sans objet")}</span>}
       </div>
 
-      {/* Détail de l'étape sélectionnée */}
-      <div className="card" style={{ padding: 20, position: "sticky", top: 74, maxHeight: "calc(100vh - 90px)", overflowY: "auto" }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: "var(--dim)" }}>ÉTAPE</div>
-            <h3 style={{ margin: 0, fontSize: 20 }}>{step.label}</h3>
+      {/* L'ÉTAPE SÉLECTIONNÉE, juste sous l'avancement et sur toute la largeur : ce qu'elle
+          attend à gauche, les gestes à droite (dessous quand la place manque). */}
+      <section ref={detailRef} className="parc-detail" aria-label="Étape sélectionnée">
+        <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
+        <div className="parc-detail-info">
+          <div className="parc-surtitre">
+            Étape {data.steps.indexOf(step) + 1} sur {total}{step.key === data.currentKey ? " · prochaine étape" : ""}
           </div>
-          <Badge tone={etatSel.ton}>{etatSel.libelle}</Badge>
+          <div className="parc-detail-titre">
+            <h3>{step.label}</h3>
+            <Badge tone={etatSel.ton}>{etatSel.libelle}</Badge>
+          </div>
+          {step.sub && <p className="parc-detail-sub">{step.sub}</p>}
+          <p className={`parc-ligne ${etatSel.classe}`}>{lineFor(step)}</p>
         </div>
-        {step.sub && <p style={{ color: "var(--muted)", marginTop: 8 }}>{step.sub}</p>}
-        <p className={`parc-ligne ${etatSel.classe}`} style={{ fontWeight: 600, marginTop: 14 }}>{lineFor(step)}</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+        <div className="parc-actions">
           {action && (
             <button className="btn primary" onClick={runAction}>{action.label}</button>
           )}
@@ -246,18 +236,49 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               documents du dossier mais le circuit des pièces justificatives, où elle attend
               d'être vérifiée : annoncer « importer un document » ferait chercher le fichier
               au mauvais endroit. */}
+          {/* BOUTONS SECONDAIRES PLEINS, pas « fantômes » : sur le fond gris du panneau, un bouton
+              sans bordure se lisait comme une légende posée à droite, pas comme un geste. */}
           {onImport && !String(step.key || "").startsWith("quiz:") && (
-            <button className="btn ghost" onClick={() => onImport(step)}
+            <button className="btn" onClick={() => onImport(step)}
               title={step.piece
-                ? "Déposer ici une pièce reçue par e-mail ou scannée — elle sera validée du même geste"
+                ? "Déposer ici une pièce reçue par e-mail ou scannée : elle sera validée du même geste"
                 : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
               {step.piece ? "Déposer la pièce reçue" : "Importer un document reçu"}
             </button>
           )}
           {onSignLink && step.docId && (
-            <button className="btn ghost" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
+            <button className="btn" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
           )}
         </div>
+      </section>
+
+      {/* TOUTES LES ÉTAPES, en grille sur toute la largeur : autant de colonnes que la place en
+          laisse, lues dans l'ordre du parcours, de gauche à droite puis de haut en bas. */}
+      <div className="parc-grille">
+        {data.steps.map((s, idx, arr) => {
+          const on = s.key === sel;
+          const e = ETATS[etatDe(s)] || ETATS.A_FAIRE;
+          const showDivider = hasSections && s.section && (idx === 0 || arr[idx - 1].section !== s.section);
+          return (
+            <Fragment key={s.key}>
+              {showDivider && (
+                <div className="parc-section">
+                  {s.section === "company" ? "🏢 À L'ARRIVÉE VIA L'ENTREPRISE" : "SUITE DU PARCOURS · STAGIAIRE"}
+                </div>
+              )}
+              <button type="button" onClick={() => choisir(s.key)} aria-pressed={on}
+                className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}
+                title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
+                <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ display: "block" }}>{s.label}</b>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
+                </span>
+                <Badge tone={e.ton}>{e.libelle}</Badge>
+              </button>
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );

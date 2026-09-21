@@ -5401,7 +5401,7 @@ label .requis {
 .parc-compte i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .parc-compte .valide{background:var(--green)} .parc-compte .recu{background:var(--ember2)} .parc-compte .envoye{background:var(--blue)}
 .parc-compte .a-faire{background:transparent;border:1.5px dashed var(--muted)} .parc-compte .sans-objet{background:var(--surface3);border:1px solid var(--border)}
-.parc-etape{position:relative;display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;margin-bottom:8px;border-radius:12px;cursor:pointer;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
+.parc-etape{position:relative;display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border-radius:12px;cursor:pointer;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
 .parc-etape.sel{background:var(--surface2);border-color:var(--ember1)}
 /* LA PROCHAINE ÉTAPE, celle qui attend un geste : un filet à gauche, sans éteindre les autres. */
 .parc-etape.prochaine{box-shadow:inset 3px 0 0 0 var(--ember1)}
@@ -5413,3 +5413,24 @@ label .requis {
 .parc-tuile.valide{background:var(--green-bg);color:var(--green)}
 .parc-tuile.sans-objet{background:var(--surface3);color:var(--muted)}
 .parc-ligne.valide{color:var(--green)} .parc-ligne.recu{color:var(--ember2)} .parc-ligne.envoye{color:var(--blue)}
+
+/* DISPOSITION DEMANDÉE LE 2026-09-21 : l'étape sélectionnée EN HAUT, juste sous l'avancement, sur
+   toute la largeur — elle vivait dans une colonne de droite collante qui prenait la moitié de la
+   place —, puis les étapes en grille. Les gestes se placent à droite quand la place le permet,
+   dessous sinon. `scroll-margin-top` : quand un clic la ramène à l'écran, elle ne se range pas
+   sous la barre du haut. */
+.parc-detail{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 16px;padding:16px 18px;margin:2px 0 16px;border-radius:14px;background:var(--surface2);border:1px solid var(--border-soft);scroll-margin-top:84px}
+/* 160 px : sur un téléphone, le texte reste À CÔTÉ de la tuile au lieu de passer dessous. */
+.parc-detail-info{flex:1 1 160px;min-width:0}
+.parc-surtitre{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.parc-detail-titre{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:2px}
+.parc-detail-titre h3{margin:0;font-size:20px}
+.parc-detail-sub{color:var(--muted);margin:6px 0 0}
+.parc-detail .parc-ligne{font-weight:600;margin:8px 0 0}
+.parc-actions{display:flex;flex-wrap:wrap;gap:8px;align-self:center}
+.parc-actions:empty{display:none}
+/* `min(260px,100%)` : sur un téléphone étroit, une seule colonne, sans déborder de la carte. */
+.parc-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:8px}
+.parc-section{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:8px 2px 0;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--dim)}
+.parc-section:first-child{margin-top:0}
+.parc-section::after{content:"";flex:1;height:1px;background:var(--border-soft)}
