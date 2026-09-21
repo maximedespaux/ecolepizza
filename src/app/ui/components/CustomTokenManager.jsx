@@ -1,32 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCustomTokens, saveCustomTokens } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
-
-// Aperçu client d'un modèle de jeton personnalisé (mêmes règles que le serveur).
-const pad = (n) => String(n).padStart(2, "0");
-function parseDate(v) {
-  const s = String(v || "").trim();
-  let m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
-  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
-  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
-  return null;
-}
-function applyTemplate(tpl, values) {
-  return String(tpl || "").replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (m, ref, off) => {
-    let v = values[ref];
-    if (v == null) v = "";
-    if (off) { const d = parseDate(v); if (d) { d.setDate(d.getDate() + parseInt(off, 10)); v = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; } }
-    return String(v);
-  });
-}
+/* L'aperçu calcule avec le MÊME code que le serveur (copie conforme, vérifiée par un test) : la
+   version locale qui vivait ici ne savait que décaler des dates, et affichait « {Prix|-450} »
+   inchangé pendant que le document soustrayait. */
+import { applyTemplate } from "../lib/jetonsPerso.js";
 
 const slug = (s) => String(s || "").trim().replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
 
 /**
  * Gestionnaire des jetons personnalisés : chaque jeton = un nom + un modèle qui combine
- * d'autres jetons ({Jour1}, {field:…}, {custom:…}) et du texte, avec décalage de date
- * ({endDate|-1}). `catalog` = groupes de jetons disponibles (références insérables).
+ * d'autres jetons ({Jour1}, {field:…}, {custom:…}) et du texte, avec calcul : décalage de date
+ * ({endDate|-1}), montant ajusté ({Prix|-450}), multiplié ({Prix|*20%}) ou divisé ({Prix|/3}).
+ * `catalog` = groupes de jetons disponibles (références insérables).
  */
 export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   const [list, setList] = useState([]);
@@ -96,7 +82,9 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
         </div>
         <div className="mbody" style={{ maxHeight: "72vh", overflow: "auto" }}>
           <p className="sub" style={{ margin: "0 0 8px" }}>
-            Combine jetons et texte. Décalage de date : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
+            Combine jetons et texte. Dates, en jours : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
+            Montants : <code>{"{Prix|-450}"}</code>, <code>{"{Prix|*20%}"}</code> (20 % du prix),{" "}
+            <code>{"{Prix|*90%}"}</code> (remise de 10 %), <code>{"{Prix|/3}"}</code> (un tiers).
           </p>
           {status && <div className={"status " + (status.type || "")} style={{ marginBottom: 8 }}>{status.message}</div>}
 

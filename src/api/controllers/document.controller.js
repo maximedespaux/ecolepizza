@@ -302,6 +302,47 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             }
         } catch (e) { /* évaluation indisponible : jetons vides */ }
     }
+    /* PROCÈS-VERBAL DU JURY (migrations 100 / 150) — jetons {PV}, {Date examen}, {PVCandidats}…
+       Ils ne se remplissaient QUE par la route de la commission (`POST /examens/session/:id/pv`).
+       Le même modèle `pv-jury` généré depuis le dossier d'un candidat passait par ici, où aucune
+       donnée d'examen n'était chargée : le document sortait vide de bout en bout — pas de numéro
+       de PV, pas de date, pas de jury, pas un candidat — sans qu'aucun message ne l'explique.
+
+       LA SESSION VIENT DU DOCUMENT : celle qu'il porte (document de session, migration 157) ou,
+       à défaut, celle de son dossier. Un PV ne se déduit pas du stagiaire — il appartient à la
+       commission d'UNE session, et un stagiaire peut en avoir suivi plusieurs.
+
+       ON NE REGARDE PAS SI LA COMMISSION EST CLÔTURÉE, et c'est délibéré : rendre du vide tant
+       qu'elle ne l'est pas reproduirait exactement le défaut qu'on corrige — un document muet
+       dont personne ne devine la cause. Une délibération en cours se lit d'ailleurs sur le
+       document lui-même : la décision d'un candidat « EN_COURS » s'y imprime en blanc (cf.
+       DECISIONS dans lib/tokens.js) et les comptes ne tombent pas juste. Le garde-fou reste où
+       il a toujours été : le bouton « Éditer le PV », désactivé avant la clôture. */
+    let exam = null;
+    let pvCandidats = [];
+    let examResult = null;
+    if (documentId) {
+        try {
+            const [[ds]] = await conn.query(
+                `SELECT COALESCE(gd.session_id, e.session_id) AS session_id
+                   FROM generated_document gd
+                   LEFT JOIN document_formation df ON df.document_id = gd.id
+                   LEFT JOIN enrollment e ON e.id = df.enrollment_id
+                  WHERE gd.id = ? AND gd.organization_id = ?
+                  ORDER BY (COALESCE(gd.session_id, e.session_id) IS NULL) LIMIT 1`,
+                [documentId, organizationId]);
+            if (ds && ds.session_id) {
+                /* Requis À L'APPEL, comme `evaluation.controller` le fait pour ce fichier. Rien
+                   ne l'impose aujourd'hui — `examen.controller` ne remonte pas jusqu'ici — mais
+                   les contrôleurs s'appellent déjà en croix, et un require en tête transforme la
+                   première boucle venue en module à moitié construit : un `undefined` au premier
+                   appel, sans la moindre erreur au chargement. */
+                const { contexteExamen } = require('./examen.controller.js');
+                const px = await contexteExamen(conn, organizationId, ds.session_id, learnerId);
+                if (px) ({ exam, pvCandidats, examResult } = px);
+            }
+        } catch (e) { /* migration 150 non jouée, ou pas de commission : jetons du PV vides */ }
+    }
     // Financeur (OPCO / France Travail…) : coordonnées propres, dont un SIRET distinct de
     // l'organisme. Résolu par le nom stocké (company.opco ou learner.opco) → référentiel opco.
     let financeur = null;
@@ -315,7 +356,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury };
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult };
 }
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
