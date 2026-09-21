@@ -323,7 +323,7 @@ function Stagiaires() {
         <EditStagiaireModal
           id={editId}
           onClose={() => setEditId(undefined)}
-          onSaved={(msg) => { setEditId(undefined); setStatus({ type: "success", message: msg }); load(query); }}
+          onSaved={(msg, type = "success") => { setEditId(undefined); setStatus({ type, message: msg }); load(query); }}
           onError={(m) => setStatus({ type: "error", message: m })}
         />
       )}

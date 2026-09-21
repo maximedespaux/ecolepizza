@@ -12,6 +12,9 @@ const { logAudit } = require('../lib/audit.js');
 const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
 const { resolveurBadges, resoudreCsv } = require('../lib/badges.js');
 const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
+/* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
+   pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
+const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -90,7 +93,34 @@ const LEARNER_FIELDS = [
     // par `authorizeRoles(...ADMIN_ROLES)` : un formateur ne peut pas s'accorder un Champion.
     // Il entre aussi de ce fait au journal d'audit, comme tout autre champ de la fiche.
     'cadres_exclusifs',
+    /* `note_libre` (migration 168) : la note en texte simple, sous « Votre projet », 128 mots au
+       plus (cf. refusNote). « note_libre » et pas « note » : ici, une note est aussi une note
+       d'ÉVALUATION — le nom dit un texte, pas un chiffre. Écrite par l'école seule : l'espace du
+       stagiaire a sa propre liste (INFO_FIELDS), et aucune de ses réponses ne rend la fiche entière. */
+    'note_libre',
 ];
+
+/* LA NOTE LIBRE : 128 MOTS AU PLUS, demandé le 2026-09-21. Vérifiée ICI et pas seulement à
+   l'écran : la route n'est pas le seul chemin d'entrée (reprise de données, appel direct). Le
+   garde-fou en caractères tient pour un texte collé sans espace, qui ne compterait qu'un « mot ». */
+const NOTE_MOTS_MAX = 128;
+function refusNote(body) {
+    if (body.note_libre == null || body.note_libre === '') return null;
+    const texte = String(body.note_libre);
+    const mots = compterMots(texte);
+    if (mots > NOTE_MOTS_MAX) return `La note dépasse ${NOTE_MOTS_MAX} mots (${mots}) : raccourcissez-la.`;
+    if (texte.length > CARACTERES_MAX) return `La note dépasse ${CARACTERES_MAX} caractères.`;
+    return null;
+}
+
+/* CE QUI A ÉTÉ ENVOYÉ SANS POUVOIR ÊTRE ÉCRIT — colonne absente, migration pas encore jouée : dit
+   à l'écran (`ignores`) plutôt que perdu en silence. Une note tapée, puis « Stagiaire mis à jour »,
+   et plus rien à la réouverture : le succès aurait menti. */
+function champsIgnores(body, champs) {
+    const ignores = LEARNER_FIELDS.filter((f) => !champs.includes(f)
+        && body[f] !== undefined && body[f] !== null && body[f] !== '' && body[f] !== false);
+    return ignores.length ? { ignores } : {};
+}
 
 // Colonnes de l'entreprise (section « Informations professionnelle »).
 const COMPANY_FIELDS = [
@@ -118,6 +148,7 @@ function normaliserSaisie(b) {
     const out = capitaliser(b, CAPITALES_STAGIAIRE);
     if (out.first_name != null) out.first_name = String(out.first_name).trim();
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
+    if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
     /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
        updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus
        aucun écran ne l'envoie, mais la route l'accepte toujours : la ville et le référent y
@@ -275,6 +306,8 @@ const createLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
+    const refus = refusNote(body);
+    if (refus) return res.status(422).json({ error: refus });
 
     try {
         const conn = db.promise();
@@ -314,7 +347,8 @@ const createLearner = async (req, res) => {
            liste des stagiaires le crée à la main. Les comptes déjà créés ne sont pas touchés. */
 
         // Stagiaire. Le n° de sécurité sociale est chiffré au repos (AES-256-GCM).
-        const cols = (await champsEcrivables(conn)).filter((f) => body[f] !== undefined);
+        const champs = await champsEcrivables(conn);
+        const cols = champs.filter((f) => body[f] !== undefined);
         const placeholders = cols.map(() => '?').join(', ');
         const values = cols.map((f) =>
             f === 'social_security' ? encrypt(clean(body[f])) : clean(body[f])
@@ -331,7 +365,7 @@ const createLearner = async (req, res) => {
         );
         logAudit(req, 'learner.create', 'Learner', learnerId);
 
-        res.status(201).json({ message: 'Stagiaire créé' });
+        res.status(201).json({ message: 'Stagiaire créé', ...champsIgnores(body, champs) });
     } catch (err) {
         console.error('Erreur création stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -348,6 +382,8 @@ const updateLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
+    const refus = refusNote(body);
+    if (refus) return res.status(422).json({ error: refus });
 
     try {
         const conn = db.promise();
@@ -399,7 +435,8 @@ const updateLearner = async (req, res) => {
         const REQUIRED = new Set(['first_name', 'last_name', 'financing']);
         const updates = [];
         const values = [];
-        for (const field of await champsEcrivables(conn)) {
+        const champs = await champsEcrivables(conn);
+        for (const field of champs) {
             if (body[field] === undefined) continue;
             if (body[field] === '' && REQUIRED.has(field)) continue; // ne pas vider un champ requis
             updates.push(`${field} = ?`);
@@ -509,7 +546,7 @@ const updateLearner = async (req, res) => {
         }
 
         logAudit(req, 'learner.update', 'Learner', req.params.id);
-        res.status(200).json({ success: true, message: 'Stagiaire mis à jour' });
+        res.status(200).json({ success: true, message: 'Stagiaire mis à jour', ...champsIgnores(body, champs) });
     } catch (err) {
         console.error('Erreur mise à jour stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });

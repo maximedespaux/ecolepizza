@@ -121,6 +121,7 @@ const FR_LABELS = {
     project_creation: 'Projet : création', project_takeover: 'Projet : reprise', project_oven: 'Projet : four',
     project_truck: 'Projet : camion / remorque', project_job: 'Projet : recherche de poste',
     project_improvement: 'Projet : perfectionnement',
+    note_libre: 'Note libre', // migration 168 : le texte sous « Votre projet »
     // Inscription
     price: 'Prix', acompte: 'Acompte', crm_stage: 'Étape CRM', conformite_score: 'Score de conformité',
     // Formation
