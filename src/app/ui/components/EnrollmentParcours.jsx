@@ -87,7 +87,10 @@ function lineFor(s) {
 }
 function actionFor(s) {
   // Pièce : aucun « Préparer » — le stagiaire dépose, l'école valide dans le panneau Pièces.
-  if (s.piece) return null;
+  /* Remise : aucun non plus. Son étape ne désigne pas un MODÈLE (sa clé n'en est pas un) : le
+     formulaire ouvert pour elle ne pouvait que répondre « Sélectionnez un modèle de document ».
+     Ce que l'école remet se marque dans le panneau des remises, sous le parcours. */
+  if (s.piece || s.remise) return null;
   if (isGroup(s)) {
     // Fiche entreprise : seuls les documents de groupe se génèrent ici ; les documents
     // stagiaire sont visibles mais générés depuis chaque fiche stagiaire.
@@ -115,6 +118,8 @@ function repartition(steps) {
   return n;
 }
 const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
+// La case « Autre document » de la grille : un document hors parcours, dont on choisit le modèle.
+const AUTRE = "__autre__";
 
 /**
  * Parcours documentaire d'un dossier, de haut en bas : l'avancement, puis l'ÉTAPE SÉLECTIONNÉE
@@ -126,18 +131,31 @@ const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
  * l'œil arrive en ouvrant la fiche —, et les étapes prennent toute la largeur.
  * `onOpenDoc(docId)` ouvre l'aperçu/signature ; `onPrepare`, `onSendQuiz`, `onImport` et
  * `onSignLink` sont les gestes proposés sur l'étape sélectionnée.
+ *
+ * TROIS AJOUTS FACULTATIFS, pour qu'une page n'ait plus rien à montrer PLUS BAS (fiche stagiaire,
+ * 2026-09-21 : « intégrer les boutons voir, télécharger, supprimer aux cartes, et Préparer un
+ * document dans l'étape, pour ne plus descendre ») :
+ *   · `renderGestes(étape)` : les boutons du document de l'étape, posés sur SA carte ;
+ *   · `renderPreparation(étape | null, fermer)` : le formulaire de préparation, ouvert DANS
+ *     l'étape par « Préparer ce document » — `null` pour la case « Autre document », hors
+ *     parcours, où le modèle se choisit ;
+ *   · `onCharge(données | null)` : le parcours reçu (null s'il n'a pas pu l'être), pour que la
+ *     page sache quels documents les étapes montrent déjà.
+ * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
+  // Clé de l'étape dont le formulaire de préparation est ouvert (ou AUTRE), sinon null.
+  const [preparation, setPreparation] = useState(null);
   const detailRef = useRef(null);
   // Clé de réinitialisation : dossier stagiaire (enrollmentId) ou clé fournie (ex. session entreprise).
   const key = resetKey ?? enrollmentId;
 
   // Au changement de contexte seulement : on remet l'affichage en état de chargement.
   // (Un simple rafraîchissement ne vide PAS l'affichage : évite le clignotement.)
-  useEffect(() => { setData(null); setSel(null); setError(null); }, [key]);
+  useEffect(() => { setData(null); setSel(null); setError(null); setPreparation(null); }, [key]);
 
   useEffect(() => {
     let active = true;
@@ -149,23 +167,49 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         // Ne réinitialise la sélection que si aucune étape n'est encore choisie
         // (sinon un rafraîchissement automatique ferait « sauter » la sélection).
         setSel((cur) => cur || r.data.currentKey || r.data.steps[0]?.key || null);
+        onCharge?.(r.data);
       })
-      .catch((e) => { if (active) setError(e.message); });
+      .catch((e) => { if (active) { setError(e.message); onCharge?.(null); } });
     return () => { active = false; };
   }, [key, refresh]);
 
+  /* SANS ÉTAPE — formation sans parcours, ou parcours illisible —, il n'y a aucune étape où ouvrir
+     le formulaire. Il est alors proposé tel quel, modèle au choix : préparer un document ne dépend
+     pas du parcours, et l'ancien formulaire, sous le parcours, restait disponible dans ces cas-là.
+     Pré-rempli (le dossier de l'onglet) une fois par dossier affiché, pas à chaque rafraîchissement :
+     un titre en cours de saisie ne s'efface pas toutes les vingt secondes. */
+  const sansEtapes = !!error || (!!data && data.steps.length === 0);
+  useEffect(() => { if (sansEtapes && renderPreparation) onPrepare?.(null, null); }, [sansEtapes, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const messageSansEtapes = error || "Cette formation n'a pas de parcours documentaire. Définissez-le dans Formations → Parcours documentaire.";
+  if (sansEtapes && renderPreparation) return (
+    <div className="card" style={{ padding: 18 }}>
+      <p className="hint" style={{ margin: 0, color: error ? "var(--amber, #b8860b)" : undefined }}>{messageSansEtapes}</p>
+      <h3 style={{ fontSize: 15, margin: "16px 0 0" }}>Préparer un document</h3>
+      {renderPreparation(null, null)}
+    </div>
+  );
   if (error) return <p className="hint" style={{ color: "var(--amber, #b8860b)" }}>{error}</p>;
   if (!data) return <p className="hint">Chargement du parcours…</p>;
-  if (!data.steps.length) return <p className="hint">Cette formation n'a pas de parcours documentaire. Définissez-le dans Formations → Parcours documentaire.</p>;
+  if (!data.steps.length) return <p className="hint">{messageSansEtapes}</p>;
 
+  const libre = sel === AUTRE && !!renderPreparation;
   const step = data.steps.find((s) => s.key === sel) || data.steps[Math.min(data.currentIndex, data.steps.length - 1)];
   const action = actionFor(step);
   const etatSel = ETATS[etatDe(step)] || ETATS.A_FAIRE;
+  const prepareIci = !libre && !!renderPreparation && preparation === step.key;
 
   function runAction() {
     if (!action) return;
     if (action.kind === "open" && step.docId) onOpenDoc?.(step.docId);
-    else if (action.kind === "prepare") onPrepare?.(step.key, step); // step transmis (mode groupe)
+    else if (action.kind === "prepare") {
+      /* LE FORMULAIRE S'OUVRE DANS L'ÉTAPE quand la page le fournit : il vivait sous le parcours,
+         et chaque « Préparer ce document » faisait descendre la page jusqu'à lui. `onPrepare`
+         reste appelé : c'est lui qui pré-remplit le modèle et le dossier (et, sans formulaire
+         fourni, qui ouvre celui de la page — fiche entreprise). */
+      if (renderPreparation) setPreparation(step.key);
+      onPrepare?.(step.key, step); // step transmis (mode groupe)
+    }
     else if (action.kind === "send-quiz" && step.key?.startsWith("quiz:")) onSendQuiz?.(step.key.slice(5));
   }
 
@@ -174,8 +218,16 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
      passer. On le ramène donc à l'écran — sans rien bouger s'il y est déjà (`nearest`). */
   function choisir(cle) {
     setSel(cle);
+    // Un formulaire ouvert appartient à SON étape : en choisir une autre le referme.
+    setPreparation(cle === AUTRE ? AUTRE : (p) => (p === cle ? p : null));
+    if (cle === AUTRE) onPrepare?.(null, null);
     const doux = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: "nearest", behavior: doux ? "smooth" : "auto" }));
+  }
+  // « Annuler », ou le document généré : on referme — et « Autre document » rend la main à l'étape du parcours.
+  function fermer() {
+    setPreparation(null);
+    if (sel === AUTRE) setSel(data.currentKey || data.steps[0]?.key || null);
   }
 
   const h = data.header || {};
@@ -212,6 +264,18 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
       {/* L'ÉTAPE SÉLECTIONNÉE, juste sous l'avancement et sur toute la largeur : ce qu'elle
           attend à gauche, les gestes à droite (dessous quand la place manque). */}
       <section ref={detailRef} className="parc-detail" aria-label="Étape sélectionnée">
+        {libre ? (
+          <>
+            <span className="parc-tuile grande a-faire"><Icon name="plus" size={20} /></span>
+            <div className="parc-detail-info">
+              <div className="parc-surtitre">Hors parcours</div>
+              <div className="parc-detail-titre"><h3>Autre document</h3></div>
+              <p className="parc-detail-sub">Un document qui n'est pas une étape de ce parcours : choisissez son modèle.</p>
+              {renderPreparation(null, fermer)}
+            </div>
+          </>
+        ) : (
+        <>
         <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
         <div className="parc-detail-info">
           <div className="parc-surtitre">
@@ -223,8 +287,11 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           </div>
           {step.sub && <p className="parc-detail-sub">{step.sub}</p>}
           <p className={`parc-ligne ${etatSel.classe}`}>{lineFor(step)}</p>
+          {/* Le formulaire de préparation, SOUS la ligne d'état : le modèle est celui de l'étape. */}
+          {prepareIci && renderPreparation(step, fermer)}
         </div>
-        <div className="parc-actions">
+        {/* Formulaire ouvert : ses propres boutons (Générer, Annuler) remplacent ceux de l'étape. */}
+        {!prepareIci && <div className="parc-actions">
           {action && (
             <button className="btn primary" onClick={runAction}>{action.label}</button>
           )}
@@ -249,7 +316,9 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           {onSignLink && step.docId && (
             <button className="btn" onClick={() => onSignLink(step.docId)} title="Copier un lien pour que le représentant signe">🔗 Lien de signature</button>
           )}
-        </div>
+        </div>}
+        </>
+        )}
       </section>
 
       {/* TOUTES LES ÉTAPES, en grille sur toute la largeur : autant de colonnes que la place en
@@ -259,6 +328,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           const on = s.key === sel;
           const e = ETATS[etatDe(s)] || ETATS.A_FAIRE;
           const showDivider = hasSections && s.section && (idx === 0 || arr[idx - 1].section !== s.section);
+          const gestes = renderGestes ? renderGestes(s) : null;
           return (
             <Fragment key={s.key}>
               {showDivider && (
@@ -266,19 +336,35 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
                   {s.section === "company" ? "🏢 À L'ARRIVÉE VIA L'ENTREPRISE" : "SUITE DU PARCOURS · STAGIAIRE"}
                 </div>
               )}
-              <button type="button" onClick={() => choisir(s.key)} aria-pressed={on}
-                className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}
-                title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
-                <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block" }}>{s.label}</b>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
-                </span>
-                <Badge tone={e.ton}>{e.libelle}</Badge>
-              </button>
+              {/* LA CARTE N'EST PLUS UN BOUTON, elle en CONTIENT un : ses gestes (aperçu, envoi,
+                  téléchargement, suppression) sont des boutons eux aussi, et un bouton dans un
+                  bouton n'est pas du HTML valide — le clic sur la corbeille choisirait l'étape. */}
+              <div className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}>
+                <button type="button" className="parc-etape-choix" onClick={() => choisir(s.key)} aria-pressed={on}
+                  title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
+                  <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ display: "block" }}>{s.label}</b>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
+                  </span>
+                  <Badge tone={e.ton}>{e.libelle}</Badge>
+                </button>
+                {gestes && <div className="parc-etape-gestes">{gestes}</div>}
+              </div>
             </Fragment>
           );
         })}
+        {renderPreparation && (
+          <div className={`parc-etape parc-autre${libre ? " sel" : ""}`}>
+            <button type="button" className="parc-etape-choix" onClick={() => choisir(AUTRE)} aria-pressed={libre}>
+              <span className="parc-tuile a-faire"><Icon name="plus" size={17} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b style={{ display: "block" }}>Autre document</b>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Hors parcours, modèle au choix</span>
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

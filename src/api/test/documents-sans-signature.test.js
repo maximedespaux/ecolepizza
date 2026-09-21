@@ -202,8 +202,14 @@ test('les deux pages rangent par la règle partagée, plus par le seul statut', 
     const fiche = lire('StagiaireDetail.jsx');
     assert.match(fiche, /import \{[^}]*\brepartirDocuments\b[^}]*\} from "\.\.\/lib\/documentsDossier\.js"/);
     assert.doesNotMatch(fiche, /const GROUPES_DOC/, 'une copie locale du rangement reviendrait au seul statut');
-    assert.match(fiche, /terminé\{termines > 1 \? "s" : ""\} sur/);
-    assert.doesNotMatch(fiche, /signé\{signes > 1/, 'la jauge ne compte plus des « signés »');
+    /* LA JAUGE « TERMINÉS SUR N » A QUITTÉ LA FICHE le 2026-09-21 : les documents des étapes ont
+       leurs gestes sur leur carte du parcours, et la liste ne garde que ceux qu'aucune étape ne
+       montre. Une jauge sur cette liste PARTIELLE compterait faux ; l'avancement se lit dans le
+       parcours, où un document sans signature compte comme fait dès l'envoi (lib/parcours.js,
+       etatEtape) — la règle même que cette jauge avait dû apprendre. */
+    assert.doesNotMatch(fiche, /docs-jauge/, 'plus de seconde jauge, sur une liste partielle');
+    assert.match(fiche, /repartirDocuments\(autres\)/, 'le rangement par qui doit agir vaut pour ce qui reste listé');
+    assert.doesNotMatch(fiche, /signé\{signes > 1/, 'aucun compte de « signés »');
 
     const parcours = lire('StudentFormationDetail.jsx');
     assert.match(parcours, /etat: etatPourLeStagiaire\(d\)/);

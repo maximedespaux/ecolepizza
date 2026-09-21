@@ -21,20 +21,26 @@ const sansCommentaires = (src) => src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').repla
 
 test('hors session, le formulaire n\'est pas rendu : l\'encart d\'inscription le remplace', () => {
     const src = sansCommentaires(FICHE);
-    const garde = src.indexOf('{enrollments.length === 0 ? (');
+    const garde = src.indexOf('{enrollments.length === 0 && (');
     const encart = src.indexOf('className="sd-hors-session"');
-    const sinon = src.indexOf(') : (', encart);
-    const formulaire = src.indexOf('<form onSubmit={handlePrepare}');
-    assert.ok(garde > -1, 'la garde existe');
-    assert.ok(garde < encart && encart < sinon, 'l\'encart est la branche « aucune inscription »');
-    assert.ok(sinon < formulaire, 'le formulaire n\'est rendu que dans l\'autre branche');
+    assert.ok(garde > -1 && garde < encart, 'l\'encart est la branche « aucune inscription »');
+    /* LE FORMULAIRE VIT DANS L'ÉTAPE DU PARCOURS depuis le 2026-09-21 (`formulairePreparation`,
+       passé à EnrollmentParcours, qui l'ouvre sur « Préparer ce document »). La règle ne change
+       pas de sens : le parcours n'est rendu QU'AVEC une inscription, donc le formulaire non plus. */
+    const avecInscription = src.indexOf('{enrollments.length > 0 && (');
+    const parcours = src.indexOf('<EnrollmentParcours', avecInscription);
+    assert.ok(avecInscription > -1 && avecInscription < parcours && parcours < garde,
+        'le parcours, et avec lui le formulaire, est dans la branche « inscrit »');
+    assert.match(src.slice(parcours, src.indexOf('/>', parcours)), /renderPreparation=\{formulairePreparation\}/);
     // Et il n'existe qu'UN formulaire de préparation : pas de copie restée hors de la garde.
-    assert.strictEqual(src.split('<form onSubmit={handlePrepare}').length - 1, 1);
+    assert.strictEqual(src.split('<form onSubmit={(e) => handlePrepare(e, fermer)}').length - 1, 1);
+    assert.strictEqual(src.split('=> handlePrepare(').length - 1, 1, 'aucun autre formulaire ne prépare de document');
 });
 
 test('l\'encart propose le geste qui manque : inscrire depuis une session', () => {
     const src = sansCommentaires(FICHE);
-    const encart = src.slice(src.indexOf('className="sd-hors-session"'), src.indexOf('<form onSubmit={handlePrepare}'));
+    const debut = src.indexOf('className="sd-hors-session"');
+    const encart = src.slice(debut, src.indexOf('</div>', src.indexOf('</button>', debut)));
     assert.match(encart, /inscrit à aucune session/);
     assert.match(encart, /navigate\("\/sessions"\)/);
 });

@@ -5401,7 +5401,15 @@ label .requis {
 .parc-compte i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .parc-compte .valide{background:var(--green)} .parc-compte .recu{background:var(--ember2)} .parc-compte .envoye{background:var(--blue)}
 .parc-compte .a-faire{background:transparent;border:1.5px dashed var(--muted)} .parc-compte .sans-objet{background:var(--surface3);border:1px solid var(--border)}
-.parc-etape{position:relative;display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border-radius:12px;cursor:pointer;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
+/* LA CARTE CONTIENT son bouton de sélection ET les gestes de son document (2026-09-21) : un bouton
+   ne peut pas en contenir d'autres. Le bouton occupe toute la carte (`flex:1`), les gestes se
+   rangent en bas — à hauteur égale d'une carte à l'autre sur une même rangée de la grille. */
+.parc-etape{position:relative;display:flex;flex-direction:column;border-radius:12px;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
+.parc-etape-choix{display:flex;flex:1;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.parc-etape-gestes{display:flex;align-items:center;gap:4px;padding:0 10px 8px 12px}
+/* La trace du document (envoyé, signé, importé le…) : une ligne, coupée plutôt que d'agrandir la carte. */
+.parc-trace{flex:1;min-width:0;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.parc-autre{border-style:dashed}
 .parc-etape.sel{background:var(--surface2);border-color:var(--ember1)}
 /* LA PROCHAINE ÉTAPE, celle qui attend un geste : un filet à gauche, sans éteindre les autres. */
 .parc-etape.prochaine{box-shadow:inset 3px 0 0 0 var(--ember1)}
@@ -5434,3 +5442,8 @@ label .requis {
 .parc-section{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:8px 2px 0;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--dim)}
 .parc-section:first-child{margin-top:0}
 .parc-section::after{content:"";flex:1;height:1px;background:var(--border-soft)}
+/* Le formulaire « Préparer un document », ouvert DANS l'étape (2026-09-21) — il vivait sous le
+   parcours, et chaque « Préparer ce document » faisait descendre la page jusqu'à lui. */
+.parc-preparation{margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft)}
+.parc-preparation .field{margin-bottom:10px}
+.parc-preparation-gestes{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
