@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -10,6 +10,7 @@ import DataTable from "../components/DataTable.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
+import { dossierAffiche } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
@@ -51,6 +52,8 @@ const T = (icon, text) => (
 function StagiaireDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Le dossier désigné par le lien qui a ouvert la fiche (`?dossier=`, depuis le tableau de bord).
+  const [parametres] = useSearchParams();
   const [l, setL] = useState(null);
   const [status, setStatus] = useState(null);
   const [docs, setDocs] = useState([]);
@@ -256,8 +259,9 @@ function StagiaireDetail() {
   const selTpl = templates.find((t) => t.slug === prep.slug);
   const canPrepare = enrollments.length > 0 && prep.enrollment_ids.length > 0 && !!selTpl && blockedRules.length === 0;
 
-  // Dossier dont on affiche le parcours (onglet sélectionné).
-  const curEnrId = parcoursEnr || enrollments[0]?.id || null;
+  /* Dossier dont on affiche le parcours : l'onglet choisi, sinon celui que désigne le lien, sinon
+     le premier — et jamais un dossier qui n'est pas à ce stagiaire (lib/lienDossier.js). */
+  const curEnrId = dossierAffiche(enrollments, parcoursEnr || parametres.get("dossier"));
   /* IMPORTER UN DOCUMENT REÇU (courriel, scan) SUR UNE ÉTAPE.
      Le sélecteur de fichier est un `<input>` caché déclenché par le bouton de l'étape : une
      fenêtre de plus pour choisir un fichier n'apporterait rien, le navigateur en ouvre déjà une.

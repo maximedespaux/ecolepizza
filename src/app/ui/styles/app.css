@@ -5484,6 +5484,12 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* Tableau de bord, « Derniers dossiers » : une ligne par dossier, et le lien vers la fiche qui la
+   remplit. Le lien déborde de sa ligne (marges négatives, compensées par son padding) : le survol
+   (.rowlink) respire autour du texte sans le déplacer, et le filet de séparation reste droit — posé
+   sur le lien lui-même, il aurait pris les coins arrondis du survol. */
+.dossier-ligne{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border-soft)}
+.dossier-lien{display:flex;align-items:center;gap:12px;flex:1;min-width:0;margin:-5px -10px;padding:5px 10px}
 /* Tableau de bord : un dossier d'une session terminée, gardé en vue parce qu'il n'est pas complet. */
 .dossier-echu{display:block;font-size:12px;font-weight:600;color:var(--ember1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Suivi Qualiopi : le compteur des complets, qui les réaffiche d'un clic. */

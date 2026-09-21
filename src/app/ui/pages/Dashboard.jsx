@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation, getInvoices, getPartenaires } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
@@ -13,6 +13,12 @@ import { euro, colorOf, dateHeure, dateFr } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import ARecontacter from "../components/ARecontacter.jsx";
 import { dossiersASuivre } from "../lib/dossiersASuivre.js";
+import { lienDossier } from "../lib/lienDossier.js";
+import { UserContext } from "../context/UserContext.jsx";
+import { NAV, canOpen } from "../lib/nav.js";
+
+// L'entrée « Stagiaires » du menu : une ligne de dossier n'est un lien que si le menu l'offre.
+const ENTREE_STAGIAIRES = NAV.flatMap((g) => g.items).find((it) => it.to === "/stagiaires");
 
 /* `T00:00:00` FORCE LA LECTURE EN HEURE LOCALE. Sans lui, `new Date("2026-09-14")` se lit en
    UTC et l'affichage reculerait d'un jour sur tout fuseau négatif. Même idiome que les cinq
@@ -31,6 +37,12 @@ const QUICK = [
 // deux sources pour la même traduction. Supprimé au profit de la seule qui fait autorité.
 
 function Dashboard() {
+  const { user } = useContext(UserContext);
+  /* LA FICHE S'OUVRIRA-T-ELLE ? Même décision que le menu (`canOpen`), qui est celle de la garde de
+     route. La liste des dossiers, elle, s'ouvre au SECRÉTARIAT par son seul rôle : un secrétariat
+     dont le menu n'offre pas « Stagiaires » voit donc ces lignes, et un lien l'aurait renvoyé vers
+     l'accueil, sans un mot. Pour lui, elles restent de simples lignes. */
+  const ficheOuvrable = !!ENTREE_STAGIAIRES && canOpen(user, ENTREE_STAGIAIRES);
   /* Combien de fiches « à recontacter » (migration 169) — `null` tant que la liste n'a pas répondu.
      C'est ce qui empêche la ligne « Rien ne demande d'action » de mentir quand des gens attendent
      un appel : elle ne s'affiche qu'une fois ce compte CONNU et nul. */
@@ -306,30 +318,43 @@ function Dashboard() {
             ))
           ) : recent.length === 0 ? (
             <p className="lead" style={{ margin: 0 }}>Aucun dossier pour le moment.</p>
-          ) : recent.map((e) => (
-            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--border-soft)" }}>
-              {/* DEUX LIGNES, comme la liste des inscrits d'une session et la revue des pièces.
-                  Sur une seule, la colonne ne laisse que ~296 px : le titre de formation le plus
-                  long de l'école y était coupé en plein mot, et le nom — la seule chose qu'on
-                  cherche dans « derniers dossiers » — se retrouvait à l'étroit. */}
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {e.first_name} {e.last_name}
-                </b>
-                <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {e.program_title || "Formation"}
+          ) : recent.map((e) => {
+            const contenu = (
+              <>
+                {/* DEUX LIGNES, comme la liste des inscrits d'une session et la revue des pièces.
+                    Sur une seule, la colonne ne laisse que ~296 px : le titre de formation le plus
+                    long de l'école y était coupé en plein mot, et le nom — la seule chose qu'on
+                    cherche dans « derniers dossiers » — se retrouvait à l'étroit. */}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {e.first_name} {e.last_name}
+                  </b>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {e.program_title || "Formation"}
+                  </span>
+                  {/* Pourquoi un dossier plus ancien est là : sa session est finie, lui pas encore. Sa
+                      propre ligne : à la suite de l'intitulé, l'ellipse la coupait sur téléphone, date
+                      comprise — justement ce qu'il fallait lire. */}
+                  {e.echu && <span className="dossier-echu">Session terminée le {dateFr(e.end_date || e.start_date)}</span>}
                 </span>
-                {/* Pourquoi un dossier plus ancien est là : sa session est finie, lui pas encore. Sa
-                    propre ligne : à la suite de l'intitulé, l'ellipse la coupait sur téléphone, date
-                    comprise — justement ce qu'il fallait lire. */}
-                {e.echu && <span className="dossier-echu">Session terminée le {dateFr(e.end_date || e.start_date)}</span>}
-              </span>
-              {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
-                  à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
-                  étaient tous à « ROUGE » pour un avancement de 31, 0, 19, 44 et 19 %. */}
-              <ProgressPct percent={e.percent} score={e.score} />
-            </div>
-          ))}
+                {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
+                    à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
+                    étaient tous à « ROUGE » pour un avancement de 31, 0, 19, 44 et 19 %. */}
+                <ProgressPct percent={e.percent} score={e.score} />
+              </>
+            );
+            /* LA LIGNE MÈNE À LA FICHE DU STAGIAIRE, ouverte sur CE dossier (demandé le 2026-09-21) :
+               une fiche a un onglet par dossier, et s'ouvrait sur le premier (lib/lienDossier.js). */
+            return (
+              <div key={e.id} className="dossier-ligne">
+                {ficheOuvrable ? (
+                  <Link to={lienDossier(e)} className="rowlink dossier-lien" title="Ouvrir la fiche du stagiaire">
+                    {contenu}
+                  </Link>
+                ) : contenu}
+              </div>
+            );
+          })}
         </Card>
 
         <Card title="Activité récente" more={<Link to="/audit" className="card-more">Journal <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
