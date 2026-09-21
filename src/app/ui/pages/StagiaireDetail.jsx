@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, deposerPiece} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -17,7 +17,7 @@ import RemisesReview from "../components/RemisesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
-import { GROUPES_DOC, repartirDocuments, sansSignature } from "../lib/documentsDossier.js";
+import { GROUPES_DOC, repartirDocuments, sansSignature, documentsHorsParcours } from "../lib/documentsDossier.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
@@ -60,9 +60,6 @@ function StagiaireDetail() {
   const [blockedRules, setBlockedRules] = useState([]); // règles non respectées pour le modèle+dossiers choisis
   const [viewId, setViewId] = useState(null);
 
-  // Répartition des documents selon qui doit agir (cf. GROUPES_DOC).
-  const parGroupe = useMemo(() => repartirDocuments(docs), [docs]);
-  const termines = parGroupe.fait.length;
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
@@ -72,6 +69,10 @@ function StagiaireDetail() {
      l'erreur #310, ce qui vide la page. Un hook ne se met jamais derrière un `return`. */
   const fichierRef = useRef(null);
   const [etapeImport, setEtapeImport] = useState(null);
+  /* LES DOCUMENTS QUE MONTRENT LES ÉTAPES du parcours affiché (leurs identifiants) : la liste du bas
+     ne garde que les autres. `null` tant que le parcours de l'onglet n'est pas arrivé — sans quoi
+     la liste afficherait tout, puis se viderait d'un coup. */
+  const [docsEtapes, setDocsEtapes] = useState(null);
 
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
@@ -130,7 +131,8 @@ function StagiaireDetail() {
       : [...p.enrollment_ids, eid],
   }));
 
-  async function handlePrepare(e) {
+  // `fermer` : referme le formulaire ouvert dans l'étape du parcours, une fois le document généré.
+  async function handlePrepare(e, fermer) {
     e.preventDefault();
     setStatus(null);
     const tpl = templates.find((t) => t.slug === prep.slug);
@@ -153,6 +155,7 @@ function StagiaireDetail() {
       setStatus({ type: "success", message: "Document généré. Vérifiez-le puis envoyez-le." });
       loadDocs();
       setParcoursRefresh((n) => n + 1);
+      fermer?.();
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -183,11 +186,28 @@ function StagiaireDetail() {
     }
   }
 
-  async function handleDelete(docId) {
+  async function handleDelete(d) {
+    /* CONFIRMÉE — et plus fermement pour un document SIGNÉ. La corbeille vit désormais sur la
+       carte de chaque étape, à côté de l'aperçu : un clic de travers y est plus probable que dans
+       l'ancienne liste. Et le serveur supprime tout, signature et PDF scellé compris : aucun
+       retour possible. */
+    const signe = d.status === "SIGNE";
+    if (!window.confirm(`Supprimer « ${d.title} » ?${signe ? "\nCe document est SIGNÉ : sa signature et son PDF scellé seront supprimés avec lui." : ""}\nCette action est irréversible.`)) return;
     try {
-      await deleteDocument(docId);
+      await deleteDocument(d.id);
       loadDocs();
       setParcoursRefresh((n) => n + 1);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  /* TÉLÉCHARGER : le fichier REÇU pour un document importé (c'est lui qui fait foi), le PDF sinon.
+     Une erreur se dit : sans modèle, par exemple, le serveur n'a pas de PDF à rendre. */
+  async function telecharger(d) {
+    try {
+      if (d.importe_le) await downloadDocumentImporte(d.id, d.fichier_nom);
+      else await downloadDocumentPdf(d.id, `${d.title || "document"}.pdf`);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -234,8 +254,6 @@ function StagiaireDetail() {
 
   // Dossier dont on affiche le parcours (onglet sélectionné).
   const curEnrId = parcoursEnr || enrollments[0]?.id || null;
-  // Depuis une étape du parcours : pré-remplit le modèle + le dossier courant,
-  // puis descend au formulaire (le groupement de formations reste possible).
   /* IMPORTER UN DOCUMENT REÇU (courriel, scan) SUR UNE ÉTAPE.
      Le sélecteur de fichier est un `<input>` caché déclenché par le bouton de l'étape : une
      fenêtre de plus pour choisir un fichier n'apporterait rien, le navigateur en ouvre déjà une.
@@ -341,10 +359,141 @@ function StagiaireDetail() {
     }
   }
 
+  /* DEPUIS UNE ÉTAPE DU PARCOURS : pré-remplit le modèle de l'étape et le dossier de l'onglet (le
+     regroupement de plusieurs formations reste possible dans le formulaire). Le formulaire s'ouvre
+     DANS l'étape (EnrollmentParcours) : plus rien à faire défiler. `slug` nul : la case « Autre
+     document », hors parcours — le modèle s'y choisit, on part du premier. */
   function prepareStep(slug) {
-    setPrep((p) => ({ ...p, slug, title: "", enrollment_ids: curEnrId ? [curEnrId] : p.enrollment_ids }));
-    setTimeout(() => document.getElementById("sd-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+    setPrep((p) => ({ ...p, slug: slug || templates[0]?.slug || "", title: "", enrollment_ids: curEnrId ? [curEnrId] : p.enrollment_ids }));
   }
+
+  /* LES GESTES D'UNE ÉTAPE, sur sa carte du parcours (demandé le 2026-09-21) : ceux de l'ancienne
+     liste des documents — aperçu, envoi, téléchargement, suppression —, pour ne plus avoir à
+     chercher plus bas le document d'une étape. Une étape sans document (à préparer, pièce, QCM
+     pas encore envoyé) n'en a aucun ; un document destiné à l'entreprise n'est pas dans la liste
+     du stagiaire et reste en lecture seule, comme avant. */
+  function boutonsDocument(d) {
+    // Un QCM n'a pas de PDF à télécharger : ses réponses se lisent dans l'aperçu.
+    const telechargeable = !!d.importe_le || (!!d.template_slug && !d.quiz_id);
+    return (
+      <>
+        <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+        {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" aria-label={`Envoyer ${d.title} au stagiaire`} onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
+        {telechargeable && (
+          <button className="iconbtn" title={d.importe_le ? `Télécharger le document reçu${d.fichier_nom ? ` (${d.fichier_nom})` : ""}` : "Télécharger le PDF"}
+            aria-label={`Télécharger ${d.title}`} onClick={() => telecharger(d)}><Icon name="download" size={16} /></button>
+        )}
+        <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d)}><Icon name="trash" size={15} /></button>
+      </>
+    );
+  }
+
+  function gestesEtape(s) {
+    const d = s.docId ? docs.find((x) => x.id === s.docId) : null;
+    if (!d) return null;
+    /* LA TRACE, sur une ligne : importé, signé ou envoyé, avec sa date — le détail complet au
+       survol. « Importé » d'abord : c'est lui qui distingue un document reçu par courriel d'une
+       signature faite dans l'application (cf. l'import d'un document reçu). */
+    const trace = d.importe_le ? `importé le ${dateFr(d.importe_le)}`
+      : d.signed_at ? `signé le ${dateFr(d.signed_at)}`
+      : d.sent_at ? `envoyé le ${dateFr(d.sent_at)}`
+      : "préparé, pas encore envoyé";
+    const detail = [
+      d.sent_at && `Envoyé le ${dateHeure(d.sent_at)}`,
+      d.signed_at && `signé le ${dateHeure(d.signed_at)}`,
+      d.importe_le && `reçu et importé le ${dateHeure(d.importe_le)}${d.fichier_nom ? ` (${d.fichier_nom})` : ""}`,
+    ].filter(Boolean).join(" · ") || trace;
+    return (
+      <>
+        <span className="parc-trace" title={detail}>{trace}</span>
+        {boutonsDocument(d)}
+      </>
+    );
+  }
+
+  /* « PRÉPARER UN DOCUMENT », DANS L'ÉTAPE (demandé le 2026-09-21). Le formulaire vivait sous le
+     parcours, et « Préparer ce document » faisait descendre la page jusqu'à lui. Il s'ouvre
+     désormais dans l'étape sélectionnée, où le modèle est celui de l'étape ; la case « Autre
+     document » l'ouvre avec le choix du modèle (`etape` nul) : un document hors parcours reste
+     possible. Les formations à couvrir ne se demandent que s'il y en a plusieurs — avec une seule,
+     c'est celle de l'onglet, déjà cochée. */
+  function formulairePreparation(etape, fermer) {
+    return (
+      <form onSubmit={(e) => handlePrepare(e, fermer)} className="parc-preparation">
+        {!etape && (
+          <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
+            {templates.length === 0 && <option value="">Aucun modèle disponible</option>}
+            {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
+          </SelectField>
+        )}
+        <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
+        {enrollments.length > 1 && (
+          <div className="field">
+            <label>Formations couvertes (regrouper plusieurs = un seul document)</label>
+            <DataTable
+                className="enroll-table"
+                rows={enrollments}
+                rowKey={(e) => e.id}
+                /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
+                   `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
+                   visuellement. */
+                rowProps={(e) => ({
+                  className: prep.enrollment_ids.includes(e.id) ? "on" : "",
+                  style: { cursor: "pointer" },
+                  onClick: () => toggleEnroll(e.id),
+                })}
+                cols={[
+                  { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
+                    cell: (e) => (
+                      <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
+                        aria-label={`Inclure le dossier ${e.program_code}`}
+                        onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
+                    ) },
+                  { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
+                  { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
+                  { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
+                  { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
+                    cell: (e) => {
+                      /* Troisième format sur la MÊME page avant aujourd'hui : celui-ci rendait
+                         bien « 12/03/1987 », mais par `new Date(iso)`, qui se lit en UTC et rend
+                         la veille dans tout fuseau négatif. `dateFr` découpe la chaîne. */
+                      return e.start_date ? `${dateFr(e.start_date)}${e.end_date ? ` → ${dateFr(e.end_date)}` : ""}` : "-";
+                    } },
+                  { k: "type", t: "Type", td: { fontSize: 12.5 },
+                    cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
+                ]}
+              />
+          </div>
+        )}
+        {blockedRules.length > 0 && (
+          <div className="doc-rule-warning" role="alert">
+            <Icon name="ban" />
+            <div>
+              {blockedRules.map((r) => (
+                <div key={r.slug}>Ce document ne peut pas être généré à cause de la règle : <strong>{r.label}</strong></div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="parc-preparation-gestes">
+          <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
+          {/* Sans étape où le replier (formation sans parcours), le formulaire reste ouvert : rien à annuler. */}
+          {fermer && <button type="button" className="btn" onClick={fermer}>Annuler</button>}
+          {prep.enrollment_ids.length === 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
+        </div>
+      </form>
+    );
+  }
+
+  /* LA LISTE DU BAS ne garde que les documents qu'AUCUNE étape ne montre : ceux des étapes ont
+     leurs gestes sur leur carte. Sans inscription, il n'y a pas de parcours : tout y est (les
+     documents d'une ancienne inscription existent, on les montre). Le parcours de l'onglet pas
+     encore arrivé (`docsEtapes` nul) : rien, plutôt que tout puis presque rien. */
+  const codeOnglet = enrollments.find((e) => e.id === curEnrId)?.program_code || null;
+  const autres = enrollments.length === 0 ? docs
+    : docsEtapes ? documentsHorsParcours(docs, docsEtapes, codeOnglet) : [];
+  // Répartition selon qui doit agir (cf. GROUPES_DOC) — sur ces seuls documents.
+  const parGroupe = repartirDocuments(autres);
 
   return (
     <>
@@ -426,7 +575,7 @@ function StagiaireDetail() {
                 {enrollments.map((e) => {
                   const on = curEnrId === e.id;
                   return (
-                    <button key={e.id} type="button" className={"btn sm " + (on ? "primary" : "ghost")} onClick={() => setParcoursEnr(e.id)}>
+                    <button key={e.id} type="button" className={"btn sm " + (on ? "primary" : "ghost")} onClick={() => { setParcoursEnr(e.id); setDocsEtapes(null); }}>
                       {e.program_code}{e.week ? ` · S${e.week}` : ""}
                     </button>
                   );
@@ -440,6 +589,10 @@ function StagiaireDetail() {
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}
               onImport={demanderImport}
+              renderGestes={gestesEtape}
+              renderPreparation={formulairePreparation}
+              /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout. */
+              onCharge={(d) => setDocsEtapes(new Set((d?.steps || []).map((x) => x.docId).filter(Boolean)))}
             />
             <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
@@ -449,7 +602,6 @@ function StagiaireDetail() {
                 ressemblent volontairement — c'est le même geste, dans les deux directions — et
                 chacune disparaît si son parcours n'en prévoit aucune. */}
             <RemisesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
-            <div className="divider" style={{ margin: "18px 0" }} />
           </>
         )}
 
@@ -459,7 +611,7 @@ function StagiaireDetail() {
             d'inscription (le serveur le refuse sans), et un dossier n'existe que dans une
             session : sans session, il n'y a ni parcours ni document, seulement une inscription
             à faire. C'est donc elle qu'on propose. */}
-        {enrollments.length === 0 ? (
+        {enrollments.length === 0 && (
           <div className="sd-hors-session">
             <p style={{ margin: 0 }}>
               <b>Ce stagiaire n'est inscrit à aucune session.</b> Ses documents se préparent une fois
@@ -469,90 +621,20 @@ function StagiaireDetail() {
               <Icon name="calendar" size={14} /> Inscrire depuis une session
             </button>
           </div>
-        ) : (
-        <>
-          <div id="sd-prepare" />
-          <h3 style={{ fontSize: 15, margin: "0 0 10px" }}>Préparer un document</h3>
-          <form onSubmit={handlePrepare} style={{ marginBottom: 16 }}>
-            <div className="row2">
-              <SelectField label="Modèle de document" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
-                {templates.length === 0 && <option value="">Aucun modèle disponible</option>}
-                {templates.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
-              </SelectField>
-              <Field label="Titre (facultatif)" value={prep.title} onChange={(e) => setPrep((p) => ({ ...p, title: e.target.value }))} placeholder="Laisser vide pour le titre par défaut" />
-            </div>
-            <div className="field">
-              <label>Formations couvertes (regrouper plusieurs = un seul document)</label>
-              <DataTable
-                  className="enroll-table"
-                  rows={enrollments}
-                  rowKey={(e) => e.id}
-                  /* La ligne entière coche le dossier — la case seule serait une cible de 17 px.
-                     `aria-pressed` dit l'état à la navigation vocale, que la case porte déjà
-                     visuellement. */
-                  rowProps={(e) => ({
-                    className: prep.enrollment_ids.includes(e.id) ? "on" : "",
-                    style: { cursor: "pointer" },
-                    onClick: () => toggleEnroll(e.id),
-                  })}
-                  cols={[
-                    { k: "coche", t: "", th: { width: 34 }, td: { textAlign: "center" },
-                      cell: (e) => (
-                        <input type="checkbox" checked={prep.enrollment_ids.includes(e.id)}
-                          aria-label={`Inclure le dossier ${e.program_code}`}
-                          onChange={() => toggleEnroll(e.id)} onClick={(ev) => ev.stopPropagation()} />
-                      ) },
-                    { k: "code", t: "Code", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.program_code}</span> },
-                    { k: "titre", t: "Formation", principal: true, cell: (e) => e.program_title },
-                    { k: "semaine", t: "Semaine", cell: (e) => <span className="chiffres">{e.week ? `S${e.week}${e.year ? ` · ${e.year}` : ""}` : "-"}</span> },
-                    { k: "dates", t: "Dates", td: { fontSize: 12.5, whiteSpace: "nowrap" },
-                      cell: (e) => {
-                        /* Troisième format sur la MÊME page avant aujourd'hui : celui-ci rendait
-                           bien « 12/03/1987 », mais par `new Date(iso)`, qui se lit en UTC et rend
-                           la veille dans tout fuseau négatif. `dateFr` découpe la chaîne. */
-                        return e.start_date ? `${dateFr(e.start_date)}${e.end_date ? ` → ${dateFr(e.end_date)}` : ""}` : "-";
-                      } },
-                    { k: "type", t: "Type", td: { fontSize: 12.5 },
-                      cell: (e) => (e.financing === "PROFESSIONNEL" ? "Entreprise" : "Particulier") },
-                  ]}
-                />
-            </div>
-            {blockedRules.length > 0 && (
-              <div className="doc-rule-warning" role="alert">
-                <Icon name="ban" />
-                <div>
-                  {blockedRules.map((r) => (
-                    <div key={r.slug}>Ce document ne peut pas être généré à cause de la règle : <strong>{r.label}</strong></div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button type="submit" className="btn primary" disabled={!canPrepare}>Générer le document</button>
-              {prep.enrollment_ids.length === 0 && <span className="hint">Sélectionnez au moins une formation.</span>}
-            </div>
-          </form>
-        </>
         )}
 
-        {/* Hors session et sans document, l'encart ci-dessus a déjà tout dit : « Aucun document
-            préparé » en dessous répéterait la même absence. Les documents d'une ANCIENNE
-            inscription, eux, restent affichés — ils existent. */}
-        {docs.length === 0 ? (
-          enrollments.length > 0 && <p className="hint" style={{ margin: 0 }}>Aucun document préparé.</p>
-        ) : (
+        {/* LES AUTRES DOCUMENTS : ceux qu'aucune étape du parcours ne montre (préparés hors parcours,
+            doublon d'une étape, formation sans parcours). Ceux des étapes ont leurs gestes sur leur
+            carte, juste au-dessus : les relister ici doublait la hauteur de la page (2026-09-21).
+            Plus de jauge « terminés sur N » : l'avancement se lit dans le parcours, où un document
+            sans signature compte comme fait dès l'envoi — la règle que la jauge avait dû apprendre.
+            Hors session et sans document, l'encart ci-dessus a déjà tout dit ; les documents d'une
+            ANCIENNE inscription, eux, s'affichent — ils existent. */}
+        {autres.length > 0 && (
           <>
-            {/* L'AVANCEMENT SE VOIT AVANT DE SE LIRE. Une jauge, puis les documents rangés selon
-                qui doit agir — « à envoyer » en tête, parce que c'est le seul groupe qui demande
-                quelque chose. */}
-            <div className="docs-jauge">
-              <div className="docs-barre" role="img"
-                aria-label={`${termines} document(s) terminé(s) sur ${docs.length}`}>
-                <span style={{ width: `${docs.length ? Math.round((termines / docs.length) * 100) : 0}%` }} />
-              </div>
-              <span><b className="chiffres">{termines}</b> terminé{termines > 1 ? "s" : ""} sur <b className="chiffres">{docs.length}</b></span>
-            </div>
-
+            {enrollments.length > 0 && <div className="divider" style={{ margin: "18px 0" }} />}
+            <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>{enrollments.length > 0 ? "Autres documents" : "Documents"}</h3>
+            {enrollments.length > 0 && <p className="hint" style={{ margin: "0 0 10px" }}>Ceux qu'aucune étape du parcours ne montre.</p>}
             {GROUPES_DOC.map((g) => {
               const items = parGroupe[g.cle];
               // Un groupe vide ne s'affiche pas : « À envoyer — 0 » trois fois de suite
@@ -568,8 +650,10 @@ function StagiaireDetail() {
                   {items.map((d) => {
                     const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
                     return (
-                      <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                        <span style={{ flex: 1, minWidth: 0 }}>
+                      /* `wrap` : sur un téléphone, le statut et les quatre boutons passent SOUS le titre,
+                         au lieu de le réduire à une colonne d'un mot par ligne. */
+                      <div key={d.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 11px", padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                        <span style={{ flex: "1 1 180px", minWidth: 0 }}>
                           <b>{d.title}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                             {d.formations || "-"}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : ""}
@@ -587,15 +671,11 @@ function StagiaireDetail() {
                         )}
                           </span>
                         </span>
-                        <Badge tone={tone}>{label}</Badge>
-                        <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
-                        {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer au stagiaire" aria-label={`Envoyer ${d.title} au stagiaire`} onClick={() => handleSend(d.id)}><Icon name="send" size={16} /></button>}
-                        {d.importe_le && (
-                      <button className="iconbtn" title={`Ouvrir le document reçu${d.fichier_nom ? ` (${d.fichier_nom})` : ""}`}
-                        aria-label={`Ouvrir le document reçu pour ${d.title}`}
-                        onClick={() => downloadDocumentImporte(d.id, d.fichier_nom)}><Icon name="file-text" size={16} /></button>
-                    )}
-                    <button className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${d.title}`} onClick={() => handleDelete(d.id)}><Icon name="trash" size={15} /></button>
+                        {/* Le statut et les boutons, d'un seul bloc : ils passent ensemble sous le titre. */}
+                        <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                          <Badge tone={tone}>{label}</Badge>
+                          {boutonsDocument(d)}
+                        </span>
                       </div>
                     );
                   })}

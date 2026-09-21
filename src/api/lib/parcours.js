@@ -38,6 +38,41 @@ function stepDone(step, doc) {
     return SENT.includes(doc.status);
 }
 
+/* ─── L'ÉTAT RÉEL D'UNE ÉTAPE, QUEL QUE SOIT SON RANG ───────────────────────────────────────
+   Demandé le 2026-09-21 : distinguer « pas fait », « envoyé », « reçu » et « validé », et ne plus
+   griser une étape parce qu'une étape AVANT elle n'est pas finie. Le parcours ne connaissait que
+   son rang — faite / en cours / à venir — : une pièce déposée en troisième position, une
+   convention signée derrière une carte d'identité manquante, s'affichaient « à venir », grisées,
+   comme si rien n'avait eu lieu.
+
+     A_FAIRE     rien n'est parti (ou la pièce a été refusée : elle est à renvoyer)
+     ENVOYE      l'école a envoyé, elle attend le stagiaire — signature, réponse au QCM, accusé
+                 de réception d'une remise
+     RECU        le stagiaire a déposé une pièce, l'école doit la vérifier
+     VALIDE      l'étape est faite
+     SANS_OBJET  remise écartée pour ce dossier (migration 161) — comptée faite, sans rien valider
+
+   UN DOCUMENT SANS SIGNATURE est fait dès qu'il est envoyé : il n'attend personne, il est donc
+   VALIDE, pas « envoyé » — sinon il resterait bleu pour toujours. */
+const ETATS = ['A_FAIRE', 'ENVOYE', 'RECU', 'VALIDE', 'SANS_OBJET'];
+function etatEtape(r) {
+    if (r.s.piece_id) return { VALIDEE: 'VALIDE', DEPOSEE: 'RECU' }[r.pieceStatus] || 'A_FAIRE';
+    if (r.s.remise_id) {
+        if (r.sansObjet) return 'SANS_OBJET';
+        return { RECUE: 'VALIDE', REMISE: 'ENVOYE' }[r.remiseStatus] || 'A_FAIRE';
+    }
+    if (r.done) return 'VALIDE';
+    return r.doc && SENT.includes(r.doc.status) ? 'ENVOYE' : 'A_FAIRE';
+}
+/** L'état d'une étape de GROUPE (parcours entreprise), d'après ses compteurs. */
+function etatDeGroupe({ done, gen = 0, total = 0 }) {
+    if (done) return 'VALIDE';
+    if (!total) return 'SANS_OBJET';   // aucun stagiaire concerné
+    return gen > 0 ? 'ENVOYE' : 'A_FAIRE';
+}
+/** Pourcentage d'étapes FAITES — toutes, pas seulement celles qui précèdent la première manquante. */
+const pourcentFait = (faites, total) => (total ? Math.round((faites / total) * 100) : 0);
+
 /**
  * Calcule le parcours documentaire d'un dossier.
  * steps = étapes ordonnées (cf. enrollmentSteps) ; docs = generated_document du
@@ -75,8 +110,13 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} }
         return { s, doc, done: stepDone(s, doc) };
     });
 
+    /* LA PROCHAINE ÉTAPE reste la première non faite : c'est elle qui range la carte du pipeline
+       dans sa colonne. Mais l'AVANCEMENT compte toutes les étapes faites — une convention signée
+       derrière une pièce manquante était « jamais comptée », et un dossier fait à 11 étapes sur 12
+       pouvait afficher 0 %. */
     let currentIndex = rows.findIndex((r) => !r.done);
     if (currentIndex < 0) currentIndex = rows.length;
+    const faites = rows.filter((r) => r.done).length;
 
     const outSteps = rows.map((r, i) => ({
         key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
@@ -104,12 +144,16 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} }
         remiseId: r.remiseId || null,  // l'identifiant de LA remise du dossier (pas du type) : c'est lui qu'on exclut
         remiseStatus: r.remiseStatus || null, // ATTENDUE | REMISE | RECUE
         sansObjet: !!r.sansObjet,
+        /* `status` garde son sens de RANG (faite / en cours / à venir) pour ceux qui s'en servent
+           encore ; `etat` dit ce qui s'est réellement passé, et c'est lui que l'écran affiche. */
         status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
+        etat: etatEtape(r),
     }));
 
     return {
         steps: outSteps,
-        percent: rows.length ? Math.round((currentIndex / rows.length) * 100) : 0,
+        percent: pourcentFait(faites, rows.length),
+        done: faites,
         currentIndex,
         currentKey: currentIndex < outSteps.length ? outSteps[currentIndex].key : null,
     };
@@ -186,4 +230,4 @@ async function companyParcours(conn, orgId, { programId, companyId, sessionId },
     return { steps, docs };
 }
 
-module.exports = { computeDocParcours, companyParcours, companyStepSlugs };
+module.exports = { computeDocParcours, companyParcours, companyStepSlugs, etatDeGroupe, pourcentFait, ETATS };

@@ -101,12 +101,16 @@ test('sans les statuts de pièces, le parcours se fige — le défaut du suivi',
     /* Ce test EST le défaut : appelé sans `pieces`, le calcul bloque à l'étape de la pièce.
        Il documente pourquoi `getSuivi` doit les passer, et rougirait si quelqu'un rendait le
        paramètre optionnel « par commodité ». */
+    /* LES TYPES SONT NOMMÉS : sans eux, `matchDoc` compare `undefined === undefined`, vrai, et le
+       devis satisfaisait AUSSI la convention. Tant que l'avancement s'arrêtait à la première étape
+       manquante, l'erreur ne se voyait pas ; depuis qu'il compte toutes les étapes faites
+       (2026-09-21), elle faisait passer la convention pour signée. */
     const steps = [
-        { slug: 'devis', label: 'Devis' },
+        { slug: 'devis', label: 'Devis', doc_type: 'DEVIS' },
         { slug: 'piece:1', label: 'Pièce d\'identité', piece_id: 'pt-1' },
-        { slug: 'convention', label: 'Convention' },
+        { slug: 'convention', label: 'Convention', doc_type: 'CONVENTION' },
     ];
-    const docs = [{ id: 'd1', template_slug: 'devis', status: 'SIGNE' }];
+    const docs = [{ id: 'd1', template_slug: 'devis', type: 'DEVIS', status: 'SIGNE' }];
     const sans = computeDocParcours({ steps, docs });
     assert.strictEqual(sans.currentIndex, 1, 'sans les pièces, tout s\'arrête à la première');
     assert.ok(sans.percent < 50);

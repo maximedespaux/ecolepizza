@@ -54,6 +54,29 @@ export function repartirDocuments(docs) {
 }
 
 /**
+ * LES DOCUMENTS QU'AUCUNE ÉTAPE NE MONTRE (fiche stagiaire, 2026-09-21).
+ *
+ * Chaque étape du parcours porte désormais les gestes de son document — aperçu, envoi,
+ * téléchargement, suppression — : la liste du bas de la fiche ne garde que le reste. Un document
+ * préparé hors parcours, le doublon d'une étape générée deux fois, celui d'une formation sans
+ * parcours. Les relister tous doublait la hauteur de la page pour montrer deux fois la même chose.
+ *
+ * `idsEtapes` : les documents rattachés aux étapes du parcours affiché. `codeFormation` : la
+ * formation de l'onglet — le document d'une AUTRE formation se retrouve sous son propre onglet,
+ * pas ici. Un document sans formation connue s'affiche partout : mieux vaut le voir deux fois que
+ * ne le voir nulle part.
+ */
+export function documentsHorsParcours(docs, idsEtapes, codeFormation) {
+  const ids = idsEtapes instanceof Set ? idsEtapes : new Set(idsEtapes || []);
+  return (docs || []).filter((d) => {
+    if (ids.has(d.id)) return false;
+    if (!codeFormation || !d.formations) return true;
+    // `formations` : les codes réunis par le serveur (« NIV1H, RS7404 » pour un document regroupé).
+    return String(d.formations).split(",").map((c) => c.trim()).includes(codeFormation);
+  });
+}
+
+/**
  * État d'un document dans le PARCOURS VU PAR LE STAGIAIRE (valeurs de sa pastille) :
  *   · « done » : signé, ou reçu sans rien à signer ;
  *   · « todo » : à lui de jouer — un QCM à remplir, un document à signer ;

@@ -348,7 +348,7 @@ const getSessionBoard = async (req, res) => {
             return {
                 learner_id: e.learner_id, enrollment_id: e.enrollment_id,
                 name: `${e.last_name || ''} ${e.first_name || ''}`.trim(),
-                column, done: a.done, total: a.total, percent: a.percent,
+                column, done: a.done, etape: a.etape, total: a.total, percent: a.percent,
             };
         });
 
