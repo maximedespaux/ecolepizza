@@ -903,7 +903,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
                   <input type="checkbox" checked={hasSigner("STAGIAIRE")} onChange={() => toggleSigner("STAGIAIRE")} /> Stagiaire</label>
                 <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Le représentant de l'entreprise signe (dossiers financés par une entreprise).">
                   <input type="checkbox" checked={hasSigner("ENTREPRISE")} onChange={() => toggleSigner("ENTREPRISE")} /> 🏢 Entreprise</label>
-                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Un signataire externe signe via un lien partageable (tuteur, financeur…).">
+                <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 14 }} title="Signé en ligne par des personnes de la session — formateur, jury, intervenant — à qui on l'envoie depuis la session, ou par un lien partageable (tuteur, financeur…).">
                   <input type="checkbox" checked={hasSigner("EXTERNAL")} onChange={() => toggleSigner("EXTERNAL")} /> Externe</label>
               </div>
               <p className="hint" style={{ margin: "0 0 8px" }}>L'<b>organisme signe en dernier</b> (contreseing automatique après les autres parties). Un document est « signé » quand tous ses signataires ont signé.</p>

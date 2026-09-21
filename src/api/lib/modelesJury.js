@@ -46,7 +46,10 @@ const GRILLE_JURY = {
     signers: ['STAGIAIRE', 'ORG'],
     body: [
         P(`<span style="font-size: 20pt;"><strong>Grille d’évaluation</strong></span>`, CENTRE),
-        P(`<span style="font-size: 13pt;"><strong>${jeton('Formation', 'Intitulé')} ${jeton('Code', 'Code formation')}</strong></span>`, CENTRE),
+        /* L'INTITULÉ SEUL. Celui de l'école contient déjà son code (« … RS7404 ») : {Code} à sa
+           suite l'imprimait deux fois. Retiré le 2026-09-21 — la migration 166 le retire aussi du
+           modèle en base, que ce fichier ne réécrit jamais. */
+        P(`<span style="font-size: 13pt;"><strong>${jeton('Formation', 'Intitulé')}</strong></span>`, CENTRE),
         P('<br>'),
         P(`<strong>Nom / Prénom du Candidat :</strong>&nbsp; ${jeton('Personne', 'Nom complet')}`
           + `&nbsp;&nbsp;&nbsp;&nbsp;<strong>En date du</strong> ${jeton('JuryDate', 'Date de clôture de l’évaluation')}`, GAUCHE),

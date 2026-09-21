@@ -639,8 +639,11 @@ function juryCriteresTable(lignes) {
 function juryMembresTable(membres) {
     if (!membres || !membres.length) return '';
     const head = '<tr><th>Nom et prénom</th><th>Qualité</th><th>Signature</th></tr>';
+    /* SIGNÉE EN LIGNE, la signature du membre s'imprime dans SA case ; sinon la case reste un
+       espace blanc, à signer — en ligne depuis son espace, ou à la main sur le papier. */
     const body = membres.map((m) => `<tr><td>${escCell(`${m.last_name || ''} ${m.first_name || ''}`.trim())}</td>`
-        + `<td>${escCell(m.specialty || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`).join('');
+        + `<td>${escCell(m.specialty || 'Membre du jury')}</td>`
+        + `<td>${m.signature ? signatureBox(m.signature, `Signature de ${m.last_name || ''} ${m.first_name || ''}`.trim(), 160, 50) : '&nbsp;<br>&nbsp;'}</td></tr>`).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 

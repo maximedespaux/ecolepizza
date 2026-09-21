@@ -400,17 +400,26 @@ const mesDocuments = async (req, res) => {
         const conn = db.promise();
         let rows = [];
         try {
+            /* UN DOCUMENT PEUT M'ATTRIBUER PLUSIEURS CADRES (« Jury 1 » et « Président du jury »
+               quand on cumule) : une ligne par document, ses cadres nommés, et « signé » seulement
+               quand tous les miens le sont. */
             [rows] = await conn.query(
                 `SELECT d.id, d.title, d.status, d.template_slug,
                         DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS envoye_le,
-                        DATE_FORMAT(ds.signed_at, '%Y-%m-%d %H:%i') AS signe_le,
+                        IF(SUM(ds.signed_at IS NULL) > 0, NULL, DATE_FORMAT(MAX(ds.signed_at), '%Y-%m-%d %H:%i')) AS signe_le,
+                        GROUP_CONCAT(COALESCE(ds.label, ds.slot) ORDER BY ds.slot SEPARATOR ', ') AS cadres,
+                        /* LE CANDIDAT, pour une grille de jury : toutes portent le même titre, et un
+                           membre en signe une par candidat — sans son nom, quatre lignes identiques. */
+                        TRIM(CONCAT(COALESCE(l.last_name, ''), ' ', COALESCE(l.first_name, ''))) AS candidat,
                         s.year, s.week, p.code AS program_code, p.title AS program_title
                    FROM document_signature ds
                    JOIN generated_document d ON d.id = ds.document_id
+                   LEFT JOIN learner l ON l.id = d.learner_id
                    LEFT JOIN training_session s ON s.id = d.session_id
                    LEFT JOIN training_program p ON p.id = s.program_id
                   WHERE ds.user_id = ? AND ds.organization_id = ?
-                  ORDER BY ds.signed_at IS NOT NULL, d.created_at DESC`,
+                  GROUP BY d.id, d.title, d.status, d.template_slug, d.created_at, l.last_name, l.first_name, s.year, s.week, p.code, p.title
+                  ORDER BY signe_le IS NOT NULL, d.created_at DESC`,
                 [req.user.id, req.user.organization_id]);
         } catch (e) {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
@@ -436,13 +445,17 @@ const signerMonDocument = async (req, res) => {
         /* LA CASE DOIT M'ÊTRE ATTRIBUÉE. Le contrôle porte sur `user_id`, pas sur
            l'organisation : un intervenant ne signe que ce qu'on lui a confié, jamais le
            document d'un collègue. */
-        const [[ligne]] = await conn.query(
-            `SELECT ds.id, ds.slot, ds.signed_at, d.id AS doc_id, d.template_slug, d.learner_id, d.title
+        const [lignes] = await conn.query(
+            `SELECT ds.id, ds.slot, ds.signed_at, ds.label, d.id AS doc_id, d.template_slug, d.learner_id, d.title
                FROM document_signature ds JOIN generated_document d ON d.id = ds.document_id
               WHERE ds.document_id = ? AND ds.user_id = ? AND ds.organization_id = ?`,
             [req.params.id, req.user.id, orgId]);
-        if (!ligne) return res.status(404).json({ message: "Ce document ne vous est pas attribué." });
-        if (ligne.signed_at) return res.status(409).json({ message: 'Vous avez déjà signé ce document.' });
+        if (!lignes.length) return res.status(404).json({ message: "Ce document ne vous est pas attribué." });
+        /* ET PAS DEUX FOIS : seuls mes cadres encore vides se signent. Quelqu'un qui en a deux
+           (« Jury 1 » et « Président du jury ») les signe d'un seul geste. */
+        const aSigner = lignes.filter((l) => !l.signed_at);
+        if (!aSigner.length) return res.status(409).json({ message: 'Vous avez déjà signé ce document.' });
+        const ligne = aSigner[0];
 
         const fourni = (req.body || {}).signature_data;
         if (fourni && !/^data:image\//.test(fourni)) {
@@ -467,20 +480,25 @@ const signerMonDocument = async (req, res) => {
            La base est de toute façon la bonne source : un jeton vit sept jours, un nom peut
            changer entre-temps, et c'est celui du jour de la signature qui doit figurer. */
         const [[moi]] = await conn.query('SELECT first_name, last_name FROM user WHERE id = ?', [req.user.id]);
-        const nom = [moi && moi.first_name, moi && moi.last_name].filter(Boolean).join(' ').trim() || 'Intervenant';
+        const nom = [moi && moi.first_name, moi && moi.last_name].filter(Boolean).join(' ').trim() || 'Signataire';
         /* LE CRÉNEAU VIENT DE LA CASE, pas d'une constante : c'est le modèle qui le nomme
            (`sig:intervenant` sur le contrat d'hygiène), et il peut différer d'un document à
            l'autre. Une constante ici renverrait la signature dans un créneau que le document
            n'affiche pas — le défaut qu'on vient de corriger. */
-        await applySlotSignature(conn, orgId, doc, {
-            slot: ligne.slot || SLOT_EXTERNE, label: 'Intervenant externe', signerName: nom,
-            signatureData: signature, ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
-        });
-        /* `user_id` n'est pas touché par `applySlotSignature` (elle ne connaît que le créneau) :
-           on le RÉAFFIRME, sinon l'attribution disparaîtrait au premier passage et l'espace
-           cesserait d'afficher le document une fois signé. */
-        await conn.query('UPDATE document_signature SET user_id = ? WHERE document_id = ? AND slot = ?',
-            [req.user.id, ligne.doc_id, ligne.slot || SLOT_EXTERNE]);
+        /* LE LIBELLÉ EST CELUI DU CADRE (« Jury 1 », « Formateur »…), posé à l'attribution : il
+           était écrit « Intervenant externe » en dur, et un président de jury aurait signé sous
+           ce nom-là. */
+        for (const l of aSigner) {
+            await applySlotSignature(conn, orgId, doc, {
+                slot: l.slot || SLOT_EXTERNE, label: l.label || 'Intervenant externe', signerName: nom,
+                signatureData: signature, ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+            });
+            /* `user_id` n'est pas touché par `applySlotSignature` (elle ne connaît que le créneau) :
+               on le RÉAFFIRME, sinon l'attribution disparaîtrait au premier passage et l'espace
+               cesserait d'afficher le document une fois signé. */
+            await conn.query('UPDATE document_signature SET user_id = ? WHERE document_id = ? AND slot = ?',
+                [req.user.id, ligne.doc_id, l.slot || SLOT_EXTERNE]);
+        }
         logAudit(req, 'document.sign_externe', 'GeneratedDocument', ligne.doc_id);
         res.json({ success: true, message: 'Document signé.' });
     } catch (err) {

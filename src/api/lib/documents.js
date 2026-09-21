@@ -288,4 +288,20 @@ function signatureOrganismeAffichee(enregistree, apposee, signataire) {
     return signataire ? null : (enregistree || null);
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles, opcoDuStagiaire, cleOpco, groupesParOpco, stagiairesDuDocument, signatureOrganismeAffichee };
+/**
+ * UN CADRE NOMMÉ DÉSIGNE-T-IL LE STAGIAIRE ? (« Stagiaire 1 », élève, apprenant, candidat…)
+ *
+ * Deux usages, une seule règle : au RENDU, un tel cadre non signé séparément reprend la signature
+ * du stagiaire du document (htmlfill) ; à l'ENVOI d'un document de session, il n'est proposé à
+ * personne — le stagiaire signe lui-même, depuis son espace, pas sur attribution.
+ */
+/**
+ * LA CASE D'UN MEMBRE DU JURY sur la grille d'un candidat — une par membre, créée à la clôture
+ * de l'évaluation (cloturerCandidat) et remplie quand il signe ; le tableau {JuryMembres} y lit
+ * sa signature. Le nom porte l'identifiant du membre : deux membres, deux cases, sans ambiguïté.
+ */
+const creneauJury = (userId) => `jury-${userId}`;
+
+const CASE_STAGIAIRE = /(stagiaire|eleve|élève|apprenant|participant|candidat|beneficiaire|bénéficiaire)/i;
+
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles, opcoDuStagiaire, cleOpco, groupesParOpco, stagiairesDuDocument, signatureOrganismeAffichee, CASE_STAGIAIRE, creneauJury };

@@ -568,6 +568,12 @@ export function getDocumentsSession(sessionId) {
 export function envoyerDocumentSession(sessionId, payload) {
   return request(`/sessions/${sessionId}/documents-externes`, { method: "POST", body: JSON.stringify(payload) });
 }
+/* LES CADRES QU'ON M'A ATTRIBUÉS sur les documents d'une session (« Formateur », « Jury 1 »…) :
+   un formateur les lit et les signe depuis la page de la session, comme ses émargements. */
+export function getMesCasesSession(sessionId) { return request(`/sessions/${sessionId}/mes-cases`); }
+export function signerMesCases(documentId, payload = {}) {
+  return request(`/documents/${documentId}/mes-cases/sign`, { method: "POST", body: JSON.stringify(payload) });
+}
 export function getMesDocumentsIntervenant() { return request("/intervenant/documents"); }
 export function signerMonDocumentIntervenant(id, payload = {}) {
   return request(`/intervenant/documents/${id}/signer`, { method: "POST", body: JSON.stringify(payload) });
