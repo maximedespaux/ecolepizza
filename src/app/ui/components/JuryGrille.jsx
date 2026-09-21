@@ -26,7 +26,7 @@ import { getMaGrilleJury, noterJury, verdictJury, cloturerJury } from "../api/ap
 const ETIQUETTE = { true: "Validée", false: "Non validée", null: "En cours" };
 const TON = { true: "g", false: "r", null: "n" };
 
-function JuryGrille({ sessionId }) {
+function JuryGrille({ sessionId, onCloture }) {
   const [data, setData] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [status, setStatus] = useState(null);
@@ -104,8 +104,11 @@ function JuryGrille({ sessionId }) {
     try {
       const r = await cloturerJury({ enrollment_id: courant.enrollment_id });
       await charger(true);
+      onCloture?.();
+      /* L'ORDRE DES SIGNATURES, dit au moment où il commence : le jury d'abord, chacun dans sa
+         ligne ; la grille ne part au candidat qu'après. */
       setStatus({ type: "success", message: r.data?.documentId
-        ? "Évaluation clôturée. Le document du candidat est prêt à signer."
+        ? "Évaluation clôturée. Chaque membre du jury signe la grille dans « Documents à signer » ; elle partira ensuite au candidat."
         : "Évaluation clôturée. Aucun modèle de document n'est configuré sur cette grille." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }

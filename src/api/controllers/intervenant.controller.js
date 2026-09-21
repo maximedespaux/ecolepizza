@@ -408,13 +408,17 @@ const mesDocuments = async (req, res) => {
                         DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS envoye_le,
                         IF(SUM(ds.signed_at IS NULL) > 0, NULL, DATE_FORMAT(MAX(ds.signed_at), '%Y-%m-%d %H:%i')) AS signe_le,
                         GROUP_CONCAT(COALESCE(ds.label, ds.slot) ORDER BY ds.slot SEPARATOR ', ') AS cadres,
+                        /* LE CANDIDAT, pour une grille de jury : toutes portent le même titre, et un
+                           membre en signe une par candidat — sans son nom, quatre lignes identiques. */
+                        TRIM(CONCAT(COALESCE(l.last_name, ''), ' ', COALESCE(l.first_name, ''))) AS candidat,
                         s.year, s.week, p.code AS program_code, p.title AS program_title
                    FROM document_signature ds
                    JOIN generated_document d ON d.id = ds.document_id
+                   LEFT JOIN learner l ON l.id = d.learner_id
                    LEFT JOIN training_session s ON s.id = d.session_id
                    LEFT JOIN training_program p ON p.id = s.program_id
                   WHERE ds.user_id = ? AND ds.organization_id = ?
-                  GROUP BY d.id, d.title, d.status, d.template_slug, d.created_at, s.year, s.week, p.code, p.title
+                  GROUP BY d.id, d.title, d.status, d.template_slug, d.created_at, l.last_name, l.first_name, s.year, s.week, p.code, p.title
                   ORDER BY signe_le IS NOT NULL, d.created_at DESC`,
                 [req.user.id, req.user.organization_id]);
         } catch (e) {

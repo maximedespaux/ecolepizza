@@ -30,14 +30,16 @@ const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
  * des intervenants n'en recevront jamais : une carte vide sur chaque espace ferait du bruit
  * pour rien, comme la grille de jury juste en dessous.
  */
-function MesDocuments({ onStatus, fullName }) {
+function MesDocuments({ onStatus, fullName, version }) {
   const [docs, setDocs] = useState(null);
   const [occupe, setOccupe] = useState(null);
   const [dessiner, setDessiner] = useState(null);
 
   const charger = () => getMesDocumentsIntervenant()
     .then((r) => setDocs(r.data || [])).catch(() => setDocs([]));
-  useEffect(() => { charger(); }, []);
+  /* `version` change à chaque clôture d'une évaluation : la grille du candidat vient de naître
+     avec une case à signer pour chaque membre du jury, elle doit apparaître sans recharger. */
+  useEffect(() => { charger(); }, [version]);
 
   async function signer(d, signature_data) {
     setOccupe(d.id);
@@ -63,7 +65,7 @@ function MesDocuments({ onStatus, fullName }) {
           {docs.map((d) => (
             <div key={d.id} className="arch-doc">
               <span style={{ flex: 1, minWidth: 0 }}>
-                <b>{d.title}</b>
+                <b>{d.title}</b>{d.candidat ? <span> — {d.candidat}</span> : null}
                 <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
                   {d.program_code ? `${d.program_code} · ` : ""}
                   {d.week ? `S${d.week} ${d.year} · ` : ""}
@@ -101,6 +103,7 @@ function IntervenantEspace() {
   const [data, setData] = useState(null);
   const [savedSig, setSavedSig] = useState(null);   // signature enregistrée (cachet)
   const [status, setStatus] = useState(null);
+  const [docsVersion, setDocsVersion] = useState(0); // +1 à chaque clôture : « Documents à signer » se recharge
   const [signing, setSigning] = useState(null);     // dessin ponctuel pour une demi-journée
   const [settingSig, setSettingSig] = useState(false); // dessin de la signature enregistrée
   const fileRef = useRef(null);
@@ -263,9 +266,9 @@ function IntervenantEspace() {
       {/* LA GRILLE DU JURY, sous les demi-journées de la session concernée. Elle s'efface
           d'elle-même quand la formation n'a pas de grille de jury — la plupart n'en ont pas, et
           une carte vide sur chaque session ferait du bruit pour rien. */}
-      {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} />)}
+      {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} onCloture={() => setDocsVersion((v) => v + 1)} />)}
 
-      <MesDocuments onStatus={setStatus} fullName={fullName} />
+      <MesDocuments onStatus={setStatus} fullName={fullName} version={docsVersion} />
 
       {signing && (
         <SignatureModal doc={{ label: signing.label }} defaultName={fullName} onConfirm={drawSign} onClose={() => setSigning(null)} />

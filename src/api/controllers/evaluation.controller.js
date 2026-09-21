@@ -611,7 +611,7 @@ async function resultatJuryDossier(conn, orgId, enrollmentId) {
         let membres = [];
         try {
             const [ms] = await conn.query(
-                `SELECT u.first_name, u.last_name, si.specialty
+                `SELECT u.id AS user_id, u.first_name, u.last_name, si.specialty
                    FROM enrollment e
                    JOIN session_intervenant si ON si.session_id = e.session_id
                    JOIN user u ON u.id = si.user_id
@@ -660,6 +660,20 @@ async function cloturerCandidat(conn, orgId, userId, enrollmentId) {
             learnerId: enr.learner_id, type: 'EVALUATION', templateSlug: r.grille.template_slug,
             title: r.grille.label || 'Évaluation du jury', enrollmentIds: [enrollmentId],
         });
+        /* CHAQUE MEMBRE DU JURY SIGNE LA GRILLE — le règlement d'examen fait signer chacun, et le
+           tableau {JuryMembres} lui réserve déjà une ligne. Une case vide par membre, ATTRIBUÉE :
+           il la retrouve dans « Documents à signer » de son espace et la signe ; sa signature
+           s'imprime dans SA ligne. La grille ne part au candidat qu'une fois le jury au complet
+           (cf. signaturesEnAttente, à l'envoi). */
+        const { creneauJury } = require('../lib/documents.js');
+        for (const m of r.membres || []) {
+            if (!m.user_id) continue;
+            const nom = `${m.last_name || ''} ${m.first_name || ''}`.trim();
+            await conn.query(
+                `INSERT INTO document_signature (id, organization_id, document_id, slot, label, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [crypto.randomUUID(), orgId, documentId, creneauJury(m.user_id), `Jury · ${nom}`.trim(), m.user_id]);
+        }
     }
     await conn.query(
         `UPDATE evaluation_verdict SET cloture_le = NOW(), cloture_par = ?, document_id = ?

@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument, signatureOrganismeAffichee } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument, signatureOrganismeAffichee, creneauJury } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -309,6 +309,14 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 jury = await resultatJuryDossier(conn, organizationId, dfEval.enrollment_id);
             }
         } catch (e) { /* évaluation indisponible : jetons vides */ }
+    }
+    /* LA SIGNATURE DE CHAQUE MEMBRE DU JURY, dans sa ligne de {JuryMembres} : sa case porte son
+       identifiant (creneauJury). Pas encore signée : la ligne garde son espace blanc. */
+    if (jury && Array.isArray(jury.membres)) {
+        jury = { ...jury, membres: jury.membres.map((m) => {
+            const s = m.user_id ? slotSignatures[creneauJury(m.user_id)] : null;
+            return { ...m, signature: (s && s.data) || null };
+        }) };
     }
     /* PROCÈS-VERBAL DU JURY (migrations 100 / 150) — jetons {PV}, {Date examen}, {PVCandidats}…
        Ils ne se remplissaient QUE par la route de la commission (`POST /examens/session/:id/pv`).
@@ -1182,12 +1190,32 @@ async function motifModeleManquant(conn, orgId, doc) {
  * pour les documents SANS partie signataire (org-seul). Réutilisable (envoi de groupe).
  * Renvoie true si envoyé.
  */
+/**
+ * LES SIGNATURES QU'UN DOCUMENT ATTEND ENCORE AVANT DE PARTIR — les cases attribuées, non
+ * signées (le jury sur la grille d'un candidat). Rend leurs libellés ; vide = rien n'attend.
+ *
+ * La grille du jury ne part au candidat qu'une fois TOUS les membres signés : partie plus tôt,
+ * le candidat signerait un document incomplet, et son PDF scellé ne porterait pas le jury.
+ */
+async function signaturesEnAttente(conn, docId) {
+    try {
+        const [lignes] = await conn.query(
+            'SELECT label, slot FROM document_signature WHERE document_id = ? AND user_id IS NOT NULL AND signed_at IS NULL', [docId]);
+        return lignes.map((l) => l.label || l.slot);
+    } catch (e) {
+        if (e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR')) return [];
+        throw e;
+    }
+}
+
 async function sendPreparedDoc(conn, orgId, docId) {
     const [[doc]] = await conn.query('SELECT id, type, template_slug, status, learner_id FROM generated_document WHERE id = ? AND organization_id = ?', [docId, orgId]);
     if (!doc || doc.status !== 'A_FAIRE') return false;
     // Envoi de groupe : un document sans modèle est simplement sauté. L'appelant compte les
     // envois réussis, le total lui dira qu'il en manque.
     if (await motifModeleManquant(conn, orgId, doc)) return false;
+    // Même chose pour un document qui attend encore des signatures (le jury) : il partira après.
+    if ((await signaturesEnAttente(conn, doc.id)).length) return false;
     let orgSet = ''; const orgVals = [];
     try {
         const orgSteps = await loadOrgSteps(orgId);
@@ -1226,6 +1254,10 @@ const sendDocument = async (req, res) => {
         // envoyé puis signé, avec un contenu qui n'existait dans aucun modèle.
         const motif = await motifModeleManquant(conn, orgId, doc);
         if (motif) return res.status(422).json({ message: motif });
+        const attendues = await signaturesEnAttente(conn, doc.id);
+        if (attendues.length) {
+            return res.status(422).json({ message: `Ce document attend encore ${attendues.length > 1 ? 'des signatures' : 'une signature'} avant de partir : ${attendues.join(', ')}.` });
+        }
 
         // L'ORGANISME signe en DERNIER : à l'envoi, on n'appose sa signature QUE si aucune
         // partie (stagiaire / entreprise) ne doit signer — ex. Invitation, Certificat de
@@ -1386,14 +1418,20 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
        signée : pour elle, rien ne change. */
     const [[reste]] = await conn.query(
         'SELECT COUNT(*) AS n FROM document_signature WHERE document_id = ? AND signed_at IS NULL', [doc.id]);
-    const complet = !(reste && Number(reste.n));
+    /* ET LE STAGIAIRE, S'IL DOIT SIGNER : la grille du jury se signe par les membres PUIS par le
+       candidat. La dernière signature du jury ne clôt pas un document qui attend encore la sienne
+       — elle l'aurait passé à SIGNÉ, fait contresigner l'organisme, et le candidat n'aurait plus
+       pu signer. Seul un document de STAGIAIRE est concerné : ni un document de session, ni un
+       document d'entreprise, qui n'en ont pas. */
+    const orgSteps = await loadOrgSteps(orgId);
+    const attendLeStagiaire = !!doc.learner_id && stagiaireSignsDoc(orgSteps, doc) && doc.status !== 'SIGNE';
+    const complet = !(reste && Number(reste.n)) && !attendLeStagiaire;
     // Re-scelle le PDF (signataire du créneau + contre-signature organisme).
     const slug = doc.template_slug;
     const content = slug ? await getTemplateContent(orgId, slug) : null;
     if (content && content.kind !== 'emargement') {
         const { signPdf, generateSelfSignedP12 } = require('../lib/pdfseal.js');
         // L'organisme signe en dernier : signature visible apposée avant le rendu — une fois TOUS les cadres signés.
-        const orgSteps = await loadOrgSteps(orgId);
         const orgSigne = complet && orgSignsDoc(orgSteps, doc);
         if (orgSigne) await applyOrgVisibleSignature(conn, orgId, doc.id);
         const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
