@@ -62,6 +62,15 @@ const GROUP_ROW_TOKENS = [
   { key: "D_Naissance", label: "Date de naissance", sample: "12/05/1990" },
 ];
 
+/* L'info-bulle d'un jeton « par stagiaire ». Elle dit OÙ il fonctionne — c'est la seule chose qui
+   le distingue du jeton du groupe Stagiaire de même nom : entre les marqueurs, chaque stagiaire de
+   la liste tour à tour ; ailleurs, le stagiaire du dossier, qu'un document d'entreprise n'a pas. */
+function descParStagiaire(t) {
+  const quoi = t.key === "N°" ? "Le numéro d'ordre (1, 2, 3…)" : `« ${t.label} »`;
+  return `${quoi} de chaque stagiaire, tour à tour. À placer entre {#Stagiaires} et {/Stagiaires} : `
+    + "en dehors, Prénom, Nom… désignent le stagiaire du dossier — et un document d'entreprise n'en a pas.";
+}
+
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
   return (
@@ -470,8 +479,17 @@ function TemplateEditor() {
                   {/* Groupe entreprise : jetons répétés PAR STAGIAIRE (bloc), insérés en texte brut. */}
                   {g.group === "Groupe entreprise" && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
+                      {/* CE QUE LE GROUPE VEUT DIRE, écrit là où on le lit. L'ancienne ligne (« jetons à
+                          placer entre les marqueurs ») supposait qu'on sache déjà ce qu'est la liste, d'où
+                          elle vient, et à quoi servent des marqueurs : trois choses que rien ne disait. */}
                       <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                        <b>Bloc par stagiaire</b> : jetons à placer <b>entre</b> les marqueurs.
+                        Un document d'entreprise concerne <b>plusieurs stagiaires</b> : ceux de l'entreprise
+                        inscrits à la session (et, s'il y a un document par OPCO, ceux de cet OPCO). La puce
+                        <b> Liste des stagiaires</b> les écrit, un nom par ligne.
+                        <br /><br />
+                        Pour votre propre présentation, insérez un <b>bloc « par stagiaire »</b> : ce qui est
+                        placé entre <code>{"{#Stagiaires}"}</code> et <code>{"{/Stagiaires}"}</code> se répète
+                        pour chacun, et les jetons ci-dessous y prennent ses valeurs.
                       </p>
                       <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère un bloc {#Stagiaires} … {/Stagiaires} avec un exemple"
                         draggable
@@ -482,7 +500,7 @@ function TemplateEditor() {
                       <div style={{ height: 6 }} />
                       {GROUP_ROW_TOKENS.map((t) => (
                         <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
-                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: `${t.label}, à placer dans un bloc « par stagiaire ».` }, g.group)} onMouseLeave={cacherTip}
+                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: descParStagiaire(t) }, g.group)} onMouseLeave={cacherTip}
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                           onClick={() => insertToken(t)}>{t.label}</button>

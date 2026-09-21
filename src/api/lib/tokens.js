@@ -170,7 +170,7 @@ const TOKEN_CATALOG = [
             { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
             { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
             { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
-            { key: 'Stagiaires', label: 'Liste des stagiaires (groupe, un par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
+            { key: 'Stagiaires', label: 'Liste des stagiaires (un nom par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
         ],
     },
     {
