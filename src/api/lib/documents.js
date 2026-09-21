@@ -265,4 +265,27 @@ function stagiairesDuDocument(lignes, opcoDocument) {
     return tous.filter((l) => cleOpco(l.opco) === cleOpco(opcoDocument));
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles, opcoDuStagiaire, cleOpco, groupesParOpco, stagiairesDuDocument };
+/**
+ * LA SIGNATURE DE L'ORGANISME QU'AFFICHE UN DOCUMENT.
+ *
+ * L'organisme signe EN DERNIER : juste après le stagiaire ou l'entreprise, ou à l'envoi quand il
+ * signe seul — c'est alors que sa signature est APPOSÉE sur le document (`org_signature_data`,
+ * cf. applyOrgVisibleSignature). Mais le rendu affichait sa signature ENREGISTRÉE dès le premier
+ * aperçu : un contrat envoyé au stagiaire portait déjà la signature de l'école avant la sienne,
+ * quand le cadre du stagiaire, lui, restait vide jusqu'à sa signature. Demandé le 2026-09-21 :
+ * le même cadre vide, pour l'organisme, là où il signera.
+ *
+ * Sur un document que l'organisme NE SIGNE PAS (il n'est pas parmi les signataires du modèle),
+ * rien ne viendra jamais remplir le cadre : sa signature enregistrée s'y imprime, comme avant —
+ * c'est alors une signature imprimée, pas une signature attendue.
+ *
+ * @param {string|null} enregistree  la signature enregistrée dans Organisme
+ * @param {string|null} apposee      celle apposée sur CE document
+ * @param {boolean} signataire       l'organisme compte-t-il parmi les signataires du document ?
+ */
+function signatureOrganismeAffichee(enregistree, apposee, signataire) {
+    if (apposee) return apposee;
+    return signataire ? null : (enregistree || null);
+}
+
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles, opcoDuStagiaire, cleOpco, groupesParOpco, stagiairesDuDocument, signatureOrganismeAffichee };

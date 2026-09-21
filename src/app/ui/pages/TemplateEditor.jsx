@@ -76,6 +76,10 @@ function descParStagiaire(t) {
    signature envoyé à l'entreprise. Dérivé du libellé comme les autres blocs nommés, « Cachet de
    l'entreprise » aurait donné `sig:cachetdelentreprise` — un cadre que personne ne remplit. */
 const SIG_ENTREPRISE = { key: "sig:representant", label: "Cachet de l'entreprise" };
+/* Le cadre de l'organisme : le jeton intégré « Signature organisme ». Il n'était proposé que dans
+   le groupe Organisme — et seulement si le champ était activé dans Champs documents : le seul
+   signataire sans bloc dans « Signatures ». */
+const SIG_ORGANISME = { key: "Signature organisme", label: "Signature de l'organisme" };
 
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
@@ -422,6 +426,12 @@ function TemplateEditor() {
                   <Icon name="pencil" size={13} /> {SIG_ENTREPRISE.label}
                 </button>
               )}
+              <button className="tok-chip" draggable
+                title={"Cadre vide jusqu'à la signature de l'organisme, qui signe en dernier : juste après le stagiaire ou l'entreprise, ou à l'envoi s'il signe seul. Cliquer ou glisser."}
+                onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ORGANISME))}
+                onClick={() => target?.chain().focus().insertToken({ token: SIG_ORGANISME.key, label: SIG_ORGANISME.label }).run()}>
+                <Icon name="pencil" size={13} /> {SIG_ORGANISME.label}
+              </button>
               {SIG_PRESETS.map((s) => (
                 <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », cliquer ou glisser`}
                   draggable

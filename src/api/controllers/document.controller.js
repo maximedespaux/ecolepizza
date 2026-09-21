@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument, signatureOrganismeAffichee } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -135,11 +135,16 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
     if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
-    // Si le document a été signé par l'organisme (à l'envoi), on affiche CETTE signature.
+    /* La signature de l'organisme n'apparaît qu'une fois APPOSÉE sur ce document — il signe en
+       dernier. D'ici là, un cadre vide, comme celui du stagiaire (cf. signatureOrganismeAffichee). */
     if (org && documentId) {
         try {
-            const [[gd]] = await conn.query('SELECT org_signature_data FROM generated_document WHERE id = ?', [documentId]);
-            if (gd && gd.org_signature_data) org.signature_image = decrypt(gd.org_signature_data);
+            const [[gd]] = await conn.query('SELECT org_signature_data, template_slug, type FROM generated_document WHERE id = ?', [documentId]);
+            if (gd) {
+                const signataire = orgSignsDoc(await loadOrgSteps(organizationId), gd);
+                org.signature_image = signatureOrganismeAffichee(
+                    org.signature_image, gd.org_signature_data ? decrypt(gd.org_signature_data) : null, signataire);
+            }
         } catch (e) {
             if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : signature statique
         }
