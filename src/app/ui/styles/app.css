@@ -5488,6 +5488,20 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* FICHE STAGIAIRE INCOMPLÈTE — le bandeau qui nomme ce qui manque (FicheIncomplete.jsx). Même
+   famille que .alerte-conditions, en orange : « à compléter », la teinte des dossiers à compléter du
+   tableau de bord. L'orange ne sert qu'à l'icône et à la teinte : en texte, #ff6900 sur blanc ne se
+   lit pas (moins de 3:1) ; le texte garde les couleurs du thème. */
+.fiche-incomplete{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;
+  border-radius:12px;border:1px solid color-mix(in srgb,var(--orange) 40%,var(--border));
+  background:color-mix(in srgb,var(--orange) 8%,var(--surface))}
+/* L'icône suit la PREMIÈRE ligne (le titre) : centrée sur deux ou trois lignes de texte, elle flottait. */
+.fiche-incomplete>svg{color:var(--orange);flex-shrink:0;margin-top:1px}
+.fiche-incomplete>.btn{align-self:center}
+.fiche-incomplete-corps{flex:1 1 240px;min-width:0}
+.fiche-incomplete-corps b{display:block;font-size:14px;color:var(--text)}
+.fiche-incomplete-corps p{margin:3px 0 0;font-size:13px;line-height:1.5;color:var(--muted)}
+.fiche-incomplete-corps p span{color:var(--text);font-weight:600}
 /* Tableau de bord, « Derniers dossiers » : une ligne par dossier, et le lien vers la fiche qui la
    remplit. Le lien déborde de sa ligne (marges négatives, compensées par son padding) : le survol
    (.rowlink) respire autour du texte sans le déplacer, et le filet de séparation reste droit — posé

@@ -11,6 +11,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dossierAffiche } from "../lib/lienDossier.js";
+import FicheIncomplete from "../components/FicheIncomplete.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
@@ -517,6 +518,9 @@ function StagiaireDetail() {
         }
       />
       <StatusMessage status={status} />
+      {/* Ce qui manque à la fiche, nommé : les lignes vides disparaissent de « Contact & identité »
+          ci-dessous, et une adresse absente ne s'y remarquait pas (src/api/lib/ficheIncomplete.js). */}
+      <FicheIncomplete manquants={l.champs_manquants} onCompleter={() => setEditOpen(true)} />
 
       <div className="grid cols-2">
         <Card title={T("user", "Contact & identité")}>

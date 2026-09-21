@@ -16,6 +16,8 @@ const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../l
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
 const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
+const { champsManquants } = require('../lib/ficheIncomplete.js');
+const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -353,6 +355,18 @@ const getLearner = async (req, res) => {
         if (learner.company_id) {
             const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);
             learner.company = cRows[0] || null;
+        }
+
+        /* CE QUI MANQUE À LA FICHE, pour le bandeau de l'écran (lib/ficheIncomplete.js) : ce que
+           l'école envoie aux partenaires — si quelqu'un reçoit —, plus l'essentiel. Un échec ici,
+           registre illisible par exemple, ne doit pas priver de la fiche : l'écran s'en passe, et
+           n'affiche simplement pas de bandeau. */
+        try {
+            const orgId = req.user.organization_id;
+            const transmis = (await aDesDestinataires(conn, orgId)) ? await champsOrganisme(conn, orgId) : [];
+            learner.champs_manquants = champsManquants(learner, transmis);
+        } catch (e) {
+            console.error('Fiche stagiaire, champs manquants :', e.message);
         }
 
         res.json({ data: learner });
