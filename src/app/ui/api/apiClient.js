@@ -485,6 +485,11 @@ export function createStagiaire(payload) {
 export function getDistinctions() {
   return request("/stagiaires/distinctions");
 }
+/** Les fiches « à recontacter » (migration 169), la plus ancienne attente en tête. Silencieux : la
+    liste se charge en fond sur le tableau de bord et la page des stagiaires. */
+export function getARecontacter() {
+  return request("/stagiaires/a-recontacter", { silent: true });
+}
 export function updateStagiaire(id, payload) {
   return request(`/stagiaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }

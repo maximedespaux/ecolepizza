@@ -11,6 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { euro, colorOf, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
+import ARecontacter from "../components/ARecontacter.jsx";
 
 /* `T00:00:00` FORCE LA LECTURE EN HEURE LOCALE. Sans lui, `new Date("2026-09-14")` se lit en
    UTC et l'affichage reculerait d'un jour sur tout fuseau négatif. Même idiome que les cinq
@@ -29,6 +30,10 @@ const QUICK = [
 // deux sources pour la même traduction. Supprimé au profit de la seule qui fait autorité.
 
 function Dashboard() {
+  /* Combien de fiches « à recontacter » (migration 169) — `null` tant que la liste n'a pas répondu.
+     C'est ce qui empêche la ligne « Rien ne demande d'action » de mentir quand des gens attendent
+     un appel : elle ne s'affiche qu'une fois ce compte CONNU et nul. */
+  const [nbRappels, setNbRappels] = useState(null);
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
   // La caisse est fermée au formateur : son appel échoue, et le CA ne doit alors pas
   // s'afficher du tout — surtout pas replié sur zéro. Cf. la ligne des compteurs.
@@ -215,12 +220,17 @@ function Dashboard() {
             ))}
           </div>
         </div>
-      ) : (
+      ) : nbRappels === 0 ? (
         <div className="todo-calme">
           <Icon name="check-circle" size={17} aria-hidden="true" />
           Rien ne demande d'action : dossiers complets, factures à jour, aucune session imminente.
         </div>
-      )}
+      ) : null}
+
+      {/* LES STAGIAIRES À RECONTACTER (demandé le 2026-09-21), juste sous « À traiter » : c'est une
+          liste de gestes à faire, avec le numéro à appeler. La même carte qu'en tête de la page
+          des stagiaires ; les huit plus anciennes attentes ici, le reste là-bas. */}
+      <ARecontacter limite={8} onCharge={(l) => setNbRappels(l.length)} className="fade" style={{ marginBottom: 16 }} />
 
       {/* Les compteurs situent, ils ne se consultent pas : une ligne suffit. Ils restent
           cliquables — c'était leur seul usage réel. */}

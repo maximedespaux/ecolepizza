@@ -160,8 +160,11 @@ test('LE FORMULAIRE : une section « Note » sous « Votre projet », et la frap
     assert.match(MODALE, /disabled=\{saving \|\| loading \|\| noteTropLongue\}/, 'l\'enregistrement attend qu\'elle soit raccourcie');
     assert.match(MODALE, /if \(noteTropLongue\) \{ onError\?\.\(/, 'et la touche Entrée aussi');
     assert.match(MODALE, /aria-live="polite"/, 'le compteur est annoncé');
-    // Avant la migration : le message le dit, et n'est pas vert.
-    assert.match(MODALE, /includes\("note_libre"\) \? ", sauf la note : la migration 168 n'est pas jouée\."/);
+    // Avant la migration : le message le dit, et n'est pas vert. Depuis la 169, la même phrase
+    // nomme chaque champ laissé de côté et sa migration (« sauf la note : la migration 168… »).
+    assert.match(MODALE, /note_libre: \["la note", 168\]/);
+    assert.match(MODALE, /`, sauf \$\{p\.map\(\(k\) => PERDUS\[k\]\[0\]\)\.join\(" et "\)\}/);
+    assert.match(MODALE, /"n'est pas jouée"/);
     assert.match(MODALE, /sauf\(r\) \? "info" : "success"/);
     for (const page of ['StagiaireDetail.jsx', 'Stagiaires.jsx']) {
         assert.match(lire(UI, 'pages', page), /onSaved=\{\(msg, type = "success"\) =>/, `${page} relaie le type du message`);
