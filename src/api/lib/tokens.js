@@ -14,6 +14,8 @@ const { parseDaySchedules, fmtHM } = require('./emargement.js');
 /* Le barème RETRADUIT la mesure pour le tableau de détail : « 100 » seul ne dirait pas s'il
    s'agit de secondes, de points ou d'un index de niveau. Même source que la saisie. */
 const { pointsPour, maximumExercice } = require('./bareme.js');
+// L'identifiant France Travail est chiffré au repos (migration 170) : le jeton imprime le CLAIR.
+const { decrypt } = require('./crypto.js');
 
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
@@ -1259,7 +1261,10 @@ function resolveTokens(ctx = {}) {
         Adresse: address, CP: l.zip_code || '', Ville: l.town || '',
         Email: l.email || '', 'Téléphone': l.phone || '',
         D_Naissance: frDate(l.birthday), 'Lieu naissance': l.birth_place || '', Statut: l.professional_status || '',
-        'France Travail': l.france_travail_id || '',
+        /* DÉCHIFFRÉ ICI, au seul endroit où le jeton se remplit : quel que soit le chemin qui a lu la
+           fiche (document, facture, aperçu), le papier porte l'identifiant, jamais « enc:… ». Une
+           valeur restée en clair passe telle quelle ; une valeur illisible (mauvaise clé) sort vide. */
+        'France Travail': decrypt(l.france_travail_id) || '',
         // Formation (agrégées si plusieurs)
         Formation: joinTitles, 'Niveau suggérer': joinTitles,
         Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),

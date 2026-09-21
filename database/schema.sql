@@ -163,7 +163,7 @@ CREATE TABLE learner (
     professional_status varchar(120) DEFAULT NULL,       -- « Êtes-vous ? » : en activité, demandeur d'emploi…
     levels              varchar(120) DEFAULT NULL,       -- étiquettes niveau/accès (CSV : NIV1,NIV1_PRO…)
     cpf_amount          decimal(10,2) DEFAULT NULL,      -- « Combien de CPF »
-    france_travail_id   varchar(60)  DEFAULT NULL,       -- Id France Travail (Pôle emploi)
+    france_travail_id   varchar(255) DEFAULT NULL,       -- Id France Travail (Pôle emploi), chiffré AES-256-GCM au repos (migration 170)
     current_contract    varchar(60)  DEFAULT NULL,       -- contrat actuel (si en activité)
     social_security     varchar(255) DEFAULT NULL,       -- n° de sécurité sociale (chiffré AES-256-GCM au repos)
     financing           enum('PARTICULIER','PROFESSIONNEL') NOT NULL DEFAULT 'PARTICULIER',

@@ -276,7 +276,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               </div>
               {isJobSeeker && (
                 <div className="row2">
-                  <Field label="Identifiant France Travail (Pôle emploi)" value={form.france_travail_id} onChange={set("france_travail_id")} placeholder="1234567A" />
+                  <Field label="Identifiant France Travail (Pôle emploi)" value={form.france_travail_id} onChange={set("france_travail_id")} placeholder="1234567A" maxLength={60} />
                 </div>
               )}
               {isEmployed && (
