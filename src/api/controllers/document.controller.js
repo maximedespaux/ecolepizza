@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument, signatureOrganismeAffichee } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -135,11 +135,16 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
     if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
-    // Si le document a été signé par l'organisme (à l'envoi), on affiche CETTE signature.
+    /* La signature de l'organisme n'apparaît qu'une fois APPOSÉE sur ce document — il signe en
+       dernier. D'ici là, un cadre vide, comme celui du stagiaire (cf. signatureOrganismeAffichee). */
     if (org && documentId) {
         try {
-            const [[gd]] = await conn.query('SELECT org_signature_data FROM generated_document WHERE id = ?', [documentId]);
-            if (gd && gd.org_signature_data) org.signature_image = decrypt(gd.org_signature_data);
+            const [[gd]] = await conn.query('SELECT org_signature_data, template_slug, type FROM generated_document WHERE id = ?', [documentId]);
+            if (gd) {
+                const signataire = orgSignsDoc(await loadOrgSteps(organizationId), gd);
+                org.signature_image = signatureOrganismeAffichee(
+                    org.signature_image, gd.org_signature_data ? decrypt(gd.org_signature_data) : null, signataire);
+            }
         } catch (e) {
             if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; // migration 049 non jouée : signature statique
         }
@@ -1434,9 +1439,17 @@ async function applyLearnerSignature(conn, orgId, doc, { signerName, signatureDa
 const createSignLink = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[doc]] = await conn.query('SELECT id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        const [[doc]] = await conn.query('SELECT id, template_slug FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
-        const slot = String((req.body || {}).slot || 'representant').slice(0, 60);
+        let slot = String((req.body || {}).slot || 'representant').slice(0, 60);
+        /* LE LIEN « EXTERNE » VISE LE CADRE DE L'INTERVENANT. Il écrivait dans un créneau nommé
+           `external`, qu'aucun bloc de la palette ne produit (« Externe » donne `externe`) : la
+           personne signait, et rien ne s'affichait nulle part. Sans ce cadre dans le modèle, on garde
+           `external` — et jamais « le premier cadre venu », qui pourrait être celui du stagiaire. */
+        if (slot === 'external') {
+            const { creneauxDuModele, CRENEAU_INTERVENANT } = require('./documentSession.controller.js');
+            if ((await creneauxDuModele(req.user.organization_id, doc.template_slug)).includes(CRENEAU_INTERVENANT)) slot = CRENEAU_INTERVENANT;
+        }
         const label = String((req.body || {}).label || 'Signature du représentant').slice(0, 120);
         const token = crypto.randomBytes(32).toString('base64url');
         try {

@@ -78,7 +78,7 @@ function Reglages() {
             </div>
             <div className="divider" />
             <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Signature de l'organisme</h3>
-            <p className="sub" style={{ marginTop: 0 }}>Image insérée automatiquement sur les documents via le jeton {"{Signature organisme}"} (PNG à fond transparent conseillé).</p>
+            <p className="sub" style={{ marginTop: 0 }}>Apposée par l'organisme dans le cadre {"{Signature organisme}"} de ses documents, en dernier : juste après le stagiaire ou l'entreprise, ou à l'envoi s'il signe seul — le cadre reste vide d'ici là. Sur un document que l'organisme ne signe pas, elle s'imprime telle quelle. PNG à fond transparent conseillé.</p>
             <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               {form.signature_image ? (
                 <img

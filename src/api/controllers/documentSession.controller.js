@@ -41,14 +41,27 @@ const { stepSigners } = require('../lib/documents.js');
  */
 const SLOT_DEFAUT = 'externe';
 
-async function creneauDuModele(orgId, slug) {
+/* LE CADRE DE L'INTERVENANT — « Signature de l'intervenant » dans la palette (clé FIXE
+   `sig:intervenant`, cf. TemplateEditor). Il passe AVANT « le premier cadre du modèle » : un
+   modèle qui place « Stagiaire 1 » plus haut envoyait sinon la signature de l'intervenant dans le
+   cadre du stagiaire. Et le lien de signature « externe » le vise aussi (createSignLink) : un seul
+   cadre pour le signataire externe, quel que soit le chemin par lequel il signe. */
+const CRENEAU_INTERVENANT = 'intervenant';
+
+/** Les cadres de signature nommés du modèle (`sig:<créneau>`), dans l'ordre du document. */
+async function creneauxDuModele(orgId, slug) {
     try {
         const c = await getTemplateContent(orgId, slug);
         const corps = `${(c && c.html) || ''}${(c && c.header) || ''}${(c && c.footer) || ''}`;
-        const m = /data-token="sig:([^"]+)"|\{\s*sig:([^}\s]+)\s*\}/.exec(corps);
-        const trouve = m && (m[1] || m[2]);
-        return trouve ? String(trouve).trim() : SLOT_DEFAUT;
-    } catch { return SLOT_DEFAUT; }
+        return [...corps.matchAll(/data-token="sig:([^"]+)"|\{\s*sig:([^}\s]+)\s*\}/g)]
+            .map((m) => String(m[1] || m[2]).trim());
+    } catch { return []; }
+}
+
+async function creneauDuModele(orgId, slug) {
+    const creneaux = await creneauxDuModele(orgId, slug);
+    if (creneaux.includes(CRENEAU_INTERVENANT)) return CRENEAU_INTERVENANT;
+    return creneaux[0] || SLOT_DEFAUT;
 }
 
 const noSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'
@@ -174,4 +187,4 @@ const envoyerDocumentSession = async (req, res) => {
     }
 };
 
-module.exports = { listerDocumentsSession, envoyerDocumentSession, modelesExternes, creneauDuModele, SLOT_DEFAUT };
+module.exports = { listerDocumentsSession, envoyerDocumentSession, modelesExternes, creneauDuModele, creneauxDuModele, CRENEAU_INTERVENANT, SLOT_DEFAUT };

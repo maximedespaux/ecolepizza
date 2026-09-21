@@ -71,6 +71,21 @@ function descParStagiaire(t) {
     + "en dehors, Prénom, Nom… désignent le stagiaire du dossier — et un document d'entreprise n'en a pas.";
 }
 
+/* LE CADRE DE L'ENTREPRISE a une clé FIXE, et non dérivée de son libellé : `representant`, la
+   case que remplissent l'espace du représentant (« signer avec mon cachet ») et le lien de
+   signature envoyé à l'entreprise. Dérivé du libellé comme les autres blocs nommés, « Cachet de
+   l'entreprise » aurait donné `sig:cachetdelentreprise` — un cadre que personne ne remplit. */
+const SIG_ENTREPRISE = { key: "sig:representant", label: "Cachet de l'entreprise" };
+/* Le cadre de l'organisme : le jeton intégré « Signature organisme ». Il n'était proposé que dans
+   le groupe Organisme — et seulement si le champ était activé dans Champs documents : le seul
+   signataire sans bloc dans « Signatures ». */
+const SIG_ORGANISME = { key: "Signature organisme", label: "Signature de l'organisme" };
+/* Le cadre de l'intervenant — du signataire EXTERNE : clé FIXE, celle que remplissent l'espace de
+   l'intervenant et le lien « externe » (cf. CRENEAU_INTERVENANT, documentSession.controller). Il
+   remplace le bloc nommé « Intervenant » d'autrefois, proposé sur tous les modèles alors que
+   personne ne signe un modèle où « Externe » n'est pas coché. */
+const SIG_INTERVENANT = { key: "sig:intervenant", label: "Signature de l'intervenant" };
+
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
   return (
@@ -95,6 +110,8 @@ function TemplateEditor() {
   // Papier à en-tête automatique : ON par défaut. Un modèle qui met déjà l'identité dans son
   // corps (facture…) peut le couper pour ne pas avoir le nom de l'organisme en double, tout en haut.
   const [noLetterhead, setNoLetterhead] = useState(false);
+  const [modeleEntreprise, setModeleEntreprise] = useState(false); // company_level : cadre « Cachet de l'entreprise »
+  const [signeParExterne, setSigneParExterne] = useState(false); // « Externe » coché : cadre « Signature de l'intervenant »
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -151,6 +168,8 @@ function TemplateEditor() {
         const bl = (d.layout && d.layout.bleed) || {};
         setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
         setNoLetterhead(!!(d.layout && d.layout.noLetterhead));
+        setModeleEntreprise(!!d.company_level);
+        setSigneParExterne(Array.isArray(d.signers) && d.signers.includes("EXTERNAL"));
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -286,7 +305,7 @@ function TemplateEditor() {
     if (!lbl) return;
     target?.chain().focus().insertToken({ token: sigKey(lbl), label: lbl }).run();
   }
-  const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Intervenant", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
+  const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
   function onDrop(ed) {
     return (e) => {
       const rawText = e.dataTransfer.getData("application/x-rawtoken"); // jeton texte (bloc / par stagiaire)
@@ -404,6 +423,30 @@ function TemplateEditor() {
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
                 Bloc de signature nommé, signé séparément par chaque personne.
               </p>
+              {/* Même cadre que la signature du stagiaire : un espace blanc bordé de pointillés
+                  tant que personne n'a signé, le cachet à sa place ensuite. */}
+              {modeleEntreprise && (
+                <button className="tok-chip" draggable
+                  title={"Cadre vide jusqu'à la signature : le représentant de l'entreprise y appose son cachet, depuis son espace ou par le lien de signature. Cliquer ou glisser."}
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ENTREPRISE))}
+                  onClick={() => target?.chain().focus().insertToken({ token: SIG_ENTREPRISE.key, label: SIG_ENTREPRISE.label }).run()}>
+                  <Icon name="pencil" size={13} /> {SIG_ENTREPRISE.label}
+                </button>
+              )}
+              <button className="tok-chip" draggable
+                title={"Cadre vide jusqu'à la signature de l'organisme, qui signe en dernier : juste après le stagiaire ou l'entreprise, ou à l'envoi s'il signe seul. Cliquer ou glisser."}
+                onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ORGANISME))}
+                onClick={() => target?.chain().focus().insertToken({ token: SIG_ORGANISME.key, label: SIG_ORGANISME.label }).run()}>
+                <Icon name="pencil" size={13} /> {SIG_ORGANISME.label}
+              </button>
+              {signeParExterne && (
+                <button className="tok-chip" draggable
+                  title={"Cadre vide jusqu'à la signature de l'intervenant : depuis son espace, ou par le lien externe (tuteur, financeur…). Cliquer ou glisser."}
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_INTERVENANT))}
+                  onClick={() => target?.chain().focus().insertToken({ token: SIG_INTERVENANT.key, label: SIG_INTERVENANT.label }).run()}>
+                  <Icon name="pencil" size={13} /> {SIG_INTERVENANT.label}
+                </button>
+              )}
               {SIG_PRESETS.map((s) => (
                 <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », cliquer ou glisser`}
                   draggable
