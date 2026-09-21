@@ -21,7 +21,7 @@ const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
-const { companySignsDoc, stepSigners, typeDuModele } = require('../lib/documents.js');
+const { companySignsDoc, stepSigners, typeDuModele, groupesParOpco, cleOpco } = require('../lib/documents.js');
 const { loadConditionMap, getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
@@ -545,15 +545,11 @@ const createCompanyDocument = async (req, res) => {
 
         // Regroupement par OPCO : un stagiaire sans OPCO hérite de celui de l'entreprise
         // (évite un 2e document « sans OPCO »). Clé normalisée (casse/espaces) pour ne
-        // pas scinder « OCAPIAT » et « Ocapiat ».
-        const groups = new Map();
+        // pas scinder « OCAPIAT » et « Ocapiat ». LA RÈGLE EST PARTAGÉE avec le rendu
+        // (lib/documents.js) : chaque document doit LISTER exactement le groupe qui l'a fait naître.
+        let groups = new Map();
         if (opcoSupported) {
-            for (const e of enr) {
-                const raw = (e.opco || company.opco || '').trim();
-                const key = raw.toUpperCase();
-                const g = groups.get(key) || { opco: raw || null, ids: [] };
-                g.ids.push(e.id); groups.set(key, g);
-            }
+            groups = groupesParOpco(enr, company.opco);
         } else {
             groups.set('', { opco: null, ids: enr.map((e) => e.id) });
         }
@@ -573,7 +569,7 @@ const createCompanyDocument = async (req, res) => {
                 const [srows] = await conn.query(
                     "SELECT opco FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status = 'SIGNE'",
                     [orgId, company.id, session_id, template_slug]);
-                for (const r of srows) signedOpcos.add((r.opco || '').trim().toUpperCase());
+                for (const r of srows) signedOpcos.add(cleOpco(r.opco));
             } catch (e) { if (!isMissingSchema(e)) throw e; }
         }
 
@@ -581,7 +577,7 @@ const createCompanyDocument = async (req, res) => {
         const type = typeDuModele(step);
         let created = 0;
         for (const g of groups.values()) {
-            if (signedOpcos.has((g.opco || '').trim().toUpperCase())) continue; // déjà signé → conservé
+            if (signedOpcos.has(cleOpco(g.opco))) continue; // déjà signé → conservé
 
             const id = crypto.randomUUID();
             const title = step.label + (g.opco ? ` — ${g.opco}` : '');

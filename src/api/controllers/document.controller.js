@@ -6,7 +6,7 @@ const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
-const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue } = require('../lib/documents.js');
+const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
@@ -227,20 +227,23 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             // Document entreprise : liste VIVANTE des stagiaires de l'entreprise inscrits à
             // cette session (et pas un instantané figé). Si le document est groupé par OPCO
             // (migration 089), on ne liste que les stagiaires de CET OPCO.
-            const params = [gdInfo.company_id, gdInfo.session_id, organizationId];
-            let opcoFilter = '';
-            if (gdInfo.opco !== undefined) { opcoFilter = " AND TRIM(COALESCE(l.opco, '')) = ?"; params.push((gdInfo.opco || '').trim()); }
+            /* LE TRI PAR OPCO NE SE FAIT PLUS EN SQL. Le filtre comparait l'OPCO de la FICHE
+               (`l.opco`) à celui du document, alors que la génération range un stagiaire sans OPCO
+               sous celui de son ENTREPRISE : il était dans le groupe, et hors de la liste. La
+               règle est désormais une seule fonction, partagée avec la génération
+               (`stagiairesDuDocument`, lib/documents.js) — d'où l'OPCO de l'entreprise, lu ici. */
             const [gs] = await conn.query(
                 `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
                         l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
-                        DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
+                        DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday, c.opco AS opco_entreprise
                  FROM enrollment e
                  JOIN learner l ON l.id = e.learner_id
-                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?${opcoFilter}
+                 LEFT JOIN company c ON c.id = e.company_id
+                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
                  ORDER BY l.last_name, l.first_name`,
-                params
+                [gdInfo.company_id, gdInfo.session_id, organizationId]
             );
-            groupStagiaires = gs;
+            groupStagiaires = stagiairesDuDocument(gs, gdInfo.opco);
         } else {
             // Fallback (document classique lié à des formations) : via document_formation.
             const [gs] = await conn.query(

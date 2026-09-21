@@ -917,7 +917,10 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
           ))}
           {!isEmarg && form.company_level && (
             <p className="hint" style={{ margin: "8px 0 0" }}>
-              Généré par <b>entreprise + OPCO + session</b>. Jeton <b>« Stagiaires »</b> = liste ; bloc <code>{"{#Stagiaires}…{/Stagiaires}"}</code> = ligne par stagiaire (palette <b>Groupe entreprise</b>).
+              Un document par <b>entreprise, session et OPCO</b> — un stagiaire sans OPCO sur sa fiche est
+              rangé sous celui de son entreprise. Pour nommer ses stagiaires : la puce <b>« Liste des
+              stagiaires »</b>, ou un bloc <code>{"{#Stagiaires}…{/Stagiaires}"}</code> répété pour chacun —
+              tous deux dans le groupe <b>« Groupe entreprise »</b> de l'éditeur.
             </p>
           )}
           {!isPiece && (

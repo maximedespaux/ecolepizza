@@ -213,4 +213,56 @@ function matchFormation(applies, program) {
     return true;
 }
 
-module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles };
+/* ─── L'OPCO D'UN STAGIAIRE D'ENTREPRISE ─────────────────────────────────────────────────────
+   Un document d'entreprise (convention…) se génère UN PAR OPCO : un dirigeant a souvent un OPCO
+   différent de ses salariés. Un stagiaire dont la fiche ne porte aucun OPCO prend celui de son
+   entreprise — sinon il ferait naître, pour lui seul, un second document « sans OPCO ».
+
+   LA RÈGLE VIT ICI, ET NULLE PART AILLEURS, parce que deux endroits l'écrivaient chacun à sa
+   façon. La génération (company.controller) appliquait l'héritage ; le rendu (loadContext) ne
+   listait que les stagiaires dont la FICHE portait l'OPCO du document. Un stagiaire sans OPCO
+   propre était donc rangé dans le document de l'OPCO de son entreprise… et absent de sa liste :
+   la convention nommait une personne de moins que le groupe pour lequel elle avait été faite. */
+
+/** L'OPCO sous lequel ranger ce stagiaire : le sien, sinon celui de son entreprise. */
+function opcoDuStagiaire(opcoStagiaire, opcoEntreprise) {
+    return String(opcoStagiaire || opcoEntreprise || '').trim();
+}
+
+/** Clé de regroupement : casse et espaces ignorés — « Ocapiat » et « OCAPIAT » ne font qu'un. */
+function cleOpco(opco) {
+    return String(opco || '').trim().toUpperCase();
+}
+
+/**
+ * Les inscrits d'une entreprise regroupés par OPCO — un document par groupe.
+ * `inscrits` : [{ id, opco }], l'OPCO étant celui de la FICHE du stagiaire.
+ * Rend une Map clé → { opco, ids } ; `opco` garde l'écriture du premier inscrit du groupe.
+ */
+function groupesParOpco(inscrits, opcoEntreprise) {
+    const groupes = new Map();
+    for (const e of inscrits || []) {
+        const opco = opcoDuStagiaire(e.opco, opcoEntreprise);
+        const g = groupes.get(cleOpco(opco)) || { opco: opco || null, ids: [] };
+        g.ids.push(e.id);
+        groupes.set(cleOpco(opco), g);
+    }
+    return groupes;
+}
+
+/**
+ * Les stagiaires que liste un document d'entreprise : ceux dont l'OPCO — le leur, sinon celui de
+ * l'entreprise (`opco_entreprise` sur chaque ligne) — est celui du document. `opcoDocument`
+ * `undefined` : document d'avant le regroupement par OPCO (migration 089), personne n'est écarté.
+ *
+ * CHACUN PORTE SON OPCO EFFECTIF : dans le bloc « par stagiaire », {OPCO} dit ainsi la même chose
+ * que le titre du document (« Convention — OCAPIAT »), et non une case vide pour celui qui hérite.
+ */
+function stagiairesDuDocument(lignes, opcoDocument) {
+    const tous = (lignes || []).map(({ opco_entreprise: opcoEntreprise, ...l }) =>
+        ({ ...l, opco: opcoDuStagiaire(l.opco, opcoEntreprise) }));
+    if (opcoDocument === undefined) return tous;
+    return tous.filter((l) => cleOpco(l.opco) === cleOpco(opcoDocument));
+}
+
+module.exports = { DEFAULT_STEPS, DEFAULT_SLUGS, SIGNER_ROLES, matchStep, matchFormation, parseApplies, mergeSteps, stepsToDocSet, documentSetFor, stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, typeDuModele, stepSigners, docSignerRoles, opcoDuStagiaire, cleOpco, groupesParOpco, stagiairesDuDocument };

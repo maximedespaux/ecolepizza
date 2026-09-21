@@ -123,7 +123,15 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
                 onClick={insertBlock}>
                 <Icon name="plus" size={13} /> Bloc « par stagiaire »
               </button>
-              <span className="sub" style={{ fontSize: 11, marginLeft: 8 }}>puis cliquez un jeton « par stagiaire » (groupe Entreprise) pour l'insérer entre les marqueurs.</span>
+              {/* « (groupe Entreprise) » renvoyait à un groupe qui s'appelle « Groupe entreprise », et
+                  ne disait ni à quoi sert le bloc, ni pourquoi les MÊMES noms (Prénom, Nom…) figurent
+                  aussi dans le groupe Stagiaire. */}
+              <p className="sub" style={{ fontSize: 11, margin: "6px 0 0" }}>
+                Pour un document d'entreprise : ce qui est placé entre <code>{"{#Stagiaires}"}</code> et{" "}
+                <code>{"{/Stagiaires}"}</code> se répète pour chacun de ses stagiaires. Cliquez ensuite dans le
+                bloc les informations à répéter, prises dans le groupe <b>« Groupe entreprise »</b> ci-dessous.
+                Hors du bloc, Prénom, Nom… désignent le stagiaire du dossier.
+              </p>
             </div>
             <div className="hf-label" style={{ padding: "0 0 6px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>Insérer une référence <span style={{ textTransform: "none", fontWeight: 400 }}>· cliquez dans un « Modèle » puis sur un champ</span></span>
