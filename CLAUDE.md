@@ -154,7 +154,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **aucune à jouer, 161 à vérifier (relevé le 2026-09-21)**
+## 4. Migrations — **aucune à jouer ni à vérifier (relevé le 2026-09-21)**
 
 **164, 165 et 166 sont jouées — l'utilisateur l'a annoncé le 2026-09-21 ; constaté le jour même, sans
 SQL, pour les deux qui se voient :**
@@ -189,7 +189,8 @@ SQL, pour les deux qui se voient :**
 `SELECT *`, et renvoient les clés `project_improvement` (158) et `date_creation` (159) ; la 160
 (types de remise) a été constatée par l'utilisateur, qui a créé le type « OPCO ».
 
-⚠️ **161 (`remise_document.sans_objet`) ne se vérifie PAS par l'API** : la liste relit la colonne
+**161 (`remise_document.sans_objet`) est jouée — constaté le 2026-09-21 par l'utilisateur : la requête
+sur `information_schema` rend 1.** Elle ne se vérifiait PAS par l'API : la liste relit la colonne
 en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Seule une remise réellement marquée
 « sans objet » la trahirait — et il n'y en a aucune : **relevé le 2026-09-21, l'étape de remise « OPCO »
 existe dans les 10 formations et y est INACTIVE partout**, donc aucun dossier n'affiche de remise. Une
