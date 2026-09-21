@@ -46,6 +46,18 @@ const DEPTS = {
 };
 const deptName = (d) => (DEPTS[d] ? DEPTS[d][2] : "Département " + d);
 
+/* LE FOND DE CARTE : le Plan IGN de la Géoplateforme, service public, SANS CLÉ.
+   Les tuiles CARTO (basemaps.cartocdn.com) qui le précédaient exigent désormais une clé d'API :
+   relevé le 2026-09-21, chaque tuile revenait barrée « API KEY REQUIRED · carto.com/basemaps/
+   apikey », et la carte entière en était couverte. Le Plan IGN couvre la France ET l'outre-mer
+   (Guadeloupe, Martinique, Guyane, Réunion, Mayotte : tous les départements de DEPTS), du zoom 0
+   au 19 — vérifié tuile par tuile ; le 20 n'existe pas, d'où `maxZoom: 19`. Plus coloré que le
+   fond CARTO, il est désaturé par `.fond-carte` (app.css) : les bulles et les points restent ce
+   que l'œil voit d'abord. */
+const FOND_DE_CARTE = "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
+  + "&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png"
+  + "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}";
+
 function loadCss(href) {
   if (document.querySelector(`link[data-lf="${href}"]`)) return;
   const l = document.createElement("link");
@@ -107,8 +119,9 @@ function Carte() {
       // et deux commandes superposées au même endroit s'annulent l'une l'autre.
       const map = L.map(mapDiv.current, { center: [46.6, 2.4], zoom: 5, scrollWheelZoom: true, zoomControl: false });
       L.control.zoom({ position: "bottomright" }).addTo(map);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19, attribution: "© OpenStreetMap © CARTO",
+      L.tileLayer(FOND_DE_CARTE, {
+        maxZoom: 19, className: "fond-carte",
+        attribution: '© <a href="https://www.ign.fr/" target="_blank" rel="noopener">IGN</a> · Géoplateforme',
       }).addTo(map);
       mapRef.current = map;
       setMapReady(true);
@@ -195,7 +208,27 @@ function Carte() {
     if (layerRef.current) map.removeLayer(layerRef.current);
     const group = L.layerGroup();
 
+    /* Une bulle par département, cliquable : elle ouvre ses stagiaires. `estompee` : un autre
+       département est ouvert — la bulle reste, en retrait, et un clic y passe directement. */
+    const bulle = (d, estompee) => {
+      const c = DEPTS[d.dept];
+      if (!c) return;
+      const radius = 8 + Math.round((d.count / maxCount) * 22);
+      const m = L.circleMarker([c[0], c[1]], {
+        radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: estompee ? 0.35 : 0.78,
+      });
+      m.on("click", () => setDept(d.dept));
+      m.bindTooltip(`${deptName(d.dept)} · ${d.count}, ${estompee ? "cliquer pour y passer" : "cliquer pour filtrer"}`, { direction: "top" });
+      group.addLayer(m);
+    };
+
     if (dept) {
+      /* LES AUTRES DÉPARTEMENTS NE DISPARAISSENT PLUS. Ouvrir un département effaçait toutes les
+         autres bulles : filtre posé, on cliquait une bulle pour voir qui y suit la formation, et
+         le reste de la carte s'évanouissait — plus moyen de passer au département voisin sans
+         revenir d'abord à « Tous les départements ». Elles restent, estompées ; celle du
+         département ouvert cède la place à ses points. */
+      for (const d of filtered) if (d.dept !== dept) bulle(d, true);
       // Points précis (stagiaires géocodés) du département, colorés par niveau.
       const pts = [];
       for (const p of deptPoints) {
@@ -211,21 +244,14 @@ function Carte() {
       }
       map.addLayer(group);
       layerRef.current = group;
-      if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 12 });
-      else { const c = DEPTS[dept]; if (c) map.setView([c[0], c[1]], 9); }
+      /* Zoom 9 au plus, et non 12 : assez près pour distinguer les villes du département, assez
+         loin pour que les bulles voisines restent dans le cadre — sinon elles seraient là, mais
+         hors de vue. */
+      if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 9 });
+      else { const c = DEPTS[dept]; if (c) map.setView([c[0], c[1]], 8); }
     } else {
       // Vue d'ensemble : bulles cliquables par département.
-      for (const d of filtered) {
-        const c = DEPTS[d.dept];
-        if (!c) continue;
-        const radius = 8 + Math.round((d.count / maxCount) * 22);
-        const m = L.circleMarker([c[0], c[1]], {
-          radius, weight: 1.5, color: "#fff", fillColor: "#2c3371", fillOpacity: 0.78,
-        });
-        m.on("click", () => setDept(d.dept));
-        m.bindTooltip(`${deptName(d.dept)} · ${d.count}, cliquer pour filtrer`, { direction: "top" });
-        group.addLayer(m);
-      }
+      for (const d of filtered) bulle(d, false);
       map.addLayer(group);
       layerRef.current = group;
       map.setView([46.6, 2.4], 5);
@@ -252,7 +278,9 @@ function Carte() {
 
       {dept && (
         <div className="dept-banner">
-          <b>{deptName(dept)} ({dept})</b>, {deptPoints.length} stagiaire(s) géolocalisé(s)
+          {/* Un seul bloc de texte : dans le bandeau (flex, espacé), la virgule détachée du nom
+              flottait seule, un blanc devant elle. */}
+          <span><b>{deptName(dept)} ({dept})</b>, {deptPoints.length} stagiaire(s) géolocalisé(s)</span>
           <button className="btn sm ghost" onClick={() => setDept(null)}><Icon name="chevron-left" size={14} /> Tous les départements</button>
         </div>
       )}
