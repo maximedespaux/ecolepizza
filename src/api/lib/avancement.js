@@ -2,6 +2,28 @@ const { computeDocParcours, companyParcours } = require('./parcours.js');
 const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('./conditions.js');
 const { loadEquivalences, equivalenceMap } = require('./equivalence.js');
 const { enrollmentSteps, formationSteps } = require('../controllers/formationProgram.controller.js');
+const { loadOrgSteps } = require('../controllers/template.controller.js');
+const PointDeRupture = require('./pointDeRupture.js');
+
+/* LES POINTS DE RUPTURE DE CHAQUE FORMATION, en une requête : celui du parcours du dossier
+   (migration 076), la section entreprise et son point (092, 100). Colonnes absentes : aucun point,
+   donc rien ne bloque — comme pour l'émargement. */
+async function pointsDesFormations(conn, orgId) {
+    const out = new Map();
+    try {
+        const [rows] = await conn.query(
+            `SELECT id, emargement_break_slug AS bs, company_steps AS cs, company_break_slug AS cbs
+               FROM training_program WHERE organization_id = ?`, [orgId]);
+        for (const r of rows) {
+            let cs = r.cs;
+            if (typeof cs === 'string') { try { cs = JSON.parse(cs); } catch { cs = []; } }
+            out.set(r.id, { dossier: r.bs || null, entreprise: r.cbs || null, section: Array.isArray(cs) ? cs : [] });
+        }
+    } catch (err) {
+        if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
+    }
+    return out;
+}
 
 /**
  * AVANCEMENT RÉEL D'UN DOSSIER — le pourcentage d'étapes franchies de son parcours.
@@ -79,6 +101,14 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
         if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
     }
 
+    /* LE POINT DE RUPTURE FRANCHI ? Le tableau de bord garde en vue les dossiers d'une session
+       TERMINÉE qui ne sont pas à 100 % — mais seulement si le stagiaire a franchi le point : resté
+       avant, c'est quelqu'un qui n'est jamais venu, et son dossier ne relève plus du suivi. La
+       règle est celle de l'émargement (lib/pointDeRupture.js) ; les données, celles déjà chargées
+       ici — aucune requête de plus par dossier. */
+    const points = await pointsDesFormations(conn, orgId);
+    let etapesOrg = null; // chargées une fois, et seulement si un dossier d'entreprise en a besoin
+
     // `formationSteps` par formation (toutes les étapes candidates), en cache.
     const cacheEtapes = new Map();
     async function toutesLesEtapes(program) {
@@ -89,7 +119,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
     }
 
     for (const e of dossiers) {
-        const vide = { percent: 0, done: 0, total: 0, score: 'ROUGE', signed: 0, toSign: 0, currentKey: null, documents: [] };
+        const vide = { percent: 0, done: 0, total: 0, score: 'ROUGE', signed: 0, toSign: 0, currentKey: null, documents: [], point_franchi: true };
         if (!e.program_id) { out.set(e.enrollment_id, vide); continue; }
 
         const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
@@ -99,6 +129,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             ...(factsMap.get(e.enrollment_id) || {}),
         };
         let steps = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
+        const etapesDuDossier = steps; // avant la section entreprise : c'est elle que lit le point du dossier
         const [docs] = await conn.query(
             `SELECT gd.id, gd.type, gd.status, gd.template_slug, gd.quiz_id
              FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
@@ -111,8 +142,28 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
         const ent = await companyParcours(conn, orgId,
             { programId: program.id, companyId: e.enr_company_id, sessionId: e.session_id },
             () => toutesLesEtapes(program));
+        /* Le point de rupture se juge sur les documents DU DOSSIER et, à part, sur ceux du GROUPE —
+           comme l'émargement : on les distingue avant de les réunir pour le parcours. */
+        const propres = PointDeRupture.statutsDocuments(docs);
+        const groupe = PointDeRupture.statutsDocuments(ent.docs);
         if (ent.steps) steps = ent.steps;
         if (ent.docs.length) docs.push(...ent.docs);
+
+        const pt = points.get(program.id) || {};
+        let franchi = true;
+        if (pt.dossier) {
+            const brk = (await toutesLesEtapes(program)).find((s) => s.slug === pt.dossier);
+            if (brk) {
+                const exigees = PointDeRupture.exigencesDossier(etapesDuDossier, Number(brk.sort_order));
+                if (PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeDossier(s, propres)).locked) franchi = false;
+            }
+        }
+        // Volet entreprise : seulement pour un dossier ARRIVÉ par une entreprise (enrollment.company_id).
+        if (franchi && e.enr_company_id && pt.entreprise && pt.section && pt.section.length) {
+            if (!etapesOrg) etapesOrg = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
+            const exigees = PointDeRupture.exigencesEntreprise(pt.section, pt.entreprise, etapesOrg);
+            if (exigees && PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe)).locked) franchi = false;
+        }
 
         const parc = computeDocParcours({
             steps, docs,
@@ -139,6 +190,9 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
                pièce du parcours et la carte n'en bougeait plus — quatre dossiers à moitié faits
                restaient empilés dans la toute première colonne. */
             currentKey: parc.currentKey,
+            /* Le point de rupture du parcours est-il franchi ? Vrai aussi quand la formation n'en
+               pose aucun : rien ne bloque — la règle de l'émargement. */
+            point_franchi: franchi,
             score: total > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE',
             signed: signable.filter((s) => s.docStatus === 'SIGNE').length,
             toSign: signable.length,

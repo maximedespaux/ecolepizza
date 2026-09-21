@@ -5,8 +5,11 @@ const { colonneOuNull } = require('../lib/colonnes.js');
 const { CONTRAT_VALABLE } = require('../lib/contratPartenaire.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const consentements = require('../lib/consentements.js');
-const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc, stepSigners } = require('../lib/documents.js');
+const { stepsToDocSet, stagiaireSignsDoc, companySignsDoc } = require('../lib/documents.js');
 const { loadOrgSteps } = require('./template.controller.js');
+/* La DÉCISION du point de rupture (quelles étapes il exige, ce qui compte comme signé), partagée avec
+   l'avancement des dossiers : le tableau de bord et l'émargement disent la même chose. */
+const PointDeRupture = require('../lib/pointDeRupture.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
 const { regenEmargement } = require('../lib/emargement.js');
@@ -198,45 +201,34 @@ async function companyEmargementGate(conn, e, orgId) {
     // Étapes à/avant le point, résolues sur le parcours de l'organisme.
     const bySlug = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
     const break_label = (bySlug.get(breakSlug) || {}).label || null;
-    const required = list.slice(0, idx + 1)
-        .map((sl) => bySlug.get(sl))
-        .filter((s) => s && s.active && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT' && stepSigners(s).length > 0);
+    const required = PointDeRupture.exigencesEntreprise(list, breakSlug, bySlug);
     if (!required.length) return { ...none, break_label };
 
     // Documents du DOSSIER (stagiaire).
-    const ownBySlug = {}, ownByType = {};
     const [own] = await conn.query(
         `SELECT gd.type, gd.template_slug, gd.status FROM generated_document gd
          JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
         [e.enrollment_id]
     );
-    for (const r of own) { if (r.template_slug) ownBySlug[r.template_slug] = r.status; ownByType[r.type] = r.status; }
+    const propres = PointDeRupture.statutsDocuments(own);
 
     // Documents de GROUPE de l'entreprise (scope COMPANY), pour cette session si connue.
-    const grpBySlug = {};
+    let grp = [];
     try {
         // `session_id IS NULL` laissait passer les documents de groupe de N'IMPORTE QUELLE
         // session de cette entreprise : une convention signée pour la session de mars pouvait
         // débloquer celle de septembre. On ne l'accepte donc que faute de mieux, quand le
         // dossier lui-même n'a pas de session.
-        const [grp] = await conn.query(
+        [grp] = await conn.query(
             `SELECT template_slug, status FROM generated_document
              WHERE organization_id = ? AND scope = 'COMPANY' AND company_id = ?
                AND (? IS NULL OR session_id = ?)`,
             [orgId, companyId, sessionId, sessionId]
         );
-        // Un document de groupe non signé ne doit pas être écrasé par un homonyme signé.
-        for (const r of grp) {
-            if (!r.template_slug) continue;
-            if (grpBySlug[r.template_slug] !== 'SIGNE') grpBySlug[r.template_slug] = r.status;
-        }
     } catch { /* schéma documents entreprise absent → ces étapes resteront « à faire » */ }
-
-    const isDone = (s) => (s.company_level
-        ? grpBySlug[s.slug] === 'SIGNE'
-        : (ownBySlug[s.slug] === 'SIGNE' || ownByType[s.doc_type] === 'SIGNE'));
-    const done = required.filter(isDone).length;
-    return { locked: done < required.length, need: required.length, done, break_label };
+    // Un document de groupe non signé n'écrase pas un homonyme signé (statutsDocuments).
+    const groupe = PointDeRupture.statutsDocuments(grp);
+    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe)), break_label };
 }
 
 // Accès à l'émargement : point de rupture positionné ENTRE deux jalons du parcours DE LA
@@ -282,9 +274,7 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
         Object.assign(ctx, faits.get(e.enrollment_id) || {});
     } catch { /* champs de condition indisponibles : on s'en tient aux conditions intégrées */ }
     const etapesDuDossier = await enrollmentSteps(conn, orgId, program, ctx);
-    const required = etapesDuDossier.filter((s) => s.stagiaire_sign
-        && s.doc_type !== 'QCM' && s.doc_type !== 'EMARGEMENT'
-        && Number(s.sort_order) <= threshold);
+    const required = PointDeRupture.exigencesDossier(etapesDuDossier, threshold);
     const break_label = brk.label;
     if (!required.length) return { locked: false, need: 0, done: 0, break_label };
 
@@ -293,10 +283,8 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
          JOIN document_formation df ON df.document_id = gd.id WHERE df.enrollment_id = ?`,
         [e.enrollment_id]
     );
-    const statusBySlug = {}, statusByType = {};
-    for (const r of rows) { if (r.template_slug) statusBySlug[r.template_slug] = r.status; statusByType[r.type] = r.status; }
-    const done = required.filter((s) => statusBySlug[s.slug] === 'SIGNE' || statusByType[s.doc_type] === 'SIGNE').length;
-    return { locked: done < required.length, need: required.length, done, break_label };
+    const statuts = PointDeRupture.statutsDocuments(rows);
+    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeDossier(s, statuts)), break_label };
 }
 
 /**
