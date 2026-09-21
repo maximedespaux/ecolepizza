@@ -5492,6 +5492,25 @@ label .requis {
 .dossier-lien{display:flex;align-items:center;gap:12px;flex:1;min-width:0;margin:-5px -10px;padding:5px 10px}
 /* Tableau de bord : un dossier d'une session terminée, gardé en vue parce qu'il n'est pas complet. */
 .dossier-echu{display:block;font-size:12px;font-weight:600;color:var(--ember1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* SUIVI QUALIOPI — une ligne de dossier, et l'en-tête d'un groupe d'entreprise.
+   Sur ordinateur : une seule ligne — chevron, formation, nom, avancement, score.
+   SUR TÉLÉPHONE, CETTE LIGNE NE TENAIT PAS. L'avancement (90 px), le score, le chevron, la
+   formation et leurs espacements prenaient environ 270 px des 313 disponibles : mesuré à 375 px,
+   la colonne du nom faisait de 0 à 24 px, un mot par ligne, « stagiaire(s) » débordant sous la
+   barre, et chaque ligne montait à près de 200 px. Sous 640 px, la ligne devient une grille : l'état
+   (avancement + score) passe SOUS le nom, dans la même colonne que lui, et le nom récupère toute la
+   largeur. Les retraits du détail et des membres d'un groupe (40 et 34 px) fondent aussi. */
+.suivi-ligne{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left}
+.suivi-ligne-texte{flex:1;min-width:0}
+.suivi-ligne-etat{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.suivi-detail{padding:12px 16px 14px 40px;border-top:1px solid var(--border-soft)}
+.suivi-groupe-membres{padding:10px 14px 14px 34px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px}
+@media (max-width:640px){
+  .suivi-ligne{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:6px 10px;padding:12px}
+  .suivi-ligne-etat{grid-row:2;grid-column:3}
+  .suivi-detail{padding:12px 12px 14px}
+  .suivi-groupe-membres{padding:10px 10px 12px}
+}
 /* Suivi Qualiopi : le compteur des complets, qui les réaffiche d'un clic. */
 /* Même allure que les compteurs liens (.compteurs a), sans bouton plein. Au survol, on souligne
    plutôt que de passer au bleu marine : --navy n'a pas de valeur sombre, il disparaîtrait sur le

@@ -62,21 +62,23 @@ function CompanyRoadmap({ steps }) {
 function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden", background: nested ? "var(--surface2)" : undefined }}>
-      <button type="button" onClick={onToggle}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+      {/* Mise en page dans app.css (.suivi-ligne) : sur téléphone, l'état passe sous le nom. */}
+      <button type="button" onClick={onToggle} className="suivi-ligne">
         <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
         <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
-        <span style={{ flex: 1, minWidth: 0 }}>
+        <span className="suivi-ligne-texte">
           <b>{d.last_name} {d.first_name}</b>
           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
             {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
           </span>
         </span>
-        <ProgressPct percent={d.percent} score={d.score} />
-        <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+        <span className="suivi-ligne-etat">
+          <ProgressPct percent={d.percent} score={d.score} />
+          <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
+        </span>
       </button>
       {isOpen && (
-        <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
+        <div className="suivi-detail">
           <Roadmap steps={d.documents} />
           {/* Sur la fiche, l'onglet de CE dossier — pas le premier (lib/lienDossier.js). */}
           <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(lienDossier(d.learner_id, d.enrollment_id))}>
@@ -284,21 +286,22 @@ function Suivi() {
                   const cOpen = !!open[ckey];
                   return (
                     <div key={ckey} className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--ember1, #c0392b)" }}>
-                      <button type="button" onClick={() => toggle(ckey)}
-                        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                      <button type="button" onClick={() => toggle(ckey)} className="suivi-ligne">
                         <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
                         <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
+                        <span className="suivi-ligne-texte">
                           <b>{g.company_name}</b>
                           <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                             {g.members.length} stagiaire(s){complets > 0 ? ` dont ${complets} complet${complets > 1 ? "s" : ""}` : ""} · {g.done}/{g.total} étape(s)
                           </span>
                         </span>
-                        <ProgressPct percent={g.percent} score={g.score} />
-                        <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
+                        <span className="suivi-ligne-etat">
+                          <ProgressPct percent={g.percent} score={g.score} />
+                          <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
+                        </span>
                       </button>
                       {cOpen && (
-                        <div style={{ padding: "10px 14px 14px 34px", borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div className="suivi-groupe-membres">
                           {g.documents?.length > 0 && (
                             <div style={{ marginBottom: 4 }}>
                               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)", marginBottom: 6 }}>PARCOURS DU GROUPE</div>
