@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -12,6 +12,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { dateHeure, dateFr } from "../lib/format.js";
+import { documentsDeLEtape, documentsEntrepriseHorsParcours } from "../lib/documentsDossier.js";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
@@ -100,6 +101,10 @@ export default function EntrepriseDetail() {
   const [preparing, setPreparing] = useState(false);
   const [companyDocs, setCompanyDocs] = useState([]); // documents entreprise déjà générés
   const [viewId, setViewId] = useState(null); // aperçu d'un document
+  /* LES MODÈLES QUE MONTRENT LES ÉTAPES DE GROUPE du parcours affiché : leurs documents ont leurs
+     gestes sur la carte de l'étape, la liste du bas ne garde que les autres. `null` tant que le
+     parcours de la session n'est pas arrivé — sans quoi la liste afficherait tout, puis presque rien. */
+  const [slugsEtapes, setSlugsEtapes] = useState(null);
 
   function load() {
     getCompany(id).then((r) => {
@@ -178,16 +183,13 @@ export default function EntrepriseDetail() {
   // Parcours documentaire du groupe : génère un document pour tout le groupe.
   //  · document de groupe (company_level) → un doc par OPCO ;
   //  · sinon → un doc par stagiaire concerné, puis envoi (le stagiaire signe dans son espace).
-  // Depuis une étape du parcours (document de groupe) : pré-sélectionne le bon
-  // document dans le formulaire « Préparer un document » et descend au formulaire
-  // (comme la fiche stagiaire). La génération se fait ensuite via le formulaire.
+  // Depuis une étape du parcours (document de groupe) : pré-remplit le modèle de l'étape et la
+  // session affichée. Le formulaire s'ouvre DANS l'étape (EnrollmentParcours, 2026-09-21) : il
+  // vivait dans une carte plus bas, vers laquelle la page défilait. `slug` nul : la case « Autre
+  // document », où le modèle se choisit. Session AFFICHÉE seule, plutôt qu'ajoutée aux cases déjà
+  // cochées : l'étape appartient au parcours de cette session-là (les autres restent à cocher).
   function prepareCompanyDoc(slug) {
-    setPrep((p) => {
-      const ids = new Set(p.sessionIds);
-      if (viewSessionId) ids.add(viewSessionId);
-      return { ...p, slug, sessionIds: ids };
-    });
-    setTimeout(() => document.getElementById("ent-prepare")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+    setPrep({ slug: slug || "", sessionIds: new Set(viewSessionId ? [viewSessionId] : []) });
   }
   // Modèles couverts par les sessions cochées (union, dédupliqué par slug).
   const coveredTpls = (() => {
@@ -197,7 +199,8 @@ export default function EntrepriseDetail() {
   })();
   const togglePrepSession = (sid) => setPrep((p) => { const n = new Set(p.sessionIds); n.has(sid) ? n.delete(sid) : n.add(sid); return { ...p, sessionIds: n }; });
   // Génère le document de groupe pour chaque session cochée qui le propose.
-  async function prepareGroupDoc(ev) {
+  // `fermer` : referme le formulaire ouvert dans l'étape du parcours, une fois le document généré.
+  async function prepareGroupDoc(ev, fermer) {
     ev.preventDefault();
     if (!prep.slug || prep.sessionIds.size === 0) return;
     setPreparing(true); setStatus(null);
@@ -209,7 +212,7 @@ export default function EntrepriseDetail() {
         n++;
       }
       setStatus({ type: n ? "success" : "error", message: n ? `Document de groupe préparé (${n} formation(s)).` : "Ce document n'existe pas dans les formations sélectionnées." });
-      if (n) { setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); }
+      if (n) { setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); fermer?.(); }
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setPreparing(false); }
   }
@@ -229,6 +232,10 @@ export default function EntrepriseDetail() {
     if (!window.confirm(msg)) return;
     setStatus(null);
     try { await deleteDocument(docId); setParcoursRefresh((n) => n + 1); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  async function telechargerPdf(d) {
+    try { await downloadDocumentPdf(d.id, `${d.title || "document"}.pdf`); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function companySignLink(docId) {
@@ -270,6 +277,104 @@ export default function EntrepriseDetail() {
   }
 
   if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} />;
+
+  /* LES BOUTONS D'UN DOCUMENT DE GROUPE, une seule définition : sur la carte de son étape ET dans
+     « Autres documents ». La corbeille garde sa confirmation (plus ferme pour un document signé). */
+  function boutonsDocumentEntreprise(d) {
+    return (
+      <>
+        <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
+        {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer (à l'entreprise)" aria-label={`Envoyer ${d.title} à l'entreprise`} onClick={() => sendCompanyDoc(d.id)}><Icon name="send" size={16} /></button>}
+        {d.template_slug && <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger ${d.title}`} onClick={() => telechargerPdf(d)}><Icon name="download" size={16} /></button>}
+        <button className="iconbtn del" title={d.status === "SIGNE" ? "Supprimer (document signé)" : "Supprimer"} aria-label={`Supprimer ${d.title}`} onClick={() => deleteCompanyDoc(d.id, d.title, d.status === "SIGNE")}><Icon name="trash" size={15} /></button>
+      </>
+    );
+  }
+  const traceDocument = (d) => (d.signed_at ? `signé le ${dateFr(d.signed_at)}`
+    : d.sent_at ? `envoyé le ${dateFr(d.sent_at)}`
+    : d.created_at ? `préparé le ${dateFr(d.created_at)}` : "préparé");
+
+  /* LES GESTES D'UNE ÉTAPE DE GROUPE, sur sa carte (demandé le 2026-09-21, comme la fiche
+     stagiaire). Une étape peut montrer PLUSIEURS documents — un par OPCO — : une ligne chacun,
+     nommée par son OPCO. Une étape « stagiaire » n'en a aucun : ses documents se génèrent depuis
+     chaque fiche stagiaire. */
+  function gestesEtapeGroupe(s) {
+    if (!s.company_level) return null;
+    const liste = documentsDeLEtape(companyDocs, s.key, viewSessionId);
+    if (!liste.length) return null;
+    /* Plusieurs documents : chaque ligne porte le NOM de son OPCO et un état court — la date
+       n'y tiendrait pas à côté de quatre boutons ; elle reste, complète, au survol. */
+    const etatCourt = (d) => (d.signed_at || d.status === "SIGNE" ? "signé" : d.sent_at ? "envoyé" : "préparé");
+    const ligne = (d, nom) => (
+      <>
+        <span className="parc-trace" title={[d.title, d.created_at && `préparé le ${dateHeure(d.created_at)}`, d.sent_at && `envoyé le ${dateHeure(d.sent_at)}`, d.signed_at && `signé le ${dateHeure(d.signed_at)}`].filter(Boolean).join(" · ")}>
+          {nom ? `${nom} · ${etatCourt(d)}` : traceDocument(d)}
+        </span>
+        {boutonsDocumentEntreprise(d)}
+      </>
+    );
+    if (liste.length === 1) return ligne(liste[0], null);
+    return (
+      <div className="parc-gestes-multi">
+        {/* Le titre porte l'OPCO après le tiret (« Convention de formation — AKTO ») : c'est lui qui distingue les lignes. */}
+        {liste.map((d) => <div key={d.id} className="parc-geste-ligne">{ligne(d, d.title.split(" — ").slice(1).join(" — ") || d.title)}</div>)}
+      </div>
+    );
+  }
+
+  /* « PRÉPARER UN DOCUMENT » DE GROUPE, DANS L'ÉTAPE (2026-09-21) : la carte « Préparer un
+     document », sous le parcours, disparaît. Ouvert depuis une étape, le modèle est le sien ; depuis
+     « Autre document » (`etape` nul), il se choisit parmi les modèles de groupe des sessions
+     cochées. Les formations ne se demandent que si l'entreprise en a plusieurs. */
+  function formulaireGroupe(etape, fermer) {
+    return (
+      <form onSubmit={(ev) => prepareGroupDoc(ev, fermer)} className="parc-preparation">
+        {!etape && (
+          <div className="field">
+            <label>Modèle de document (groupe)</label>
+            <select className="inp" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
+              <option value="">{coveredTpls.length ? "Choisir un document" : "Aucun document de groupe disponible"}</option>
+              {coveredTpls.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
+            </select>
+          </div>
+        )}
+        {(data.sessions || []).length > 1 && (
+          <div className="field">
+            <label>Formations couvertes</label>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {(data.sessions || []).map((s) => {
+                const checked = prep.sessionIds.has(s.id);
+                const tplCount = (groupTplsBySession[s.id] || []).length;
+                return (
+                  <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={checked} onChange={() => togglePrepSession(s.id)} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b>{s.program_code || s.program_title}</b>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.program_title} · S{s.week} {s.year}</span>
+                    </span>
+                    <Badge tone={tplCount ? "b" : "n"}>{tplCount} doc{tplCount > 1 ? "s" : ""} groupe</Badge>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="parc-preparation-gestes">
+          <button type="submit" className="btn primary" disabled={preparing || !prep.slug || prep.sessionIds.size === 0}>
+            <Icon name="file-text" size={15} /> Générer le document
+          </button>
+          {/* Sans étape où le replier (parcours sans étape), le formulaire reste ouvert : rien à annuler. */}
+          {fermer && <button type="button" className="btn" onClick={fermer}>Annuler</button>}
+          {prep.sessionIds.size === 0 && <span className="hint">Sélectionne au moins une formation.</span>}
+        </div>
+      </form>
+    );
+  }
+
+  /* « AUTRES DOCUMENTS » : les documents de groupe qu'aucune étape ne montre (préparés hors
+     parcours, ou d'une session qui n'est plus celle de l'entreprise). Sans session, tout y est. */
+  const autresDocs = !viewSessionId ? companyDocs
+    : slugsEtapes ? documentsEntrepriseHorsParcours(companyDocs, slugsEtapes, viewSessionId, (data.sessions || []).map((x) => x.id)) : [];
 
   return (
     <>
@@ -434,7 +539,7 @@ export default function EntrepriseDetail() {
           <p className="hint" style={{ margin: "0 0 12px" }}>🏢 document de groupe · les documents stagiaire se génèrent depuis leur fiche.</p>
           {(data.sessions || []).length > 1 && (
             <div className="field" style={{ maxWidth: 360 }}><label>Session</label>
-              <select className="inp" value={viewSessionId} onChange={(e) => setViewSessionId(e.target.value)}>
+              <select className="inp" value={viewSessionId} onChange={(e) => { setViewSessionId(e.target.value); setSlugsEtapes(null); }}>
                 {data.sessions.map((s) => <option key={s.id} value={s.id}>{`${s.program_code || s.program_title} · S${s.week} ${s.year}`}</option>)}
               </select>
             </div>
@@ -448,80 +553,39 @@ export default function EntrepriseDetail() {
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
               onOpenDoc={openCompanyDoc}
+              renderGestes={gestesEtapeGroupe}
+              renderPreparation={formulaireGroupe}
+              /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout. */
+              onCharge={(d) => setSlugsEtapes(new Set((d?.steps || []).filter((x) => x.company_level).map((x) => x.key)))}
             />
           )}
-        </Card>
-      </div>
 
-      {/* Préparer un document de GROUPE (comme la fiche stagiaire). */}
-      <div id="ent-prepare" style={{ marginTop: 22, scrollMarginTop: 80 }}>
-        <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Préparer un document</span>}>
-          <p className="hint" style={{ margin: "0 0 12px" }}>Document de groupe (🏢), pour une ou plusieurs formations.</p>
-          {(data.sessions || []).length === 0 ? (
-            <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
-          ) : (
-            <form onSubmit={prepareGroupDoc}>
-              <div className="field">
-                <label>Modèle de document (groupe)</label>
-                <select className="inp" value={prep.slug} onChange={(e) => setPrep((p) => ({ ...p, slug: e.target.value }))}>
-                  <option value="">{coveredTpls.length ? "Choisir un document" : "Aucun document de groupe disponible"}</option>
-                  {coveredTpls.map((t) => <option key={t.slug} value={t.slug}>{t.label}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>Formations couvertes</label>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {(data.sessions || []).map((s) => {
-                    const checked = prep.sessionIds.has(s.id);
-                    const tplCount = (groupTplsBySession[s.id] || []).length;
-                    return (
-                      <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }}>
-                        <input type="checkbox" checked={checked} onChange={() => togglePrepSession(s.id)} />
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <b>{s.program_code || s.program_title}</b>
-                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.program_title} · S{s.week} {s.year}</span>
-                        </span>
-                        <Badge tone={tplCount ? "b" : "n"}>{tplCount} doc{tplCount > 1 ? "s" : ""} groupe</Badge>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button type="submit" className="btn primary" disabled={preparing || !prep.slug || prep.sessionIds.size === 0}>
-                  <Icon name="file-text" size={15} /> Générer le document
-                </button>
-                {prep.sessionIds.size === 0 && <span className="hint">Sélectionne au moins une formation.</span>}
-              </div>
-            </form>
-          )}
-
-          {/* Documents entreprise déjà générés : aperçu / envoi / suppression. */}
-          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
-            {companyDocs.length === 0 ? (
-              <p className="hint" style={{ margin: 0 }}>Aucun document entreprise préparé.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {companyDocs.map((d) => {
+          {autresDocs.length > 0 && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+              <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Autres documents</h3>
+              <p className="hint" style={{ margin: "0 0 8px" }}>Documents de groupe qu'aucune étape du parcours ne montre.</p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {autresDocs.map((d) => {
                   const [label, tone] = DOC_STATUS[d.status] || [d.status, "n"];
                   return (
-                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                      <span style={{ flex: 1, minWidth: 0 }}>
+                    /* `wrap` : sur un téléphone, statut et boutons passent ensemble SOUS le titre. */
+                    <div key={d.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 11px", padding: "8px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                      <span style={{ flex: "1 1 180px", minWidth: 0 }}>
                         <b>{d.title}</b>
                         <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                          {d.created_at ? `préparé le ${dateHeure(d.created_at)}` : ""}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}
+                          {d.created_at ? `préparé le ${dateHeure(d.created_at)}` : ""}{d.sent_at ? ` · envoyé le ${dateHeure(d.sent_at)}` : ""}{d.signed_at ? ` · signé le ${dateHeure(d.signed_at)}` : ""}
                         </span>
                       </span>
-                      <Badge tone={tone}>{label}</Badge>
-                      <button className="iconbtn" title="Aperçu / vérifier" onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
-                      {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer (à l'entreprise)" onClick={() => sendCompanyDoc(d.id)}><Icon name="send" size={16} /></button>}
-                      <button className="iconbtn del" title={d.status === "SIGNE" ? "Supprimer (document signé)" : "Supprimer"} onClick={() => deleteCompanyDoc(d.id, d.title, d.status === "SIGNE")}><Icon name="trash" size={15} /></button>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                        <Badge tone={tone}>{label}</Badge>
+                        {boutonsDocumentEntreprise(d)}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </Card>
       </div>
 

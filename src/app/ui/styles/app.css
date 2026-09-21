@@ -5407,8 +5407,10 @@ label .requis {
 .parc-etape{position:relative;display:flex;flex-direction:column;border-radius:12px;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
 .parc-etape-choix{display:flex;flex:1;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .parc-etape-gestes{display:flex;align-items:center;gap:4px;padding:0 10px 8px 12px}
-/* La trace du document (envoyé, signé, importé le…) : une ligne, coupée plutôt que d'agrandir la carte. */
-.parc-trace{flex:1;min-width:0;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* La trace du document (envoyé, signé, importé le…) : DEUX lignes au plus, coupées au-delà. Sur une
+   ligne, quatre boutons ne lui laissaient qu'une douzaine de caractères — « envoyé le 10/0… » ; la
+   seconde ne coûte rien en hauteur, les boutons de 32 px la font déjà. */
+.parc-trace{flex:1;min-width:0;font-size:11.5px;line-height:1.25;color:var(--muted);overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .parc-autre{border-style:dashed}
 .parc-etape.sel{background:var(--surface2);border-color:var(--ember1)}
 /* LA PROCHAINE ÉTAPE, celle qui attend un geste : un filet à gauche, sans éteindre les autres. */
@@ -5447,3 +5449,7 @@ label .requis {
 .parc-preparation{margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft)}
 .parc-preparation .field{margin-bottom:10px}
 .parc-preparation-gestes{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+/* Une étape de GROUPE peut montrer plusieurs documents, un par OPCO (fiche entreprise) : une ligne
+   chacun — nommée par son OPCO —, les boutons au bout de la sienne. */
+.parc-gestes-multi{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.parc-geste-ligne{display:flex;align-items:center;gap:4px}
