@@ -1378,21 +1378,31 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [crypto.randomUUID(), orgId, doc.id, slot, label, signerName, encSig, encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), hash]);
     }
+    /* LE DOCUMENT N'EST SIGNÉ QUE LORSQUE TOUS SES CADRES ATTRIBUÉS LE SONT. Un document de
+       session peut en attribuer plusieurs — « Formateur », « Jury 1 », « Président du jury »…
+       Le premier à signer passait le document à SIGNÉ, et l'organisme contresignait aussitôt :
+       le document se disait signé avec deux cadres vides, et l'organisme signait AVANT les
+       autres au lieu d'en dernier. Une case sans attribution (lien, espace entreprise) est créée
+       signée : pour elle, rien ne change. */
+    const [[reste]] = await conn.query(
+        'SELECT COUNT(*) AS n FROM document_signature WHERE document_id = ? AND signed_at IS NULL', [doc.id]);
+    const complet = !(reste && Number(reste.n));
     // Re-scelle le PDF (signataire du créneau + contre-signature organisme).
     const slug = doc.template_slug;
     const content = slug ? await getTemplateContent(orgId, slug) : null;
     if (content && content.kind !== 'emargement') {
         const { signPdf, generateSelfSignedP12 } = require('../lib/pdfseal.js');
-        // L'organisme signe en dernier : signature visible apposée avant le rendu.
+        // L'organisme signe en dernier : signature visible apposée avant le rendu — une fois TOUS les cadres signés.
         const orgSteps = await loadOrgSteps(orgId);
-        if (orgSignsDoc(orgSteps, doc)) await applyOrgVisibleSignature(conn, orgId, doc.id);
+        const orgSigne = complet && orgSignsDoc(orgSteps, doc);
+        if (orgSigne) await applyOrgVisibleSignature(conn, orgId, doc.id);
         const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
         let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
         const repP12 = generateSelfSignedP12(signerName || 'Signataire');
         pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false });
         let count = 1;
         try {
-            if (orgSignsDoc(orgSteps, doc)) {
+            if (orgSigne) {
                 const org = ctx.org || {};
                 const orgName = org.legal_name || org.short_name || 'Organisme';
                 const orgP12 = await getOrgSigner(conn, orgId, orgName);
@@ -1402,7 +1412,9 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
         } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
         await storeSignedPdf(conn, orgId, doc.id, pdf, count);
     }
-    await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
+    if (complet) {
+        await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
+    }
 }
 
 /**

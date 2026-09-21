@@ -8,6 +8,7 @@
 // les exporte tous — n'en garder qu'un jeu casserait l'autre fonctionnalité en silence.
 const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
+const { CASE_STAGIAIRE } = require('./documents.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -70,7 +71,7 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
 
     const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)
-    const STAG_SLOT = /(stagiaire|eleve|élève|apprenant|participant|candidat|beneficiaire|bénéficiaire)/i;
+    const STAG_SLOT = CASE_STAGIAIRE; // règle partagée avec l'envoi des documents de session
     // Jeton de signature multiple « sig:<slot> » : cadre de signature (rempli si signé, sinon vide).
     // Repli : un emplacement « stagiaire » non signé séparément reprend la signature
     // du stagiaire du document (bouton « Signer » unique) — sinon il resterait vide.

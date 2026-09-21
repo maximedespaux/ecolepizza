@@ -57,14 +57,19 @@ test('SEULS LES MODÈLES « EXTERNE » PEUVENT PARTIR', () => {
     assert.match(SESSION_CTRL, /n'est pas signable par un intervenant externe/);
 });
 
-test('ON N\'ENVOIE QU\'À UN INTERVENANT AFFECTÉ À CETTE SESSION', () => {
+test('ON N\'ENVOIE QU\'À UNE PERSONNE AFFECTÉE À CETTE SESSION', () => {
     /* « Externe » ne veut pas dire « n'importe qui ». Le contrôle porte sur la SESSION et pas
        seulement sur l'organisme : sans ça, on pourrait attribuer un contrat à un intervenant
-       d'une autre promotion, qui le verrait apparaître chez lui sans comprendre. */
-    const zone = SESSION_CTRL.slice(SESSION_CTRL.indexOf('let affecte'));
-    assert.match(zone, /FROM session_intervenant si JOIN user u ON u\.id = si\.user_id/);
-    assert.match(zone, /si\.session_id = \? AND si\.organization_id = \? AND si\.user_id = \?/);
-    assert.match(zone, /n'est pas affecté à cette session/);
+       d'une autre promotion, qui le verrait apparaître chez lui sans comprendre.
+       DEPUIS LE 2026-09-21, les FORMATEURS de la session signent aussi (cadres « Formateur »,
+       « Jury 1 »…) : la liste des personnes admises réunit les deux affectations, et elle seule. */
+    const zone = SESSION_CTRL.slice(SESSION_CTRL.indexOf('async function personnesDeLaSession'));
+    assert.match(zone, /FROM session_trainer st JOIN user u ON u\.id = st\.user_id\s+WHERE st\.session_id = \?/);
+    assert.match(zone, /FROM session_intervenant si JOIN user u ON u\.id = si\.user_id\s+WHERE si\.session_id = \? AND si\.organization_id = \?/);
+    const envoi = SESSION_CTRL.slice(SESSION_CTRL.indexOf('const envoyerDocumentSession'));
+    assert.match(envoi, /await personnesDeLaSession\(conn, orgId, req\.params\.id\)/);
+    assert.match(envoi, /if \(attributions\.some\(\(a\) => !nomDe\.has\(a\.userId\)\)\)/, 'CHAQUE personne est vérifiée');
+    assert.match(envoi, /n'est pas affectée à cette session/);
 });
 
 test('LA CASE EST CRÉÉE VIDE ET ATTRIBUÉE — c\'est le rail dormant qu\'on branche', () => {
@@ -74,8 +79,15 @@ test('LA CASE EST CRÉÉE VIDE ET ATTRIBUÉE — c\'est le rail dormant qu\'on b
        regardait que la liste des COLONNES, et restait verte quand on passait NULL à la place de
        `userId` — le document serait alors parti sans destinataire, invisible dans tous les
        espaces. Nommer une colonne ne dit rien de ce qu'on y met. */
-    assert.match(SESSION_CTRL, /\[crypto\.randomUUID\(\), orgId, docId, await creneauDuModele\(orgId, slug\), 'Intervenant externe', userId\]/,
-        'la case doit porter l\'identifiant de l\'intervenant, pas NULL — et le créneau du MODÈLE');
+    /* DEPUIS LE 2026-09-21, une case PAR CADRE attribué : chacune porte la personne choisie
+       (`a.userId`, jamais NULL) et un cadre qui EXISTE dans le modèle — vérifié avant, ou calculé
+       par creneauDuModele pour l'ancienne forme à un seul intervenant. */
+    assert.match(SESSION_CTRL, /\[crypto\.randomUUID\(\), orgId, docId, a\.slot, libelle\.get\(a\.slot\) \|\| 'Intervenant externe', a\.userId\]/,
+        'la case doit porter l\'identifiant de la personne, pas NULL — et le créneau du MODÈLE');
+    assert.match(SESSION_CTRL, /attributions = \[\{ slot: await creneauDuModele\(orgId, slug\), userId: String\(b\.user_id\)\.trim\(\) \}\]/,
+        'l\'ancienne forme garde le créneau lu dans le modèle');
+    assert.match(SESSION_CTRL, /const inconnu = attributions\.find\(\(a\) => !libelle\.has\(a\.slot\)\)/,
+        'un créneau inventé recevrait une signature que le document n\'afficherait nulle part');
     /* `signed_at` reste NULL : c'est ce qui distingue « en attente » de « signé », et c'est
        cette ligne que l'espace de l'intervenant lit. */
     assert.ok(!/signed_at = NOW\(\)/.test(SESSION_CTRL.slice(SESSION_CTRL.indexOf('INSERT INTO document_signature'))),
@@ -86,7 +98,9 @@ test('L\'INTERVENANT NE SIGNE QUE CE QUI LUI EST ATTRIBUÉ', () => {
     const zone = INTERV.slice(INTERV.indexOf('const signerMonDocument'));
     assert.match(zone, /WHERE ds\.document_id = \? AND ds\.user_id = \? AND ds\.organization_id = \?/,
         'le contrôle porte sur user_id, pas sur l\'organisation : jamais le document d\'un collègue');
-    assert.match(zone, /if \(ligne\.signed_at\) return res\.status\(409\)/, 'et pas deux fois');
+    /* Et pas deux fois : seules les cases encore vides se signent (une personne peut en avoir
+       plusieurs sur un même document depuis les cadres du jury). */
+    assert.match(zone, /const aSigner = lignes\.filter\(\(l\) => !l\.signed_at\);\s+if \(!aSigner\.length\) return res\.status\(409\)/, 'et pas deux fois');
 });
 
 test('IL SIGNE D\'UN CLIC, AVEC SA SIGNATURE ENREGISTRÉE', () => {
@@ -237,8 +251,9 @@ test('LE CRÉNEAU VIENT DU MODÈLE, PAS D\'UNE CONSTANTE', async () => {
     assert.match(SESSION_CTRL, /ds\.document_id = d\.id AND ds\.user_id IS NOT NULL/);
 
     /* Côté intervenant aussi : le créneau vient de SA case. */
-    assert.match(INTERV, /slot: ligne\.slot \|\| SLOT_EXTERNE/);
-    assert.match(INTERV, /\[req\.user\.id, ligne\.doc_id, ligne\.slot \|\| SLOT_EXTERNE\]/);
+    assert.match(INTERV, /slot: l\.slot \|\| SLOT_EXTERNE, label: l\.label \|\| 'Intervenant externe'/,
+        'le créneau ET le libellé de CHAQUE case (« Jury 1 »…), pas une constante');
+    assert.match(INTERV, /\[req\.user\.id, ligne\.doc_id, l\.slot \|\| SLOT_EXTERNE\]/);
     assert.match(INTERV, /SELECT ds\.id, ds\.slot, ds\.signed_at/, 'il faut donc le LIRE');
 });
 
@@ -286,5 +301,7 @@ test('LA SIGNATURE PORTE LE NOM DE L\'INTERVENANT, PAS « Intervenant »', () =>
     assert.match(zone, /SELECT first_name, last_name FROM user WHERE id = \?/);
     assert.ok(!/req\.user\.first_name/.test(zone),
         'le jeton ne porte pas le nom : le lire là donne `undefined` à tous les coups');
-    assert.match(zone, /\|\| 'Intervenant'/, 'le repli reste, pour un compte sans nom saisi');
+    /* Le repli reste, pour un compte sans nom saisi — « Signataire » depuis que formateurs et jury
+       signent aussi par ce chemin : « Intervenant » aurait été faux pour eux. */
+    assert.match(zone, /\|\| 'Signataire'/, 'le repli reste, pour un compte sans nom saisi');
 });

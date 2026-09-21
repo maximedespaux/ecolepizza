@@ -4,7 +4,7 @@ const { listSessionIntervenants, addSessionIntervenant, setIntervenantSlots, rem
 const { getSessionConsents, setConsentPourStagiaire, getManquantsParSession } = require('../controllers/consentement.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
-const { listerDocumentsSession, envoyerDocumentSession } = require('../controllers/documentSession.controller.js');
+const { listerDocumentsSession, envoyerDocumentSession, mesCasesDeSession } = require('../controllers/documentSession.controller.js');
 const router = express.Router();
 router.use(authenticateToken);
 
@@ -49,6 +49,10 @@ router.put('/:id/consentements/:learnerId', authorizeRoles(...ADMIN_ROLES), setC
    Lecture pour tout le personnel — le formateur doit voir où en est la signature ; l'ENVOI
    engage l'organisme et reste au bureau, comme toute génération de document. */
 router.get('/:id/documents-externes', authorizeRoles(...STAFF_ROLES), listerDocumentsSession);
+/* LES CADRES QU'ON M'A ATTRIBUÉS sur les documents de la session — un formateur les signe depuis
+   cette page, comme ses émargements. Lecture : tout le personnel ; le contrôleur ne rend que les
+   SIENS (ds.user_id = moi). */
+router.get('/:id/mes-cases', authorizeRoles(...STAFF_ROLES), mesCasesDeSession);
 router.post('/:id/documents-externes', authorizeRoles(...ADMIN_ROLES), envoyerDocumentSession);
 
 module.exports = router;

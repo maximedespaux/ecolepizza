@@ -448,7 +448,7 @@ function TemplateEditor() {
                 </button>
               )}
               {SIG_PRESETS.map((s) => (
-                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », cliquer ou glisser`}
+                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} ». Sur un modèle où « Externe » est coché, il s'attribue à une personne de la session à l'envoi, qui le signe en ligne ; sinon il se signe à la main. Cliquer ou glisser.`}
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
                   onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>

@@ -68,6 +68,8 @@ function MesDocuments({ onStatus, fullName }) {
                   {d.program_code ? `${d.program_code} · ` : ""}
                   {d.week ? `S${d.week} ${d.year} · ` : ""}
                   {d.signe_le ? `signé le ${d.signe_le}` : `reçu le ${d.envoye_le}`}
+                  {/* LE CADRE QU'ON ME DEMANDE DE SIGNER, nommé : « Jury 1 », « Président du jury »… */}
+                  {d.cadres ? ` · ${d.cadres}` : ""}
                 </span>
               </span>
               {/* VOIR AVANT DE SIGNER, toujours — et relire après. Les deux boutons sont posés

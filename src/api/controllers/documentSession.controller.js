@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { loadOrgSteps, getTemplateContent } = require('./template.controller.js');
-const { stepSigners } = require('../lib/documents.js');
+const { stepSigners, CASE_STAGIAIRE } = require('../lib/documents.js');
 
 /**
  * LE CRÉNEAU DE SIGNATURE SE LIT DANS LE MODÈLE, il ne s'impose pas.
@@ -58,6 +58,61 @@ async function creneauxDuModele(orgId, slug) {
     } catch { return []; }
 }
 
+/**
+ * LES CADRES D'UN MODÈLE QU'ON ATTRIBUE À UNE PERSONNE DE LA SESSION — formateur, jury,
+ * intervenant —, avec le libellé que l'école leur a donné dans l'éditeur (« Jury 1 »,
+ * « Président du jury »…). Rendus dans l'ordre du document, sans doublon.
+ *
+ * DEUX SORTES DE CADRES N'Y FIGURENT PAS, parce que personne de la session ne les signe :
+ * ceux du STAGIAIRE (il signe lui-même, depuis son espace — cf. CASE_STAGIAIRE) et celui du
+ * représentant d'une ENTREPRISE (`representant`, rempli depuis l'espace entreprise).
+ */
+async function casesDuModele(orgId, slug) {
+    let corps = '';
+    try {
+        const c = await getTemplateContent(orgId, slug);
+        corps = `${(c && c.html) || ''}${(c && c.header) || ''}${(c && c.footer) || ''}`;
+    } catch { return []; }
+    const cases = [];
+    const vus = new Set();
+    for (const m of corps.matchAll(/<span\b[^>]*\bdata-token="sig:([^"]+)"[^>]*>|\{\s*sig:([^}\s]+)\s*\}/g)) {
+        const slot = String(m[1] || m[2]).trim();
+        const lib = m[1] ? (/\bdata-label="([^"]*)"/.exec(m[0]) || [])[1] : '';
+        const label = String(lib || slot).replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').trim();
+        if (!slot || vus.has(slot) || slot === 'representant' || CASE_STAGIAIRE.test(`${slot} ${label}`)) continue;
+        vus.add(slot);
+        cases.push({ slot, label });
+    }
+    return cases;
+}
+
+/**
+ * LES PERSONNES QU'ON PEUT CHOISIR : les FORMATEURS et les INTERVENANTS affectés à CETTE
+ * session — le jury en fait partie (il évalue depuis l'espace intervenant). Personne d'autre :
+ * signer un document de la session n'est pas un droit de l'organisme entier.
+ */
+async function personnesDeLaSession(conn, orgId, sessionId) {
+    let formateurs = [];
+    let intervenants = [];
+    try {
+        [formateurs] = await conn.query(
+            `SELECT u.id, CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS nom
+               FROM session_trainer st JOIN user u ON u.id = st.user_id
+              WHERE st.session_id = ? AND u.organization_id = ?
+              ORDER BY u.last_name, u.first_name`, [sessionId, orgId]);
+    } catch (e) { if (!noSchema(e)) throw e; }
+    try {
+        [intervenants] = await conn.query(
+            `SELECT u.id, CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS nom,
+                    si.specialty
+               FROM session_intervenant si JOIN user u ON u.id = si.user_id
+              WHERE si.session_id = ? AND si.organization_id = ?
+              ORDER BY u.last_name, u.first_name`, [sessionId, orgId]);
+    } catch (e) { if (!noSchema(e)) throw e; }
+    const net = (p) => ({ ...p, nom: String(p.nom || '').trim() });
+    return { formateurs: formateurs.map(net), intervenants: intervenants.map(net) };
+}
+
 async function creneauDuModele(orgId, slug) {
     const creneaux = await creneauxDuModele(orgId, slug);
     if (creneaux.includes(CRENEAU_INTERVENANT)) return CRENEAU_INTERVENANT;
@@ -87,25 +142,18 @@ const listerDocumentsSession = async (req, res) => {
             'SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
 
-        /* LES INTERVENANTS DE CETTE SESSION, et eux seuls : « externe » ne veut pas dire
-           « n'importe qui ». On n'envoie qu'à quelqu'un que l'école a affecté à la session. */
-        let intervenants = [];
-        try {
-            [intervenants] = await conn.query(
-                `SELECT u.id, CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS nom,
-                        si.specialty
-                   FROM session_intervenant si JOIN user u ON u.id = si.user_id
-                  WHERE si.session_id = ? AND si.organization_id = ?
-                  ORDER BY u.last_name, u.first_name`, [req.params.id, orgId]);
-        } catch (e) { if (!noSchema(e)) throw e; }
+        /* LES PERSONNES DE CETTE SESSION, et elles seules : formateurs et intervenants (dont le
+           jury). « Externe » ne veut pas dire « n'importe qui » : on n'envoie qu'à quelqu'un que
+           l'école a affecté à la session. */
+        const { formateurs, intervenants } = await personnesDeLaSession(conn, orgId, req.params.id);
 
-        let envoyes = [];
+        let lignes = [];
         try {
-            [envoyes] = await conn.query(
+            [lignes] = await conn.query(
                 `SELECT d.id, d.title, d.template_slug, d.status,
                         DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS envoye_le,
                         DATE_FORMAT(ds.signed_at, '%Y-%m-%d %H:%i') AS signe_le,
-                        ds.signer_name, ds.user_id AS signataire_id,
+                        ds.slot, ds.label, ds.signer_name, ds.user_id AS signataire_id,
                         CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS signataire,
                         DATE_FORMAT(d.org_signed_at, '%Y-%m-%d %H:%i') AS org_signe_le
                    FROM generated_document d
@@ -118,8 +166,28 @@ const listerDocumentsSession = async (req, res) => {
                   ORDER BY d.created_at DESC`, [orgId, req.params.id]);
         } catch (e) { if (!noSchema(e)) throw e; } // migration 157 non jouée : aucun envoi
 
-        res.json({ data: { modeles: await modelesExternes(orgId), intervenants: intervenants.map(
-            (i) => ({ ...i, nom: String(i.nom || '').trim() })), envoyes } });
+        /* UN DOCUMENT, PLUSIEURS CADRES : la requête rend une ligne par cadre attribué, on les
+           regroupe. Le document n'est « signé » que lorsque TOUS ses cadres le sont — c'est aussi
+           la règle d'applySlotSignature, qui ne le passe à SIGNÉ qu'à ce moment-là. */
+        const parDoc = new Map();
+        for (const l of lignes) {
+            const d = parDoc.get(l.id) || { id: l.id, title: l.title, template_slug: l.template_slug, status: l.status,
+                envoye_le: l.envoye_le, org_signe_le: l.org_signe_le, cases: [] };
+            if (l.signataire_id) {
+                d.cases.push({ slot: l.slot, label: l.label || l.slot, signataire: String(l.signataire || '').trim(),
+                    signataire_id: l.signataire_id, signe_le: l.signe_le });
+            }
+            parDoc.set(l.id, d);
+        }
+        const envoyes = [...parDoc.values()].map((d) => ({
+            ...d,
+            signe_le: d.cases.length && d.cases.every((c) => c.signe_le)
+                ? d.cases.map((c) => c.signe_le).sort().pop() : null,
+        }));
+
+        const modeles = [];
+        for (const m of await modelesExternes(orgId)) modeles.push({ ...m, cases: await casesDuModele(orgId, m.slug) });
+        res.json({ data: { modeles, formateurs, intervenants, envoyes } });
     } catch (err) {
         console.error('Erreur documents de session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -127,16 +195,29 @@ const listerDocumentsSession = async (req, res) => {
 };
 
 /**
- * POST /api/sessions/:id/documents-externes — { template_slug, user_id }
- * Produit le document de session et ATTRIBUE sa case de signature à l'intervenant.
+ * POST /api/sessions/:id/documents-externes — { template_slug, attributions: [{ slot, user_id }] }
+ * Produit le document de session et ATTRIBUE chacun de ses cadres à une personne de la session :
+ * « Formateur » à un formateur, « Jury 1 », « Président du jury »… à un membre du jury.
+ *
+ * L'ANCIENNE FORME { template_slug, user_id } reste acceptée : un seul intervenant, le cadre
+ * que le modèle lui destine (creneauDuModele). C'est celle qu'envoyait l'écran jusqu'ici.
  */
 const envoyerDocumentSession = async (req, res) => {
     try {
         const conn = db.promise();
         const orgId = req.user.organization_id;
-        const slug = String((req.body || {}).template_slug || '').trim();
-        const userId = String((req.body || {}).user_id || '').trim();
-        if (!slug || !userId) return res.status(422).json({ error: 'Modèle et intervenant requis.' });
+        const b = req.body || {};
+        const slug = String(b.template_slug || '').trim();
+        let attributions = Array.isArray(b.attributions)
+            ? b.attributions.map((a) => ({ slot: String((a && a.slot) || '').trim(), userId: String((a && a.user_id) || '').trim() }))
+                .filter((a) => a.slot && a.userId)
+            : null;
+        const ancienneForme = !attributions && !!String(b.user_id || '').trim();
+        if (ancienneForme) attributions = [{ slot: await creneauDuModele(orgId, slug), userId: String(b.user_id).trim() }];
+        if (!slug || !attributions || !attributions.length) return res.status(422).json({ error: 'Modèle et signataire requis.' });
+        if (new Set(attributions.map((a) => a.slot)).size !== attributions.length) {
+            return res.status(422).json({ error: 'Un même cadre ne peut être attribué deux fois.' });
+        }
 
         const [[sess]] = await conn.query(
             'SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
@@ -148,18 +229,23 @@ const envoyerDocumentSession = async (req, res) => {
         const modele = (await modelesExternes(orgId)).find((m) => m.slug === slug);
         if (!modele) return res.status(422).json({ error: "Ce modèle n'est pas signable par un intervenant externe." });
 
-        /* ET L'INTERVENANT DOIT ÊTRE AFFECTÉ À CETTE SESSION. Le contrôle porte sur la session,
-           pas seulement sur l'organisme : « externe » ne veut pas dire « n'importe qui ». */
-        let affecte = null;
-        try {
-            const [[r]] = await conn.query(
-                `SELECT u.id, CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,'')) AS nom
-                   FROM session_intervenant si JOIN user u ON u.id = si.user_id
-                  WHERE si.session_id = ? AND si.organization_id = ? AND si.user_id = ?`,
-                [req.params.id, orgId, userId]);
-            affecte = r || null;
-        } catch (e) { if (!noSchema(e)) throw e; }
-        if (!affecte) return res.status(422).json({ error: "Cet intervenant n'est pas affecté à cette session." });
+        /* CHAQUE CADRE DOIT EXISTER DANS LE MODÈLE : un créneau inventé recevrait une signature
+           que le document n'afficherait nulle part. (L'ancienne forme garde son créneau calculé.) */
+        const cases = await casesDuModele(orgId, slug);
+        const libelle = new Map(cases.map((c) => [c.slot, c.label]));
+        if (!ancienneForme) {
+            const inconnu = attributions.find((a) => !libelle.has(a.slot));
+            if (inconnu) return res.status(422).json({ error: `Le modèle n'a pas de cadre « ${inconnu.slot} ».` });
+        }
+
+        /* ET CHAQUE PERSONNE DOIT ÊTRE AFFECTÉE À CETTE SESSION — formateur ou intervenant. Le
+           contrôle porte sur la session, pas seulement sur l'organisme : « externe » ne veut pas
+           dire « n'importe qui ». */
+        const { formateurs, intervenants } = await personnesDeLaSession(conn, orgId, req.params.id);
+        const nomDe = new Map([...formateurs, ...intervenants].map((p) => [p.id, p.nom]));
+        if (attributions.some((a) => !nomDe.has(a.userId))) {
+            return res.status(422).json({ error: "Cette personne n'est pas affectée à cette session." });
+        }
 
         const docId = crypto.randomUUID();
         try {
@@ -171,20 +257,54 @@ const envoyerDocumentSession = async (req, res) => {
             if (noSchema(e)) return res.status(422).json({ error: 'Documents de session non initialisés (migration 157).' });
             throw e;
         }
-        /* LA CASE EST CRÉÉE VIDE, ATTRIBUÉE. `signed_at` NULL = « en attente » : c'est cette
-           ligne que l'espace de l'intervenant lit, et c'est elle que `applySlotSignature`
-           remplira le jour où il signera. */
-        await conn.query(
-            `INSERT INTO document_signature (id, organization_id, document_id, slot, label, user_id)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [crypto.randomUUID(), orgId, docId, await creneauDuModele(orgId, slug), 'Intervenant externe', userId]);
+        /* LES CASES SONT CRÉÉES VIDES, ATTRIBUÉES — une par cadre. `signed_at` NULL = « en
+           attente » : c'est cette ligne que l'espace de la personne lit, et c'est elle
+           qu'`applySlotSignature` remplira le jour où elle signera. */
+        for (const a of attributions) {
+            await conn.query(
+                `INSERT INTO document_signature (id, organization_id, document_id, slot, label, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [crypto.randomUUID(), orgId, docId, a.slot, libelle.get(a.slot) || 'Intervenant externe', a.userId]);
+        }
 
         logAudit(req, 'document.session_externe', 'GeneratedDocument', docId);
-        res.status(201).json({ data: { id: docId }, message: `Document envoyé à ${String(affecte.nom || '').trim()}.` });
+        const noms = [...new Set(attributions.map((a) => nomDe.get(a.userId) || ''))].filter(Boolean);
+        res.status(201).json({ data: { id: docId }, message: noms.length ? `Document envoyé à ${noms.join(', ')}.` : 'Document envoyé.' });
     } catch (err) {
         console.error('Erreur envoi document de session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
-module.exports = { listerDocumentsSession, envoyerDocumentSession, modelesExternes, creneauDuModele, creneauxDuModele, CRENEAU_INTERVENANT, SLOT_DEFAUT };
+/**
+ * GET /api/sessions/:id/mes-cases — les cadres qu'on M'a attribués sur les documents de cette
+ * session, signés ou non. C'est la liste qu'un FORMATEUR voit sur la page de la session, là où il
+ * signe déjà ses émargements ; l'intervenant, lui, a la sienne dans son espace.
+ */
+const mesCasesDeSession = async (req, res) => {
+    try {
+        const conn = db.promise();
+        let lignes = [];
+        try {
+            [lignes] = await conn.query(
+                `SELECT d.id, d.title, d.status, ds.slot, ds.label,
+                        DATE_FORMAT(ds.signed_at, '%Y-%m-%d %H:%i') AS signe_le
+                   FROM document_signature ds JOIN generated_document d ON d.id = ds.document_id
+                  WHERE ds.user_id = ? AND ds.organization_id = ? AND d.session_id = ? AND d.scope = 'SESSION'
+                  ORDER BY d.created_at DESC`,
+                [req.user.id, req.user.organization_id, req.params.id]);
+        } catch (e) { if (!noSchema(e)) throw e; }
+        const parDoc = new Map();
+        for (const l of lignes) {
+            const d = parDoc.get(l.id) || { id: l.id, title: l.title, status: l.status, cases: [] };
+            d.cases.push({ slot: l.slot, label: l.label || l.slot, signe_le: l.signe_le });
+            parDoc.set(l.id, d);
+        }
+        res.json({ data: [...parDoc.values()].map((d) => ({ ...d, a_signer: d.cases.some((c) => !c.signe_le) })) });
+    } catch (err) {
+        console.error('Erreur cadres à signer :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { mesCasesDeSession, casesDuModele, personnesDeLaSession, listerDocumentsSession, envoyerDocumentSession, modelesExternes, creneauDuModele, creneauxDuModele, CRENEAU_INTERVENANT, SLOT_DEFAUT };

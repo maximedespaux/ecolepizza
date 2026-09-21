@@ -4,6 +4,7 @@ const {
     listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, checkDocumentConditions,
     importDocumentFile, getDocumentFile,
 } = require('../controllers/document.controller.js');
+const { signerMonDocument } = require('../controllers/intervenant.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -33,6 +34,11 @@ router.get('/:id/preview', authenticateToken, previewHtml);
 router.get('/:id/pdf', authenticateToken, downloadPdf);
 router.get('/:id/docx', authenticateToken, downloadDocx);
 router.post('/:id/sign', authenticateToken, signDocument);
+/* SIGNER LES CADRES QU'ON M'A ATTRIBUÉS (formateur, membre du jury…) — même geste, même garde que
+   l'espace intervenant : `signerMonDocument` ne signe que les cases dont `user_id` est le mien.
+   Le suffixe « /sign » en fait un acte de PARTICIPANT, pas une écriture de la rubrique (cf.
+   sectionAccess.middleware) : un formateur en lecture seule sur Stagiaires signe quand même SA case. */
+router.post('/:id/mes-cases/sign', authenticateToken, signerMonDocument);
 // Lien de signature partageable (représentant entreprise…) : bureau uniquement.
 router.post('/:id/sign-link', authenticateToken, authorizeRoles(...ADMIN_ROLES), createSignLink);
 
