@@ -1,14 +1,32 @@
 import { useEffect, useState } from "react";
 import { getEnrollmentParcours } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
+import Badge from "./Badge.jsx";
 
-// Icône SVG d'une étape selon son état / type de document.
-function stepIcon(s) {
-  if (s.status === "done") return "check";
+/* L'ÉTAT RÉEL D'UNE ÉTAPE, calculé par le serveur (lib/parcours.js, `etat`), et sa présentation.
+   Demandé le 2026-09-21 : la coche orange marquait tout ce qui précédait l'étape en cours, et le
+   gris tout ce qui la suivait — une pièce déposée ou une convention signée « en avance »
+   s'affichaient grisées, comme si rien n'avait eu lieu. Chaque étape montre maintenant ce qui
+   s'est passé pour elle : l'icône, la couleur ET le mot, pour ne jamais dépendre de la seule
+   couleur. */
+const ETATS = {
+  A_FAIRE: { libelle: "À faire", classe: "a-faire", icone: null, ton: "n" },
+  ENVOYE: { libelle: "Envoyé", classe: "envoye", icone: "send", ton: "b" },
+  RECU: { libelle: "Reçu", classe: "recu", icone: "download", ton: "a" },
+  VALIDE: { libelle: "Validé", classe: "valide", icone: "check", ton: "g" },
+  SANS_OBJET: { libelle: "Sans objet", classe: "sans-objet", icone: "minus", ton: "n" },
+};
+// Serveur d'avant `etat` : on retombe sur le rang, le mieux qu'on sache dire.
+const etatDe = (s) => s.etat || (s.status === "done" ? "VALIDE" : "A_FAIRE");
+
+// Icône du TYPE d'étape (ce qu'il faut faire) : affichée tant que rien ne s'est passé.
+function iconeDuType(s) {
   if (s.quiz) return "help";
+  if (s.piece) return "upload";
   if (s.signable) return "pencil";
   return "file-text";
 }
+const iconeDe = (s) => ETATS[etatDe(s)]?.icone || iconeDuType(s);
 
 // Étape « de groupe » (parcours entreprise) : porte des compteurs gen/total/signed.
 const isGroup = (s) => s && s.total != null;
@@ -26,8 +44,9 @@ function listSub(s) {
   return s.sub;
 }
 
-// Ligne d'état de l'étape sélectionnée (selon son statut et le document lié).
+// Ligne d'état de l'étape sélectionnée (selon son état et le document lié).
 function lineFor(s) {
+  const etat = etatDe(s);
   if (isGroup(s)) {
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
@@ -37,23 +56,27 @@ function lineFor(s) {
   }
   // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.
   if (s.company_level) {
-    if (s.status === "done") return "Document entreprise signé.";
+    if (etat === "VALIDE") return "Document entreprise signé.";
     return "Document destiné à l'entreprise, généré depuis la fiche entreprise.";
   }
   // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : statut piloté par le dépôt,
   // pas par un document. Le dépôt/validation se fait dans le panneau « Pièces justificatives ».
   if (s.piece) {
-    return { VALIDEE: "Pièce validée.", DEPOSEE: "Déposée par le stagiaire, à vérifier ci-dessous.",
+    return { VALIDEE: "Pièce validée.", DEPOSEE: "Reçue du stagiaire, à vérifier ci-dessous.",
       REFUSEE: "Refusée — le stagiaire doit en renvoyer une.", ATTENDUE: "En attente du dépôt par le stagiaire." }[s.pieceStatus]
       || "Pièce à fournir.";
   }
-  if (s.status === "done") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
-  if (s.status === "todo") return "À venir.";
-  if (s.quiz) return s.docId ? "En attente de réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
+  if (s.remise) {
+    if (etat === "SANS_OBJET") return "Sans objet pour ce dossier.";
+    return { RECUE: "Remis au stagiaire, réception confirmée.", REMISE: "Remis au stagiaire, en attente de son accusé de réception." }[s.remiseStatus]
+      || "Document à remettre au stagiaire.";
+  }
+  if (etat === "VALIDE") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
+  if (s.quiz) return s.docId ? "Envoyé : en attente de la réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
   if (s.signable) {
     if (!s.docId) return "Document à préparer, puis à faire signer.";
     if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer au stagiaire.";
-    return "En attente de signature du stagiaire.";
+    return "Envoyé : en attente de la signature du stagiaire.";
   }
   if (!s.docId) return "Document à préparer.";
   if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer.";
@@ -71,11 +94,24 @@ function actionFor(s) {
   // Fiche stagiaire : un document destiné à l'entreprise est en lecture seule
   // (consultable s'il existe, mais jamais généré ici).
   if (s.company_level) return s.docId ? { label: s.signable ? "Ouvrir la signature" : "Voir le document", kind: "open" } : null;
-  if (s.status !== "current" && s.status !== "todo") return null;
+  /* PLUS DE CONDITION DE RANG : une étape faite n'a plus d'action, les autres en ont une, où
+     qu'elles soient dans le parcours — on peut préparer la convention avant que la pièce
+     d'identité soit validée. */
+  const etat = etatDe(s);
+  if (etat === "VALIDE" || etat === "SANS_OBJET") return null;
   if (s.docId) return { label: s.signable ? "Ouvrir la signature" : s.quiz ? "Voir le QCM" : "Voir le document", kind: "open" };
   if (s.quiz) return { label: "Envoyer le QCM", kind: "send-quiz" }; // envoi manuel au stagiaire
   return { label: "Préparer ce document", kind: "prepare" };
 }
+
+/* Combien d'étapes dans chaque état — les compteurs et la barre de l'en-tête. « Sans objet »
+   compte avec « validé » dans l'avancement (serveur), mais se nomme à part. */
+function repartition(steps) {
+  const n = { A_FAIRE: 0, ENVOYE: 0, RECU: 0, VALIDE: 0, SANS_OBJET: 0 };
+  for (const s of steps) n[etatDe(s)] = (n[etatDe(s)] || 0) + 1;
+  return n;
+}
+const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
 
 /**
  * Parcours documentaire d'un dossier : chronologie à gauche (les documents/QCM de
@@ -114,6 +150,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
 
   const step = data.steps.find((s) => s.key === sel) || data.steps[Math.min(data.currentIndex, data.steps.length - 1)];
   const action = actionFor(step);
+  const etatSel = ETATS[etatDe(step)] || ETATS.A_FAIRE;
 
   function runAction() {
     if (!action) return;
@@ -124,6 +161,9 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
 
   const h = data.header || {};
   const headLine = [h.code, h.session, h.financing, h.opco].filter(Boolean).join(" · ");
+  const n = repartition(data.steps);
+  const total = data.steps.length;
+  const part = (k) => `${(n[k] / total) * 100}%`;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.15fr) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
@@ -131,15 +171,28 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
       <div className="card" style={{ padding: 18 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
           <h3 style={{ margin: 0, fontSize: 18 }}>Parcours</h3>
-          <b style={{ color: "var(--ember1, #c0392b)", fontSize: 18 }}>{data.percent}%</b>
+          <b style={{ color: "var(--green)", fontSize: 18 }} title="Étapes faites, dans n'importe quel ordre">{data.percent}%</b>
         </div>
         {headLine && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{headLine}</div>}
-        <div style={{ height: 8, borderRadius: 6, background: "var(--border-soft)", margin: "10px 0 16px", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${data.percent}%`, background: "linear-gradient(90deg,#c0392b,#e0932e)", borderRadius: 6 }} />
+        {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est
+            validé, ce qui attend l'école (reçu), ce qui attend le stagiaire (envoyé). */}
+        <div className="parc-barre" role="img"
+          aria-label={`${n.VALIDE + n.SANS_OBJET} validée(s), ${n.RECU} reçue(s), ${n.ENVOYE} envoyée(s), ${n.A_FAIRE} à faire, sur ${total}`}>
+          <span className="valide" style={{ width: `${((n.VALIDE + n.SANS_OBJET) / total) * 100}%` }} />
+          <span className="recu" style={{ width: part("RECU") }} />
+          <span className="envoye" style={{ width: part("ENVOYE") }} />
+        </div>
+        <div className="parc-compte">
+          <span><i className="valide" />{pluriel(n.VALIDE, "validée", "validées")}</span>
+          {n.RECU > 0 && <span><i className="recu" />{pluriel(n.RECU, "reçue, à vérifier", "reçues, à vérifier")}</span>}
+          {n.ENVOYE > 0 && <span><i className="envoye" />{pluriel(n.ENVOYE, "envoyée", "envoyées")}</span>}
+          <span><i className="a-faire" />{pluriel(n.A_FAIRE, "à faire", "à faire")}</span>
+          {n.SANS_OBJET > 0 && <span><i className="sans-objet" />{pluriel(n.SANS_OBJET, "sans objet", "sans objet")}</span>}
         </div>
         <div>
           {data.steps.map((s, idx, arr) => {
             const on = s.key === sel;
+            const e = ETATS[etatDe(s)] || ETATS.A_FAIRE;
             // Séparateur de section (parcours entreprise) : uniquement si l'API
             // renvoie deux sections distinctes (company / learner).
             const hasSections = arr.some((x) => x.section === "company") && arr.some((x) => x.section === "learner");
@@ -154,26 +207,14 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               <div key={s.key}>
               {divider}
               <button type="button" onClick={() => setSel(s.key)}
-                style={{
-                  display: "flex", gap: 12, alignItems: "center", width: "100%", textAlign: "left",
-                  padding: "10px 12px", marginBottom: 8, borderRadius: 12, cursor: "pointer",
-                  color: "var(--text)",
-                  background: on ? "var(--surface2)" : "transparent",
-                  border: on ? "1px solid var(--ember1, #c0392b)" : "1px solid var(--border-soft)",
-                }}>
-                <span style={{
-                  width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", flex: "0 0 34px",
-                  background: s.status === "todo" ? "var(--border-soft)" : "linear-gradient(135deg,#c0392b,#e0932e)",
-                  filter: s.status === "todo" ? "grayscale(1) opacity(.6)" : "none",
-                  color: s.status === "todo" ? "var(--muted)" : "#fff",
-                }}><Icon name={stepIcon(s)} size={17} /></span>
+                className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}
+                title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
+                <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block", color: s.status === "todo" ? "var(--dim)" : "var(--text)" }}>{s.label}</b>
+                  <b style={{ display: "block" }}>{s.label}</b>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
                 </span>
-                {s.status === "current" && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ember1,#c0392b)", whiteSpace: "nowrap" }}>En cours</span>
-                )}
+                <Badge tone={e.ton}>{e.libelle}</Badge>
               </button>
               </div>
             );
@@ -184,17 +225,15 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
       {/* Détail de l'étape sélectionnée */}
       <div className="card" style={{ padding: 20, position: "sticky", top: 74, maxHeight: "calc(100vh - 90px)", overflowY: "auto" }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <span style={{
-            width: 44, height: 44, borderRadius: 11, display: "grid", placeItems: "center",
-            background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff",
-          }}><Icon name={stepIcon(step)} size={20} /></span>
-          <div>
+          <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: "var(--dim)" }}>ÉTAPE</div>
             <h3 style={{ margin: 0, fontSize: 20 }}>{step.label}</h3>
           </div>
+          <Badge tone={etatSel.ton}>{etatSel.libelle}</Badge>
         </div>
         {step.sub && <p style={{ color: "var(--muted)", marginTop: 8 }}>{step.sub}</p>}
-        <p style={{ fontWeight: 600, marginTop: 14, color: step.status === "done" ? "#2e9e5b" : "inherit" }}>{lineFor(step)}</p>
+        <p className={`parc-ligne ${etatSel.classe}`} style={{ fontWeight: 600, marginTop: 14 }}>{lineFor(step)}</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           {action && (
             <button className="btn primary" onClick={runAction}>{action.label}</button>

@@ -120,13 +120,19 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             remises: remisesParDossier.get(e.enrollment_id) || {},
         });
         const total = parc.steps.length;
-        const done = parc.currentIndex;
+        /* DEUX NOMBRES, DEUX SENS. `done` compte les étapes FAITES, dans n'importe quel ordre — le
+           Suivi en fait la somme par entreprise pour son pourcentage. `etape` est le RANG de la
+           prochaine étape, celui qu'affiche le pipeline (« Étape 3/12 »). Tant que le parcours se
+           faisait dans l'ordre, les deux coïncidaient ; une étape faite en avance les sépare. */
+        const done = parc.done;
+        const etape = parc.currentIndex;
         const signable = parc.steps.filter((s) => s.signable || s.quiz);
         const anyHandled = parc.steps.some((s) => ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'].includes(s.docStatus));
 
         out.set(e.enrollment_id, {
             percent: parc.percent,
             done,
+            etape,
             total,
             /* L'ÉTAPE COURANTE, pour le tableau du pipeline : c'est elle qui décide dans quelle
                COLONNE tombe la carte. Sans les pièces au calcul, elle désignait la première

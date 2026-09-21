@@ -5,7 +5,7 @@ const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 /* La section « À l'arrivée via une entreprise » — la MÊME lecture que celle du parcours, pas
    une relecture du JSON écrite une seconde fois ici. */
-const { companyStepSlugs } = require('../lib/parcours.js');
+const { companyStepSlugs, etatDeGroupe, pourcentFait } = require('../lib/parcours.js');
 const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
@@ -749,7 +749,13 @@ const getCompanyParcours = async (req, res) => {
         }
         let currentIndex = steps.findIndex((s) => !s._done);
         if (currentIndex < 0) currentIndex = steps.length;
-        steps.forEach((s, i) => { s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo'; delete s._done; });
+        // Même règle que le dossier d'un stagiaire (lib/parcours.js) : l'état réel, l'avancement de toutes les étapes faites.
+        const faites = steps.filter((s) => s._done).length;
+        steps.forEach((s, i) => {
+            s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo';
+            s.etat = etatDeGroupe({ done: s._done, gen: s.gen, total: s.total });
+            delete s._done;
+        });
 
         res.json({
             data: {
@@ -759,7 +765,7 @@ const getCompanyParcours = async (req, res) => {
                     financing: 'Groupe entreprise', opco: null,
                 },
                 total_stagiaires: grp.enrollments.length,
-                percent: steps.length ? Math.round((currentIndex / steps.length) * 100) : 0,
+                percent: pourcentFait(faites, steps.length),
                 currentIndex,
                 currentKey: currentIndex < steps.length ? steps[currentIndex].key : null,
                 steps,

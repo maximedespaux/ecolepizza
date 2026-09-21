@@ -170,7 +170,7 @@ function TableauSession({ session, onErreur }) {
                     ) : items.map((r) => (
                       <div className="pipe-card" key={r.enrollment_id}>
                         <Link to={`/stagiaires/${r.learner_id}`} className="pipe-name">{r.name}</Link>
-                        <div className="pipe-docs" style={{ marginTop: 6 }}>Étape {Math.min(r.done + 1, r.total)}/{r.total}{r.percent != null ? ` · ${r.percent}%` : ""}</div>
+                        <div className="pipe-docs" style={{ marginTop: 6 }}>Étape {Math.min((r.etape ?? r.done) + 1, r.total)}/{r.total}{r.percent != null ? ` · ${r.percent}%` : ""}</div>
                       </div>
                     ))}
                   </div>

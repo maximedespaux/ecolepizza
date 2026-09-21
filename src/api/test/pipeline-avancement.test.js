@@ -54,7 +54,11 @@ test('sans les statuts de pièces, la carte reste collée à la pièce', () => {
     const parc = computeDocParcours({ steps: ETAPES, docs: DOCS });
     assert.strictEqual(parc.currentKey, 'piece:1', 'l\'étape courante se fige sur la pièce');
     assert.strictEqual(parc.currentIndex, 1);
-    assert.strictEqual(parc.percent, 25, 'la convention signée n\'est jamais comptée');
+    /* L'AVANCEMENT, lui, ne se fige plus (2026-09-21) : il compte TOUTES les étapes faites, dans
+       n'importe quel ordre. La convention signée derrière la pièce compte — elle « n'était jamais
+       comptée », et un dossier fait à 11 étapes sur 12 pouvait afficher 0 %. La pièce, elle, ne
+       compte pas tant qu'on ne passe pas son statut : c'est ce qui reste du défaut. */
+    assert.strictEqual(parc.percent, 50, 'devis et convention signés, sur quatre étapes');
 });
 
 test('avec les statuts, la carte dépasse la pièce validée', () => {

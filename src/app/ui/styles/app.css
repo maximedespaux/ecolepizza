@@ -5389,3 +5389,27 @@ label .requis {
    de défilement latérale — le défaut que `.tablewrap` corrige déjà pour les tableaux. */
 .eval-onglets{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin}
 .eval-onglets>*{flex:0 0 auto}
+
+/* ─── PARCOURS D'UN DOSSIER : l'état RÉEL de chaque étape (2026-09-21) ────────────────────────
+   Plus de coche orange pour tout ce qui précède l'étape en cours, ni de gris pour tout ce qui la
+   suit : chaque étape porte son état — à faire, envoyé, reçu, validé — quel que soit son rang.
+   Les couleurs sont celles du thème (clair et sombre), pas des dégradés écrits en dur. */
+.parc-barre{display:flex;height:8px;border-radius:6px;background:var(--border-soft);margin:10px 0 8px;overflow:hidden}
+.parc-barre>span{height:100%}
+.parc-barre .valide{background:var(--green)} .parc-barre .recu{background:var(--ember2)} .parc-barre .envoye{background:var(--blue)}
+.parc-compte{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted);margin-bottom:14px}
+.parc-compte i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.parc-compte .valide{background:var(--green)} .parc-compte .recu{background:var(--ember2)} .parc-compte .envoye{background:var(--blue)}
+.parc-compte .a-faire{background:transparent;border:1.5px dashed var(--muted)} .parc-compte .sans-objet{background:var(--surface3);border:1px solid var(--border)}
+.parc-etape{position:relative;display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;margin-bottom:8px;border-radius:12px;cursor:pointer;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
+.parc-etape.sel{background:var(--surface2);border-color:var(--ember1)}
+/* LA PROCHAINE ÉTAPE, celle qui attend un geste : un filet à gauche, sans éteindre les autres. */
+.parc-etape.prochaine{box-shadow:inset 3px 0 0 0 var(--ember1)}
+.parc-tuile{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:0 0 34px}
+.parc-tuile.grande{width:44px;height:44px;border-radius:11px;flex:0 0 44px}
+.parc-tuile.a-faire{background:var(--surface);color:var(--muted);border:1.5px dashed var(--border)}
+.parc-tuile.envoye{background:var(--blue-bg);color:var(--blue)}
+.parc-tuile.recu{background:var(--amber-bg);color:var(--ember2)}
+.parc-tuile.valide{background:var(--green-bg);color:var(--green)}
+.parc-tuile.sans-objet{background:var(--surface3);color:var(--muted)}
+.parc-ligne.valide{color:var(--green)} .parc-ligne.recu{color:var(--ember2)} .parc-ligne.envoye{color:var(--blue)}

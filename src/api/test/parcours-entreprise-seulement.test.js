@@ -61,5 +61,5 @@ test('et surtout : elle peut être GÉNÉRÉE', () => {
     /* LA SECTION SE LIT PAR LA FONCTION PARTAGÉE, pas par une seconde lecture du JSON écrite
        ici — et elle doit être IMPORTÉE : appelée sans import, le fichier se charge quand même
        et l'erreur n'arrive qu'au clic. */
-    assert.match(CO, /const \{ companyStepSlugs \} = require\('\.\.\/lib\/parcours\.js'\);/);
+    assert.match(CO, /const \{ companyStepSlugs(?:, \w+)* \} = require\('\.\.\/lib\/parcours\.js'\);/);
 });
