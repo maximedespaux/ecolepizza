@@ -3,8 +3,8 @@
  *
  * LA DEMANDE. Une ligne de « Derniers dossiers », sur le tableau de bord, ne s'ouvrait pas : pour
  * voir le dossier, il fallait passer par la liste des stagiaires et chercher le nom. Puis, le même
- * jour : le suivi Qualiopi et les inscrits d'une session, qui ouvraient bien la fiche — sur le
- * premier dossier.
+ * jour : le suivi Qualiopi, les inscrits d'une session, les cartes du pipeline et la notation, qui
+ * ouvraient bien la fiche — sur le premier dossier.
  *
  * CE QUI SE CACHAIT DERRIÈRE. La fiche a un onglet par dossier — NIV1H, puis RS7404 : le parcours
  * ordinaire de l'école — et s'ouvrait toujours sur le PREMIER. Un simple lien vers la fiche aurait
@@ -80,17 +80,22 @@ test('un secrétariat sans « Stagiaires » au menu voit les lignes, sans lien',
     assert.match(AUTH, /const ADMIN_ROLES = \[[^\]]*'SECRETARIAT'/);
 });
 
-test('suivi et session ouvrent la fiche sur LEUR dossier — chacun avec son nom de champ', () => {
-    /* Les trois écrans ne nomment pas le dossier pareil : `enrollment_id` dans le suivi, `id` dans
-       une session (et dans GET /enrollments). D'où deux arguments explicites plutôt qu'une ligne
-       à deviner : `d.id` dans le suivi, ou `e.learner_id` passé deux fois, rendrait un lien que la
-       fiche ignore — elle retomberait sans bruit sur le premier dossier. */
+test('suivi, session, pipeline et notation ouvrent la fiche sur LEUR dossier — chacun avec son nom de champ', () => {
+    /* Les écrans ne nomment pas le dossier pareil : `enrollment_id` dans le suivi, le pipeline et
+       la notation, `id` dans une session (et dans GET /enrollments). D'où deux arguments explicites
+       plutôt qu'une ligne à deviner : `d.id` dans le suivi, ou `e.learner_id` passé deux fois,
+       rendrait un lien que la fiche ignore — elle retomberait sans bruit sur le premier dossier. */
     const SUIVI = lireUi('pages/Suivi.jsx');
     const SESSION = lireUi('pages/SessionDetail.jsx');
+    const PIPELINE = lireUi('pages/Pipeline.jsx');
+    const NOTATION = lireUi('pages/Notation.jsx');
     assert.match(SUIVI, /navigate\(lienDossier\(d\.learner_id, d\.enrollment_id\)\)/);
     assert.match(SESSION, /navigate\(lienDossier\(e\.learner_id, e\.id\)\)/);
-    // Plus aucune fiche ouverte « sur le premier dossier » depuis ces trois écrans.
-    for (const [nom, SRC] of [['suivi', SUIVI], ['session', SESSION], ['tableau de bord', lireUi('pages/Dashboard.jsx')]]) {
+    assert.match(PIPELINE, /<Link to=\{lienDossier\(r\.learner_id, r\.enrollment_id\)\} className="pipe-name">/);
+    assert.match(NOTATION, /<Link to=\{lienDossier\(s\.learner_id, s\.enrollment_id\)\}/);
+    // Plus aucune fiche ouverte « sur le premier dossier » depuis ces cinq écrans.
+    for (const [nom, SRC] of [['suivi', SUIVI], ['session', SESSION], ['pipeline', PIPELINE], ['notation', NOTATION],
+        ['tableau de bord', lireUi('pages/Dashboard.jsx')]]) {
         assert.doesNotMatch(SRC, /`\/stagiaires\/\$\{/, `${nom} : une adresse de fiche écrite à la main, sans son dossier`);
     }
 });

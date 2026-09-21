@@ -8,14 +8,15 @@
  * parcours ordinaire de l'école — et s'ouvrait toujours sur le premier. Venu d'une ligne qui désigne
  * UN dossier, on serait tombé sur un autre sans s'en apercevoir : le parcours affiché n'aurait pas
  * été celui qu'on venait de voir à 62 %. Le lien dit donc lequel (`?dossier=`), et la fiche le
- * sélectionne. Trois écrans y mènent (2026-09-21) : « Derniers dossiers » du tableau de bord, le
- * suivi Qualiopi et les inscrits d'une session.
+ * sélectionne. Cinq écrans y mènent (2026-09-21) : « Derniers dossiers » du tableau de bord, le
+ * suivi Qualiopi, les inscrits d'une session, les cartes du pipeline et la notation.
  */
 
 /**
- * L'adresse de la fiche, ouverte sur ce dossier. DEUX ARGUMENTS, et pas une ligne : les trois
- * écrans ne nomment pas le dossier pareil — `id` dans GET /enrollments et dans une session,
- * `enrollment_id` dans le suivi. Une ligne à deviner aurait fini par prendre le mauvais champ.
+ * L'adresse de la fiche, ouverte sur ce dossier. DEUX ARGUMENTS, et pas une ligne : les écrans ne
+ * nomment pas le dossier pareil — `id` dans GET /enrollments et dans une session, `enrollment_id`
+ * dans le suivi, le pipeline et la notation. Une ligne à deviner aurait fini par prendre le mauvais
+ * champ.
  */
 export const lienDossier = (learnerId, dossierId) =>
     `/stagiaires/${encodeURIComponent(learnerId)}?dossier=${encodeURIComponent(dossierId)}`;
