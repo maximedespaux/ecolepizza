@@ -54,4 +54,23 @@ async function tableExiste(conn, table) {
     } catch { return false; }
 }
 
-module.exports = { colonneExiste, colonneOuNull, tableExiste };
+/**
+ * LA LARGEUR D'UNE COLONNE TEXTE (nombre de caractères), ou null si elle n'existe pas / se lit mal.
+ *
+ * Pour les champs chiffrés au repos : une valeur chiffrée (« enc:iv:tag:… ») est bien plus longue
+ * que son clair, et l'écrire dans une colonne restée étroite échouerait — ou, hors mode strict,
+ * serait TRONQUÉE sans erreur, ce qui la rendrait à jamais illisible. On regarde donc la place
+ * avant de chiffrer. Sans cache, pour la raison déjà dite : une migration jouée pendant que le
+ * serveur tourne doit être vue tout de suite.
+ */
+async function largeurColonne(conn, table, colonne) {
+    try {
+        const [r] = await conn.query(
+            `SELECT CHARACTER_MAXIMUM_LENGTH AS n FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ? LIMIT 1`,
+            [table, colonne]);
+        return r.length && r[0].n != null ? Number(r[0].n) : null;
+    } catch { return null; }
+}
+
+module.exports = { colonneExiste, colonneOuNull, tableExiste, largeurColonne };

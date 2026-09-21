@@ -15,7 +15,7 @@ const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../l
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
-const { colonneExiste } = require('../lib/colonnes.js');
+const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -108,6 +108,37 @@ const LEARNER_FIELDS = [
 // La case telle qu'elle arrive : un booléen du formulaire, ou 1 / « true » d'un autre appelant.
 const estCoche = (v) => v === true || v === 1 || v === '1' || v === 'true';
 
+/* L'IDENTIFIANT FRANCE TRAVAIL EST CHIFFRÉ AU REPOS (2026-09-21), comme le n° de sécurité sociale :
+   « même nature — un identifiant attribué par un organisme public » (cf. lib/consentements.js), et
+   il était resté EN CLAIR dans la base et donc dans chaque sauvegarde. Chiffré et non HACHÉ : il
+   doit se relire — sur la fiche, et imprimé sur les documents par le jeton {France Travail}.
+
+   LA COLONNE DOIT AVOIR LA PLACE (migration 170). Un chiffré fait « enc: » + 60 caractères + deux
+   fois le clair — environ 80 pour un identifiant de 8 : dans l'ancienne colonne de 60, l'écriture
+   échouerait, ou serait TRONQUÉE sans erreur hors mode strict, et un chiffré tronqué ne se rouvre
+   JAMAIS. Tant que la colonne est étroite, on écrit donc en clair, comme avant — l'outil
+   `database/tools/chiffrer-france-travail.js` reprendra ces valeurs une fois la 170 jouée. */
+const LARGEUR_CHIFFRE = 255;
+async function franceTravailChiffrable(conn) {
+    return (await largeurColonne(conn, 'learner', 'france_travail_id')) >= LARGEUR_CHIFFRE;
+}
+// Ce que la base reçoit pour un champ : chiffré pour les deux identifiants, tel quel sinon.
+function valeurStockee(champ, valeur, chiffrerFT) {
+    if (valeur === null || valeur === undefined || valeur === '') return valeur === '' ? null : valeur;
+    if (champ === 'social_security') return encrypt(valeur);
+    if (champ === 'france_travail_id' && chiffrerFT) return encrypt(valeur);
+    return valeur;
+}
+/* BORNÉ POUR TENIR, UNE FOIS CHIFFRÉ, DANS LES 255 : 96 octets de clair donnent 62 + 192 = 254
+   caractères. Un vrai identifiant en compte 8 à 11 ; 60 caractères, c'est l'ancienne colonne. */
+function refusFranceTravail(body) {
+    const v = body.france_travail_id;
+    if (v == null || v === '') return null;
+    const t = String(v);
+    if (t.length > 60 || Buffer.byteLength(t, 'utf8') > 96) return "L'identifiant France Travail est trop long (60 caractères au plus).";
+    return null;
+}
+
 /* LA NOTE LIBRE : 128 MOTS AU PLUS, demandé le 2026-09-21. Vérifiée ICI et pas seulement à
    l'écran : la route n'est pas le seul chemin d'entrée (reprise de données, appel direct). Le
    garde-fou en caractères tient pour un texte collé sans espace, qui ne compterait qu'un « mot ». */
@@ -164,6 +195,7 @@ function normaliserSaisie(b) {
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
     if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
     if (out.a_recontacter !== undefined) out.a_recontacter = estCoche(out.a_recontacter) ? 1 : 0;
+    if (out.france_travail_id != null) out.france_travail_id = String(out.france_travail_id).trim();
     /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
        updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus
        aucun écran ne l'envoie, mais la route l'accepte toujours : la ville et le référent y
@@ -310,7 +342,12 @@ const getLearner = async (req, res) => {
             return res.status(404).json({ message: 'Stagiaire introuvable' });
         }
         // Déchiffre le n° de sécurité sociale pour l'affichage (rôle autorisé).
-        const learner = { ...rows[0], social_security: decrypt(rows[0].social_security) };
+        const learner = {
+            ...rows[0],
+            social_security: decrypt(rows[0].social_security),
+            // Chiffré depuis la 170 ; `decrypt` rend tel quel un identifiant resté en clair.
+            france_travail_id: decrypt(rows[0].france_travail_id),
+        };
 
         // Entreprise liée (pour préremplir la section « professionnel »).
         if (learner.company_id) {
@@ -355,7 +392,7 @@ const createLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
-    const refus = refusNote(body);
+    const refus = refusNote(body) || refusFranceTravail(body);
     if (refus) return res.status(422).json({ error: refus });
 
     try {
@@ -395,13 +432,12 @@ const createLearner = async (req, res) => {
            Pour une exception — un client de la seule boutique —, le bouton « ＋ Compte » de la
            liste des stagiaires le crée à la main. Les comptes déjà créés ne sont pas touchés. */
 
-        // Stagiaire. Le n° de sécurité sociale est chiffré au repos (AES-256-GCM).
+        // Stagiaire. Le n° de sécurité sociale et l'identifiant France Travail sont chiffrés au repos (AES-256-GCM).
         const champs = await champsEcrivables(conn);
         const cols = champs.filter((f) => body[f] !== undefined);
         const placeholders = cols.map(() => '?').join(', ');
-        const values = cols.map((f) =>
-            f === 'social_security' ? encrypt(clean(body[f])) : clean(body[f])
-        );
+        const chiffrerFT = cols.includes('france_travail_id') && await franceTravailChiffrable(conn);
+        const values = cols.map((f) => valeurStockee(f, clean(body[f]), chiffrerFT));
 
         /* L'identifiant est tiré ICI et non par UUID() en base : sans lui, la ligne de journal
            dirait « un stagiaire a été créé » sans pouvoir dire lequel — une trace à moitié
@@ -437,7 +473,7 @@ const updateLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
-    const refus = refusNote(body);
+    const refus = refusNote(body) || refusFranceTravail(body);
     if (refus) return res.status(422).json({ error: refus });
 
     try {
@@ -491,12 +527,12 @@ const updateLearner = async (req, res) => {
         const updates = [];
         const values = [];
         const champs = await champsEcrivables(conn);
+        const chiffrerFT = body.france_travail_id !== undefined && await franceTravailChiffrable(conn);
         for (const field of champs) {
             if (body[field] === undefined) continue;
             if (body[field] === '' && REQUIRED.has(field)) continue; // ne pas vider un champ requis
             updates.push(`${field} = ?`);
-            const raw = body[field];
-            values.push(raw === '' ? null : (field === 'social_security' ? encrypt(raw) : raw));
+            values.push(valeurStockee(field, body[field], chiffrerFT));
         }
         /* LA DATE DU RAPPEL SUIT LA CASE, sans relire la fiche : posée quand la case se coche,
            GARDÉE tant qu'elle le reste (`COALESCE`) — réenregistrer une fiche cochée ne la fait pas

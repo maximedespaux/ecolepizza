@@ -5,6 +5,7 @@ const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
 const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
+const { decrypt } = require('../lib/crypto.js'); // identifiant France Travail de l'acheteur (migration 170)
 const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
@@ -94,7 +95,8 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
                 email: inv.buyer_email || l[0].email || null,
                 address: { line: l[0].address, zip: l[0].zip_code, city: l[0].town },
             };
-            buyerFields = { prefix: 'learner', row: l[0] };
+            // L'identifiant France Travail est chiffré au repos (migration 170) : la fiche de l'acheteur le rend en clair.
+            buyerFields = { prefix: 'learner', row: { ...l[0], france_travail_id: decrypt(l[0].france_travail_id) } };
         }
     } else if (inv.buyer_name) {
         buyer = { name: inv.buyer_name, siret: null, email: inv.buyer_email || null, address: {} };
