@@ -154,28 +154,24 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **164, 165 et 166 à jouer, 161 à vérifier (relevé le 2026-09-21)**
+## 4. Migrations — **aucune à jouer ni à vérifier (relevé le 2026-09-21)**
 
-**166 — À JOUER** (`166_grille_jury_sans_code.sql`) : retire la puce {Code} de l'en-tête du modèle
-`grille-jury` — l'intitulé de la formation contient déjà son code, et la grille imprimait « … RS7404
-RS7404 ». Migration de DONNÉES, sur le seul corps de ce modèle (motif `REGEXP_REPLACE` sans barre
-oblique inverse ni point-virgule, cf. la 146). Elle se vérifie à l'aperçu du modèle : plus de code après
-l'intitulé. Son revert REMET la puce juste après {Formation}. Les grilles signées gardent leur PDF figé.
+**164, 165 et 166 sont jouées — l'utilisateur l'a annoncé le 2026-09-21 ; constaté le jour même, sans
+SQL, pour les deux qui se voient :**
 
-**165 — À JOUER** (`165_titres_documents.sql`) : les documents titrés d'un CODE (« LIVRET_ACCUEIL »,
-« R_GLEMENT_EXAMEN ») prennent l'intitulé de leur modèle ; le code le fait à la création depuis.
-9 documents en production, tous envoyés. Migration de DONNÉES : elle se vérifie sur la fiche d'un
-stagiaire RS7404 — plus aucun titre en capitales soulignées. Les documents SIGNÉS ne sont pas
-renommés (le titre entre dans le HTML dont la signature prend l'empreinte). Son revert ne fait rien,
-et l'explique.
-
-**164 — À JOUER** (`164_qcm_reponse_libre.sql`) : type de question `TEXT` (réponse libre limitée en
-MOTS, 128 par défaut) dans l'ENUM de `quiz_question.type`, et colonne `max_words`. Sans elle, l'éditeur
-REFUSE d'enregistrer une réponse libre (422) : un ENUM qui ignore une valeur la range en chaîne vide
-hors mode strict. Elle se vérifie à l'usage : enregistrer un QCM avec une question « Réponse libre »
-réussit. Son revert SUPPRIME les questions TEXT (leur texte reste dans les preuves figées).
-⚠️ Elle ne se vérifie PAS par l'API : les lectures demandent `max_words` par `colonneOuNull`, qui rend
-la clé dans les deux branches.
+- **166** (`166_grille_jury_sans_code.sql`, puce {Code} retirée de l'en-tête du modèle `grille-jury`,
+  qui imprimait « … RS7404 RS7404 ») : `GET /templates/grille-jury/body` ne porte plus de
+  `data-token="Code"`, et l'Aperçu de l'éditeur rend l'intitulé seul. Migration de DONNÉES (motif
+  `REGEXP_REPLACE` sans barre oblique inverse ni point-virgule, cf. la 146) ; son revert REMET la
+  puce juste après {Formation}. Les grilles signées gardent leur PDF figé.
+- **165** (`165_titres_documents.sql`, titres « LIVRET_ACCUEIL » / « R_GLEMENT_EXAMEN » remplacés par
+  l'intitulé du modèle) : sur les 60 documents des quatre stagiaires RS7404, aucun titre n'est plus un
+  code. Migration de DONNÉES ; les documents SIGNÉS ne sont pas renommés (le titre entre dans le HTML
+  dont la signature prend l'empreinte). Son revert ne fait rien, et l'explique.
+- **164** (`164_qcm_reponse_libre.sql`, type de question `TEXT` + colonne `max_words`) : ⚠️ elle ne
+  se vérifie PAS par l'API — les lectures demandent `max_words` par `colonneOuNull`, qui rend la clé
+  dans les deux branches. Elle se vérifie à l'usage : enregistrer un QCM avec une question « Réponse
+  libre » réussit (sans elle, 422). Son revert SUPPRIME les questions TEXT.
 
 **162 et 163 sont jouées — constaté le 2026-09-17 par l'API, sans SQL :**
 
@@ -193,9 +189,14 @@ la clé dans les deux branches.
 `SELECT *`, et renvoient les clés `project_improvement` (158) et `date_creation` (159) ; la 160
 (types de remise) a été constatée par l'utilisateur, qui a créé le type « OPCO ».
 
-⚠️ **161 (`remise_document.sans_objet`) ne se vérifie PAS par l'API** : la liste relit la colonne
-en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Une requête suffit — même forme
-que pour la 156 ci-dessous, avec `table_name='remise_document' AND column_name='sans_objet'`.
+**161 (`remise_document.sans_objet`) est jouée — constaté le 2026-09-21 par l'utilisateur : la requête
+sur `information_schema` rend 1.** Elle ne se vérifiait PAS par l'API : la liste relit la colonne
+en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Seule une remise réellement marquée
+« sans objet » la trahirait — et il n'y en a aucune : **relevé le 2026-09-21, l'étape de remise « OPCO »
+existe dans les 10 formations et y est INACTIVE partout**, donc aucun dossier n'affiche de remise. Une
+requête suffit — même forme que pour la 156 ci-dessous, avec `table_name='remise_document' AND
+column_name='sans_objet'`. Sans la colonne, rien ne se voit tant que l'étape reste inactive ; le jour
+où elle s'active, marquer une remise « sans objet » répondrait « Migration 161 non jouée. » (503).
 
 Les migrations **153 à 157 sont jouées**. Elles avaient été annoncées « en attente » dans ce
 paragraphe et y sont restées après avoir été jouées : exactement le travers décrit plus bas.
