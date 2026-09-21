@@ -16,6 +16,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
 import { sansLesComplets } from "../lib/dossiersASuivre.js";
+import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
 
@@ -77,7 +78,8 @@ function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
       {isOpen && (
         <div style={{ padding: "12px 16px 14px 40px", borderTop: "1px solid var(--border-soft)" }}>
           <Roadmap steps={d.documents} />
-          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(`/stagiaires/${d.learner_id}`)}>
+          {/* Sur la fiche, l'onglet de CE dossier — pas le premier (lib/lienDossier.js). */}
+          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(lienDossier(d.learner_id, d.enrollment_id))}>
             Gérer &amp; envoyer les documents →
           </button>
         </div>

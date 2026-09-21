@@ -348,7 +348,7 @@ function Dashboard() {
             return (
               <div key={e.id} className="dossier-ligne">
                 {ficheOuvrable ? (
-                  <Link to={lienDossier(e)} className="rowlink dossier-lien" title="Ouvrir la fiche du stagiaire">
+                  <Link to={lienDossier(e.learner_id, e.id)} className="rowlink dossier-lien" title="Ouvrir la fiche du stagiaire">
                     {contenu}
                   </Link>
                 ) : contenu}
