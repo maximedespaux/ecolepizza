@@ -256,6 +256,14 @@ function Stagiaires() {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     {rappels.has(l.id) && <Badge tone="a" className="rappel-chip" title="Cochée « à recontacter » : elle figure dans la liste en tête">À recontacter</Badge>}
+                    {/* FICHE INCOMPLÈTE : le repère seulement (règle du serveur, lib/ficheIncomplete.js) ;
+                        le détail et le bouton pour compléter sont en tête de la fiche. Neutre, l'icône
+                        seule en orange : sur une base importée, il peut revenir sur bien des lignes. */}
+                    {l.champs_manquants?.length > 0 && (
+                      <Badge tone="n" className="fiche-chip" title={`Fiche incomplète : ${l.champs_manquants.join(", ")}`}>
+                        <Icon name="alert-triangle" size={11} aria-hidden="true" /><span className="fiche-chip-t">Fiche incomplète</span>
+                      </Badge>
+                    )}
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{l.email || "-"} · {l.phone || "-"}</span>
                   </span>
                 </Link>

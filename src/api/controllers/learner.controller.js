@@ -15,7 +15,7 @@ const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../l
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
-const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
+const { colonneExiste, colonneOuNull, largeurColonne } = require('../lib/colonnes.js');
 const { champsManquants } = require('../lib/ficheIncomplete.js');
 const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js');
 
@@ -209,14 +209,20 @@ function normaliserSaisie(b) {
 /**
  * GET /api/stagiaires — liste des stagiaires de l'organisme, filtre ?q= (nom/email).
  */
-const getLearners = (req, res) => {
+const getLearners = async (req, res) => {
     const organizationId = req.user.organization_id;
     const q = req.query.q ? `%${req.query.q}%` : '%';
+    /* Civilité et projet : lus pour le repère « Fiche incomplète » (plus bas), jamais renvoyés.
+       La case « perfectionnement » arrive avec la 158 : sans elle, NULL — la liste ne tombe pas
+       pour une colonne absente (même précaution que l'export des partenaires). */
+    const projetPerf = await colonneOuNull(db.promise(), 'learner', 'project_improvement', 'l.');
 
     db.query(
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
+                l.civility, l.project_creation, l.project_takeover, l.project_oven,
+                l.project_truck, l.project_job, ${projetPerf},
                 l.company_id, c.name AS company_name,
                 u.email AS account_email
          FROM learner l
@@ -240,26 +246,46 @@ const getLearners = (req, res) => {
                produirait « RS74047404 ». On traduit donc à l'affichage, et les anciennes lignes
                redeviennent justes sans que personne n'y touche. */
             const resoudre = await resolveurBadges(db.promise(), req.user.organization_id);
-            const data = results.map(({ account_email, levels, ...rest }) => ({
-                ...rest, levels: resoudreCsv(levels, resoudre), has_account: !!account_email,
-                /* L'E-MAIL DU COMPTE QUAND IL A DÉCROCHÉ DE CELUI DE LA FICHE — et seulement
-                   alors. Il était lu ici depuis toujours, et JETÉ : l'écran ne pouvait donc pas
-                   signaler l'écart, et personne ne pouvait le voir.
+            /* LE REPÈRE « FICHE INCOMPLÈTE » — la règle même du bandeau de la fiche
+               (lib/ficheIncomplete.js), calculée ici pour chaque ligne. Les LIBELLÉS seulement,
+               et seulement pour les fiches incomplètes : la liste compte plus de mille lignes, et
+               le détail (envoyé aux partenaires ou essentiel) se lit sur la fiche. `null` : le
+               calcul a échoué — la liste perd le repère, jamais ses lignes. */
+            let transmis = null;
+            try {
+                const conn = db.promise();
+                transmis = (await aDesDestinataires(conn, organizationId)) ? await champsOrganisme(conn, organizationId) : [];
+            } catch (e) {
+                console.error('Liste des stagiaires, champs manquants :', e.message);
+            }
+            const data = results.map(({ account_email, levels, civility, project_creation, project_takeover,
+                project_oven, project_truck, project_job, project_improvement, ...rest }) => {
+                const manque = transmis ? champsManquants({
+                    ...rest, civility, project_creation, project_takeover, project_oven, project_truck,
+                    project_job, project_improvement,
+                }, transmis).map((m) => m.libelle) : [];
+                return {
+                    ...rest, levels: resoudreCsv(levels, resoudre), has_account: !!account_email,
+                    ...(manque.length ? { champs_manquants: manque } : {}),
+                    /* L'E-MAIL DU COMPTE QUAND IL A DÉCROCHÉ DE CELUI DE LA FICHE — et seulement
+                       alors. Il était lu ici depuis toujours, et JETÉ : l'écran ne pouvait donc pas
+                       signaler l'écart, et personne ne pouvait le voir.
 
-                   CE QUE ÇA COÛTAIT, vécu en production le 2026-09-16 : on corrige l'e-mail
-                   d'une fiche après la création du compte, on réinitialise le mot de passe, et
-                   la connexion répond « Email ou mot de passe incorrect » — parce qu'elle
-                   cherche dans `user`, resté sur l'ANCIENNE adresse. Le message est
-                   volontairement ambigu (il ne dit jamais si c'est l'e-mail ou le mot de passe,
-                   pour ne pas révéler l'existence d'un compte) : on cherche donc le mot de
-                   passe pendant des heures, alors que c'est l'identifiant qui a bougé.
+                       CE QUE ÇA COÛTAIT, vécu en production le 2026-09-16 : on corrige l'e-mail
+                       d'une fiche après la création du compte, on réinitialise le mot de passe, et
+                       la connexion répond « Email ou mot de passe incorrect » — parce qu'elle
+                       cherche dans `user`, resté sur l'ANCIENNE adresse. Le message est
+                       volontairement ambigu (il ne dit jamais si c'est l'e-mail ou le mot de passe,
+                       pour ne pas révéler l'existence d'un compte) : on cherche donc le mot de
+                       passe pendant des heures, alors que c'est l'identifiant qui a bougé.
 
-                   Il n'est renvoyé QUE s'il diffère : la liste ne publie pas l'adresse de
-                   connexion de 1073 personnes pour le plaisir. */
-                compte_email_different: account_email && rest.email
-                    && account_email.trim().toLowerCase() !== String(rest.email).trim().toLowerCase()
-                    ? account_email : null,
-            }));
+                       Il n'est renvoyé QUE s'il diffère : la liste ne publie pas l'adresse de
+                       connexion de 1073 personnes pour le plaisir. */
+                    compte_email_different: account_email && rest.email
+                        && account_email.trim().toLowerCase() !== String(rest.email).trim().toLowerCase()
+                        ? account_email : null,
+                };
+            });
             res.json({ data });
         }
     );
