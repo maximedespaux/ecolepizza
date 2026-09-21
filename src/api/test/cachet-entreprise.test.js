@@ -31,7 +31,7 @@ test('LE CADRE DE L\'ENTREPRISE EST LA CASE OÙ L\'ENTREPRISE SIGNE', () => {
     const cadre = /const SIG_ENTREPRISE = \{ key: "sig:([^"]+)", label: "([^"]+)" \};/.exec(EDITEUR);
     assert.ok(cadre, 'SIG_ENTREPRISE introuvable dans l\'éditeur');
     const espace = /slot: '([^']+)', label: 'Signature du représentant'/.exec(lire('controllers/rep.controller.js'));
-    const lien = /const slot = String\(\(req\.body \|\| \{\}\)\.slot \|\| '([^']+)'\)/.exec(lire('controllers/document.controller.js'));
+    const lien = /(?:const|let) slot = String\(\(req\.body \|\| \{\}\)\.slot \|\| '([^']+)'\)/.exec(lire('controllers/document.controller.js'));
     assert.ok(espace && lien, 'cases de signature du représentant introuvables');
     assert.strictEqual(cadre[1], espace[1], 'l\'espace du représentant signe dans une autre case');
     assert.strictEqual(cadre[1], lien[1], 'le lien de signature remplit une autre case');
