@@ -154,34 +154,23 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **170 et 169 à jouer (relevé le 2026-09-21, au soir)**
+## 4. Migrations — **aucune à jouer (relevé le 2026-09-21, au soir)**
 
-**170 — À JOUER, PUIS UNE REPRISE PAR SCRIPT** (`170_france_travail_chiffre.sql`) : l'identifiant
-France Travail (`learner.france_travail_id`) est désormais CHIFFRÉ au repos (AES-256-GCM, même clé
-que le n° de sécurité sociale) ; la 170 élargit sa colonne de 60 à 255, sans quoi un chiffré
-(~80 caractères) serait refusé — ou TRONQUÉ, donc à jamais illisible. **L'ORDRE COMPTE** :
-  1. jouer la 170 ;
-  2. déployer le code (il chiffre à l'écriture dès que la colonne a la place, et déchiffre partout
-     où l'identifiant se lit : fiche, jeton {France Travail}, facture) ;
-  3. reprendre les identifiants DÉJÀ saisis, restés en clair — par le CHEMIN ABSOLU (un chemin
-     relatif se résout depuis le dossier courant : lancé depuis `src/api`, « Cannot find module ») :
-     `sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js --essai`, puis
-     sans `--essai`, puis `--verifier` (qui doit dire « 0 encore en clair, 0 illisible »).
-Chiffrer avant de déployer ferait afficher « enc:… » par l'ancien code. Le script confronte la clé
-à une valeur déjà chiffrée avant d'écrire (le garde-fou du coffre), refuse tant que la 170 n'est pas
-jouée, n'affiche aucun identifiant. Le revert NE rétrécit PAS la colonne (il couperait les
-chiffrés) : pour revenir au clair, `--dechiffrer` avant de remettre l'ancien code.
-Vérification sans SQL : après l'étape 3, `--verifier` ; côté API, `GET /stagiaires/:id` continue de
-renvoyer l'identifiant EN CLAIR (c'est la base qui change, pas l'écran).
+**170 est jouée, ET LA REPRISE EST FAITE** (`170_france_travail_chiffre.sql`, identifiant France
+Travail chiffré au repos, AES-256-GCM, même clé que le n° de sécurité sociale) — constaté le
+2026-09-21 : `chiffrer-france-travail.js --verifier` rend « 2 chiffré(s) et rouvrable(s), 0 encore
+en clair, 0 illisible(s) », la clé confrontée à un témoin existant ; et l'API rend ces deux
+identifiants EN CLAIR sur la fiche (lus sur les 4 demandeurs d'emploi, aucun « enc:… ») — le code
+déployé déchiffre. Le revert NE rétrécit PAS la colonne (il couperait les chiffrés) : pour revenir
+au clair, `sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js
+--dechiffrer` AVANT de remettre l'ancien code. Le chemin ABSOLU compte : un chemin relatif se
+résout depuis le dossier courant (lancé depuis `src/api`, « Cannot find module »).
+⚠️ Les sauvegardes nocturnes d'AVANT la reprise contiennent encore ces identifiants en clair :
+elles s'effacent d'elles-mêmes au fil de la rotation (14 jours, vers le 5 octobre 2026).
 
-**169 — À JOUER** (`169_stagiaire_a_recontacter.sql`) : colonnes `learner.a_recontacter` (la case
-« À recontacter » de la fiche, 0 ou 1) et `learner.a_recontacter_depuis` (posée par le SERVEUR à la
-coche, gardée tant qu'elle reste cochée, effacée à la décoche — l'ordre de la liste de priorité).
-Sans elles, la fiche s'enregistre et DIT que la case n'a pas été prise (`ignores`), la liste de
-rappel est vide et la pastille « Stagiaires » du menu n'apparaît pas. Elle se vérifie par l'API :
-`GET /stagiaires/a-recontacter` répond (liste, vide au début), et `GET /stagiaires/:id` (`SELECT *`)
-renvoie les clés `a_recontacter` et `a_recontacter_depuis`. Son revert retire les deux colonnes — les
-rappels en cours sont perdus.
+**169 est jouée** (`169_stagiaire_a_recontacter.sql`, le rappel « À recontacter ») — constaté le
+2026-09-21 au soir : `GET /stagiaires/:id` (`SELECT *`) renvoie les clés `a_recontacter` et
+`a_recontacter_depuis`, et `GET /stagiaires/a-recontacter` répond 200 (un rappel déjà posé).
 
 ⚠️ **UNE SAISIE RESTE À FAIRE, pas une migration : la forme juridique de l'organisme est VIDE.**
 La colonne existe (167 jouée), mais `GET /organisation` rend `legal_status: null` : les deux
