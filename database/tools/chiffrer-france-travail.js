@@ -17,12 +17,14 @@
  * L'ORDRE (cf. la migration 170) :
  *   1. jouer la 170 — sans elle le script REFUSE : un chiffré ne tient pas dans 60 caractères ;
  *   2. déployer le code qui chiffre et déchiffre — sinon l'ancien code afficherait « enc:… » ;
- *   3. lancer ce script :
+ *   3. lancer ce script — par son CHEMIN ABSOLU : un chemin relatif se résout depuis le dossier
+ *      courant, et lancé depuis `/opt/impastio/src/api` il cherchait `src/api/database/tools/…`
+ *      (« Cannot find module », vu le 2026-09-21). Le script, lui, vit à la racine du dépôt :
  *
- *   sudo -u impastio node database/tools/chiffrer-france-travail.js --essai       # n'écrit rien
- *   sudo -u impastio node database/tools/chiffrer-france-travail.js               # chiffre
- *   sudo -u impastio node database/tools/chiffrer-france-travail.js --verifier    # rouvre tout, n'écrit rien
- *   sudo -u impastio node database/tools/chiffrer-france-travail.js --dechiffrer  # retour au clair
+ *   sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js --essai       # n'écrit rien
+ *   sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js               # chiffre
+ *   sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js --verifier    # rouvre tout, n'écrit rien
+ *   sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js --dechiffrer  # retour au clair
  *   … --sans-temoin   # seulement si aucune valeur déjà chiffrée n'existe pour confronter la clé
  *
  * REJOUABLE ET REPRENABLE : un identifiant déjà chiffré est reconnu (« enc: ») et sauté.

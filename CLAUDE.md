@@ -163,9 +163,10 @@ que le n° de sécurité sociale) ; la 170 élargit sa colonne de 60 à 255, san
   1. jouer la 170 ;
   2. déployer le code (il chiffre à l'écriture dès que la colonne a la place, et déchiffre partout
      où l'identifiant se lit : fiche, jeton {France Travail}, facture) ;
-  3. reprendre les identifiants DÉJÀ saisis, restés en clair :
-     `sudo -u impastio node database/tools/chiffrer-france-travail.js --essai`, puis sans `--essai`,
-     puis `--verifier` (qui doit dire « 0 encore en clair, 0 illisible »).
+  3. reprendre les identifiants DÉJÀ saisis, restés en clair — par le CHEMIN ABSOLU (un chemin
+     relatif se résout depuis le dossier courant : lancé depuis `src/api`, « Cannot find module ») :
+     `sudo -u impastio node /opt/impastio/database/tools/chiffrer-france-travail.js --essai`, puis
+     sans `--essai`, puis `--verifier` (qui doit dire « 0 encore en clair, 0 illisible »).
 Chiffrer avant de déployer ferait afficher « enc:… » par l'ancien code. Le script confronte la clé
 à une valeur déjà chiffrée avant d'écrire (le garde-fou du coffre), refuse tant que la 170 n'est pas
 jouée, n'affiche aucun identifiant. Le revert NE rétrécit PAS la colonne (il couperait les
