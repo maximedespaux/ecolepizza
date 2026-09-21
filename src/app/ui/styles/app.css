@@ -1279,6 +1279,11 @@ tbody tr:last-child td{border-bottom:none}
 .carte-wrap .leaflet-pane,.carte-wrap .leaflet-top,.carte-wrap .leaflet-bottom{z-index:1}
 .carte-map{height:560px;width:100%}
 .carte-map .leaflet-popup-content{font-family:var(--font-b);font-size:13px}
+/* Le Plan IGN (Carte.jsx, FOND_DE_CARTE) est un plan routier, coloré et très étiqueté : désaturé,
+   éclairci et un peu voilé, il redevient un fond, proche du fond gris clair qu'il remplace, et les
+   bulles comme les points de couleur restent ce qu'on voit d'abord. Sur le seul calque des tuiles —
+   les marqueurs, dans un autre calque, gardent leurs couleurs. */
+.carte-map .fond-carte{filter:saturate(.2) brightness(1.08) contrast(.8);opacity:.85}
 .carte-loading{position:absolute;inset:0;z-index:500;display:grid;place-items:center;background:rgba(0,0,0,.04);color:var(--muted);font-size:14px}
 
 /* ————— LA CARTE COMME SCÈNE —————
