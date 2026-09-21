@@ -122,12 +122,10 @@ test('l\'écran pose le repère sur la ligne, avec la liste en info-bulle', () =
        que `.badge` tient en inline-flex. */
     assert.match(CSS, /\.fiche-chip\{margin-left:8px;vertical-align:1px;white-space:nowrap\}/);
     assert.doesNotMatch(CSS.match(/\.fiche-chip\{[^}]*\}/)[0], /display:/);
-    /* Sur téléphone, la colonne du nom fait ~70 px : le repère entier débordait sur « + Compte ».
-       Il se réduit à son icône — le texte masqué à l'œil, PAS retiré (`display:none` le couperait
-       aussi d'un lecteur d'écran). */
-    assert.match(LISTE, /<span className="fiche-chip-t">Fiche incomplète<\/span>/);
-    const telephone = CSS.match(/@media \(max-width:640px\)\{\n  \.fiche-chip\{[\s\S]*?\n\}/);
-    assert.ok(telephone, 'le repère a sa règle téléphone');
-    assert.match(telephone[0], /\.fiche-chip-t\{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset\(50%\)/);
-    assert.doesNotMatch(telephone[0], /display:none/);
+    /* LE LIBELLÉ RESTE ENTIER, téléphone compris. Il s'y réduisait à son icône quand la colonne du
+       nom ne faisait que 70 px ; la ligne y passe désormais les actions sous le nom
+       (stagiaires-lignes-telephone.test.js), et la place ne manque plus. Une icône seule ne se
+       comprenait pas au doigt : pas d'info-bulle sur un écran tactile. */
+    assert.match(LISTE, /<Icon name="alert-triangle" size=\{11\} aria-hidden="true" \/>Fiche incomplète/);
+    assert.doesNotMatch(CSS, /fiche-chip-t/);
 });

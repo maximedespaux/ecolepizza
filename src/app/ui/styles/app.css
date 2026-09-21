@@ -5488,17 +5488,25 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* LISTE DES STAGIAIRES — une ligne par fiche : avatar et nom (le lien), puis les actions.
+   SUR TÉLÉPHONE, CETTE LIGNE NE TENAIT PAS, le même défaut que les lignes du suivi : le lien vers
+   l'entreprise, « + Compte » (ou les deux boutons du compte), modifier et supprimer prenaient
+   environ 220 px des 300 disponibles, et la colonne du nom tombait vers 70 px — nom sur deux lignes,
+   téléphone coupé au milieu, et « À recontacter » ou un e-mail un peu long mordant sur « + Compte ».
+   Sous 640 px, les actions — groupées en un bloc — passent SOUS le nom, alignées sur lui (34 px
+   d'avatar + 11 d'écart), et le nom récupère toute la largeur. Le bloc peut lui-même passer à la
+   ligne : l'alerte « identifiant ≠ fiche » et les quatre boutons d'un compte dépassaient d'un pixel
+   la largeur restante — cas rare, qui prend alors deux lignes plutôt que de déborder. */
+.stagiaire-ligne{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--border-soft)}
+.stagiaire-actions{display:flex;align-items:center;gap:11px;flex-shrink:0}
+@media (max-width:640px){
+  .stagiaire-ligne{flex-wrap:wrap;row-gap:6px}
+  .stagiaire-actions{flex:1 1 100%;flex-wrap:wrap;row-gap:6px;padding-left:45px}
+}
 /* Le repère « Fiche incomplète » de la liste des stagiaires : même place que « À recontacter », mais
    il garde le inline-flex de .badge — l'icône et le texte doivent rester alignés. */
 .fiche-chip{margin-left:8px;vertical-align:1px;white-space:nowrap}
 .fiche-chip svg{color:var(--orange)}
-/* SUR TÉLÉPHONE, LE REPÈRE SE RÉDUIT À SON ICÔNE. La colonne du nom n'y fait qu'environ 70 px :
-   « Fiche incomplète » en entier débordait sur le bouton « + Compte ». Le texte reste lu par un
-   lecteur d'écran — masqué à l'œil, pas retiré du document —, et le détail est sur la fiche. */
-@media (max-width:640px){
-  .fiche-chip{padding:3px 6px}
-  .fiche-chip-t{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-}
 /* FICHE STAGIAIRE INCOMPLÈTE — le bandeau qui nomme ce qui manque (FicheIncomplete.jsx). Même
    famille que .alerte-conditions, en orange : « à compléter », la teinte des dossiers à compléter du
    tableau de bord. L'orange ne sert qu'à l'icône et à la teinte : en texte, #ff6900 sur blanc ne se
