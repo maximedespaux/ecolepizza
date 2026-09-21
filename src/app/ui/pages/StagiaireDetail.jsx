@@ -243,6 +243,10 @@ function StagiaireDetail() {
     l.project_oven && "Four",
     l.project_truck && "Camion / Remorque",
     l.project_job && "Cherche poste pizzaïolo(la)",
+    /* Absent de cette liste depuis la migration 158 (vu le 2026-09-21) : qui ne cochait QUE
+       « Perfectionnement » lisait « Aucun projet renseigné » sur sa fiche — le défaut même que la
+       case avait été créée pour corriger. */
+    l.project_improvement && "Perfectionnement",
   ].filter(Boolean).join(" · ");
 
   const c = l.company;
@@ -550,6 +554,14 @@ function StagiaireDetail() {
 
         <Card title={T("target", "Projet")}>
           {projects ? <p style={{ margin: 0 }}>{projects}</p> : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
+          {/* LA NOTE (migration 168), sous le projet comme dans le formulaire. Du texte simple : ses
+              retours à la ligne sont gardés (`pre-wrap`), et un mot sans fin ne sort pas de la carte. */}
+          {l.note_libre && (
+            <div className="sd-note">
+              <div className="sd-note-t">Note</div>
+              <p>{l.note_libre}</p>
+            </div>
+          )}
         </Card>
 
         {c && (
@@ -694,7 +706,8 @@ function StagiaireDetail() {
         <EditStagiaireModal
           id={l.id}
           onClose={() => setEditOpen(false)}
-          onSaved={(msg) => { setEditOpen(false); setStatus({ type: "success", message: msg || "Fiche mise à jour." }); loadLearner(); loadDocs(); setParcoursRefresh((n) => n + 1); }}
+          /* `type` : « info » quand le serveur n'a pas tout pris (la note, avant la migration 168). */
+          onSaved={(msg, type = "success") => { setEditOpen(false); setStatus({ type, message: msg || "Fiche mise à jour." }); loadLearner(); loadDocs(); setParcoursRefresh((n) => n + 1); }}
           onError={(m) => setStatus({ type: "error", message: m })}
           onDelete={handleDeleteLearner}
         />

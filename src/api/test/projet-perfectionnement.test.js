@@ -45,6 +45,10 @@ test('« Perfectionnement » est connu partout où le projet est lu ou écrit', 
     assert.match(CONSENT, /\['project_improvement', 'perfectionnement'\]/, 'dite dans l\'export partenaire');
     assert.strictEqual((CONSENT.match(/colonneOuNull\(conn, 'learner', 'project_improvement'/g) || []).length, 2,
         'les DEUX SELECT explicites la demandent de façon tolérante');
+    /* Le septième, oublié jusqu'au 2026-09-21 : la carte « Projet » de la fiche. Qui ne cochait que
+       « Perfectionnement » y lisait « Aucun projet renseigné ». */
+    const FICHE = readFileSync(path.join(__dirname, '../../app/ui/pages/StagiaireDetail.jsx'), 'utf8');
+    assert.match(FICHE, /l\.project_improvement && "Perfectionnement",/, 'affichée sur la fiche');
 });
 
 test('la liste blanche d\'écriture est filtrée sur les colonnes que la table porte', () => {

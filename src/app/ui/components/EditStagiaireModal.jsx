@@ -3,6 +3,7 @@ import { getStagiaire, createStagiaire, updateStagiaire, getOpcos, getFormations
 import { Field, SelectField } from "./Field.jsx";
 import { OPCOS } from "../lib/opco.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
+import { compterMots, NOTE_STAGIAIRE_MOTS_MAX } from "../lib/mots.js";
 
 const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
@@ -32,6 +33,7 @@ const EMPTY = {
   financing: "PARTICULIER", opco: "", levels: "", completed_levels: "", company_id: "",
   project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
   project_improvement: false,
+  note_libre: "", // migration 168 : la note en texte simple, sous « Votre projet »
 };
 
 /* LA LISTE DOIT SUIVRE `EMPTY` : `toForm` lit les autres clés en `?? ""`, si bien qu'un booléen
@@ -131,6 +133,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     return (f && f.color) || colorForLevel(code);
   };
 
+  /* LA NOTE : 128 MOTS AU PLUS, comptés comme le serveur les recompte (lib/mots.js). La frappe
+     n'est PAS coupée à la limite — un texte collé serait tronqué en silence, au milieu d'une
+     phrase — : le compteur passe au rouge, dit de combien, et l'enregistrement attend. */
+  const motsNote = compterMots(form.note_libre);
+  const noteTropLongue = motsNote > NOTE_STAGIAIRE_MOTS_MAX;
+
   const isPro = form.financing === "PROFESSIONNEL";
   const isJobSeeker = form.professional_status === "Demandeur d'emploi";
   const isEmployed = form.professional_status === "En activité";
@@ -147,19 +155,26 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     }
     // Même règle que le serveur, dite ICI : un 422 après enregistrement fait perdre la saisie de vue.
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) { onError?.("Adresse email invalide."); return; }
+    if (noteTropLongue) { onError?.(`La note dépasse ${NOTE_STAGIAIRE_MOTS_MAX} mots (${motsNote}) : raccourcissez-la pour enregistrer.`); return; }
     setSaving(true);
     try {
       // On lie l'entreprise via sa FK (company_id) : plus de saisie dupliquée par stagiaire.
       const payload = { ...form, company_id: isPro ? (form.company_id || null) : null };
+      /* LE SERVEUR DIT CE QU'IL A LAISSÉ TOMBER (`ignores` : colonne absente, migration non jouée).
+         Même règle que l'écran de l'organisme : un « enregistré » qui tairait la note perdue serait
+         un succès qui ment — elle aurait disparu à la réouverture, sans un mot. */
+      const sauf = (r) => ((r?.ignores || []).includes("note_libre") ? ", sauf la note : la migration 168 n'est pas jouée." : null);
       if (id) {
-        await updateStagiaire(id, payload);
-        onSaved?.("Stagiaire mis à jour.");
+        const r = await updateStagiaire(id, payload);
+        onSaved?.(sauf(r) ? `Stagiaire mis à jour${sauf(r)}` : "Stagiaire mis à jour.", sauf(r) ? "info" : "success");
       } else {
         /* PLUS DE COMPTE À LA CRÉATION DE LA FICHE : il naît à l'inscription à une session, quand
            l'espace a enfin quelque chose à montrer (cf. createLearner). On le dit, sinon on
            chercherait le mot de passe qu'affichait ce message. */
-        await createStagiaire(payload);
-        onSaved?.("Stagiaire ajouté. Son compte de connexion sera créé à son inscription à une session.");
+        const r = await createStagiaire(payload);
+        onSaved?.(sauf(r)
+          ? `Stagiaire ajouté${sauf(r)} Son compte de connexion sera créé à son inscription à une session.`
+          : "Stagiaire ajouté. Son compte de connexion sera créé à son inscription à une session.", sauf(r) ? "info" : "success");
       }
     } catch (err) { onError?.(err.message); }
     finally { setSaving(false); }
@@ -266,7 +281,9 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
 
               <div className="divider" />
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet</h3>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+              {/* `marginBottom: 12` : l'écart d'un champ (`.field`). Sans lui, la section suivante
+                  (« Note », « Entreprise ») se collait aux cases. */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
                 {/* « Perfectionnement » (migration 158) : les cinq autres cases disent toutes un projet de
                     CHANGEMENT — créer, reprendre, s'équiper, chercher un poste. Qui exerce déjà et vient
                     se perfectionner n'avait aucune case, et ressortait donc avec un projet VIDE,
@@ -276,6 +293,22 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                     <input type="checkbox" checked={!!form[k]} onChange={toggle(k)} /> {lab}
                   </label>
                 ))}
+              </div>
+
+              {/* LA NOTE, sous le projet (demandé le 2026-09-21) : du texte simple, 128 mots au plus.
+                  Le titre de la section nomme le champ (`aria-labelledby`) ; le compteur est annoncé
+                  aux lecteurs d'écran, sinon la limite n'existerait que pour qui voit la couleur. */}
+              <div className="divider" />
+              <h3 id="note-libre-titre" style={{ fontSize: 15, marginBottom: 10 }}>Note</h3>
+              <div className="field">
+                <textarea className="inp note-libre" rows={4} value={form.note_libre} onChange={set("note_libre")}
+                  aria-labelledby="note-libre-titre" aria-describedby="note-libre-compte" aria-invalid={noteTropLongue || undefined}
+                  placeholder="Texte libre : précisions sur le projet, disponibilités, contexte…" />
+                <div id="note-libre-compte" className={"mots-compte" + (noteTropLongue ? " trop" : "")} aria-live="polite">
+                  {noteTropLongue
+                    ? `${motsNote} / ${NOTE_STAGIAIRE_MOTS_MAX} mots : retirez-en ${motsNote - NOTE_STAGIAIRE_MOTS_MAX} pour enregistrer`
+                    : `${motsNote} / ${NOTE_STAGIAIRE_MOTS_MAX} mots`}
+                </div>
               </div>
 
               {isPro && (
@@ -365,7 +398,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
           {onDelete && <button type="button" className="btn ghost danger" onClick={onDelete}>Supprimer le stagiaire</button>}
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" className="btn ghost" onClick={onClose}>Annuler</button>
-            <button type="submit" form="stagiaire-form" className="btn primary" disabled={saving || loading}>
+            <button type="submit" form="stagiaire-form" className="btn primary" disabled={saving || loading || noteTropLongue}>
               {saving ? "Enregistrement…" : id ? "Enregistrer" : "Ajouter le stagiaire"}
             </button>
           </div>
