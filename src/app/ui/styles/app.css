@@ -1479,9 +1479,11 @@ tbody tr:last-child td{border-bottom:none}
   color:var(--dim);background:var(--surface2);border:1px dashed var(--border);
   border-radius:var(--r);scroll-snap-align:start;
   transition:background .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease)}
-.pipe-plie:hover{background:var(--surface3);border-color:var(--navy);color:var(--navy)}
+/* Survol en --blue, pas en --navy : --navy n'a pas de valeur sombre et disparaissait sur le fond
+   du thème sombre ; --blue vaut la même couleur en clair (#2c3371) et s'éclaircit en sombre. */
+.pipe-plie:hover{background:var(--surface3);border-color:var(--blue);color:var(--blue)}
 .pipe-plie b{font-size:17px;font-weight:800;color:var(--muted);letter-spacing:-.02em}
-.pipe-plie:hover b{color:var(--navy)}
+.pipe-plie:hover b{color:var(--blue)}
 .pipe-plie span{writing-mode:vertical-rl;font-size:11.5px;letter-spacing:.04em;
   text-transform:uppercase;font-weight:700}
 @media (prefers-reduced-motion:reduce){.pipe-plie{transition:none}}
@@ -1607,8 +1609,10 @@ tbody tr:last-child td{border-bottom:none}
   background:var(--surface2);font-size:13px;color:var(--muted)}
 .compteurs a{display:inline-flex;align-items:baseline;gap:5px;text-decoration:none;color:inherit;
   border-radius:5px;padding:1px 3px;transition:color .14s var(--ease)}
-.compteurs a:hover{color:var(--navy)}
-.compteurs a:hover b{color:var(--navy)}
+/* --blue et non --navy, même raison que .pipe-plie : en thème sombre, le chiffre survolé passait
+   en bleu marine sur fond bleu nuit — il disparaissait sous le pointeur. En clair, rien ne change. */
+.compteurs a:hover{color:var(--blue)}
+.compteurs a:hover b{color:var(--blue)}
 .compteurs b{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.02em}
 .compteurs>i{width:1px;height:14px;background:var(--border);flex-shrink:0}
 @media (max-width:640px){.compteurs>i{display:none}.compteurs{gap:6px 14px}}
