@@ -814,13 +814,18 @@ const getTemplateBody = async (req, res) => {
         // Le TYPE accompagne le corps : l'éditeur en a besoin pour n'offrir la « Facture type »
         // que là où elle a un sens. Sans lui, le bouton ne s'afficherait jamais.
         const steps = await loadOrgSteps(req.user.organization_id);
-        const docType = (steps.find((x) => x.slug === req.params.slug) || {}).doc_type || null;
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, body_html: '', header_html: '', footer_html: '', layout: null } });
+        const etape = steps.find((x) => x.slug === req.params.slug) || {};
+        const docType = etape.doc_type || null;
+        /* MODÈLE D'ENTREPRISE OU NON : l'éditeur n'offre le cadre « Cachet de l'entreprise » que
+           là où le représentant signe — les documents d'entreprise (cf. rep.controller). Posé sur
+           un modèle de stagiaire, il resterait vide à jamais. */
+        const companyLevel = etape.company_level ? 1 : 0;
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, body_html: '', header_html: '', footer_html: '', layout: null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
-            return res.json({ data: { slug: req.params.slug, kind: 'docx', doc_type: docType, body_html: '', header_html: '', footer_html: '', layout: null } });
+            return res.json({ data: { slug: req.params.slug, kind: 'docx', doc_type: docType, company_level: companyLevel, body_html: '', header_html: '', footer_html: '', layout: null } });
         }
-        res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
+        res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, body_html: content.html, header_html: content.header || '', footer_html: content.footer || '', layout: content.layout || null } });
     } catch (err) {
         console.error('Erreur lecture corps modèle :', err);
         res.status(500).json({ error: 'Internal Server Error' });

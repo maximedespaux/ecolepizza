@@ -71,6 +71,12 @@ function descParStagiaire(t) {
     + "en dehors, Prénom, Nom… désignent le stagiaire du dossier — et un document d'entreprise n'en a pas.";
 }
 
+/* LE CADRE DE L'ENTREPRISE a une clé FIXE, et non dérivée de son libellé : `representant`, la
+   case que remplissent l'espace du représentant (« signer avec mon cachet ») et le lien de
+   signature envoyé à l'entreprise. Dérivé du libellé comme les autres blocs nommés, « Cachet de
+   l'entreprise » aurait donné `sig:cachetdelentreprise` — un cadre que personne ne remplit. */
+const SIG_ENTREPRISE = { key: "sig:representant", label: "Cachet de l'entreprise" };
+
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
   return (
@@ -95,6 +101,7 @@ function TemplateEditor() {
   // Papier à en-tête automatique : ON par défaut. Un modèle qui met déjà l'identité dans son
   // corps (facture…) peut le couper pour ne pas avoir le nom de l'organisme en double, tout en haut.
   const [noLetterhead, setNoLetterhead] = useState(false);
+  const [modeleEntreprise, setModeleEntreprise] = useState(false); // company_level : cadre « Cachet de l'entreprise »
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -151,6 +158,7 @@ function TemplateEditor() {
         const bl = (d.layout && d.layout.bleed) || {};
         setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
         setNoLetterhead(!!(d.layout && d.layout.noLetterhead));
+        setModeleEntreprise(!!d.company_level);
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -404,6 +412,16 @@ function TemplateEditor() {
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
                 Bloc de signature nommé, signé séparément par chaque personne.
               </p>
+              {/* Même cadre que la signature du stagiaire : un espace blanc bordé de pointillés
+                  tant que personne n'a signé, le cachet à sa place ensuite. */}
+              {modeleEntreprise && (
+                <button className="tok-chip" draggable
+                  title={"Cadre vide jusqu'à la signature : le représentant de l'entreprise y appose son cachet, depuis son espace ou par le lien de signature. Cliquer ou glisser."}
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ENTREPRISE))}
+                  onClick={() => target?.chain().focus().insertToken({ token: SIG_ENTREPRISE.key, label: SIG_ENTREPRISE.label }).run()}>
+                  <Icon name="pencil" size={13} /> {SIG_ENTREPRISE.label}
+                </button>
+              )}
               {SIG_PRESETS.map((s) => (
                 <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », cliquer ou glisser`}
                   draggable

@@ -19,6 +19,11 @@ const TABLE_LABEL = {
 const EXCLUDED_EXACT = new Set([
     'id', 'password', 'social_security', 'lat', 'lng', 'geo_precision', 'geocoded_at',
     'created_at', 'updated_at', 'sort_order', 'color', 'signature_image', 'sign_cert',
+    /* `company.stamp` (migration 085) : le cachet que le représentant enregistre dans son espace.
+       C'est une IMAGE rangée en texte (data-URL) : proposée comme « champ », elle s'insérait en
+       puce et s'imprimait en caractères — des milliers — sur le document. Le cachet a sa place
+       dans le cadre « Cachet de l'entreprise », rempli à la signature. */
+    'stamp',
 ]);
 function isExcludedColumn(name) {
     if (EXCLUDED_EXACT.has(name)) return true;
