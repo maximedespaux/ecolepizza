@@ -37,7 +37,7 @@ async function docSignedByCompany(conn, orgSteps, doc) {
         return !!(r && r.company_id);
     } catch { return false; }
 }
-const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
@@ -98,7 +98,7 @@ async function buildDocHtml(conn, orgId, doc) {
     if (!slug) return null;
     const content = await getTemplateContent(orgId, slug);
     if (!content || content.kind !== 'builder') return null;
-    return renderTemplateHtml(content.html, ctx, { title: doc.title || '', headerHtml: content.header, footerHtml: content.footer });
+    return renderTemplateHtml(content.html, ctx, { title: doc.title || '', headerHtml: content.header, footerHtml: content.footer, letterhead: avecPapierEnTete(content.layout) });
 }
 
 const TYPE_LABELS = {
@@ -646,6 +646,11 @@ const createDocument = async (req, res) => {
             [enrIds, orgId, learner_id]);
         if (okEnr.length !== enrIds.length) return res.status(422).json({ error: 'Formation(s) invalide(s) pour ce stagiaire.' });
         const documentId = await prepareLearnerDoc(conn, orgId, { learnerId: learner_id, type, templateSlug: template_slug, title, enrollmentIds: enrIds });
+        /* PRÉPARER UN DOCUMENT N'ÉTAIT PAS JOURNALISÉ — seul geste du circuit à ne pas l'être :
+           l'import, le PDF, l'envoi, la signature, la suppression le sont. Le 2026-09-21, à la
+           question « ce certificat de réalisation devait-il être préparé pour cette stagiaire ? »,
+           personne ne pouvait dire qui l'avait préparé, ni quand. */
+        logAudit(req, 'document.create', 'GeneratedDocument', documentId);
         res.status(201).json({ message: 'Document préparé', id: documentId });
     } catch (err) {
         console.error('Erreur création document :', err);
@@ -909,6 +914,7 @@ async function composeDocPdf(conn, r) {
         return await composeDocumentPdf({
             bodyHtml: r.content.html, ctx: r.ctx,
             headerHtml: r.content.header, footerHtml: r.content.footer,
+            useLetterhead: avecPapierEnTete(r.content.layout), // « sans en-tête » : lib/htmlfill.js
             bleed: (r.content.layout && r.content.layout.bleed) || {},
         });
     }
@@ -1143,6 +1149,7 @@ const previewHtml = async (req, res) => {
             html = renderTemplateHtml(r.content.html, r.ctx, {
                 title: r.doc.title || r.baseName,
                 headerHtml: r.content.header, footerHtml: r.content.footer,
+                letterhead: avecPapierEnTete(r.content.layout),
             });
         } else {
             return res.status(400).json({ message: 'Aperçu HTML indisponible pour ce modèle (.docx) — utilisez le PDF.' });
@@ -1388,7 +1395,7 @@ async function renderDocumentHtml(conn, orgId, doc) {
     const content = slug ? await getTemplateContent(orgId, slug) : null;
     if (!content || content.kind === 'docx' || content.kind === 'emargement') return null;
     const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
-    return renderTemplateHtml(content.html, ctx, { title: doc.title, headerHtml: content.header, footerHtml: content.footer });
+    return renderTemplateHtml(content.html, ctx, { title: doc.title, headerHtml: content.header, footerHtml: content.footer, letterhead: avecPapierEnTete(content.layout) });
 }
 
 /**

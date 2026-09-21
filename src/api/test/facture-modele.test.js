@@ -492,8 +492,9 @@ test('la facture peut désactiver le papier à en-tête automatique (identité d
     const sans = renderTemplateHtml('<p>x</p>', { org }, { headerHtml: '', letterhead: false });
     assert.match(avec, /BAROUSSE/, 'par défaut, le papier à en-tête reste actif');
     assert.doesNotMatch(sans, /BAROUSSE/, 'letterhead:false ne doit pas ajouter l\'identité de l\'organisme en haut');
-    // Et le contrôleur lit le drapeau du modèle.
+    // Et le contrôleur lit le drapeau du modèle — par la règle commune depuis le 2026-09-21
+    // (lib/htmlfill.js, avecPapierEnTete), écrite une fois pour tous les rendus.
     const src = fs.readFileSync(path.join(__dirname, '..', 'controllers/invoice.controller.js'), 'utf8');
-    assert.match(src, /letterhead: !\(content\.layout && content\.layout\.noLetterhead\)/,
+    assert.match(src, /letterhead: avecPapierEnTete\(content\.layout\)/,
         'la facture ne respecte pas le réglage « en-tête automatique » du modèle');
 });

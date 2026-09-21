@@ -4,7 +4,7 @@ const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
-const { renderTemplateHtml } = require('../lib/htmlfill.js');
+const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
 const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
@@ -578,7 +578,7 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
         title: `${data.typeLabel} ${data.number}`,
         headerHtml: content.header,
         footerHtml: content.footer,
-        letterhead: !(content.layout && content.layout.noLetterhead),
+        letterhead: avecPapierEnTete(content.layout),
     });
     // PDF/A-3 : exigé par Factur-X, et seul le moteur de rendu peut l'obtenir (polices
     // embarquees, profil de sortie ICC, aucune couleur en espace dependant du peripherique).

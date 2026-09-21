@@ -4,6 +4,7 @@ const { logAudit } = require('../lib/audit.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent } = require('./template.controller.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
+const { avecPapierEnTete } = require('../lib/htmlfill.js');
 
 /**
  * PROCÈS-VERBAL DE JURY DE CERTIFICATION — la commission de délibération d'une session.
@@ -316,7 +317,7 @@ const pvPdf = async (req, res) => {
         }
         const pdf = await composeDocumentPdf({
             bodyHtml: content.html, headerHtml: content.header, footerHtml: content.footer,
-            ctx, useLetterhead: !(content.layout && content.layout.noLetterhead),
+            ctx, useLetterhead: avecPapierEnTete(content.layout),
             bleed: (content.layout && content.layout.bleed) || {},
         });
         logAudit(req, 'examen.pv', 'ExamSession', req.params.id);

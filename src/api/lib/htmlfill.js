@@ -501,4 +501,16 @@ ${DOC_CSS}
 <body><main class="doc-body">${filled}</main></body></html>`;
 }
 
-module.exports = { fillHtml, renderTemplateHtml, renderBodyOnlyDoc, letterhead, escapeHtml, DOC_CSS };
+/**
+ * LE PAPIER À EN-TÊTE AUTOMATIQUE, OUI OU NON : la règle, écrite UNE fois (2026-09-21).
+ *
+ * Un modèle peut le couper (« sans en-tête », `layout.noLetterhead`). L'aperçu de l'éditeur, le PV
+ * du jury et la facture le respectaient, chacun avec sa propre ligne ; les DOCUMENTS générés, non :
+ * leurs quatre rendus (PDF, aperçu, empreinte, page de signature) n'en disaient rien, et le rendu
+ * retombait sur « oui ». Constaté sur le certificat de réalisation d'une stagiaire : modèle réglé
+ * sans en-tête, aperçu de l'éditeur vide, PDF avec l'identité de l'organisme en haut des deux pages.
+ * Chaque rendu passe désormais par ici — un test vérifie qu'aucun ne l'oublie.
+ */
+const avecPapierEnTete = (layout) => !(layout && layout.noLetterhead);
+
+module.exports = { fillHtml, renderTemplateHtml, renderBodyOnlyDoc, letterhead, escapeHtml, DOC_CSS, avecPapierEnTete };

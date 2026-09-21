@@ -8,6 +8,7 @@ const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = 
 const { articlesTable, paiementsTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
+const { avecPapierEnTete } = require('../lib/htmlfill.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
 const { identiteExemple } = require('../lib/echantillons.js');
@@ -771,7 +772,7 @@ const previewPdf = async (req, res) => {
             sampleValues: await sampleTokenValues(req.user.organization_id),
             bleed: (layout && layout.bleed) || {},
             // Papier à en-tête automatique désactivable (l'aperçu doit refléter le rendu réel).
-            useLetterhead: !(layout && layout.noLetterhead),
+            useLetterhead: avecPapierEnTete(layout),
         });
         res.set('Content-Type', 'application/pdf');
         res.set('Content-Disposition', 'inline; filename="apercu.pdf"');
