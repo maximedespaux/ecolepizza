@@ -193,9 +193,9 @@ const TOKEN_CATALOG = [
             { key: 'TVA organisme', label: 'N° TVA', sample: 'FR76987654321' },
             { key: 'NDA', label: 'N° déclaration d’activité', sample: '75330000000' },
             { key: 'Adresse organisme', label: 'Adresse', sample: '1 rue du Four, 33000 Bordeaux' },
-            { key: 'Ville organisme', label: 'Ville', sample: 'Bordeaux' },
+            { key: 'Ville organisme', label: 'Ville', sample: 'BORDEAUX' },
             { key: 'Code postal organisme', label: 'Code postal', sample: '33000' },
-            { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'S.A.S.' },
+            { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'SAS' },
             { key: 'Capital organisme', label: 'Capital social', sample: '2000 euros' },
             { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136' },
             { key: 'NAF organisme', label: 'Code NAF/APE', sample: '8559A' },
@@ -1302,8 +1302,9 @@ function resolveTokens(ctx = {}) {
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
         'Adresse organisme': orgAddress, 'Ville organisme': o.town || '', 'Code postal organisme': o.zip_code || '',
         'Téléphone organisme': o.phone || '', 'Email organisme': o.email || '',
-        // Identité de société — portées par l'entité émettrice sur une facture (l'organisme
-        // n'a pas ces colonnes ; elles restent vides hors facture).
+        // Identité de société — portées par l'entité émettrice sur une facture. L'organisme a sa
+        // FORME JURIDIQUE depuis la migration 167 (Paramètres → Organisme) : le jeton se remplit
+        // aussi hors facture. Capital, RCS et NAF restent propres à l'entité émettrice.
         'Forme juridique organisme': o.legal_status || '', 'Capital organisme': o.capital || '',
         'RCS organisme': o.rcs || '', 'NAF organisme': o.naf_ape || '',
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',

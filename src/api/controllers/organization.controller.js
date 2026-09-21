@@ -1,4 +1,5 @@
 const db = require('../config/database.js');
+const { enCapitales } = require('../lib/saisie.js');
 const consentements = require('../lib/consentements.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
@@ -66,14 +67,14 @@ const getOrganization = (req, res) => {
  * PATCH /api/organisation — met à jour l'organisme (admin / secrétariat).
  */
 const updateOrganization = async (req, res) => {
-    const allowed = ['legal_name', 'short_name', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
+    const allowed = ['legal_name', 'short_name', 'legal_status', 'code', 'manager', 'siret', 'vat_number', 'nda', 'naf_ape',
         'address', 'zip_code', 'town', 'phone', 'email', 'iban', 'bic', 'bank_name', 'signature_image',
         'logo_image', 'emargement_config', 'qualiopi', 'vat_rate', 'partner_fields',
         // Réglages « Mailing » (migration 138) : un interrupteur 0/1 par type d'e-mail.
         'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications',
     ];
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie sans elles.
-    const OPTIONAL = new Set(['vat_rate', 'partner_fields',
+    const OPTIONAL = new Set(['vat_rate', 'partner_fields', 'legal_status',
         'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications']);
 
     const cols = [];
@@ -85,6 +86,11 @@ const updateOrganization = async (req, res) => {
         else if (f.startsWith('mail_')) v = v ? 1 : 0;
         else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
         else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
+        /* EN CAPITALES, comme la ville des stagiaires et des entreprises (lib/saisie.js) — et la forme
+           juridique, choisie dans une liste en capitales (SAS, SARL…) : l'écran la propose ainsi, le
+           serveur la tient ainsi, quel que soit le chemin. Vide = non renseignée. */
+        else if (f === 'town') v = enCapitales(v);
+        else if (f === 'legal_status') v = (v == null ? '' : enCapitales(v)).slice(0, 40) || null;
         else if (f === 'signature_image') v = encrypt(v || null);
         else if (f === 'emargement_config') v = JSON.stringify(mergeEmargConfig(v));
         cols.push(f); valOf[f] = v;

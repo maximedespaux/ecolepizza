@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { getOrganisation, updateOrganisation } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
-import { Field } from "../components/Field.jsx";
+import { Field, SelectField } from "../components/Field.jsx";
+import { FORMES_JURIDIQUES } from "../lib/formesJuridiques.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import LocationsManager from "../components/LocationsManager.jsx";
 
@@ -23,14 +24,22 @@ function Reglages() {
   }, []);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
+  /* LA VILLE EN CAPITALES DÈS LA FRAPPE, comme celle des stagiaires et des entreprises : le serveur
+     la met en capitales de toute façon, et la voir changer de casse au rechargement suivant
+     ressemblerait à un bug. */
+  const setVille = (e) => setForm((p) => ({ ...p, town: e.target.value.toLocaleUpperCase("fr") }));
 
   async function save(e) {
     e.preventDefault();
     setSaving(true);
     setStatus(null);
     try {
-      await updateOrganisation(form);
-      setStatus({ type: "success", message: "Organisme enregistré." });
+      const r = await updateOrganisation(form);
+      /* LE SERVEUR DIT CE QU'IL A LAISSÉ TOMBER (colonne absente, migration non jouée) : un
+         « enregistré » qui tairait la forme juridique perdue serait un succès qui ment. */
+      setStatus(r?.ignores?.includes("legal_status")
+        ? { type: "info", message: "Organisme enregistré, sauf la forme juridique : la migration 167 n'est pas jouée." }
+        : { type: "success", message: "Organisme enregistré." });
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     } finally {
@@ -47,8 +56,22 @@ function Reglages() {
           <form onSubmit={save}>
             <div className="row2">
               {FIELDS.map(([k, label]) => (
-                <Field key={k} label={label} value={form[k] || ""} onChange={set(k)} />
+                k === "town"
+                  ? <Field key={k} label={label} value={form.town || ""} onChange={setVille} placeholder="LANNEMEZAN" />
+                  : <Field key={k} label={label} value={form[k] || ""} onChange={set(k)} />
               ))}
+              {/* LA FORME JURIDIQUE, choisie dans une liste en capitales : c'est le sigle qui
+                  s'imprime ({Forme juridique organisme}). Une valeur enregistrée hors de la liste
+                  reste proposée, pour ne pas disparaître au premier enregistrement. */}
+              <SelectField label="Forme juridique" value={form.legal_status || ""} onChange={set("legal_status")}>
+                <option value="">Non renseignée</option>
+                {form.legal_status && !FORMES_JURIDIQUES.some(([c]) => c === form.legal_status) && (
+                  <option value={form.legal_status}>{form.legal_status}</option>
+                )}
+                {FORMES_JURIDIQUES.map(([code, libelle]) => (
+                  <option key={code} value={code}>{code} — {libelle}</option>
+                ))}
+              </SelectField>
             </div>
             <div className="field" style={{ marginTop: 4 }}>
               {/* `htmlFor` : le seul champ de cette page écrit à la main plutôt qu'avec

@@ -138,6 +138,7 @@ const FR_LABELS = {
     // « · Short name » — le nom de la colonne, en anglais, coupé au milieu. Personne ne devine
     // ce qu'est un « Nda » en construisant un modèle de facture.
     'organization.legal_name': "Raison sociale de l'organisme",
+    'organization.legal_status': "Forme juridique de l'organisme",
     'organization.short_name': 'Nom court',
     'organization.manager': 'Responsable',
     'organization.nda': "N° de déclaration d'activité (NDA)",
