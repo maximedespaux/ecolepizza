@@ -190,8 +190,12 @@ SQL, pour les deux qui se voient :**
 (types de remise) a été constatée par l'utilisateur, qui a créé le type « OPCO ».
 
 ⚠️ **161 (`remise_document.sans_objet`) ne se vérifie PAS par l'API** : la liste relit la colonne
-en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Une requête suffit — même forme
-que pour la 156 ci-dessous, avec `table_name='remise_document' AND column_name='sans_objet'`.
+en cascade et renvoie la clé `sans_objet` dans les DEUX branches. Seule une remise réellement marquée
+« sans objet » la trahirait — et il n'y en a aucune : **relevé le 2026-09-21, l'étape de remise « OPCO »
+existe dans les 10 formations et y est INACTIVE partout**, donc aucun dossier n'affiche de remise. Une
+requête suffit — même forme que pour la 156 ci-dessous, avec `table_name='remise_document' AND
+column_name='sans_objet'`. Sans la colonne, rien ne se voit tant que l'étape reste inactive ; le jour
+où elle s'active, marquer une remise « sans objet » répondrait « Migration 161 non jouée. » (503).
 
 Les migrations **153 à 157 sont jouées**. Elles avaient été annoncées « en attente » dans ce
 paragraphe et y sont restées après avoir été jouées : exactement le travers décrit plus bas.
