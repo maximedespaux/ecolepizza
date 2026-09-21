@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-21** :
-**1591 tests — 1584 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1596 tests — 1589 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,32 +154,32 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **168 à jouer, 167 à REJOUER (relevé le 2026-09-21)**
+## 4. Migrations — **aucune à jouer (relevé le 2026-09-21, au soir)**
 
-**168 — À JOUER** (`168_stagiaire_note_libre.sql`) : colonne `learner.note_libre` (TEXT), la note en
-texte simple de la fiche stagiaire, sous « Votre projet », 128 mots au plus — le serveur les recompte
-et refuse au-delà (même compte que l'écran, `lib/reponseLibre.js`). « note_libre » et pas « note » :
-ici, une note est aussi une note d'évaluation. Sans la colonne, la fiche s'enregistre et DIT que la
-note n'a pas été prise (réponse `ignores`, message « sauf la note »). Elle se vérifie par l'API :
-`GET /stagiaires/:id` fait un `SELECT *` et renvoie la clé `note_libre`. Son revert retire la colonne
-— les notes saisies sont perdues.
+⚠️ **UNE SAISIE RESTE À FAIRE, pas une migration : la forme juridique de l'organisme est VIDE.**
+La colonne existe (167 jouée), mais `GET /organisation` rend `legal_status: null` : les deux
+enregistrements de l'après-midi l'ont ignorée, la colonne n'existant pas encore. À choisir dans
+Paramètres → Organisme, puis enregistrer. Tant qu'elle est vide, le jeton {Forme juridique organisme}
+sort vide hors facture.
 
-**167 — À JOUER** (`167_organisme_forme_juridique.sql`) : colonne `organization.legal_status` (forme
-juridique choisie dans Paramètres → Organisme, liste en capitales de `lib/formesJuridiques.js`), et la
-ville DÉJÀ saisie de l'organisme passée en capitales (comparaison sur les octets, comme la 162). Sans
-elle, l'écran enregistre le reste et DIT que la forme juridique n'a pas été prise (colonne facultative,
-`ignores`). Elle se vérifie par l'API : `GET /organisation` renvoie la clé `legal_status` (`SELECT *`),
-et la ville en capitales. Son revert retire la colonne ; la ville reste en capitales (casse d'origine
-perdue, comme pour la 162).
+**168 est jouée** (`168_stagiaire_note_libre.sql`, colonne `learner.note_libre`, la note en texte
+simple sous « Votre projet », 128 mots au plus, recomptés par le serveur avec le même compte que
+l'écran, `lib/reponseLibre.js`) — l'utilisateur a relevé `information_schema` = 1 le 2026-09-21, et
+l'API le confirme le même soir : `GET /stagiaires/:id` (`SELECT *`) renvoie la clé `note_libre`.
+« note_libre » et pas « note » : ici, une note est aussi une note d'évaluation. Son revert retire la
+colonne — les notes saisies sont perdues.
 
-⚠️ **Annoncée jouée le 2026-09-21, elle n'est PAS en production** : à 17 h 02 ce jour-là,
-`GET /organisation` rendait 28 colonnes, `short_name` comprise (celle qu'elle suit), et pas
-`legal_status`. **La ville en capitales ne prouve rien** : l'organisme a été enregistré deux fois
-dans l'après-midi (journal : `organization.update` à 16 h 16 et 16 h 38), et le code met la ville en
-capitales à CHAQUE enregistrement — les deux fois, la forme juridique a été ignorée. Donc : rejouer la
-167 (sans risque, `IF NOT EXISTS`), vérifier par `information_schema` (`table_name='organization' AND
-column_name='legal_status'`, doit rendre 1), puis RECHOISIR la forme juridique dans Paramètres →
-Organisme et enregistrer.
+**167 est jouée** (`167_organisme_forme_juridique.sql`, colonne `organization.legal_status`, liste en
+capitales de `lib/formesJuridiques.js`, et la ville de l'organisme passée en capitales) — constaté le
+2026-09-21 au soir : `GET /organisation` renvoie la clé `legal_status`. Son revert retire la colonne ;
+la ville reste en capitales (casse d'origine perdue, comme pour la 162).
+
+**LE PIÈGE QU'ELLE A MONTRÉ, à ne pas re-découvrir** : annoncée jouée une première fois, elle ne
+l'était pas — à 17 h 02, `GET /organisation` rendait 28 colonnes, `short_name` comprise (celle
+qu'elle suit), et pas `legal_status`. Et **la ville en capitales ne prouvait rien** : l'organisme
+avait été enregistré deux fois dans l'après-midi (journal : `organization.update` à 16 h 16 et
+16 h 38), et le code met la ville en capitales à CHAQUE enregistrement. Une migration qui fait
+DEUX choses se vérifie sur celle que le code ne sait pas refaire seul — ici, la colonne.
 
 **164, 165 et 166 sont jouées — l'utilisateur l'a annoncé le 2026-09-21 ; constaté le jour même, sans
 SQL, pour les deux qui se voient :**
