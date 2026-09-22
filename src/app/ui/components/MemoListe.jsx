@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMemos, createMemo, updateMemo, deleteMemo, clearMemosFaits, chercherCiblesMemo } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
-import { etatEcheance, trierMemos, mentionEnCours, insererMention, TYPES_LIEN, MAX_TEXTE } from "../lib/memos.js";
+import { etatEcheance, trierMemos, mentionEnCours, insererMention, blocsMemo, continuerPuce, resumeMemo, TYPES_LIEN, MAX_TEXTE } from "../lib/memos.js";
 import { annoncerMemos, onMemosChange } from "../lib/events.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 
@@ -24,6 +24,11 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
  *
  * LE TEXTE RESTE CE QU'ON A TAPÉ. Les liens vivent à côté, en puces sous la phrase — retoucher la
  * phrase après coup ne casse donc aucun lien, et rien n'oblige à relire des marqueurs dans la prose.
+ *
+ * PLUSIEURS LIGNES, ET DES PUCES (demandé le 2026-09-22). Entrée AJOUTE le mémo, Maj + Entrée va à
+ * la ligne — l'inverse serait piégeux dans une liste où l'on ajoute vingt fois pour une fois qu'on
+ * rédige. Une ligne qui commence par « * » ou « - » est une puce, et Maj + Entrée la continue toute
+ * seule ; une puce laissée vide ferme la liste. Rien d'autre n'est interprété : ni gras, ni titre.
  */
 export default function MemoListe({ autoFocus = false, onNaviguer }) {
   const [memos, setMemos] = useState(undefined); // undefined : chargement · null : migration 176 absente
@@ -39,6 +44,7 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
   const [actif, setActif] = useState(0);
   const champRef = useRef(null);
   const minuteur = useRef(null);
+  const [saisieOuverte, setSaisieOuverte] = useState(false);
 
   const charger = () => getMemos()
     .then((r) => {
@@ -49,6 +55,17 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
   useEffect(() => { charger(); return onMemosChange(charger); }, []);
   useAutoRefresh(charger, { interval: 60000 });
   useEffect(() => () => clearTimeout(minuteur.current), []);
+
+  /* LE CHAMP GRANDIT AVEC CE QU'ON ÉCRIT, jusqu'à un plafond : une liste de huit puces ne doit pas
+     se lire par une fente de deux lignes, et le panneau de la barre du haut ne doit pas devenir
+     une page. Au-delà, le champ défile. `height: auto` AVANT la mesure, sinon `scrollHeight` ne
+     redescend jamais — le champ ne ferait que grandir, même en effaçant. */
+  useEffect(() => {
+    const el = champRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
+  }, [texte]);
 
   /* Chaque geste prévient l'autre endroit, qui se relit — et celui-ci avec, par le même signal. */
   async function agir(fn) {
@@ -90,14 +107,40 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
     });
   }
 
+  /* SANS SURVOL, PAS DE TOUCHE MAJ : sur un téléphone, la touche Entrée du clavier à l'écran est la
+     SEULE façon d'aller à la ligne, et l'y refuser rendrait les listes impossibles à écrire là où
+     on écrit le plus de pense-bêtes. Le mémo s'y ajoute par le bouton « Ajouter », juste dessous. */
+  const sansTouchMaj = () => typeof window !== "undefined" && !!window.matchMedia?.("(hover: none)")?.matches;
+
+  /* ON LIT LE CHAMP, PAS L'ÉTAT. `texte` est un état React : entre la frappe et le rendu, il est en
+     retard d'une fraction de seconde sur ce qu'on voit, et la puce se serait continuée d'après une
+     ligne déjà périmée. La valeur du champ, elle, est toujours à jour.
+     ÉCRIRE, EN REVANCHE, RESTE LE TRAVAIL DE REACT : poser `el.value` à la main fait rouler la
+     saisie en arrière au rendu suivant — essayé, et le retour à la ligne disparaissait purement et
+     simplement. Le curseur se replace après ce rendu, sans quoi il retomberait à la fin du texte,
+     donc SOUS la puce qu'on vient d'ouvrir au lieu d'être dedans. */
+  function allerALaLigne(el) {
+    const { texte: t, curseur } = continuerPuce(el.value, el.selectionStart);
+    setTexte(t);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(curseur, curseur); });
+  }
+
   /* Tant que la liste est ouverte, les flèches et Entrée lui appartiennent : Entrée choisit, elle
      n'envoie pas le mémo à moitié écrit. */
   function surTouche(e) {
-    if (!suggestions || !suggestions.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setActif((i) => (i + 1) % suggestions.length); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActif((i) => (i - 1 + suggestions.length) % suggestions.length); }
-    else if (e.key === "Enter") { e.preventDefault(); choisir(suggestions[actif]); }
-    else if (e.key === "Escape") { e.preventDefault(); setSuggestions(null); }
+    if (suggestions && suggestions.length) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setActif((i) => (i + 1) % suggestions.length); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setActif((i) => (i - 1 + suggestions.length) % suggestions.length); }
+      else if (e.key === "Enter") { e.preventDefault(); choisir(suggestions[actif]); }
+      else if (e.key === "Escape") { e.preventDefault(); setSuggestions(null); }
+      return;
+    }
+    if (e.key === "Escape" && suggestions) { e.preventDefault(); setSuggestions(null); return; }
+    /* `isComposing` : sur un clavier à composition (accents, autre alphabet), Entrée VALIDE le
+       caractère en cours. L'intercepter ajouterait un mémo au milieu d'un mot. */
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.shiftKey || sansTouchMaj()) { e.preventDefault(); allerALaLigne(e.target); return; }
+    ajouter(e);
   }
 
   async function ajouter(e) {
@@ -128,7 +171,11 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
     <div className="memo">
       <form className="memo-form" onSubmit={ajouter}>
         <div className="memo-champ">
-          <input ref={champRef} className="inp" value={texte} onChange={surSaisie} onKeyDown={surTouche} maxLength={MAX_TEXTE}
+          {/* UN `textarea` ET NON UN `input` : un pense-bête tient souvent en une ligne, mais « ce
+              qu'il faut faire » tient en trois. Il commence à la hauteur d'un champ ordinaire et
+              grandit avec le texte, pour ne pas promettre un formulaire là où une phrase suffit. */}
+          <textarea ref={champRef} className="inp memo-saisie" rows={1} value={texte} onChange={surSaisie} onKeyDown={surTouche}
+            onFocus={() => setSaisieOuverte(true)} onBlur={() => setSaisieOuverte(false)} maxLength={MAX_TEXTE}
             placeholder="Nouveau mémo. @ pour un stagiaire, # pour une session" aria-label="Nouveau mémo" autoFocus={autoFocus}
             autoComplete="off" role="combobox" aria-expanded={!!(suggestions && suggestions.length)} aria-controls="memo-suggestions" />
           {suggestions && (
@@ -148,6 +195,15 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
             </ul>
           )}
         </div>
+
+        {/* L'AIDE NE S'AFFICHE QU'EN ÉCRIVANT : montrée en permanence, elle double la hauteur du
+            formulaire pour une règle qu'on n'apprend qu'une fois ; cachée, personne ne devine
+            Maj + Entrée. Elle paraît au moment exact où elle sert — dès qu'on entre dans le champ. */}
+        {(saisieOuverte || texte) && (
+          <p className="hint memo-aide">
+            Maj + Entrée pour aller à la ligne. Une ligne qui commence par «&nbsp;*&nbsp;» devient une puce.
+          </p>
+        )}
 
         {liens.length > 0 && (
           <div className="memo-liens-choisis">
@@ -200,13 +256,25 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
 
 function LigneMemo({ m, agir, onNaviguer }) {
   const etat = m.fait_le ? null : etatEcheance(m.echeance);
+  /* Les libellés parlés prennent le mémo EN UNE LIGNE : « Supprimer : Il faut faire : * 1 * 2 »
+     ferait annoncer des étoiles au milieu d'une phrase. */
+  const dit = resumeMemo(m.texte);
   const du = etat && (etat.ton === "retard" || etat.ton === "jour");
   return (
     <li className={"memo-ligne" + (m.fait_le ? " fait" : "") + (du ? " du" : "") + (m.nouveau ? " neuf" : "")}>
       <input type="checkbox" checked={!!m.fait_le} onChange={() => agir(() => updateMemo(m.id, { fait: !m.fait_le }))}
-        aria-label={m.fait_le ? `Remettre à faire : ${m.texte}` : `Marquer comme fait : ${m.texte}`} />
+        aria-label={m.fait_le ? `Remettre à faire : ${dit}` : `Marquer comme fait : ${dit}`} />
       <div className="memo-corps">
-        <span className="memo-texte">{m.texte}</span>
+        {/* LE MÉMO TEL QU'IL A ÉTÉ ÉCRIT : ses lignes, et ses puces rendues en vraie liste — un
+            lecteur d'écran l'annonce alors comme une liste, et les retours tiennent quand une
+            ligne se replie. `blocsMemo` ne reconnaît que la puce : rien d'autre n'est interprété. */}
+        <div className="memo-texte">
+          {blocsMemo(m.texte).map((b, i) => (b.type === "puces" ? (
+            <ul key={i} className="memo-puces">{b.items.map((t, j) => <li key={j}>{t}</li>)}</ul>
+          ) : (
+            <p key={i} className="memo-para">{b.lignes.join("\n")}</p>
+          )))}
+        </div>
         {(m.liens || []).length > 0 && (
           <span className="memo-liens">
             {m.liens.map((l) => {
@@ -233,11 +301,11 @@ function LigneMemo({ m, agir, onNaviguer }) {
           <button type="button" className={"memo-action" + (m.partage ? " on" : "")} aria-pressed={m.partage}
             onClick={() => agir(() => updateMemo(m.id, { partage: !m.partage }))}
             title={m.partage ? "Ne plus partager" : "Partager avec l'équipe"}
-            aria-label={m.partage ? `Ne plus partager : ${m.texte}` : `Partager avec l'équipe : ${m.texte}`}>
+            aria-label={m.partage ? `Ne plus partager : ${dit}` : `Partager avec l'équipe : ${dit}`}>
             <Icon name="users" size={15} />
           </button>
           <button type="button" className="memo-action danger" onClick={() => agir(() => deleteMemo(m.id))}
-            title="Supprimer" aria-label={`Supprimer : ${m.texte}`}>
+            title="Supprimer" aria-label={`Supprimer : ${dit}`}>
             <Icon name="trash" size={15} />
           </button>
         </span>
