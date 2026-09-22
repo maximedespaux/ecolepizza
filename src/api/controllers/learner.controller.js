@@ -91,6 +91,10 @@ const LEARNER_FIELDS = [
        indiscernables de ceux qui n'avaient rien rempli. */
     'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
     'project_improvement',
+    /* Le TYPE de four (migration 172), sous la case « Four » : bois, électrique, gaz — les trois
+       ensemble possibles (un four mixte). Filtrés comme les autres sur les colonnes que la table
+       porte : sans la migration, ils ne s'enregistrent pas, et `ignores` le dit à l'écran. */
+    'project_oven_wood', 'project_oven_electric', 'project_oven_gas',
     // Cadres exclusifs accordés par l'école (migration 113) — même idiome que `levels` : une
     // liste séparée par des virgules. Passe par cette liste blanche, donc par PATCH /:id, donc
     // par `authorizeRoles(...ADMIN_ROLES)` : un formateur ne peut pas s'accorder un Champion.
@@ -161,7 +165,7 @@ function refusNote(body) {
    rappel arrive déjà ramenée à 0 ou 1 (normaliserSaisie) : sans cette règle, décocher avant la
    migration 169 aurait annoncé « sauf le rappel » pour une case qui ne disait rien. */
 const CASES = new Set(['project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
-    'project_improvement', 'a_recontacter']);
+    'project_improvement', 'project_oven_wood', 'project_oven_electric', 'project_oven_gas', 'a_recontacter']);
 function champsIgnores(body, champs) {
     const perdu = (f) => (CASES.has(f) ? estCoche(body[f])
         : body[f] !== undefined && body[f] !== null && body[f] !== '' && body[f] !== false);
@@ -197,6 +201,9 @@ function normaliserSaisie(b) {
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
     if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
     if (out.a_recontacter !== undefined) out.a_recontacter = estCoche(out.a_recontacter) ? 1 : 0;
+    /* UN TYPE DE FOUR SANS FOUR EST UNE CONTRADICTION : le formulaire les lie, mais la route accepte
+       d'autres appelants. Un type coché coche « Four » — l'export dirait sinon « bois » sans four. */
+    if (['project_oven_wood', 'project_oven_electric', 'project_oven_gas'].some((k) => estCoche(out[k]))) out.project_oven = 1;
     if (out.france_travail_id != null) out.france_travail_id = String(out.france_travail_id).trim();
     /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
        updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus

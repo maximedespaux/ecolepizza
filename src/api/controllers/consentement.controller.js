@@ -114,6 +114,7 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
                 l.civility, l.address, l.zip_code, l.town, l.professional_status,
                 l.project_creation, l.project_takeover, l.project_oven, l.project_truck,
                 l.project_job, ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
+                ${await colonnesTypesFour(conn)},
                 c.name AS company_name, c.siret AS company_siret,
                 c.legal_status AS company_legal, c.naf_ape AS company_naf,
                 c.address AS company_address, c.zip_code AS company_zip, c.town AS company_town
@@ -338,6 +339,28 @@ const setConsentPourStagiaire = async (req, res) => {
  * divergé — et une divergence ici ne se voit pas : elle produit un export qui envoie un champ de
  * trop, sans erreur ni alerte.
  */
+/* LE PROJET EST UNE SÉRIE DE BOOLÉENS EN BASE. Les envoyer tels quels donnerait autant de colonnes
+   de 0 et de 1 à décoder ; on les rassemble en une phrase lisible. */
+const PROJETS = [
+    ['project_creation', 'création'], ['project_takeover', 'reprise'],
+    ['project_oven', 'four'], ['project_truck', 'camion'],
+    ['project_job', 'recherche de poste'], ['project_improvement', 'perfectionnement'],
+];
+/* LE FOUR, ET DUQUEL (migration 172) : « four (bois, gaz) » plutôt que « four » — c'est la première
+   question d'un fabricant de fours. Sans type coché, « four », comme avant. */
+const TYPES_FOUR = [['project_oven_wood', 'bois'], ['project_oven_electric', 'électrique'], ['project_oven_gas', 'gaz']];
+function phraseProjet(l) {
+    return PROJETS.filter(([c]) => Number(l[c]) === 1).map(([c, mot]) => {
+        if (c !== 'project_oven') return mot;
+        const types = TYPES_FOUR.filter(([t]) => Number(l[t]) === 1).map(([, t]) => t);
+        return types.length ? `four (${types.join(', ')})` : mot;
+    }).join(', ');
+}
+/* Les types de four, demandés de façon tolérante : sans la migration 172, NULL — l'export ne tombe
+   pas pour une colonne absente, il dit « four » comme avant. */
+const colonnesTypesFour = async (conn) =>
+    (await Promise.all(TYPES_FOUR.map(([c]) => colonneOuNull(conn, 'learner', c, 'l.')))).join(', ');
+
 async function composerLignes(conn, orgId, retenus, etats) {
     const choisis = await consentements.champsOrganisme(conn, orgId);
     const champsParStagiaire = new Map(retenus.map((l) => {
@@ -349,13 +372,6 @@ async function composerLignes(conn, orgId, retenus, etats) {
        fait que la donnée est bel et bien partie pour celui-là. */
     const champs = choisis.filter((c) => [...champsParStagiaire.values()].some((l) => l.includes(c)));
 
-    /* LE PROJET EST CINQ BOOLÉENS EN BASE. Les envoyer tels quels donnerait cinq colonnes de 0 et
-       de 1 à décoder ; on les rassemble en une phrase lisible. */
-    const PROJETS = [
-        ['project_creation', 'création'], ['project_takeover', 'reprise'],
-        ['project_oven', 'four'], ['project_truck', 'camion'],
-        ['project_job', 'recherche de poste'], ['project_improvement', 'perfectionnement'],
-    ];
     const valeurs = (l) => ({
         civilite: l.civility || '',
         nom: l.last_name || '', prenom: l.first_name || '',
@@ -363,7 +379,7 @@ async function composerLignes(conn, orgId, retenus, etats) {
         adresse: l.address || '', code_postal: l.zip_code || '', ville: l.town || '',
         formation: l.program_title || l.program_code || '',
         dates_session: l.start_date && l.end_date ? `${l.start_date} → ${l.end_date}` : '',
-        projet: PROJETS.filter(([c]) => Number(l[c]) === 1).map(([, m]) => m).join(', '),
+        projet: phraseProjet(l),
         statut: l.professional_status || '',
         /* L'ENTREPRISE : vide quand le stagiaire n'en a pas. Une colonne présente et vide dit
            « pas d'entreprise » ; une colonne absente forcerait à deviner. */
@@ -478,6 +494,7 @@ const produireTransmissionPartenaire = async (req, res) => {
                     l.zip_code, l.town, l.professional_status, l.project_creation,
                     l.project_takeover, l.project_oven, l.project_truck, l.project_job,
                     ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
+                    ${await colonnesTypesFour(conn)},
                     c.name AS company_name, c.siret AS company_siret, c.legal_status AS company_legal,
                     c.naf_ape AS company_naf, c.address AS company_address,
                     c.zip_code AS company_zip, c.town AS company_town,
@@ -567,5 +584,5 @@ const getTransmissions = async (req, res) => {
     }
 };
 
-module.exports = { getSessionConsents, setConsentPourStagiaire, getManquantsParSession,
+module.exports = { phraseProjet, getSessionConsents, setConsentPourStagiaire, getManquantsParSession,
     produireTransmissionPartenaire, getTransmissions };

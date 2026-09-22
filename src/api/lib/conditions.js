@@ -59,6 +59,7 @@ const DEFAULT_ENABLED = new Set([
     'learner.opco', 'learner.professional_status', 'learner.diploma_level', 'learner.current_contract',
     'learner.cpf_amount', 'learner.project_creation', 'learner.project_takeover', 'learner.project_oven',
     'learner.project_truck', 'learner.project_job', 'learner.project_improvement',
+    'learner.project_oven_wood', 'learner.project_oven_electric', 'learner.project_oven_gas',
     'enrollment.financing', 'enrollment.crm_stage', 'enrollment.price',
     'training_program.days', 'training_program.level', 'training_program.code',
     'training_program.rs_code', 'training_program.hygiene',
@@ -121,6 +122,8 @@ const FR_LABELS = {
     project_creation: 'Projet : création', project_takeover: 'Projet : reprise', project_oven: 'Projet : four',
     project_truck: 'Projet : camion / remorque', project_job: 'Projet : recherche de poste',
     project_improvement: 'Projet : perfectionnement',
+    project_oven_wood: 'Projet : four à bois', project_oven_electric: 'Projet : four électrique',
+    project_oven_gas: 'Projet : four à gaz', // migration 172
     note_libre: 'Note libre', // migration 168 : le texte sous « Votre projet »
     // Inscription
     price: 'Prix', acompte: 'Acompte', crm_stage: 'Étape CRM', conformite_score: 'Score de conformité',
