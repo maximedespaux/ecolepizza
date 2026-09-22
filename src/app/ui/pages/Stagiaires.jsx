@@ -9,6 +9,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import ImportCsv from "../components/ImportCsv.jsx";
 import ARecontacter from "../components/ARecontacter.jsx";
 import ListePlus from "../components/ListePlus.jsx";
 import { initials } from "../lib/format.js";
@@ -139,6 +140,7 @@ function Stagiaires() {
 
 
   const openNew = () => setEditId(null);
+  const [importer, setImporter] = useState(false); // l'import CSV (2026-09-22)
   const openEdit = (id) => setEditId(id);
   const isOpen = editId !== undefined;
 
@@ -149,7 +151,10 @@ function Stagiaires() {
         title="Stagiaires"
         lead="Fiche d'expression du stagiaire : contact, parcours, statut, projet."
         actions={
-          <button className="btn primary" onClick={openNew}>＋ Nouveau stagiaire</button>
+          <>
+            <button className="btn ghost" onClick={() => setImporter(true)}><Icon name="upload" size={15} /> Importer</button>
+            <button className="btn primary" onClick={openNew}>＋ Nouveau stagiaire</button>
+          </>
         }
       />
       <StatusMessage status={status} />
@@ -351,6 +356,10 @@ function Stagiaires() {
           onSaved={(msg, type = "success") => { setEditId(undefined); setStatus({ type, message: msg }); load(query); setRappelsRefresh((n) => n + 1); }}
           onError={(m) => setStatus({ type: "error", message: m })}
         />
+      )}
+      {importer && (
+        <ImportCsv type="stagiaires" onClose={() => setImporter(false)}
+          onImporte={(n) => { load(query); setStatus({ type: "success", message: `${n} stagiaire${n > 1 ? "s" : ""} importé${n > 1 ? "s" : ""}.` }); }} />
       )}
     </>
   );

@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1721 tests — 1714 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1734 tests — 1727 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -156,17 +156,18 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ## 4. Migrations — **aucune à jouer (relevé le 2026-09-22, au soir)**
 
-⚠️ **UN OUTIL DE DONNÉES RESTE À LANCER, pas une migration : `database/tools/completer-entreprises.js`**
-(demandé le 2026-09-22 : passer chaque fiche entreprise au registre, compléter celles qu'il connaît,
-supprimer celles qu'il ne connaît pas ou qui sont radiées, et ne toucher à AUCUNE fiche rattachée —
-stagiaire, inscription, facture, document, vente, compte de représentant, cachet, référent stagiaire).
-Source : l'API officielle « Recherche d'entreprises », les données mêmes que republient Pappers et
-societe.com. Lancé sans option, il ne fait qu'un ESSAI (rien n'est écrit en base) et dépose plan et
-rapport dans `/tmp/impastio-entreprises` ; `--appliquer <plan>` sauvegarde les fiches visées, puis
-exécute CE plan-là ; `--restaurer <sauvegarde>` défait. Commandes en tête du script, règles de décision
-dans `src/api/lib/registreEntreprises.js`. **Pas encore lancé au 2026-09-22 au soir** — relevé par l'API :
-3 entreprises sur 257 ont une date de création, 6 un SIRET, aucune un prénom de référent. La plupart se
-chercheront donc PAR LE NOM : attendre beaucoup de fiches « à vérifier à la main ».
+**L'OUTIL `database/tools/completer-entreprises.js` A ÉTÉ LANCÉ ET APPLIQUÉ** — l'utilisateur l'a annoncé le
+2026-09-22 au soir. Il passe chaque fiche entreprise au registre (l'API officielle « Recherche
+d'entreprises », les données que republient Pappers et societe.com), complète ce qui est vide, supprime
+les fiches introuvables ou radiées, et ne touche à AUCUNE fiche rattachée (stagiaire, inscription,
+facture, document, vente, compte de représentant, cachet, référent stagiaire). Règles de décision :
+`src/api/lib/registreEntreprises.js`. Relevé le soir même par l'API : **257 entreprises restent** (471 à
+l'import), dont 3 avec une date de création et 6 avec un SIRET — le registre n'a donc presque rien
+complété : sans SIRET, il ne complète que sur un nom SANS AMBIGUÏTÉ au même code postal.
+⚠️ Sa sauvegarde (`sauvegarde-….json`, ce que `--restaurer` remet) est dans `/tmp/impastio-entreprises`,
+que le redémarrage du serveur efface ; les sauvegardes nocturnes de la base, elles, gardent l'état
+d'avant quatorze jours (jusque vers le 6 octobre 2026). Relancer l'outil plus tard est sans risque : il
+refait un essai d'abord, et ne revient jamais sur une fiche rattachée.
 
 **171, 172, 173 et 174 sont jouées — l'utilisateur l'a annoncé le 2026-09-22 au soir ; constaté le jour même
 par l'API, sans SQL, le code déployé (l'interface servie porte le bloc « Référent », les quinze cases et le
