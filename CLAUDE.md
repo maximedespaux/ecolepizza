@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1734 tests — 1727 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1762 tests — 1755 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -155,6 +155,17 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 ---
 
 ## 4. Migrations — **aucune à jouer (relevé le 2026-09-22, au soir)**
+
+⚠️ **LE DROIT À L'IMAGE ATTEND UN ENREGISTREMENT, pas une migration (2026-09-22).** La réponse du
+stagiaire (photos, et partenaires à part) vit au registre des consentements — finalité `droit_image`,
+aucune migration : la 130 a été pensée pour — et le document l'imprime par les jetons « Autorisations »
+({Case photos oui}…). Mais le modèle `droit-image` de production ne sert PAS : son fichier Word est en
+base avec un genre resté « builder » sans corps, donc `getTemplateContent` rend `null` et la liste des
+modèles dit « à créer » (même cas pour `convention` et `convocation`, relevé le même jour). L'éditeur
+propose le document de l'école recomposé avec les cases (`lib/modelesProposes.js`) : **il faut l'ouvrir
+dans Modèles → Droit à l'image, le relire, puis ENREGISTRER** — rien n'est écrit avant. Un document qui
+porte ces jetons ne se signe qu'une fois la question répondue (`consentementsManquants`), par toutes
+les routes, et garde la réponse du jour de sa signature (`reponsesDuDocument`).
 
 **L'OUTIL `database/tools/completer-entreprises.js` A ÉTÉ LANCÉ ET APPLIQUÉ** — l'utilisateur l'a annoncé le
 2026-09-22 au soir. Il passe chaque fiche entreprise au registre (l'API officielle « Recherche
