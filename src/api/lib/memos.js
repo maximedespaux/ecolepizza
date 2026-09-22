@@ -11,6 +11,59 @@
 const MAX_TEXTE = 1000;
 
 /**
+ * CE QU'UN MÉMO PEUT DÉSIGNER (migration 177) — @ pour QUI, # pour QUOI.
+ *
+ * L'école a choisi ces six-là le 2026-09-22 : @ trouve un stagiaire, une entreprise ou un membre de
+ * l'équipe ; # trouve une session, un partenaire, une facture. `ping` distingue le seul type qui
+ * fait quelque chose de plus que lier : mentionner un collègue lui montre le mémo et allume une
+ * pastille sur son bouton.
+ *
+ * `capacite` est la rubrique qu'il faut pouvoir ouvrir pour que le type soit proposé : inutile de
+ * faire chercher des factures à qui n'y a pas accès — il verrait des numéros qu'il ne peut pas
+ * ouvrir. Les MEMBRES n'en ont pas : leurs noms sont connus de tout le personnel (barre du haut,
+ * signatures, communauté).
+ */
+const TYPES_LIEN = {
+    stagiaire: { genre: '@', capacite: '/stagiaires' },
+    entreprise: { genre: '@', capacite: '/entreprises' },
+    membre: { genre: '@', capacite: null, ping: true },
+    session: { genre: '#', capacite: '/sessions' },
+    partenaire: { genre: '#', capacite: '/partenaires' },
+    facture: { genre: '#', capacite: '/factures' },
+};
+const GENRES = ['@', '#'];
+/** Un mémo n'est pas un annuaire : au-delà, c'est que le lien n'est plus le sujet. */
+const MAX_LIENS = 8;
+const MAX_LIBELLE = 160;
+const estUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+
+/**
+ * Les liens d'un nouveau mémo → `{ liens }` ou `{ erreur }`. Chaque lien porte un type connu, un
+ * identifiant qui ressemble à un identifiant, et le libellé LU AU MOMENT DU CHOIX — celui qui
+ * restera lisible si la fiche disparaît. Les doublons sont écartés en silence : choisir deux fois
+ * la même personne n'est pas une erreur, c'est un clic de trop.
+ */
+function lireLiens(v) {
+    if (v === undefined || v === null || v === '') return { liens: [] };
+    if (!Array.isArray(v)) return { erreur: 'Liens illisibles.' };
+    const liens = [];
+    const vus = new Set();
+    for (const l of v) {
+        const type = String((l && l.type) || '');
+        if (!TYPES_LIEN[type]) return { erreur: `Type de lien inconnu : ${type || '(vide)'}.` };
+        if (!estUuid(l.id)) return { erreur: 'Lien sans identifiant valable.' };
+        const libelle = String(l.libelle == null ? '' : l.libelle).replace(/\s+/g, ' ').trim().slice(0, MAX_LIBELLE);
+        if (!libelle) return { erreur: 'Lien sans nom.' };
+        const cle = `${type}:${String(l.id).toLowerCase()}`;
+        if (vus.has(cle)) continue;
+        vus.add(cle);
+        liens.push({ type, id: String(l.id).toLowerCase(), libelle });
+    }
+    if (liens.length > MAX_LIENS) return { erreur: `Un mémo porte ${MAX_LIENS} liens au plus.` };
+    return { liens };
+}
+
+/**
  * « 2026-10-05 » si c'est une VRAIE date, `null` sinon. Le 30 février, « 05/10/2026 » ou un texte
  * libre ne passent pas : une échéance fausse ferait compter un rappel qui n'en est pas un.
  */
@@ -59,4 +112,4 @@ function lireModification(b = {}) {
     return { modification: out };
 }
 
-module.exports = { MAX_TEXTE, dateValide, lireNouveauMemo, lireModification };
+module.exports = { MAX_TEXTE, MAX_LIENS, TYPES_LIEN, GENRES, dateValide, lireNouveauMemo, lireModification, lireLiens, estUuid };

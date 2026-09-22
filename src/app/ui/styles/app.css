@@ -4938,6 +4938,35 @@ button.av-wrap:active{transform:scale(.94)}
 .memo-partage{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
 .memo-form-options .btn{margin-left:auto}
 .memo-erreur{color:var(--red);font-size:12.5px;margin:0 0 10px}
+/* @ et # : la liste s'ouvre SOUS le champ, dans le flux du formulaire — un menu flottant de plus
+   se serait battu avec le panneau, qui flotte déjà. */
+.memo-champ{position:relative}
+.memo-suggestions{position:absolute;z-index:5;top:calc(100% + 4px);left:0;right:0;max-height:230px;overflow:auto;
+  list-style:none;margin:0;padding:4px;background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;box-shadow:var(--shadow-2)}
+.memo-suggestion{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0;border-radius:9px;
+  background:transparent;color:var(--text);font-size:13px;text-align:left}
+.memo-suggestion b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.memo-suggestion .hint{margin-left:auto;white-space:nowrap;font-size:11.5px}
+.memo-suggestion.actif{background:var(--surface2)}
+.memo-suggestion-vide{padding:8px 10px;font-size:12.5px;color:var(--muted)}
+/* Les liens d'un mémo : sous la phrase, et dans le formulaire ce qu'on vient de choisir. */
+.memo-liens,.memo-liens-choisis{display:flex;flex-wrap:wrap;gap:6px}
+.memo-liens-choisis{margin:-2px 0 2px}
+.memo-lien{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11.5px;text-decoration:none}
+a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
+.memo-lien button{border:0;background:transparent;color:var(--muted);font-size:13px;line-height:1;padding:0 0 0 2px}
+.memo-lien button:hover{color:var(--red)}
+/* « Nouveau pour vous » : ce qu'un collègue vient de me confier, et que la pastille annonçait. */
+.memo-neuf{display:inline-flex;align-items:center;padding:1px 7px;border-radius:99px;font-weight:700;
+  background:color-mix(in srgb,var(--blue) 16%,transparent);color:var(--blue)}
+.memo-ligne.neuf{box-shadow:inset 3px 0 0 var(--blue)}
+/* La seconde pastille du bouton, à GAUCHE et d'une autre couleur que celle des échéances : deux
+   chiffres qui ne disent pas la même chose ne doivent pas se ressembler. */
+.memo-dot-neuf{position:absolute;top:-5px;left:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;
+  background:var(--blue);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1;
+  box-shadow:0 2px 6px -1px color-mix(in srgb,var(--blue) 50%,transparent)}
 .memo-vide{margin:6px 0 0}
 .memo-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 .memo-ligne{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px}
