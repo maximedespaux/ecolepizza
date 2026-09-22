@@ -13,6 +13,7 @@ import { Squelette } from "../components/Squelette.jsx";
 import { dossierAffiche } from "../lib/lienDossier.js";
 import FicheIncomplete from "../components/FicheIncomplete.jsx";
 import { lignesProjet } from "../lib/projet.js";
+import { referentAvecCivilite } from "../lib/referent.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
@@ -581,7 +582,7 @@ function StagiaireDetail() {
             <Row label="Téléphone" value={c.phone} />
             <Row label="Email" value={c.email} />
             <Row label="OPCO" value={c.opco} />
-            <Row label="Représentant" value={[c.representative_civ, c.representative_name, c.representative_role && `(${c.representative_role})`].filter(Boolean).join(" ")} />
+            <Row label="Représentant" value={[referentAvecCivilite(c), c.representative_role && `(${c.representative_role})`].filter(Boolean).join(" ")} />
           </Card>
         )}
       </div>

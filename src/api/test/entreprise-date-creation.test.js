@@ -27,7 +27,7 @@ test('la colonne peut ne pas être là — le code marche avant ET après la 159
        TOUTE la création d'entreprise en ER_BAD_FIELD_ERROR — on perdrait la fiche entière pour
        un champ facultatif. La liste, elle, passe par `colonneOuNull`, qui rend
        « NULL AS date_creation » : l'écran reçoit toujours la même forme d'objet. */
-    assert.match(CTRL, /const COMPANY_COLS_OPT = \['vat_number', 'date_creation'\];/);
+    assert.match(CTRL, /const COMPANY_COLS_OPT = \['vat_number', 'date_creation'[^\]]*\];/);
     assert.match(CTRL, /colonneOuNull\(conn, 'company', 'date_creation', 'c\.'\)/);
     /* Sonder information_schema demande d'attendre : le gestionnaire de liste était en style
        rappel, où `await` est une erreur de syntaxe — pas un défaut d'exécution qu'on verrait

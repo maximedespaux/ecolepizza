@@ -163,7 +163,14 @@ async function essai(conn, { organisme, chercher, limite = 0, progression = () =
         vues++;
         const d = await analyser(ligne, chercher);
         // Seulement les colonnes que CETTE base porte (date_creation arrive avec la 159).
-        if (d.champs) d.champs = Object.fromEntries(Object.entries(d.champs).filter(([k]) => cols.some((c) => c.nom === k)));
+        if (d.champs) {
+            const brut = d.champs;
+            d.champs = Object.fromEntries(Object.entries(brut).filter(([k]) => cols.some((c) => c.nom === k)));
+            // Sans la 174, pas de colonne pour le prénom : il rejoint le nom, dans la forme d'avant.
+            if (brut.representative_first_name && d.champs.representative_name && !('representative_first_name' in d.champs)) {
+                d.champs.representative_name = `${brut.representative_first_name} ${d.champs.representative_name}`.toLocaleUpperCase('fr');
+            }
+        }
         if (d.action === 'completer' && !Object.keys(d.champs).length) d.action = 'deja_complete';
         plan.entreprises.push({ ...base, empreinte: empreinte(ligne), ...d });
         progression(vues, limite ? Math.min(limite, aExaminer.length) : aExaminer.length);
@@ -173,6 +180,11 @@ async function essai(conn, { organisme, chercher, limite = 0, progression = () =
 
 const LIBELLES = { siret: 'SIRET', naf_ape: 'NAF', legal_status: 'forme', date_creation: 'création', address: 'adresse',
     zip_code: 'CP', town: 'ville', representative_name: 'référent', representative_role: 'fonction' };
+/* Les champs d'une fiche à compléter, lisibles : le prénom se lit AVEC le nom — « référent Paul MARTIN ». */
+const champsLisibles = (champs) => Object.entries(champs)
+    .filter(([k]) => k !== 'representative_first_name')
+    .map(([k, v]) => `${LIBELLES[k] || k} ${k === 'representative_name' ? [champs.representative_first_name, v].filter(Boolean).join(' ') : v}`)
+    .join(' · ');
 const candidat = (c) => `${c.nom} (SIRET ${c.siret}, ${c.commune}, ${c.etat})`;
 
 /** Le rapport lisible d'un plan : les comptes, puis chaque fiche qui bouge ou qui attend un humain. */
@@ -198,7 +210,7 @@ function rapport(plan) {
     const bloc = (titre, liste, ligne) => { if (liste.length) { L.push('', `${titre} (${liste.length})`); for (const e of liste) L.push(`  · ${ligne(e)}`); } };
     const qui = (e) => `${e.nom}${e.lieu ? ` — ${e.lieu}` : ''}`;
     bloc('À SUPPRIMER', sup, (e) => `${qui(e)} — ${e.motif}`);
-    bloc('À COMPLÉTER', par('completer'), (e) => `${qui(e)} → ${Object.entries(e.champs).map(([k, v]) => `${LIBELLES[k] || k} ${v}`).join(' · ')}`);
+    bloc('À COMPLÉTER', par('completer'), (e) => `${qui(e)} → ${champsLisibles(e.champs)}`);
     bloc('À VÉRIFIER À LA MAIN', par('a_verifier'), (e) => `${qui(e)} — ${e.motif}${e.candidats?.length ? ` : ${e.candidats.map(candidat).join(' ; ')}` : ''}`);
     bloc('EN ERREUR', par('erreur'), (e) => `${qui(e)} — ${e.motif}`);
     return L.join('\n');

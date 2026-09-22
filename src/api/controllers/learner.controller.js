@@ -12,6 +12,7 @@ const { logAudit } = require('../lib/audit.js');
 const { couperSessions } = require('./auth.controller.js'); // évincer les sessions après un reset
 const { resolveurBadges, resoudreCsv } = require('../lib/badges.js');
 const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
+const { suivreStagiaire } = require('../lib/referentEntreprise.js');
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
@@ -609,6 +610,8 @@ const updateLearner = async (req, res) => {
                 values
             );
         }
+        // Référent d'une entreprise (migration 174) : sa civilité, son prénom et son nom suivent cette fiche.
+        if (['civility', 'first_name', 'last_name'].some((k) => body[k] !== undefined)) await suivreStagiaire(conn, learnerId);
 
         /* ─── L'E-MAIL DE LA FICHE EST L'IDENTIFIANT DE CONNEXION : il doit suivre ───────────
            DÉFAUT VÉCU EN PRODUCTION le 2026-09-16. Un e-mail saisi avec une coquille, corrigé

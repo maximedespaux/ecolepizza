@@ -1,5 +1,6 @@
 const crypto = require('crypto');
-const { colonneOuNull } = require('../lib/colonnes.js');
+const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
+const { appliquerReferent, nomReferent } = require('../lib/referentEntreprise.js');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
@@ -65,6 +66,9 @@ const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code =
 const getCompanies = async (req, res) => {
   try {
     const conn = db.promise();
+    /* LE STAGIAIRE RÉFÉRENT DÉSIGNÉ (migration 174) passe avant la déduction par l'e-mail : c'est un
+       choix de l'école, l'autre n'est qu'une coïncidence d'adresses. Sans la colonne, la déduction seule. */
+    const lien = await colonneExiste(conn, 'company', 'representative_learner_id');
     const [results] = await conn.query(
         /* `learner_id` / `learner_name` : LE stagiaire dont l'adresse est EXACTEMENT celle de
            l'entreprise — c.-à-d. le cas « le référent EST un stagiaire » (petite société au nom
@@ -73,8 +77,12 @@ const getCompanies = async (req, res) => {
            lien pour une entreprise sans e-mail ou dont l'e-mail ne pointe sur aucun stagiaire. */
         `SELECT c.id, c.organization_id, c.name, c.siret, c.town, c.email, c.phone, c.opco,
                 c.representative_civ, c.representative_name, c.created_at,
+                ${await colonneOuNull(conn, 'company', 'representative_first_name', 'c.')},
                 ${await colonneOuNull(conn, 'company', 'date_creation', 'c.')},
                 (SELECT COUNT(*) FROM learner l WHERE l.company_id = c.id) AS learner_count,
+                ${lien ? `(SELECT rl.id FROM learner rl WHERE rl.id = c.representative_learner_id AND rl.organization_id = c.organization_id)` : 'NULL'} AS referent_id,
+                ${lien ? `(SELECT CONCAT_WS(' ', rl.first_name, rl.last_name) FROM learner rl
+                   WHERE rl.id = c.representative_learner_id AND rl.organization_id = c.organization_id)` : 'NULL'} AS referent_name,
                 (SELECT sl.id FROM learner sl
                    WHERE sl.organization_id = c.organization_id AND c.email <> '' AND sl.email = c.email
                    ORDER BY sl.created_at LIMIT 1) AS learner_id,
@@ -85,7 +93,9 @@ const getCompanies = async (req, res) => {
          WHERE c.organization_id = ?
          ORDER BY c.name`,
         [req.user.organization_id]);
-    res.json({ data: results });
+    res.json({ data: results.map(({ referent_id, referent_name, ...c }) => (referent_id
+        ? { ...c, learner_id: referent_id, learner_name: referent_name, referent_stagiaire: true }
+        : c)) });
   } catch (err) {
     console.error('Erreur récupération entreprises :', err);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -140,7 +150,16 @@ const getCompany = async (req, res) => {
                 representative = { linked: true, is_person: isPerson, role: u.role, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || null };
             }
         }
-        res.json({ data: { ...company, learners, sessions, representative } });
+        /* LE STAGIAIRE RÉFÉRENT (migration 174), pour que la fiche le montre choisi — il n'est pas
+           forcément parmi les stagiaires rattachés. Même organisme, toujours. */
+        let referentStagiaire = null;
+        if (company.representative_learner_id) {
+            const [[rl]] = await conn.query(
+                'SELECT id, civility, first_name, last_name, email FROM learner WHERE id = ? AND organization_id = ?',
+                [company.representative_learner_id, req.user.organization_id]);
+            referentStagiaire = rl || null;
+        }
+        res.json({ data: { ...company, learners, sessions, representative, referent_stagiaire: referentStagiaire } });
     } catch (err) {
         console.error('Erreur lecture entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -157,7 +176,9 @@ const COMPANY_COLS = ['name', 'siret', 'naf_ape', 'legal_status', 'address', 'zi
    cent soixante et onze fiches importées portent toutes le même `created_at`, à la seconde
    près : il ne dit rien de l'entreprise. C'est la date du Kbis que réclament une convention,
    un dossier OPCO ou un contrôle. */
-const COMPANY_COLS_OPT = ['vat_number', 'date_creation'];
+/* `representative_first_name` et `representative_learner_id` (migration 174) : le prénom du
+   référent, et le stagiaire choisi comme référent (lib/referentEntreprise.js). */
+const COMPANY_COLS_OPT = ['vat_number', 'date_creation', 'representative_first_name', 'representative_learner_id'];
 async function colonnesEntreprise(conn) {
     const dispo = [];
     for (const c of COMPANY_COLS_OPT) {
@@ -235,10 +256,13 @@ const createCompany = async (req, res) => {
      *
      * `updateCompany` ne les réclame PAS, pour la même raison que la fiche stagiaire : imposer
      * un SIRET pour corriger un code postal rendrait les anciennes fiches irréparables. */
+    /* Le référent se donne par son nom, OU par le stagiaire choisi : ses noms sont alors recopiés
+       plus bas (appliquerReferent), après ce contrôle, qui doit rester sans base. */
+    const referentChoisi = !!String(b.representative_learner_id || '').trim();
     const manquants = [
         ['name', "Nom de l'entreprise"], ['siret', 'SIRET'], ['email', 'E-mail'],
         ['phone', 'Téléphone'], ['representative_name', 'Nom du référent'],
-    ].filter(([k]) => !String(b[k] || '').trim()).map(([, libelle]) => libelle);
+    ].filter(([k]) => !(k === 'representative_name' && referentChoisi) && !String(b[k] || '').trim()).map(([, libelle]) => libelle);
     if (manquants.length) {
         return res.status(422).json({ error: `Champ${manquants.length > 1 ? 's' : ''} requis : ${manquants.join(', ')}.` });
     }
@@ -247,13 +271,16 @@ const createCompany = async (req, res) => {
     if (mauvaiseTva) return res.status(422).json({ error: mauvaiseTva });
     try {
         const id = crypto.randomUUID();
-        const cols = (await colonnesEntreprise(db.promise())).filter((k) => b[k] !== undefined);
+        const colonnes = await colonnesEntreprise(db.promise());
+        const referent = await appliquerReferent(db.promise(), req.user.organization_id, b, colonnes);
+        if (referent.erreur) return res.status(422).json({ error: referent.erreur });
+        const cols = colonnes.filter((k) => b[k] !== undefined);
         await db.promise().query(
             `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
             [id, req.user.organization_id, ...cols.map((k) => clean(b[k]))]
         );
         logAudit(req, 'company.create', 'Company', id);
-        res.status(201).json({ message: 'Entreprise créée', data: { id } });
+        res.status(201).json({ message: 'Entreprise créée', data: { id }, ...(referent.ignores.length ? { ignores: referent.ignores } : {}) });
     } catch (err) {
         console.error('Erreur création entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -272,7 +299,10 @@ const updateCompany = async (req, res) => {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!c) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        const cols = (await colonnesEntreprise(conn)).filter((k) => b[k] !== undefined);
+        const colonnes = await colonnesEntreprise(conn);
+        const referent = await appliquerReferent(conn, req.user.organization_id, b, colonnes);
+        if (referent.erreur) return res.status(422).json({ error: referent.erreur });
+        const cols = colonnes.filter((k) => b[k] !== undefined);
         if (cols.length) {
             await conn.query(
                 `UPDATE company SET ${cols.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND organization_id = ?`,
@@ -280,7 +310,8 @@ const updateCompany = async (req, res) => {
             );
         }
         logAudit(req, 'company.update', 'Company', req.params.id);
-        res.json({ success: true });
+        // Ce qui n'a pu être gardé (migration 174 non jouée) : l'écran le dit, plutôt qu'un succès qui ment.
+        res.json({ success: true, ...(referent.ignores.length ? { ignores: referent.ignores } : {}) });
     } catch (err) {
         console.error('Erreur mise à jour entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -878,11 +909,40 @@ const createRepresentativeAccount = async (req, res) => {
         const orgId = req.user.organization_id;
         const [[company]] = await conn.query('SELECT * FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        /* LE PRÉNOM, S'IL EST SAISI À PART (migration 174) : plus besoin de le deviner au premier mot
+           du nom. Les fiches d'avant gardent la coupe au premier mot. */
+        const prenom = String(company.representative_first_name || '').trim();
+        const [first, ...rest] = prenom
+            ? [prenom, ...String(company.representative_name || '').trim().split(/\s+/)]
+            : String(nomReferent(company) || company.name || 'Représentant').trim().split(/\s+/);
+        const last = rest.join(' ') || '';
+
+        const linkCompany = async (uid) => {
+            try { await conn.query('UPDATE company SET user_id = ? WHERE id = ? AND organization_id = ?', [uid, company.id, orgId]); }
+            catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
+        };
+        /* LE RÉFÉRENT EST UN STAGIAIRE QUI A DÉJÀ SON COMPTE (migration 174) : c'est ce compte-là qu'on
+           rattache, quelle que soit l'adresse de l'entreprise. Il signe depuis son espace habituel,
+           onglet Entreprise ; son mot de passe et son rôle ne sont pas touchés. L'e-mail de
+           l'entreprise ne sert plus à le retrouver — une adresse générique n'y menait pas. */
+        if (company.representative_learner_id) {
+            const [[su]] = await conn.query(
+                `SELECT u.id, u.role, u.email FROM learner l JOIN user u ON u.id = l.user_id
+                  WHERE l.id = ? AND l.organization_id = ? AND u.organization_id = ?`,
+                [company.representative_learner_id, orgId, orgId]);
+            if (su) {
+                await linkCompany(su.id);
+                const { subject, html } = representativeEmail({
+                    firstName: first, email: su.email, password: null, companyName: company.name, loginUrl: `${appUrl()}/login`,
+                });
+                sendMail({ to: su.email, subject, html, kind: 'credentials' });
+                return res.status(200).json({ data: { email: su.email, linked: true, existing_role: su.role } });
+            }
+            // Pas encore de compte (il naît à l'inscription à une session) : on suit la voie de l'e-mail.
+        }
+
         const email = (company.email || '').trim();
         if (!email) return res.status(422).json({ message: "Renseigne d'abord l'e-mail de l'entreprise." });
-
-        const [first, ...rest] = String(company.representative_name || company.name || 'Représentant').trim().split(/\s+/);
-        const last = rest.join(' ') || '';
 
         // Compte existant pour cet e-mail dans l'organisme ? (le référent peut DÉJÀ être un
         // stagiaire / membre du bureau — cas fréquent d'une société au nom du propriétaire).
@@ -890,10 +950,6 @@ const createRepresentativeAccount = async (req, res) => {
         const [[u]] = await conn.query('SELECT id, role FROM user WHERE email = ? AND organization_id = ?', [email, orgId]);
         const existing = u || (linkedId ? { id: linkedId, role: null } : null);
 
-        const linkCompany = async (uid) => {
-            try { await conn.query('UPDATE company SET user_id = ? WHERE id = ? AND organization_id = ?', [uid, company.id, orgId]); }
-            catch (e) { if (!isMissingSchema(e)) throw e; } // migration 084 non jouée
-        };
 
         /* E-mail au représentant : « voici votre accès pour signer les documents de l'entreprise ».
            Best-effort (ne bloque JAMAIS la création du compte, cf. lib/mailer.js) et soumis à

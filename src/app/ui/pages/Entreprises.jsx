@@ -12,6 +12,8 @@ import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { useListeBornee } from "../lib/listeBornee.js";
 import { dateFr } from "../lib/format.js";
+import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
+import { nomReferent, referentAvecCivilite, messageReferentPerdu } from "../lib/referent.js";
 
 /**
  * Entreprises — clients / financeurs de l'organisme. Une entreprise regroupe plusieurs
@@ -37,7 +39,7 @@ export default function Entreprises() {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtrees = !q ? rows
-      : rows.filter((c) => [c.name, c.siret, c.town, c.email, c.representative_name].some((f) => String(f || "").toLowerCase().includes(q)));
+      : rows.filter((c) => [c.name, c.siret, c.town, c.email, nomReferent(c)].some((f) => String(f || "").toLowerCase().includes(q)));
     /* Comparaison de CHAÎNES sur les dix premiers caractères — « AAAA-MM-JJ », dont l'ordre
        alphabétique EST l'ordre chronologique. Le pilote rend une colonne `DATE` sous la forme
        « 2020-03-15T00:00:00.000Z » : tronquer évite de comparer des fuseaux. Une entreprise
@@ -127,12 +129,14 @@ export default function Entreprises() {
                 cell: (c) => (
                   <>
                     <b>{c.name}</b>
-                    {/* L'e-mail de l'entreprise EST celui d'un stagiaire → lien vers sa fiche.
-                        `stopPropagation` : sinon le clic déclencherait aussi l'ouverture de la
-                        ligne (fiche entreprise). Absent si l'e-mail ne pointe sur personne. */}
+                    {/* Le référent EST un stagiaire — choisi comme tel (migration 174), ou l'e-mail de
+                        l'entreprise est le sien → lien vers sa fiche. `stopPropagation` : sinon le clic
+                        déclencherait aussi l'ouverture de la ligne (fiche entreprise). */}
                     {c.learner_id && (
                       <Link to={`/stagiaires/${c.learner_id}`} onClick={(e) => e.stopPropagation()}
-                        title={c.learner_name ? `Contact aussi stagiaire : ${c.learner_name} — ouvrir sa fiche` : "Contact aussi stagiaire — ouvrir sa fiche"}
+                        title={c.referent_stagiaire
+                          ? `Référent : ${c.learner_name || "un stagiaire"} — ouvrir sa fiche`
+                          : c.learner_name ? `Contact aussi stagiaire : ${c.learner_name} — ouvrir sa fiche` : "Contact aussi stagiaire — ouvrir sa fiche"}
                         aria-label={c.learner_name ? `Ouvrir la fiche stagiaire de ${c.learner_name}` : "Ouvrir la fiche stagiaire liée"}
                         style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, marginLeft: 7, borderRadius: 6, border: "1px solid var(--border)", color: "var(--muted)", verticalAlign: "middle" }}>
                         <Icon name="graduation" size={12} />
@@ -143,7 +147,7 @@ export default function Entreprises() {
                 ) },
               { k: "siret", t: "SIRET", td: { fontSize: 12 }, cell: (c) => (c.siret ? <span className="mono">{c.siret}</span> : null) },
               { k: "town", t: "Ville", cell: (c) => c.town || null },
-              { k: "ref", t: "Référent", cell: (c) => [c.representative_civ, c.representative_name].filter(Boolean).join(" ") || null },
+              { k: "ref", t: "Référent", cell: (c) => referentAvecCivilite(c) || null },
               { k: "nb", t: "Stagiaires", cell: (c) => <Badge tone={c.learner_count > 0 ? "b" : "n"}>{c.learner_count || 0}</Badge> },
               /* LA DATE DU KBIS (migration 159), triable. Cette colonne a d'abord montré
                  `created_at` — la date d'ENTRÉE DE LA FICHE dans l'application. Ça n'intéresse
@@ -165,7 +169,7 @@ export default function Entreprises() {
       </Card>
 
       {creating && <CreateCompanyModal onClose={() => setCreating(false)}
-        onCreated={(id) => { setCreating(false); navigate(`/entreprises/${id}`); }}
+        onCreated={(id, info) => { setCreating(false); navigate(`/entreprises/${id}`, info ? { state: { info } } : undefined); }}
         onError={(m) => setStatus({ type: "error", message: m })} />}
     </>
   );
@@ -175,7 +179,8 @@ export default function Entreprises() {
 const EN_CAPITALES = ["representative_name", "town"];
 
 function CreateCompanyModal({ onClose, onCreated, onError }) {
-  const [f, setF] = useState({ name: "", siret: "", vat_number: "", date_creation: "", address: "", zip_code: "", town: "", email: "", phone: "", representative_civ: "", representative_name: "" });
+  const [f, setF] = useState({ name: "", siret: "", vat_number: "", date_creation: "", address: "", zip_code: "", town: "", email: "", phone: "",
+    representative_civ: "", representative_name: "", representative_first_name: "", representative_learner_id: "" });
   const [busy, setBusy] = useState(false);
   /* Mêmes conventions que la fiche entreprise et la fiche stagiaire : nom du référent et ville en
      capitales (ils ressortent sur les conventions et les liens de signature), e-mail normalisé —
@@ -191,13 +196,18 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
     /* Les cinq champs d'une convention. Même règle que le serveur, dite ici : un 422 après coup
        fait perdre la saisie de vue. Le message NOMME ce qui manque — « champs requis » sur neuf
        champs oblige à tous les relire pour trouver lequel. */
+    // Le référent se donne par son nom, OU par le stagiaire choisi (le serveur recopie alors ses noms).
     const manquants = [["name", "Nom de l'entreprise"], ["siret", "SIRET"], ["email", "E-mail"],
       ["phone", "Téléphone"], ["representative_name", "Nom du référent"]]
-      .filter(([k]) => !String(f[k] || "").trim()).map(([, l]) => l);
+      .filter(([k]) => !(k === "representative_name" && f.representative_learner_id) && !String(f[k] || "").trim()).map(([, l]) => l);
     if (manquants.length) { onError(`Champ${manquants.length > 1 ? "s" : ""} requis : ${manquants.join(", ")}.`); return; }
     if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email)) { onError("Adresse e-mail invalide."); return; }
     setBusy(true);
-    try { const r = await createCompany(f); onCreated(r.data?.id); }
+    try {
+      const r = await createCompany(f);
+      const perdu = messageReferentPerdu(r?.ignores);
+      onCreated(r.data?.id, perdu ? `Entreprise créée, sauf ${perdu}` : null);
+    }
     catch (e) { onError(e.message); setBusy(false); }
   }
 
@@ -236,11 +246,7 @@ function CreateCompanyModal({ onClose, onCreated, onError }) {
             <div className="field"><label>Ville</label><input className="inp" value={f.town} onChange={set("town")} placeholder="LANNEMEZAN" /></div>
           </div>
           <div className="field"><label>E-mail<Requis /></label><input className="inp" type="email" value={f.email} onChange={set("email")} placeholder="contact@lepetitfour.fr" /></div>
-          <div className="grid cols-2" style={{ gap: 12 }}>
-            <div className="field"><label>Civilité référent</label>
-              <select className="inp" value={f.representative_civ} onChange={set("representative_civ")}><option value="">-</option><option>M.</option><option>Mme</option></select></div>
-            <div className="field"><label>Nom du référent<Requis /></label><input className="inp" value={f.representative_name} onChange={set("representative_name")} placeholder="DUPONT" /></div>
-          </div>
+          <ReferentEntreprise valeur={f} onChange={(m) => setF((p) => ({ ...p, ...m }))} requis />
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>

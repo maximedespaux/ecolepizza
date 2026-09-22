@@ -6,6 +6,8 @@ import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 import { compterMots, NOTE_STAGIAIRE_MOTS_MAX } from "../lib/mots.js";
 import { GROUPES_PROJET, CASES_PROJET, PRECISIONS_FOUR, MIGRATION_DES_CASES } from "../lib/projet.js";
 import { bumpBadges } from "../lib/events.js";
+import ReferentEntreprise from "./ReferentEntreprise.jsx";
+import { messageReferentPerdu } from "../lib/referent.js";
 
 const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
@@ -129,9 +131,10 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   async function saveNewCompany() {
     /* Mêmes cinq champs que la route, nommés un par un : « champs requis » sur six champs
        oblige à tous les relire pour trouver lequel manque. */
+    // Le référent se donne par son nom, OU par le stagiaire choisi (le serveur recopie alors ses noms).
     const manquants = [["name", "Nom de l'entreprise"], ["siret", "SIRET"], ["email", "E-mail"],
-      ["phone", "Téléphone"], ["representative_name", "Représentant"]]
-      .filter(([k]) => !String(newCo[k] || "").trim()).map(([, l]) => l);
+      ["phone", "Téléphone"], ["representative_name", "Référent"]]
+      .filter(([k]) => !(k === "representative_name" && newCo.representative_learner_id) && !String(newCo[k] || "").trim()).map(([, l]) => l);
     if (manquants.length) { onError?.(`Champ${manquants.length > 1 ? "s" : ""} requis : ${manquants.join(", ")}.`); return; }
     try {
       const r = await createCompany(newCo);
@@ -139,6 +142,10 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
       setCompanies(list);
       setForm((p) => ({ ...p, company_id: r.data?.id || p.company_id }));
       setNewCo(null);
+      /* Avant la migration 174, le lien vers le stagiaire référent n'est pas gardé : on le dit, par le
+         seul canal de cette fenêtre — un « créée » muet laisserait croire le lien en place. */
+      const perdu = messageReferentPerdu(r?.ignores);
+      if (perdu) onError?.(`Entreprise créée, sauf ${perdu}`);
     } catch (e) { onError?.(e.message); }
   }
   const codeColor = (code) => {
@@ -370,7 +377,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}{c.town ? ` · ${c.town}` : ""}</option>)}
                     </SelectField>
                     <div style={{ display: "flex", alignItems: "flex-end" }}>
-                      {!newCo && <button type="button" className="btn ghost" onClick={() => setNewCo({ name: "", siret: "", town: "", email: "", phone: "", representative_name: "" })}>＋ Nouvelle entreprise</button>}
+                      {!newCo && <button type="button" className="btn ghost" onClick={() => setNewCo({ name: "", siret: "", town: "", email: "", phone: "",
+                        representative_civ: "", representative_name: "", representative_first_name: "", representative_learner_id: "" })}>＋ Nouvelle entreprise</button>}
                     </div>
                   </div>
                   {newCo && (
@@ -384,11 +392,15 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                         <Field label="SIRET" requis placeholder="879 955 136 00012" value={newCo.siret} onChange={(e) => setNewCo((n) => ({ ...n, siret: e.target.value }))} />
                         <Field label="Ville" placeholder="LANNEMEZAN" value={newCo.town} onChange={(e) => setNewCo((n) => ({ ...n, town: e.target.value.toLocaleUpperCase("fr") }))} />
                       </div>
-                      <div className="row3">
+                      <div className="row2">
                         <Field label="E-mail" requis type="email" placeholder="contact@lepetitfour.fr" value={newCo.email} onChange={(e) => setNewCo((n) => ({ ...n, email: e.target.value }))} />
                         <Field label="Téléphone" requis placeholder="05 62 98 12 34" value={newCo.phone} onChange={(e) => setNewCo((n) => ({ ...n, phone: e.target.value }))} />
-                        <Field label="Représentant (nom & prénom)" requis placeholder="DUPONT" value={newCo.representative_name} onChange={(e) => setNewCo((n) => ({ ...n, representative_name: e.target.value }))} />
                       </div>
+                      {/* LE RÉFÉRENT, stagiaire ou autre personne (migration 174). Une petite société au nom de son
+                          propriétaire : c'est souvent CE stagiaire — proposé d'un clic quand sa fiche existe déjà. */}
+                      <ReferentEntreprise valeur={newCo} onChange={(m) => setNewCo((n) => ({ ...n, ...m }))} requis
+                        titreSuggestions="Ce stagiaire :"
+                        suggestions={id ? [{ id, civility: form.civility, first_name: form.first_name, last_name: form.last_name, email: form.email }] : []} />
                       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                         <button type="button" className="btn sm ghost" onClick={() => setNewCo(null)}>Annuler</button>
                         <button type="button" className="btn sm primary" onClick={saveNewCompany}>Créer &amp; rattacher</button>

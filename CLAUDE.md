@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1707 tests — 1700 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1721 tests — 1714 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **171, 172 et 173 à jouer (relevé le 2026-09-22)**
+## 4. Migrations — **171, 172, 173 et 174 à jouer (relevé le 2026-09-22)**
 
 ⚠️ **UN OUTIL DE DONNÉES RESTE À LANCER, pas une migration : `database/tools/completer-entreprises.js`**
 (demandé le 2026-09-22 : passer chaque fiche entreprise au registre, compléter celles qu'il connaît,
@@ -165,6 +165,16 @@ societe.com. Lancé sans option, il ne fait qu'un ESSAI (rien n'est écrit en ba
 rapport dans `/tmp/impastio-entreprises` ; `--appliquer <plan>` sauvegarde les fiches visées, puis
 exécute CE plan-là ; `--restaurer <sauvegarde>` défait. Commandes en tête du script, règles de décision
 dans `src/api/lib/registreEntreprises.js`. **Pas encore lancé au 2026-09-22.**
+
+**174 — À JOUER** (`174_referent_entreprise.sql`, le référent d'une entreprise : un stagiaire choisi, ou une
+personne en nom et prénom). Deux colonnes : `company.representative_first_name` (le prénom —
+`representative_name` porte alors le NOM seul ; les fiches d'avant gardent leur nom complet, que
+`nomReferent` lit tel quel) et `company.representative_learner_id` (le stagiaire référent, FK ON DELETE SET
+NULL ; ses civilité, prénom et nom sont recopiés, et suivent sa fiche). Sans elle, le prénom rejoint le nom
+dans la forme d'avant (« JEAN DUPONT ») et le lien n'est pas gardé — l'écran le dit (« sauf le lien vers le
+stagiaire référent »). Elle se vérifie par l'API : `GET /companies/:id` (`SELECT *`) renvoie les deux clés.
+Son revert replie le prénom dans le nom, puis retire les colonnes : seul le lien se perd. À jouer de
+préférence AVANT l'outil `completer-entreprises.js` : il écrit alors le prénom et le nom du dirigeant à part.
 
 **173 — À JOUER** (`173_projet_cases.sql`, quinze cases de plus dans « Votre projet », TINYINT(1)
 comme les autres : le TYPE D'ACTIVITÉ — `project_dine_in`, `project_takeaway`, `project_by_slice`,

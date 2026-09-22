@@ -3064,6 +3064,33 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .gs-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
 .gs-item:hover{background:var(--surface2)}
 .gs-price{display:flex;align-items:center;gap:6px}
+/* LE RÉFÉRENT D'UNE ENTREPRISE (ReferentEntreprise.jsx, migration 174) : un stagiaire, ou une autre
+   personne. Le trait du haut le sépare des coordonnées ; la légende FLOTTE, sinon un fieldset la
+   pose DANS son bord et coupe le trait. Fiche entreprise, création, et sous-formulaire de la fiche
+   stagiaire : trois largeurs, d'où la grille qui se replie. */
+.referent{border:0;border-top:1px solid var(--border-soft);margin:14px 0 0;padding:12px 0 0;min-width:0}
+.referent>legend{float:left;width:100%;padding:0;margin:0 0 8px;font-size:12.5px;font-weight:600}
+.referent>legend+*{clear:both}
+.referent-modes{margin-bottom:10px}
+.referent-stagiaire{display:flex;flex-direction:column;gap:8px}
+.referent-choisi{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2)}
+.referent-choisi-nom{display:flex;flex-direction:column;min-width:0}
+.referent-choisi-nom .hint{font-size:12px;overflow-wrap:anywhere}
+.referent-aide{margin:0}
+.referent-proposes{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.referent-recherche{flex:none;min-width:0}
+.referent-resultats{max-height:220px}
+.referent-resultat{border:0;background:none;width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit;flex-direction:column;align-items:flex-start;gap:1px}
+.referent-resultat .hint{font-size:12px;overflow-wrap:anywhere}
+.referent-personne{display:grid;grid-template-columns:minmax(90px,120px) minmax(0,1fr) minmax(0,1fr);gap:12px}
+.referent-personne .field{margin-bottom:0;min-width:0}
+.referent-fonction{margin:12px 0 0}
+@media(max-width:560px){
+  .referent-personne{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .referent-personne .field:first-child{grid-column:1/-1}
+}
+/* Au téléphone, les deux choix à la taille du doigt : la pilule de base fait 27 px de haut. */
+@media(max-width:600px){.referent-modes .seg-btn{min-height:40px;padding:8px 14px}}
 .gs-price .inp{width:78px;flex:0 0 auto}
 
 /* Fiche technique — curseur de prix double poignée */

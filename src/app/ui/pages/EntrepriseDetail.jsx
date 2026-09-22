@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
+import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
+import { messageReferentPerdu } from "../lib/referent.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -39,9 +41,8 @@ const CFIELDS = [
   { k: "town", label: "Ville", placeholder: "LANNEMEZAN" },
   { k: "email", label: "E-mail", requis: true, placeholder: "contact@lepetitfour.fr" },
   { k: "phone", label: "Téléphone", requis: true, placeholder: "05 62 98 12 34" },
-  { k: "representative_civ", label: "Civilité du référent", type: "select", options: ["M.", "Mme"] },
-  { k: "representative_name", label: "Nom du référent", requis: true, placeholder: "DUPONT" },
-  { k: "representative_role", label: "Fonction du référent", full: true, type: "select", options: REP_ROLES },
+  /* Le RÉFÉRENT n'est plus dans cette liste : civilité, nom, prénom — ou le stagiaire choisi — et sa
+     fonction vivent dans ReferentEntreprise, sous la grille (migration 174). */
 ];
 
 /* Mêmes conventions qu'à la saisie d'un stagiaire : le NOM DU RÉFÉRENT et la VILLE passent en
@@ -59,6 +60,7 @@ const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONS
 export default function EntrepriseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [form, setForm] = useState({});
   const [status, setStatus] = useState(null);
@@ -120,6 +122,9 @@ export default function EntrepriseDetail() {
     }).catch((e) => setStatus({ type: "error", message: e.message }));
   }
   useEffect(() => { load(); }, [id]);
+  /* Un message venu de la création (« créée, sauf le lien vers le stagiaire… ») : la liste ne peut
+     pas l'afficher, elle vient de laisser la place à cette fiche. */
+  useEffect(() => { if (location.state?.info) setStatus({ type: "info", message: location.state.info }); }, [location.state]);
   useEffect(() => { getSessions().then((r) => setSessions(r.data || [])).catch(() => {}); }, []);
   useEffect(() => { getOpcos().then((r) => setOpcoNames((r.data || []).map((o) => o.name).filter(Boolean))).catch(() => {}); }, []);
   useEffect(() => {
@@ -259,7 +264,13 @@ export default function EntrepriseDetail() {
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: valeurNormalisee(k, e.target.value) }));
   async function saveInfo() {
     setSavingInfo(true); setStatus(null);
-    try { await updateCompany(id, form); setStatus({ type: "success", message: "Entreprise enregistrée." }); load(); }
+    try {
+      const r = await updateCompany(id, form);
+      /* CE QUE LE SERVEUR N'A PU GARDER (migration 174 non jouée) : dit, plutôt qu'un succès qui ment. */
+      const perdu = messageReferentPerdu(r?.ignores);
+      setStatus(perdu ? { type: "info", message: `Entreprise enregistrée, sauf ${perdu}` } : { type: "success", message: "Entreprise enregistrée." });
+      load();
+    }
     catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingInfo(false); }
   }
@@ -492,6 +503,8 @@ export default function EntrepriseDetail() {
                 );
               })}
             </div>
+            <ReferentEntreprise valeur={form} onChange={(m) => setForm((p) => ({ ...p, ...m }))} requis
+              suggestions={data.learners || []} stagiaire={data.referent_stagiaire || null} fonctions={REP_ROLES} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10, flexWrap: "wrap" }}>
               <button className="btn primary" onClick={saveInfo} disabled={savingInfo}><Icon name="check" size={15} /> Enregistrer</button>
               <button className="btn ghost danger" onClick={removeCompany}><Icon name="trash" size={15} /> Supprimer l'entreprise</button>

@@ -130,8 +130,10 @@ function formeJuridique(code) {
 
 /* Le référent : le dirigeant qui signe — gérant, président, directeur général —, et pour un
    entrepreneur individuel, lui-même. Une personne morale (une holding présidente) n'est pas un
-   référent qu'on joint ; les commissaires aux comptes non plus. Le PREMIER prénom seulement : le
-   formulaire range « Prénom NOM », et la création du compte du représentant coupe au premier mot. */
+   référent qu'on joint ; les commissaires aux comptes non plus. Le prénom et le NOM à part, comme
+   les range la fiche entreprise depuis la migration 174 : le PREMIER prénom seulement, écrit
+   « Paul » et non « PAUL ANDRÉ » — le registre écrit tout en capitales. */
+const enTitre = (s) => String(s || '').toLocaleLowerCase('fr').replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase('fr'));
 const ROLES = [
     [/^co-?g[ée]rant|^g[ée]rant/i, 'Gérant(e)'],
     [/^pr[ée]sident/i, 'Président(e)'],
@@ -139,13 +141,15 @@ const ROLES = [
 ];
 function referent(r) {
     const personnes = (r.dirigeants || []).filter((d) => d.type_dirigeant === 'personne physique' && d.nom);
-    const nom = (d) => [String(d.prenoms || '').trim().split(/\s+/)[0], d.nom].filter(Boolean).join(' ').toLocaleUpperCase('fr');
-    if (String(r.nature_juridique) === '1000' && personnes[0]) {
-        return { representative_name: nom(personnes[0]), representative_role: "Chef(fe) d'entreprise" };
-    }
+    const qui = (d, role) => ({
+        representative_first_name: enTitre(String(d.prenoms || '').trim().split(/\s+/)[0]) || null,
+        representative_name: String(d.nom).toLocaleUpperCase('fr'),
+        representative_role: role,
+    });
+    if (String(r.nature_juridique) === '1000' && personnes[0]) return qui(personnes[0], "Chef(fe) d'entreprise");
     for (const [re, role] of ROLES) {
         const d = personnes.find((p) => re.test(String(p.qualite || '')));
-        if (d) return { representative_name: nom(d), representative_role: role };
+        if (d) return qui(d, role);
     }
     return null;
 }
@@ -182,8 +186,9 @@ const vide = (v) => v == null || String(v).trim() === '';
 /**
  * Ce qu'on écrit vraiment : les champs VIDES de la fiche, rien d'autre. Deux exceptions pour le
  * SIRET, qui ne contredisent rien : un SIREN saisi à sa place (le SIRET le prolonge), et une
- * valeur qui n'est pas un numéro (« en cours »). La fonction du référent ne s'écrit qu'avec son
- * nom : poser « Gérant(e) » à côté d'un référent choisi par l'école le dirait gérant à tort.
+ * valeur qui n'est pas un numéro (« en cours »). Le prénom et la fonction du référent ne s'écrivent
+ * qu'avec son NOM : poser « Paul » ou « Gérant(e) » à côté du référent choisi par l'école lui
+ * prêterait un prénom et un titre qui ne sont pas les siens.
  */
 function aCompleter(entreprise, champs) {
     const out = {};
@@ -193,11 +198,13 @@ function aCompleter(entreprise, champs) {
             if (vide(entreprise.siret) || !id || (id.type === 'siren' && String(v).startsWith(id.valeur))) out.siret = v;
             continue;
         }
-        if (k === 'representative_role') continue;
+        if (k === 'representative_role' || k === 'representative_first_name') continue;
         if (vide(entreprise[k])) out[k] = v;
     }
-    if (out.representative_name && champs.representative_role && vide(entreprise.representative_role)) {
-        out.representative_role = champs.representative_role;
+    if (out.representative_name) {
+        for (const k of ['representative_first_name', 'representative_role']) {
+            if (champs[k] && vide(entreprise[k])) out[k] = champs[k];
+        }
     }
     return out;
 }
