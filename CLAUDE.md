@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1694 tests — 1687 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1707 tests — 1700 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -155,6 +155,16 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 ---
 
 ## 4. Migrations — **171, 172 et 173 à jouer (relevé le 2026-09-22)**
+
+⚠️ **UN OUTIL DE DONNÉES RESTE À LANCER, pas une migration : `database/tools/completer-entreprises.js`**
+(demandé le 2026-09-22 : passer chaque fiche entreprise au registre, compléter celles qu'il connaît,
+supprimer celles qu'il ne connaît pas ou qui sont radiées, et ne toucher à AUCUNE fiche rattachée —
+stagiaire, inscription, facture, document, vente, compte de représentant, cachet, référent stagiaire).
+Source : l'API officielle « Recherche d'entreprises », les données mêmes que republient Pappers et
+societe.com. Lancé sans option, il ne fait qu'un ESSAI (rien n'est écrit en base) et dépose plan et
+rapport dans `/tmp/impastio-entreprises` ; `--appliquer <plan>` sauvegarde les fiches visées, puis
+exécute CE plan-là ; `--restaurer <sauvegarde>` défait. Commandes en tête du script, règles de décision
+dans `src/api/lib/registreEntreprises.js`. **Pas encore lancé au 2026-09-22.**
 
 **173 — À JOUER** (`173_projet_cases.sql`, quinze cases de plus dans « Votre projet », TINYINT(1)
 comme les autres : le TYPE D'ACTIVITÉ — `project_dine_in`, `project_takeaway`, `project_by_slice`,
