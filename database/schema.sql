@@ -450,7 +450,7 @@ CREATE TABLE audit_log (
     user_id         uuid         DEFAULT NULL,
     action          varchar(120) NOT NULL,          -- ex. « document.generate »
     entity          varchar(120) DEFAULT NULL,
-    entity_id       uuid         DEFAULT NULL,
+    entity_id       varchar(64)  DEFAULT NULL,      -- UUID, slug de modèle ou nom de rôle (migration 175)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_audit_org (organization_id, entity),

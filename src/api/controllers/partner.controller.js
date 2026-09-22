@@ -589,7 +589,11 @@ const createPartnerCategory = async (req, res) => {
             'INSERT INTO partner_category (id, organization_id, code, label, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
             [id, orgId, code, label.slice(0, 120),
              req.body?.color ? String(req.body.color).slice(0, 20) : null, Number(mx.n) + 1]);
-        await logAudit(req, { action: 'CREATE', entity: 'partner_category', entityId: id, after: { code, label } });
+        /* QUATRE ARGUMENTS À PLAT. Ici se trouvait `logAudit(req, { action, entity, entityId, after })` :
+           la colonne `action` recevait « [object Object] » et l'entité restait vide, si bien que le
+           journal ne disait ni ce qui s'était passé ni sur quoi. L'avant et l'après n'y ont pas de
+           colonne : ils n'étaient de toute façon jamais écrits. */
+        logAudit(req, 'CREATE', 'partner_category', id);
         res.status(201).json({ data: { id, code, label } });
     } catch (err) {
         if (isMissingSchema(err)) return res.status(409).json({ message: 'Migration 129 non jouée : catégories non modifiables.' });
@@ -627,8 +631,7 @@ const updatePartnerCategory = async (req, res) => {
 
         vals.push(cat.id, req.user.organization_id);
         await conn.query(`UPDATE partner_category SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
-        await logAudit(req, { action: 'UPDATE', entity: 'partner_category', entityId: cat.id,
-            before: { label: cat.label }, after: { label: req.body?.label } });
+        logAudit(req, 'UPDATE', 'partner_category', cat.id);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur modification catégorie partenaire :', err);
@@ -667,7 +670,7 @@ const deletePartnerCategory = async (req, res) => {
             });
         }
         await conn.query('DELETE FROM partner_category WHERE id = ? AND organization_id = ?', [cat.id, orgId]);
-        await logAudit(req, { action: 'DELETE', entity: 'partner_category', entityId: cat.id, before: cat });
+        logAudit(req, 'DELETE', 'partner_category', cat.id);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur suppression catégorie partenaire :', err);

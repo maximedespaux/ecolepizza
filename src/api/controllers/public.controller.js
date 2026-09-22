@@ -8,7 +8,7 @@ const { estSignatureValide } = require('../lib/signatures.js');
 const messageAttente = (manquants) => (manquants.length > 1
     ? `Ce document imprime les réponses du stagiaire à ${questionsEnClair(manquants)}, qu'il n'a pas encore données. `
     : `Ce document imprime la réponse du stagiaire à ${questionsEnClair(manquants)}, qu'il n'a pas encore donnée. `)
-    + 'Il répond depuis son espace : le document pourra ensuite être signé.';
+    + 'Il répond depuis son espace\u00a0: le document pourra ensuite être signé.';
 
 async function loadLink(conn, token) {
     /* L'EXPIRATION EST TRANCHÉE PAR LA BASE, pas par une Date reconstruite en JS. Le pilote

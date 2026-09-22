@@ -59,7 +59,7 @@ const FINALITES = {
         cle: 'droit_image',
         titre: 'Diffuser des photos de moi prises pendant la formation',
         formulation: 'J\'autorise l\'école à diffuser les photographies prises au cours de la formation '
-            + 'sur lesquelles j\'apparais, afin de faire connaître ses formations : sur son site internet, '
+            + 'sur lesquelles j\'apparais, afin de faire connaître ses formations\u00a0: sur son site internet, '
             + 'sur ses réseaux sociaux et dans ses lettres d\'information envoyées par e-mail ou par SMS. '
             + 'Je peux revenir sur ce choix à tout moment depuis mon profil. Refuser n\'a aucune '
             + 'conséquence sur ma formation, mon inscription ou mon accès aux services de l\'école.',

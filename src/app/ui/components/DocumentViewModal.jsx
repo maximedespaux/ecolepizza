@@ -117,10 +117,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
               <Icon name="clock" size={14} aria-hidden="true" />
               <span>
                 {questions.length > 1 ? "En attente des réponses du stagiaire à " : "En attente de la réponse du stagiaire à "}
-                {questions.map((q) => `« ${q.titre} »`).join(" et ")}.
+                {questions.map((q) => `«\u00a0${q.titre}\u00a0»`).join(" et ")}.
                 {questions.length > 1
-                  ? " Ce document les imprime : il ne se signe qu'une fois les réponses données."
-                  : " Ce document l'imprime : il ne se signe qu'une fois la réponse donnée."}
+                  ? " Ce document les imprime\u00a0: il ne se signe qu'une fois les réponses données."
+                  : " Ce document l'imprime\u00a0: il ne se signe qu'une fois la réponse donnée."}
               </span>
             </p>
           ))}

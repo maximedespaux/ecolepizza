@@ -15,9 +15,14 @@ import { getMyConsents, setMyConsent } from "../api/apiClient.js";
 import { dateHeure } from "../lib/format.js";
 
 /**
- * Profil stagiaire, en trois onglets :
+ * Profil stagiaire, en quatre onglets :
  *  • Profil  : avatar (picker pizza), cadre & progression.
  *  • Mes infos : coordonnées personnelles — modifiables et synchronisées côté organisme.
+ *  • Confidentialité : ce que voient les autres stagiaires, et « Mes autorisations » (partenaires,
+ *    photos). L'onglet s'appelait « Visibilité » alors que la fenêtre de consentement envoyait vers
+ *    « Mon profil → Confidentialité » : un chemin vers un onglet qui n'existait pas. Renommé le
+ *    2026-09-22 à la demande de l'école ; le titre de la section a changé avec lui, pour ne pas
+ *    répéter le nom de l'onglet.
  *  • Compte  : changement d'e-mail et de mot de passe.
  */
 const CIVILITIES = ["", "M.", "Mme"];
@@ -62,7 +67,7 @@ function ConsentementsBloc() {
 
   return (
     <div className="consent-bloc">
-      <div className="consent-bloc-t">Confidentialité</div>
+      <div className="consent-bloc-t">Mes autorisations</div>
       {liste.map((f) => (
         <div key={f.cle} className="consent-ligne">
           <div>
@@ -216,7 +221,7 @@ export default function ProfileModal({ onClose }) {
           <span className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
             <button className={"seg-btn" + (tab === "profil" ? " on" : "")} onClick={() => setTab("profil")}>Profil</button>
             <button className={"seg-btn" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Mes infos</button>
-            <button className={"seg-btn" + (tab === "visibilite" ? " on" : "")} onClick={() => setTab("visibilite")}>Visibilité</button>
+            <button className={"seg-btn" + (tab === "confidentialite" ? " on" : "")} onClick={() => setTab("confidentialite")}>Confidentialité</button>
             <button className={"seg-btn" + (tab === "compte" ? " on" : "")} onClick={() => setTab("compte")}>Compte</button>
           </span>
 
@@ -224,7 +229,7 @@ export default function ProfileModal({ onClose }) {
             <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} quest={quest} exploits={exploits} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
-          {tab === "visibilite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
+          {tab === "confidentialite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
           {tab === "compte" && <CompteTab currentEmail={user?.email} onEmailChanged={refreshUser} />}
         </div>
         <div className="mfoot">
