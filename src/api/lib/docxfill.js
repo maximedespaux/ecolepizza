@@ -103,7 +103,28 @@ function fillDocument(type, ctx, loadTemplate) {
     return renderTemplate(buf, ctx, slug);
 }
 
+/**
+ * Les jetons {Clé} d'un modèle Word : corps, en-têtes et pieds de page.
+ *
+ * Word coupe souvent un jeton en plusieurs morceaux de texte — une correction d'orthographe, un
+ * changement de police au milieu suffit. On lit donc le texte SANS ses balises, comme
+ * docxtemplater le recompose au remplissage : « {Case photos oui} » se retrouve entier.
+ * Un fichier illisible n'a aucun jeton — il ne se remplirait pas non plus.
+ */
+function jetonsDuDocx(buffer) {
+    const cles = new Set();
+    try {
+        const zip = new PizZip(buffer);
+        for (const nom of Object.keys(zip.files)) {
+            if (!/^word\/(document|header\d*|footer\d*)\.xml$/.test(nom)) continue;
+            const texte = zip.file(nom).asText().replace(/<[^>]+>/g, '');
+            for (const m of texte.matchAll(/\{([^{}]+)\}/g)) cles.add(m[1].trim());
+        }
+    } catch { /* fichier illisible : aucun jeton */ }
+    return cles;
+}
+
 module.exports = {
     TEMPLATE_SLUGS, templateSlugFor, defaultTemplateBuffer,
-    renderTemplate, buildTokens, fillDocument,
+    renderTemplate, buildTokens, fillDocument, jetonsDuDocx,
 };

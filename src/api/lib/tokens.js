@@ -17,6 +17,8 @@ const { pointsPour, maximumExercice } = require('./bareme.js');
 // L'identifiant France Travail est chiffré au repos (migration 170) : le jeton imprime le CLAIR.
 const { decrypt } = require('./crypto.js');
 const { nomReferent } = require('./referentEntreprise.js');
+/* Les réponses du stagiaire (photos, partenaires) : la règle de rendu vit avec le registre. */
+const { valeursJetons } = require('./consentements.js');
 
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
@@ -108,6 +110,22 @@ const TOKEN_CATALOG = [
             { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'Toulouse' },
             { key: 'Statut', label: 'Statut professionnel', sample: "Demandeur d'emploi" },
             { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A' },
+        ],
+    },
+    /* LES RÉPONSES DU STAGIAIRE, IMPRIMÉES (2026-09-22) — photos et partenaires, deux questions
+       du registre des consentements (lib/consentements.js). Une case par jeton : le modèle place
+       « {Case photos oui} Autorise {Case photos non} N'autorise pas » avec ses propres mots. Un
+       document qui en porte un ne se signe qu'une fois la question répondue. */
+    {
+        group: 'Autorisations',
+        tokens: [
+            { key: 'Case photos oui', label: 'Photos : case « Autorise »', sample: '☒' },
+            { key: 'Case photos non', label: 'Photos : case « N’autorise pas »', sample: '☐' },
+            { key: 'Choix photos', label: 'Photos : « autorise » ou « n’autorise pas »', sample: 'autorise' },
+            { key: 'Case partenaires oui', label: 'Partenaires : case « Autorise »', sample: '☒' },
+            { key: 'Case partenaires non', label: 'Partenaires : case « N’autorise pas »', sample: '☐' },
+            { key: 'Choix partenaires', label: 'Partenaires : « autorise » ou « n’autorise pas »', sample: 'autorise' },
+            { key: 'Données partenaires', label: 'Partenaires : informations transmises', sample: 'mon nom, mon prénom, mon adresse e-mail et mon téléphone' },
         ],
     },
     {
@@ -1075,6 +1093,11 @@ const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
     'Today', 'Date', 'Stagiaires',
     'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
+    /* LES RÉPONSES DU STAGIAIRE : vides tant qu'il n'a pas répondu, et c'est la SIGNATURE qui
+       l'exige, pas la génération. Les compter « manquantes » bloquerait l'aperçu du document —
+       celui-là même où la question lui est posée. */
+    'Case photos oui', 'Case photos non', 'Choix photos',
+    'Case partenaires oui', 'Case partenaires non', 'Choix partenaires', 'Données partenaires',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -1352,6 +1375,8 @@ function resolveTokens(ctx = {}) {
         ...evalVals,
         // Jury externe (grille de la 149) — vide sans grille de jury sur la formation.
         ...juryVals,
+        // Réponses du stagiaire (photos, partenaires) — à la date de signature du document.
+        ...valeursJetons(ctx.consentements),
         // Dates
         Date: today, Today: today,
         // Signature (valeurs HTML : cf. RAW_TOKENS)

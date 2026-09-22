@@ -5,6 +5,7 @@ import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documen
 import { dateHeure, dateFr } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
+import QuestionsConsentement from "./QuestionsConsentement.jsx";
 
 /**
  * Aperçu FIDÈLE du document : rendu HTML identique au PDF, affiché en ligne
@@ -27,8 +28,12 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   const fichier = doc?.importe || doc?.modele_fichier || null;
   const titreFichier = doc?.importe ? "Document reçu" : "Document du modèle";
 
+  /* RELIRE LE DOCUMENT après une réponse : la question répondue sort de la liste, et le nouvel
+     objet relance l'aperçu (cf. l'effet suivant), qui montre alors la case cochée. */
+  const recharger = () => getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
   useEffect(() => {
-    getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
+    recharger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Aperçu = rendu HTML du modèle rempli (affiché en ligne, sans lecteur PDF).
@@ -70,7 +75,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
     }
   }
 
-  const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE";
+  /* LES QUESTIONS QUE CE DOCUMENT IMPRIME, sans réponse encore (photos, partenaires). Tant qu'il en
+     reste, pas de bouton « Signer » : le serveur refuserait, et le document signé ne dirait rien. */
+  const questions = doc?.questions_consentement || [];
+  const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE" && !questions.length;
 
   // Lien de signature pour un signataire EXTERNE (tuteur, financeur…) — action du personnel.
   async function externalLink() {
@@ -99,6 +107,23 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
         </div>
         <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
           <StatusMessage status={status} />
+          {/* LE STAGIAIRE RÉPOND ICI ; TOUTE AUTRE PERSONNE EST PRÉVENUE. Seul le stagiaire peut
+              répondre (`peut_repondre`, dit par le serveur) : une réponse donnée à sa place ne
+              vaudrait rien. Le personnel saisit une réponse papier sur la page de la session. */}
+          {questions.length > 0 && (doc.peut_repondre ? (
+            <QuestionsConsentement questions={questions} onRepondu={recharger} />
+          ) : (
+            <p className="doc-attente">
+              <Icon name="clock" size={14} aria-hidden="true" />
+              <span>
+                {questions.length > 1 ? "En attente des réponses du stagiaire à " : "En attente de la réponse du stagiaire à "}
+                {questions.map((q) => `« ${q.titre} »`).join(" et ")}.
+                {questions.length > 1
+                  ? " Ce document les imprime : il ne se signe qu'une fois les réponses données."
+                  : " Ce document l'imprime : il ne se signe qu'une fois la réponse donnée."}
+              </span>
+            </p>
+          ))}
           {doc && doc.org_signable && (
             <div style={{ padding: "6px 14px", fontSize: 12, background: doc.org_signed ? "rgba(22,163,74,.08)" : "rgba(184,134,11,.10)", borderBottom: "1px solid var(--border-soft)" }}>
               {doc.org_signed

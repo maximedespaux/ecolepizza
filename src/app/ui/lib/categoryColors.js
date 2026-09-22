@@ -25,6 +25,8 @@ const CURATED = {
   "Personnalisés": 256,
   "Signature": 226,
   "Examen": 14,
+  // Les réponses du stagiaire (photos, partenaires) : à mi-chemin des dates (48) et du lieu (96).
+  "Autorisations": 72,
 };
 
 // Teinte d'une catégorie : curatée si connue, sinon dérivée du nom (déterministe) — un groupe

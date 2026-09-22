@@ -291,7 +291,7 @@ test('la fenêtre se déclenche sur les DEUX cas, et compte ses relances', () =>
     /* Le compteur de relances vaut pour les deux : fermer sans répondre ne doit pas produire une
        fenêtre à chaque connexion, sinon l'insistance fabrique le consentement extorqué qu'on
        cherche à éviter. */
-    assert.match(comp, /if \(premiere\) \{ setADemander\(premiere\); compterUneRelance\(\); \}/);
+    assert.match(comp, /if \(premiere\) \{ setADemander\(premiere\); compterUneRelance\(premiere\.cle\); \}/);
 });
 
 /* ═════════════════════════════════════════════════════════════════════════════════════════════

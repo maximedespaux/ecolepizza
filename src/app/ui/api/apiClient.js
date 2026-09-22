@@ -446,8 +446,9 @@ export function updateMyVisibility(visibility) { return request("/mon-espace/vis
    ceux qui n'ont pas consenti, et inscrit l'envoi au journal. L'écran ne choisit personne — il
    affiche ce que le serveur a retenu. C'est ce qui le distingue du courriel écrit à la main, où
    rien n'empêchait d'ajouter quelqu'un. */
-export function getSessionConsents(sessionId) {
-  return request(`/sessions/${sessionId}/consentements`);
+/* `finalite` : la question suivie — les partenaires par défaut, ou le droit à l'image. */
+export function getSessionConsents(sessionId, finalite = "partenaires") {
+  return request(`/sessions/${sessionId}/consentements?finalite=${encodeURIComponent(finalite)}`);
 }
 /* COMBIEN RESTENT À SOLLICITER, PAR SESSION — ce qui permet au calendrier de dire OÙ sont les
    gens que la pastille de navigation compte. `silent` : c'est un indicateur d'ambiance, pas une
@@ -456,9 +457,9 @@ export function getSessionConsents(sessionId) {
 export function getConsentsManquants() {
   return request("/sessions/consentements-manquants", { silent: true });
 }
-export function setSessionConsent(sessionId, learnerId, accorde, source) {
+export function setSessionConsent(sessionId, learnerId, accorde, source, finalite = "partenaires") {
   return request(`/sessions/${sessionId}/consentements/${learnerId}`,
-    { method: "PUT", body: JSON.stringify({ accorde, source }) });
+    { method: "PUT", body: JSON.stringify({ accorde, source, finalite }) });
 }
 /* Le journal des envois d'UN PARTENAIRE. Par partenaire et non par session, depuis que l'export
    l'est aussi : c'est lui qui permet de répondre à « à qui mes coordonnées ont-elles été

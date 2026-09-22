@@ -512,7 +512,7 @@ async function loadCustomTokens(orgId) {
 // Ordre d'affichage canonique des groupes de la palette (du plus utile au plus rare).
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
-    'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
+    'Stagiaire', 'Autorisations', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Examen', 'Lieu de formation',
     'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
@@ -520,7 +520,10 @@ const GROUP_ORDER = [
 /* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
    détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
    après le seuil. */
-const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)',
+    /* Photos puis partenaires, et dans chacun « Autorise » avant « N'autorise pas » : l'ordre où
+       les cases se posent sur le document. Trié par libellé, « Partenaires » passerait devant. */
+    'Autorisations']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -529,7 +532,7 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates
 //    masque le groupe « Groupe entreprise ».
 /* Une évaluation note UNE personne : sur un document de groupe, ces jetons n'auraient
    aucun dossier à lire et sortiraient vides. */
-const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique', 'Jury']);
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Autorisations', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
 /* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens). */
 const STAGIAIRE_NOMMES = ['D_Naissance'];
@@ -585,6 +588,10 @@ const getTokens = async (req, res) => {
            on les tapait, et n'apparaissaient nulle part. Le même défaut que celui mesuré sur
            l'évaluation pratique, resté invisible deux ans faute d'écran qui s'en serve. */
         groups.push(catalogGroup('Examen'));
+        /* LES RÉPONSES DU STAGIAIRE (photos, partenaires), pour le document « Droit à l'image » ou
+           tout autre qui voudrait les imprimer. Un modèle qui en porte une ne se signe qu'une fois
+           la question répondue (cf. consentementsManquants, document.controller). */
+        groups.push(catalogGroup('Autorisations'));
         groups.push(factureTokensGroup());
         // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
         // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /

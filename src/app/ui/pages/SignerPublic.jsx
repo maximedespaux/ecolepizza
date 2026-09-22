@@ -54,10 +54,18 @@ export default function SignerPublic() {
               </div>
               {done || data.signed ? (
                 <span className="badge g" style={{ fontSize: 14, padding: "8px 14px" }}>✅ Signé{data.signer_name ? ` · ${data.signer_name}` : ""}</span>
-              ) : (
+              ) : !data.bloque && (
                 <button className="btn primary" onClick={() => setSigning(true)}><Icon name="pencil" size={16} /> {data.label || "Signer le document"}</button>
               )}
             </div>
+
+            {/* LE DOCUMENT ATTEND UNE RÉPONSE QUE SEUL LE STAGIAIRE PEUT DONNER (photos,
+                partenaires) : on le dit avant que quelqu'un trace sa signature pour rien. */}
+            {!done && !data.signed && data.bloque && (
+              <div className="card doc-attente" style={{ marginBottom: 16 }} role="status">
+                <Icon name="clock" size={14} aria-hidden="true" /><span>{data.bloque}</span>
+              </div>
+            )}
 
             {error && <div className="card" style={{ padding: 12, marginBottom: 16, color: "var(--ember1)" }}>{error}</div>}
 

@@ -37,6 +37,16 @@ const { phraseProjet, colonnesProjetSql } = require('../lib/projet.js');
 
 const FINALITE = 'partenaires';
 
+/* LA QUESTION SUIVIE PAR LA PAGE D'UNE SESSION : les partenaires par défaut, ou une autre finalité
+   DÉCLARÉE — le droit à l'image (2026-09-22). Une valeur inconnue est REFUSÉE, pas remplacée par
+   le défaut : l'écran croirait afficher les photos et lirait les partenaires. L'export, lui, ne
+   passe jamais par ici — il ne lit que les partenaires. */
+function finaliteDemandee(v) {
+    if (v === undefined || v === null || v === '') return FINALITE;
+    return consentements.FINALITES_CONNUES.includes(String(v)) ? String(v) : null;
+}
+const QUESTION_INCONNUE = 'Question de consentement inconnue.';
+
 /**
  * DEUX PANNES QUI SE RESSEMBLENT, ET QU'IL NE FAUT SURTOUT PAS CONFONDRE.
  *
@@ -170,16 +180,18 @@ const getManquantsParSession = async (req, res) => {
 const getSessionConsents = async (req, res) => {
     try {
         const conn = db.promise();
+        const finalite = finaliteDemandee(req.query.finalite);
+        if (!finalite) return res.status(422).json({ message: QUESTION_INCONNUE });
         const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
         if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
 
         const etats = await consentements.etatParStagiaire(
-            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
+            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), finalite);
         /* QUI S'EST EXPRIMÉ LUI-MÊME, une fois quelconque. En LOT : une session de quinze
            stagiaires ferait sinon quinze requêtes pour une information que l'écran affiche d'un
            bloc. */
         const propres = await consentements.ontReponduEuxMemes(
-            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), FINALITE);
+            conn, req.user.organization_id, bloc.inscrits.map((l) => l.id), finalite);
         const stagiaires = bloc.inscrits.map((l) => {
             const e = etats.get(l.id);
             return {
@@ -204,9 +216,12 @@ const getSessionConsents = async (req, res) => {
             data: {
                 session: bloc.session,
                 stagiaires,
-                destinatairesActuels: await consentements.destinatairesPartenaires(conn, req.user.organization_id),
-                formulation: consentements.FINALITES[FINALITE].formulation,
-                champs: consentements.FINALITES[FINALITE].champs,
+                finalite,
+                destinatairesActuels: finalite === FINALITE
+                    ? await consentements.destinatairesPartenaires(conn, req.user.organization_id)
+                    : consentements.FINALITES[finalite].destinataires,
+                formulation: consentements.FINALITES[finalite].formulation,
+                champs: consentements.FINALITES[finalite].champs,
                 sources: consentements.SOURCES,
             },
         });
@@ -237,6 +252,8 @@ const getSessionConsents = async (req, res) => {
 const setConsentPourStagiaire = async (req, res) => {
     try {
         const conn = db.promise();
+        const finalite = finaliteDemandee(req.body?.finalite);
+        if (!finalite) return res.status(422).json({ message: QUESTION_INCONNUE });
         const bloc = await sessionAvecInscrits(conn, req.params.id, req.user.organization_id);
         if (!bloc) return res.status(404).json({ message: 'Session introuvable' });
         if (!bloc.inscrits.some((l) => l.id === req.params.learnerId)) {
@@ -274,7 +291,7 @@ const setConsentPourStagiaire = async (req, res) => {
            saute définitivement, la dernière ligne ne venant plus de l'espace du stagiaire. Le
            verrou se désactivait en le forçant une fois. */
         const quand = await consentements.aReponduLuiMeme(
-            conn, req.user.organization_id, req.params.learnerId, FINALITE);
+            conn, req.user.organization_id, req.params.learnerId, finalite);
         if (quand) {
             return res.status(409).json({
                 /* FORMULATION NEUTRE : le message parle de gens dont on ne connaît pas le genre,
@@ -289,10 +306,10 @@ const setConsentPourStagiaire = async (req, res) => {
 
         const r = await consentements.enregistrer(conn, {
             orgId: req.user.organization_id, learnerId: req.params.learnerId,
-            finalite: FINALITE, accorde: req.body.accorde, source, saisiPar: req.user.id,
+            finalite, accorde: req.body.accorde, source, saisiPar: req.user.id,
         });
         if (!r.ok) return res.status(409).json({ message: r.message });
-        logAudit(req, `consent.${req.body.accorde ? 'accorde' : 'refuse'}.${FINALITE}.${source}`,
+        logAudit(req, `consent.${req.body.accorde ? 'accorde' : 'refuse'}.${finalite}.${source}`,
             'Learner', req.params.learnerId);
         res.json({ success: true });
     } catch (err) {

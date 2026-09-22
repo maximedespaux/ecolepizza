@@ -48,7 +48,11 @@ test('la consultation ne fabrique pas de corps sans modèle', () => {
        préfixe n'identifie pas une fonction ; il en identifie une famille. */
     const debut = doc.indexOf('const getDocument =');
     assert.notStrictEqual(debut, -1, 'getDocument introuvable');
-    const bloc = doc.slice(debut, debut + 3000);
+    /* JUSQU'À LA FIN DE LA FONCTION, et non 3 000 caractères : la fenêtre fixe a lâché le jour où
+       getDocument a appris à poser les questions d'un document (photos, partenaires) — `no_template`
+       était toujours là, simplement plus loin. Une borne en caractères mesure la longueur des
+       commentaires, pas ce que fait la fonction. */
+    const bloc = doc.slice(debut, doc.indexOf('\n};', debut));
     /* Le corps vient du modèle, et de lui seul — SAUF pour un document IMPORTÉ, qui n'a pas de
        corps à rendre : le vrai document est le fichier reçu, et régénérer son modèle afficherait
        une convention vierge là où le signé existe. Ce n'est pas une entorse à la règle mais son
