@@ -64,6 +64,78 @@ export function insererMention(texte, mention, libelle) {
   return { texte: `${avant}${pose}${apres}`, curseur: (avant + pose).length + (espace ? 0 : 1) };
 }
 
+/**
+ * UNE PUCE : une espace ou une tabulation, puis « * », « - » ou « \u2022 », puis le texte.
+ *
+ * L'ÉCOLE ÉCRIT SES LISTES COMME ELLE LES ÉCRIT SUR PAPIER — « * 1 », « - 2 » —, et le mémo doit
+ * les reconnaître telles quelles. Ce n'est PAS du Markdown : il n'y a ni gras, ni titre, ni lien.
+ * Une seule forme, celle qu'on tape sans y penser, et rien d'autre à apprendre.
+ * Le texte APRÈS la marque est facultatif : une puce qu'on vient d'ouvrir n'a pas encore de texte.
+ */
+const PUCE = /^([ \t]*)([*\u2022-])(?:[ \t]+(.*))?$/;
+
+/**
+ * LE TEXTE D'UN MÉMO DÉCOUPÉ POUR L'AFFICHAGE : une suite de blocs, `{ type: "puces", items }` ou
+ * `{ type: "texte", lignes }`.
+ *
+ * POURQUOI DÉCOUPER PLUTÔT QUE RENDRE LE TEXTE TEL QUEL. « Il faut faire : » suivi de deux lignes
+ * à puces s'affichait sur une seule ligne, les marques au milieu de la phrase — la liste ne se
+ * lisait plus comme une liste. Les puces consécutives forment donc UN bloc, rendu en vraie liste :
+ * les lecteurs d'écran l'annoncent comme telle, et l'alignement tient quand une ligne se replie.
+ *
+ * TOUT LE RESTE EST RENDU MOT POUR MOT, retours à la ligne compris. On n'interprète rien d'autre :
+ * un mémo est ce qu'on a tapé.
+ */
+export function blocsMemo(texte) {
+  const blocs = [];
+  for (const ligne of String(texte == null ? "" : texte).split("\n")) {
+    const p = PUCE.exec(ligne);
+    const dernier = blocs[blocs.length - 1];
+    if (p) {
+      const item = (p[3] || "").trim();
+      if (dernier && dernier.type === "puces") dernier.items.push(item);
+      else blocs.push({ type: "puces", items: [item] });
+    } else if (dernier && dernier.type === "texte") dernier.lignes.push(ligne);
+    else blocs.push({ type: "texte", lignes: [ligne] });
+  }
+  return blocs;
+}
+
+/**
+ * CE QUE MAJ + ENTRÉE ÉCRIT : `{ texte, curseur }`.
+ *
+ * Une ligne de plus, et la PUCE CONTINUE toute seule quand on en écrivait une — sinon il faudrait
+ * retaper « * » à chaque ligne d'une liste, ce que personne ne fait deux fois.
+ *
+ * ET UNE PUCE VIDE FERME LA LISTE. C'est le geste par lequel on en sort : on va à la ligne une
+ * fois de trop, la marque s'efface, et la phrase suivante repart au bord. Sans cela, la liste se
+ * poursuivrait indéfiniment et il faudrait effacer la marque à la main — deux retours en arrière
+ * dont on ne devine ni l'un ni l'autre.
+ */
+export function continuerPuce(texte, curseur) {
+  const t = String(texte == null ? "" : texte);
+  const c = Math.max(0, Math.min(curseur == null ? t.length : curseur, t.length));
+  const debut = t.lastIndexOf("\n", c - 1) + 1;
+  const p = PUCE.exec(t.slice(debut, c));
+  if (p && !(p[3] || "").trim()) return { texte: t.slice(0, debut) + t.slice(c), curseur: debut };
+  const pose = p ? `\n${p[1]}${p[2]} ` : "\n";
+  return { texte: t.slice(0, c) + pose + t.slice(c), curseur: c + pose.length };
+}
+
+/**
+ * Le mémo en UNE ligne, sans ses marques de puce : ce qu'on met dans un `aria-label` ou une
+ * info-bulle. « Supprimer : Il faut faire : * 1 » se lit mal, et un lecteur d'écran annoncerait
+ * des étoiles au milieu d'une phrase.
+ */
+export function resumeMemo(texte) {
+  return String(texte == null ? "" : texte)
+    .split("\n")
+    .map((l) => l.replace(PUCE, "$3"))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];

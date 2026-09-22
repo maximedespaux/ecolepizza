@@ -85,7 +85,19 @@ function dateValide(v) {
  * Le partage n'est vrai que s'il est explicitement vrai : un mémo naît privé.
  */
 function lireNouveauMemo(b = {}) {
-    const texte = String(b.texte == null ? '' : b.texte).replace(/\r\n?/g, '\n').trim();
+    /* PLUSIEURS LIGNES SONT ACCEPTÉES, ET C'EST TOUT L'INTÉRÊT : « ce qu'il faut faire » s'écrit en
+       liste. Trois nettoyages, et pas un de plus — on garde ce qui a été tapé :
+         · les fins de ligne de Windows deviennent des « \n », sinon le compte de caractères et le
+           découpage en puces varieraient selon le navigateur ;
+         · les espaces en bout de ligne partent : invisibles, ils feraient d'une puce vide (« * »
+           suivi d'une espace) une ligne que rien ne distingue d'une puce écrite ;
+         · au-delà de deux retours d'affilée, on retombe à deux : un mémo fait de vingt lignes
+           vides pousserait tout le reste de la liste hors de l'écran, pour rien. */
+    const texte = String(b.texte == null ? '' : b.texte)
+        .replace(/\r\n?/g, '\n')
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
     if (!texte) return { erreur: 'Écrivez le mémo avant de l’ajouter.' };
     if (texte.length > MAX_TEXTE) return { erreur: `Un mémo tient en ${MAX_TEXTE} caractères au plus.` };
     let echeance = null;
