@@ -5521,6 +5521,15 @@ label .requis {
 /* Le repère « Fiche incomplète » de la liste des stagiaires : même place que « À recontacter », mais
    il garde le inline-flex de .badge — l'icône et le texte doivent rester alignés. */
 .fiche-chip{margin-left:8px;vertical-align:1px;white-space:nowrap}
+/* « VOTRE PROJET » EN DEUX GROUPES (EditStagiaireModal) : la nature du projet, et l'équipement qu'il
+   appelle. Côte à côte quand la place le permet, l'un sous l'autre sinon. `margin-bottom: 12px` :
+   l'écart d'un champ — sans lui, la « Note » qui suit se collait aux cases. */
+.projet-groupes{display:flex;flex-wrap:wrap;gap:12px 28px;margin-bottom:12px}
+.projet-groupe{border:0;margin:0;padding:0;min-width:0;flex:1 1 240px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.projet-groupe legend{padding:0;margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.projet-case{display:flex;gap:8px;align-items:center;font-size:14px}
+/* Le type de four, en retrait sous « Four » : on voit qu'il le précise. */
+.projet-sous{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px 16px;margin:-2px 0 2px;padding-left:12px;border-left:2px solid var(--border)}
 .fiche-chip svg{color:var(--orange)}
 /* FICHE STAGIAIRE INCOMPLÈTE — le bandeau qui nomme ce qui manque (FicheIncomplete.jsx). Même
    famille que .alerte-conditions, en orange : « à compléter », la teinte des dossiers à compléter du

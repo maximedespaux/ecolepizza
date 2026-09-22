@@ -14,7 +14,9 @@ const CONDITIONS = lire('lib/conditions.js');
    cases réellement rendues. Trois listes du même ensemble finissent toujours par diverger — et
    la divergence est SILENCIEUSE ici : une case oubliée dans `BOOL_FIELDS` passe par la branche
    `?? ""` de `toForm`, arrive donc à la chaîne vide, et s'enregistre comme telle. */
-const projets = (texte) => [...new Set([...texte.matchAll(/project_[a-z]+/g)].map((m) => m[0]))].sort();
+/* `[a-z_]+` et non `[a-z]+` : depuis la migration 172, `project_oven_wood` et ses voisines — lues
+   `project_oven` par l'ancienne expression, elles auraient passé le test sans y figurer. */
+const projets = (texte) => [...new Set([...texte.matchAll(/project_[a-z_]+/g)].map((m) => m[0]))].sort();
 
 test('les trois listes de « Votre projet » disent le même ensemble', () => {
     /* `fin` se cherche APRÈS `deb`, sinon `indexOf` le trouve au début du fichier et la tranche
@@ -28,7 +30,10 @@ test('les trois listes de « Votre projet » disent le même ensemble', () => {
     };
     const dansEmpty = projets(bloc('const EMPTY', 'const BOOL_FIELDS'));
     const dansBool = projets(bloc('const BOOL_FIELDS', 'const dateOnly'));
-    const rendues = projets(bloc('<h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet', '</div>'));
+    /* Jusqu'au titre de la NOTE, et non au premier `</div>` : depuis le 2026-09-22, le projet tient en
+       deux groupes, et le type de four vit dans un bloc à lui — la première balise fermante coupait
+       la liste avant le camion. */
+    const rendues = projets(bloc('<h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet', '<h3 id="note-libre-titre"'));
 
     assert.ok(dansEmpty.includes('project_improvement'), 'la case existe dans l\'état initial');
     assert.deepStrictEqual(dansBool, dansEmpty, 'BOOL_FIELDS suit EMPTY');
