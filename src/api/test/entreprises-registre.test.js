@@ -64,13 +64,14 @@ test('le même nom, à la forme juridique, à l\'article et au métier près —
 test('ce que le registre apporte, au format du formulaire entreprise', () => {
     assert.deepStrictEqual(reg.champsDuRegistre(unite(), etab()), {
         siret: '11111111100011', naf_ape: '5610C', address: '12 RUE DU FOUR', zip_code: '65300', town: 'LANNEMEZAN',
-        legal_status: 'SARL', date_creation: '2015-02-03', representative_name: 'PAUL MARTIN', representative_role: 'Gérant(e)',
+        legal_status: 'SARL', date_creation: '2015-02-03', representative_first_name: 'Paul', representative_name: 'MARTIN',
+        representative_role: 'Gérant(e)',
     });
     const formes = { 1000: 'EI', 5498: 'EURL', 5499: 'SARL', 5710: 'SAS', 5720: 'SASU', 5599: 'SA', 6540: 'SCI', 9220: 'Association', 5202: 'Autre' };
     for (const [code, forme] of Object.entries(formes)) assert.strictEqual(reg.formeJuridique(code), forme, code);
     // L'entrepreneur individuel est son propre référent.
     const ei = unite({ nature_juridique: '1000', dirigeants: [{ type_dirigeant: 'personne physique', qualite: null, nom: 'DURAND', prenoms: 'LÉA' }] });
-    assert.deepStrictEqual(reg.referent(ei), { representative_name: 'LÉA DURAND', representative_role: "Chef(fe) d'entreprise" });
+    assert.deepStrictEqual(reg.referent(ei), { representative_first_name: 'Léa', representative_name: 'DURAND', representative_role: "Chef(fe) d'entreprise" });
     // Une holding présidente n'est pas un référent qu'on joint ; un commissaire aux comptes non plus.
     const sas = unite({ nature_juridique: '5710', dirigeants: [
         { type_dirigeant: 'personne morale', qualite: 'Président', denomination: 'HOLDING X' },
@@ -91,9 +92,10 @@ test('on ne remplit que ce qui est vide — et le SIRET seulement s\'il n\'en é
     assert.strictEqual(reg.aCompleter({ siret: 'en cours' }, champs).siret, '11111111100011', '« en cours » n\'est pas un numéro');
     assert.strictEqual(reg.aCompleter({ siret: '111 111 111' }, champs).siret, '11111111100011', 'le SIRET prolonge le SIREN saisi');
     assert.ok(!('siret' in reg.aCompleter({ siret: '22222222200022' }, champs)), 'un autre numéro n\'est jamais remplacé');
-    // La fonction ne s'écrit qu'avec le nom : « Gérant(e) » à côté du référent de l'école le dirait gérant à tort.
-    const r = reg.aCompleter({ representative_name: 'MARIE DURAND', representative_role: '' }, champs);
-    assert.ok(!('representative_name' in r) && !('representative_role' in r));
+    // Prénom et fonction ne s'écrivent qu'avec le nom : à côté du référent de l'école, ils lui prêteraient
+    // un prénom et un titre qui ne sont pas les siens.
+    const r = reg.aCompleter({ representative_name: 'MARIE DURAND', representative_first_name: '', representative_role: '' }, champs);
+    assert.ok(!('representative_name' in r) && !('representative_first_name' in r) && !('representative_role' in r));
 });
 
 test('la décision, fiche par fiche', async () => {
@@ -179,7 +181,9 @@ const COLS_LIENS = ['learner.company_id', 'learner.email', 'enrollment.company_i
     'material_sale.company_id'];
 let base;
 const echapper = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const ligne = (c) => Object.fromEntries(COLS.map(([k]) => [k, c[k] ?? null]));
+// Les colonnes de company dans CETTE fausse base : `base.cols` pour la simuler après la migration 174.
+const colsBase = () => (base && base.cols) || COLS;
+const ligne = (c) => Object.fromEntries(colsBase().map(([k]) => [k, c[k] ?? null]));
 const vide = (v) => v == null || String(v).trim() === '';
 
 function nouvelleBase() {
@@ -213,9 +217,9 @@ const faux = {
                 base.ecritures.push({ q, sauvegardeDejaEcrite: !!base.dossier && fs.readdirSync(base.dossier).some((f) => f.startsWith('sauvegarde-')), garde: garde(q) });
             }
             if (/information_schema\.columns WHERE table_schema = DATABASE\(\) AND table_name IN/.test(q)) {
-                return [[...COLS.map(([c]) => ({ t: 'company', c })), ...COLS_LIENS.map((x) => { const [t, c] = x.split('.'); return { t, c }; })]];
+                return [[...colsBase().map(([c]) => ({ t: 'company', c })), ...COLS_LIENS.map((x) => { const [t, c] = x.split('.'); return { t, c }; })]];
             }
-            if (/information_schema\.columns WHERE table_schema = DATABASE\(\) AND table_name = 'company'/.test(q)) return [COLS.map(([c, t]) => ({ c, t }))];
+            if (/information_schema\.columns WHERE table_schema = DATABASE\(\) AND table_name = 'company'/.test(q)) return [colsBase().map(([c, t]) => ({ c, t }))];
             if (/^SELECT id, code, legal_name FROM organization/.test(q)) return [base.orgs];
             if (/^SELECT id FROM organization WHERE id = \?/.test(q)) return [base.orgs.filter((o) => o.id === params[0])];
             if (/FROM company c WHERE c\.organization_id = \? ORDER BY c\.name$/.test(q)) {
@@ -294,6 +298,20 @@ test('l\'essai : une fiche rattachée ne part même pas au registre, et rien ne 
     assert.match(texte, /1 à supprimer \(1 introuvables, 0 fermées\)/);
     assert.match(texte, /Pizza Fantome — 65300 — introuvable au registre/);
     assert.match(texte, /Le Napoli → NAF 5610C/);
+});
+
+test('le référent du registre : prénom et NOM à part après la migration 174, réunis avant', async () => {
+    base = nouvelleBase();
+    let plan = await outil.essai(faux.promise(), { organisme: base.orgs[0], chercher: registreBanc() });
+    let napoli = plan.entreprises.find((e) => e.id === 'napoli');
+    assert.strictEqual(napoli.champs.representative_name, 'PAUL MARTIN', 'sans colonne pour le prénom : la forme d\'avant');
+    assert.ok(!('representative_first_name' in napoli.champs));
+    base = nouvelleBase();
+    base.cols = [...COLS, ['representative_first_name', 'varchar']];
+    plan = await outil.essai(faux.promise(), { organisme: base.orgs[0], chercher: registreBanc() });
+    napoli = plan.entreprises.find((e) => e.id === 'napoli');
+    assert.deepStrictEqual([napoli.champs.representative_first_name, napoli.champs.representative_name], ['Paul', 'MARTIN']);
+    assert.match(outil.rapport(plan), /référent Paul MARTIN · fonction Gérant\(e\)/);
 });
 
 test('l\'application : la sauvegarde d\'abord, puis le plan seul, sous garde', async () => {

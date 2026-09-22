@@ -16,6 +16,7 @@ const { parseDaySchedules, fmtHM } = require('./emargement.js');
 const { pointsPour, maximumExercice } = require('./bareme.js');
 // L'identifiant France Travail est chiffré au repos (migration 170) : le jeton imprime le CLAIR.
 const { decrypt } = require('./crypto.js');
+const { nomReferent } = require('./referentEntreprise.js');
 
 // --- Formatage ---
 const pad = (n) => String(n).padStart(2, '0');
@@ -1291,8 +1292,9 @@ function resolveTokens(ctx = {}) {
         // Entreprise
         'Nom entreprise': c.name || '', 'Nom de l’entreprise': c.name || '',
         Siret: c.siret || '', OPCO: c.opco || l.opco || '', // repli sur l'OPCO du stagiaire (particulier financé)
-        'Civ représentant': c.representative_civ || '', 'Nom représentant': c.representative_name || '',
-        'Responsable entreprise': c.representative_name || '', 'Fonction représentant': c.representative_role || '',
+        /* Prénom et nom (migration 174), ou le nom complet des fiches d'avant : « M. Jean DUPONT ». */
+        'Civ représentant': c.representative_civ || '', 'Nom représentant': nomReferent(c),
+        'Responsable entreprise': nomReferent(c), 'Fonction représentant': c.representative_role || '',
         'Adresse entreprise': cAddress,
         'Email entreprise': c.email || '', 'Téléphone entreprise': c.phone || '',
         'NAF entreprise': c.naf_ape || '', 'Forme juridique': c.legal_status || '',

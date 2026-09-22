@@ -55,12 +55,18 @@ test('les deux écrans appliquent les mêmes conventions, et montrent un exemple
     assert.match(LISTE, /EN_CAPITALES\.includes\(k\) \? e\.target\.value\.toLocaleUpperCase\("fr"\)/);
     assert.match(LISTE, /\^\[\^\\s@\]\+@/, 'le format d\'e-mail est vérifié avant l\'envoi');
     // Des exemples de format sur les champs libres des deux écrans.
-    for (const attendu of ['placeholder: "879 955 136 00012"', 'placeholder: "65300"', 'placeholder: "DUPONT"']) {
+    for (const attendu of ['placeholder: "879 955 136 00012"', 'placeholder: "65300"']) {
         assert.ok(DETAIL.includes(attendu), `fiche entreprise : ${attendu} manquant`);
     }
-    for (const attendu of ['placeholder="SARL Le Petit Four"', 'placeholder="contact@lepetitfour.fr"', 'placeholder="DUPONT"']) {
+    for (const attendu of ['placeholder="SARL Le Petit Four"', 'placeholder="contact@lepetitfour.fr"']) {
         assert.ok(LISTE.includes(attendu), `modale de création : ${attendu} manquant`);
     }
+    /* LE RÉFÉRENT (migration 174) vit dans un composant commun aux deux écrans : ses exemples, et
+       son NOM en capitales dès la frappe, y sont une seule fois. */
+    const REFERENT = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/components/ReferentEntreprise.jsx'), 'utf8');
+    for (const ecran of [DETAIL, LISTE]) assert.match(ecran, /<ReferentEntreprise valeur=/);
+    for (const attendu of ['placeholder="DUPONT"', 'placeholder="Jean"']) assert.ok(REFERENT.includes(attendu), attendu);
+    assert.match(REFERENT, /onChange\(\{ representative_name: e\.target\.value\.toLocaleUpperCase\("fr"\) \}\)/);
 });
 
 /* ---------------------------------------------------------------------------------------------
@@ -179,11 +185,13 @@ test('le sous-formulaire de la fiche stagiaire collecte bien ces champs', () => 
        l'écran ne proposait même pas — l'utilisateur ne pouvant ni comprendre ni corriger. */
     const bloc = MODALE_STAGIAIRE.slice(MODALE_STAGIAIRE.indexOf('{newCo && ('));
     for (const champ of ['label="Nom" requis', 'label="SIRET" requis', 'label="E-mail" requis',
-        'label="Téléphone" requis', 'label="Représentant (nom & prénom)" requis']) {
+        'label="Téléphone" requis']) {
         assert.ok(bloc.includes(champ), `${champ} manquant dans le sous-formulaire`);
     }
-    assert.match(MODALE_STAGIAIRE, /setNewCo\(\{ name: "", siret: "", town: "", email: "", phone: "", representative_name: "" \}\)/,
-        'l\'état initial doit porter les deux champs neufs, sinon ils sont non contrôlés');
+    // Le référent (migration 174) : le composant commun — nom et prénom, ou un stagiaire choisi.
+    assert.match(bloc, /<ReferentEntreprise valeur=\{newCo\} onChange=\{\(m\) => setNewCo\(\(n\) => \(\{ \.\.\.n, \.\.\.m \}\)\)\} requis/);
+    assert.match(MODALE_STAGIAIRE, /setNewCo\(\{ name: "", siret: "", town: "", email: "", phone: "",\s*representative_civ: "", representative_name: "", representative_first_name: "", representative_learner_id: "" \}\)/,
+        'l\'état initial doit porter chaque champ, sinon ils sont non contrôlés');
     // Et le sous-formulaire vérifie AVANT d'envoyer : un 422 après coup fait perdre la saisie.
     assert.match(MODALE_STAGIAIRE, /const manquants = \[\["name", "Nom de l'entreprise"\]/,
         'le sous-formulaire doit contrôler les cinq champs lui-même');

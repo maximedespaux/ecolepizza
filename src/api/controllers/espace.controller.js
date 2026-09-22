@@ -21,6 +21,7 @@ const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
 const { formationsDesQcm, jourPour } = require('../lib/qcmFormations.js');
 const { capitaliser, enCapitales, CAPITALES_STAGIAIRE } = require('../lib/saisie.js');
+const { suivreStagiaire } = require('../lib/referentEntreprise.js');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -1974,6 +1975,9 @@ const updateMyInfos = async (req, res) => {
             const params = Object.values(vals);
             if (birthday !== undefined) { sets.push('birthday = ?'); params.push(birthday); }
             if (sets.length) await conn.query(`UPDATE learner SET ${sets.join(', ')} WHERE id = ?`, [...params, learner.id]);
+            /* Le stagiaire corrige lui-même son nom : les entreprises dont il est le référent
+               (migration 174) suivent, comme depuis la fiche tenue par l'école. */
+            if (['civility', 'first_name', 'last_name'].some((k) => vals[k] !== undefined)) await suivreStagiaire(conn, learner.id);
         }
         // Miroir sur le compte utilisateur (certaines vues organisme s'appuient dessus).
         const uSets = []; const uParams = [];
