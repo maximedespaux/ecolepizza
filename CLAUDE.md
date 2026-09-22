@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1778 tests — 1771 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1796 tests — 1789 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,9 +154,32 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **une à jouer : la 175 (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **une à jouer : la 176 ; la 175 jouée, à constater (relevé le 2026-09-22, au soir)**
 
-**175 est À JOUER** (`175_audit_identifiant_texte.sql`, le journal d'audit qui perdait en silence les
+**176 est À JOUER** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
+faire, demandés le 2026-09-22). Une table `memo` — auteur, texte, échéance facultative, partage,
+`fait_le`/`fait_par`. Un mémo est PRIVÉ ; son auteur peut le partager, et alors tout le personnel le
+voit et peut le cocher, mais lui seul le supprime ou le reprend (le privé d'un autre répond 404, jamais
+403 : un 403 dirait qu'il existe). Le bouton de la barre du haut, à côté de la cloche, compte les mémos
+ÉCHUS ou dus AUJOURD'HUI — pas les lignes de la liste, un compteur qui ne descend jamais cesse d'être
+lu — et la même liste s'affiche sur le tableau de bord. AUCUNE TRACE AU JOURNAL D'AUDIT, exprès : il
+alimente l'« Activité récente » que tout le bureau lit, et les pense-bêtes privés y défileraient.
+Sans la migration, rien ne casse : la liste et la carte disent « pas encore disponibles (migration 176
+non jouée) », le compteur reste vide et l'écriture répond 503. **Elle se vérifie par l'API, sans SQL** :
+écrire un mémo depuis le bouton, puis `GET /api/memos` rend une liste (et non `data: null`). Ou une
+requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo';`
+⚠️ Son revert SUPPRIME la table : tous les mémos, privés et partagés, faits ou non.
+
+
+**175 : JOUÉE selon l'utilisateur (2026-09-22, vers 18 h 40), PAS ENCORE CONSTATÉE.** À 18 h 41, le code de
+la PR #168 était en ligne (fusionnée à 18 h 39), mais aucun modèle n'avait été enregistré depuis : le
+journal ne pouvait encore rien dire. Le Droit à l'image, enregistré à 18 h 12, l'a été sous l'ANCIEN code,
+dont la ligne d'audit était refusée — ni sa présence ni son absence ne prouvent quoi que ce soit. Les lignes
+`template.save` à `entity_id: null` des 1er et 2 août sont anciennes, et ne comptent pas non plus : seule une
+ligne ÉCRITE APRÈS 18 h 39 tranche. Constater par l'une des deux voies décrites ci-dessous.
+
+(`175_audit_identifiant_texte.sql`, le journal d'audit qui perdait en silence les
 modèles et les rôles). `audit_log.entity_id` passe de `uuid` à `varchar(64)`. Un modèle de document se
 désigne par son SLUG (« grille-jury ») et un rôle système par son NOM (« FORMATEUR ») : la colonne uuid
 refusait la LIGNE ENTIÈRE, et `GET /api/audit?q=template` ne rendait aucune ligne `template.save`. Sept
@@ -175,14 +198,20 @@ nulle part — MariaDB les a refusées —, et les lignes « [object Object] » 
 défaut de famille, corrigé le même jour : l'appel passait un objet) ne disent pas de quelle catégorie il
 s'agissait.
 
-⚠️ **LE DROIT À L'IMAGE ATTEND UN ENREGISTREMENT, pas une migration (2026-09-22).** La réponse du
+**LE DROIT À L'IMAGE EST ENREGISTRÉ — constaté le 2026-09-22 à 18 h 40 par l'API** : `GET /templates`
+rend `has_body: true` (daté de 18 h 12) et `GET /templates/droit-image/body` rend le corps sans `propose`, mot
+pour mot la proposition de l'éditeur (14 jetons, 3315 caractères). Ce corps est ANTÉRIEUR aux espaces
+insécables du commit ec3121df : ses « : » et « ; » suivent une espace ordinaire. Rendu à la même date avec
+les vraies longueurs (raison sociale, les 12 informations annoncées aux partenaires), aucun ne commençait une
+ligne — rien à reprendre tant que personne ne s'en plaint.
+Ce qui suit est l'historique de ce chantier, gardé pour ses explications. La réponse du
 stagiaire (photos, et partenaires à part) vit au registre des consentements — finalité `droit_image`,
 aucune migration : la 130 a été pensée pour — et le document l'imprime par les jetons « Autorisations »
 ({Case photos oui}…). Mais le modèle `droit-image` de production ne sert PAS : son fichier Word est en
 base avec un genre resté « builder » sans corps, donc `getTemplateContent` rend `null` et la liste des
 modèles dit « à créer » (même cas pour `convention` et `convocation`, relevé le même jour). L'éditeur
-propose le document de l'école recomposé avec les cases (`lib/modelesProposes.js`) : **il faut l'ouvrir
-dans Modèles → Droit à l'image, le relire, puis ENREGISTRER** — rien n'est écrit avant. Un document qui
+propose le document de l'école recomposé avec les cases (`lib/modelesProposes.js`) : il fallait l'ouvrir
+dans Modèles → Droit à l'image, le relire, puis ENREGISTRER — rien n'est écrit avant (fait). Un document qui
 porte ces jetons ne se signe qu'une fois la question répondue (`consentementsManquants`), par toutes
 les routes, et garde la réponse du jour de sa signature (`reponsesDuDocument`).
 

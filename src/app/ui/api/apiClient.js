@@ -356,6 +356,31 @@ export function saveComptaTargets(payload) {
   return request("/comptabilite/cibles", { method: "PUT", body: JSON.stringify(payload) });
 }
 
+// --- Mémos du personnel (migration 176) ---
+/* `data: null` : la migration 176 n'est pas jouée, l'écran le dit au lieu d'une liste vide. */
+export function getMemos() {
+  return request("/memos");
+}
+/* Le chiffre du bouton de la barre du haut. SILENCIEUX : il se relit toutes les minutes et à chaque
+   écriture de l'équipe, et ne doit pas allumer la barre de chargement à chaque fois. */
+export function getMemosCompte() {
+  return request("/memos/compte", { silent: true });
+}
+export function createMemo(payload) {
+  return request("/memos", { method: "POST", body: JSON.stringify(payload) });
+}
+/* `{ fait }` pour cocher ou décocher, `{ partage }` pour partager ou reprendre (l'auteur seul). */
+export function updateMemo(id, payload) {
+  return request(`/memos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function deleteMemo(id) {
+  return request(`/memos/${id}`, { method: "DELETE" });
+}
+/* Efface MES mémos cochés, jamais ceux des autres. */
+export function clearMemosFaits() {
+  return request("/memos/faits", { method: "DELETE" });
+}
+
 // --- Notifications ---
 export function getNotifications() {
   return request("/notifications", { silent: true });

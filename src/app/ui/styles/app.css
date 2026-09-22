@@ -4928,6 +4928,64 @@ button.av-wrap:active{transform:scale(.94)}
 .consent-foot{display:flex;gap:10px}
 .consent-choix{flex:1;justify-content:center;font-weight:700}
 
+/* — MÉMO — le pense-bête du personnel : la MÊME liste dans le panneau de la barre du haut et dans
+   la carte du tableau de bord. Ce qui est échu ou dû aujourd'hui se colore : c'est ce que compte le
+   bouton, et ce qui doit sauter aux yeux dans une liste qu'on relit vite. */
+.memo-form{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.memo-form-options{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.memo-date{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.memo-date .inp{padding:6px 8px;font-size:12.5px;width:auto}
+.memo-partage{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
+.memo-form-options .btn{margin-left:auto}
+.memo-erreur{color:var(--red);font-size:12.5px;margin:0 0 10px}
+.memo-vide{margin:6px 0 0}
+.memo-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.memo-ligne{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px}
+.memo-ligne:hover{background:var(--surface2)}
+.memo-ligne > input[type="checkbox"]{margin-top:2px;flex-shrink:0;width:16px;height:16px}
+.memo-corps{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.memo-texte{font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}
+.memo-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--muted)}
+.memo-echeance,.memo-equipe{display:inline-flex;align-items:center;gap:4px}
+.memo-echeance.ton-retard{color:var(--red);font-weight:700}
+.memo-echeance.ton-jour{color:var(--ember1);font-weight:700}
+.memo-ligne.du{background:color-mix(in srgb,var(--ember1) 7%,transparent)}
+/* EN SOMBRE, LE ROUGE DU THÈME TOMBE À 3,6:1 sur la surface du panneau — sous les 4,5:1 qu'un texte
+   de 11,5 px demande. Éclairci, il garde sa couleur et repasse au-dessus. Même correction que pour
+   `--dim` plus haut : c'est la LISIBILITÉ qui décide de la nuance, pas la charte. */
+[data-theme="dark"] .memo-echeance.ton-retard,
+[data-theme="dark"] .memo-echeance.ton-jour,
+[data-theme="dark"] .memo-erreur{color:color-mix(in srgb,var(--red) 55%,#fff)}
+.memo-ligne.fait .memo-texte{text-decoration:line-through;color:var(--muted)}
+/* Les deux gestes de l'auteur restent discrets, et apparaissent au survol ou au clavier : une
+   corbeille toujours visible sur chaque ligne fait d'une liste de tâches un champ de mines. */
+.memo-actions{display:flex;gap:2px;flex-shrink:0;opacity:0;transition:.15s var(--ease)}
+.memo-ligne:hover .memo-actions,.memo-ligne:focus-within .memo-actions{opacity:1}
+/* SUR UN ÉCRAN TACTILE, IL N'Y A PAS DE SURVOL : les deux boutons resteraient invisibles ET
+   cliquables, ce qui est pire que visibles — on supprime un mémo sans avoir rien vu. */
+@media (hover:none){ .memo-actions{opacity:1} }
+.memo-action{width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;
+  color:var(--muted);display:grid;place-items:center}
+.memo-action:hover{color:var(--text);border-color:var(--border)}
+.memo-action.on{color:var(--ember1)}
+.memo-action.danger:hover{color:var(--red);border-color:var(--red)}
+.memo-faits{margin-top:10px;padding-top:8px;border-top:1px solid var(--border-soft)}
+.memo-faits-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+/* Le panneau du bouton : posé dans `document.body` (la barre porte un backdrop-filter, qui
+   accrocherait un `position: fixed` à elle au lieu de l'écran), placé d'après le bouton. */
+.memo-panneau{position:fixed;z-index:60;width:min(380px,calc(100vw - 16px));max-height:min(70vh,560px);
+  display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;box-shadow:0 18px 40px -12px rgba(15,17,28,.35)}
+.memo-panneau-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:12px 14px;border-bottom:1px solid var(--border-soft)}
+.memo-panneau-tete b{display:inline-flex;align-items:center;gap:7px;font-size:14px}
+.memo-panneau-corps{padding:12px 14px;overflow:auto}
+@media (max-width:560px){
+  .memo-panneau{width:auto}
+  .memo-form-options .btn{margin-left:0;width:100%;justify-content:center}
+}
+
 /* — LES QUESTIONS AVANT SIGNATURE — un document qui imprime la réponse du stagiaire (photos,
    partenaires) la lui demande au-dessus de son aperçu, avec les règles de la fenêtre : deux
    boutons de même poids. Le personnel, lui, ne voit qu'une ligne d'attente. */

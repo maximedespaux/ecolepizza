@@ -12,6 +12,8 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import { euro, colorOf, dateHeure, dateFr } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import ARecontacter from "../components/ARecontacter.jsx";
+import MemoListe from "../components/MemoListe.jsx";
+import { ROLES_MEMO } from "../lib/memos.js";
 import { dossiersASuivre } from "../lib/dossiersASuivre.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import { UserContext } from "../context/UserContext.jsx";
@@ -250,6 +252,13 @@ function Dashboard() {
           liste de gestes à faire, avec le numéro à appeler. La même carte qu'en tête de la page
           des stagiaires ; les huit plus anciennes attentes ici, le reste là-bas. */}
       <ARecontacter limite={8} onCharge={(l) => setNbRappels(l.length)} className="fade" style={{ marginBottom: 16 }} />
+
+      {/* LE MÉMO, juste après ce qui attend : c'est la même question, « qu'est-ce que j'ai à faire »,
+          mais ce qu'on s'est noté soi-même. La MÊME liste que le bouton de la barre du haut — l'une
+          se relit quand l'autre écrit. Cachée aux rôles qui n'en ont pas (l'auditeur). */}
+      {ROLES_MEMO.includes(user?.role) && (
+        <Card title="Mémo" className="fade" style={{ marginBottom: 16 }}><MemoListe /></Card>
+      )}
 
       {/* Les compteurs situent, ils ne se consultent pas : une ligne suffit. Ils restent
           cliquables — c'était leur seul usage réel. */}
