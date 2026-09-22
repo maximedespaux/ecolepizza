@@ -154,7 +154,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **171, 172, 173 et 174 à jouer (relevé le 2026-09-22)**
+## 4. Migrations — **aucune à jouer (relevé le 2026-09-22, au soir)**
 
 ⚠️ **UN OUTIL DE DONNÉES RESTE À LANCER, pas une migration : `database/tools/completer-entreprises.js`**
 (demandé le 2026-09-22 : passer chaque fiche entreprise au registre, compléter celles qu'il connaît,
@@ -164,19 +164,37 @@ Source : l'API officielle « Recherche d'entreprises », les données mêmes que
 societe.com. Lancé sans option, il ne fait qu'un ESSAI (rien n'est écrit en base) et dépose plan et
 rapport dans `/tmp/impastio-entreprises` ; `--appliquer <plan>` sauvegarde les fiches visées, puis
 exécute CE plan-là ; `--restaurer <sauvegarde>` défait. Commandes en tête du script, règles de décision
-dans `src/api/lib/registreEntreprises.js`. **Pas encore lancé au 2026-09-22.**
+dans `src/api/lib/registreEntreprises.js`. **Pas encore lancé au 2026-09-22 au soir** — relevé par l'API :
+3 entreprises sur 257 ont une date de création, 6 un SIRET, aucune un prénom de référent. La plupart se
+chercheront donc PAR LE NOM : attendre beaucoup de fiches « à vérifier à la main ».
 
-**174 — À JOUER** (`174_referent_entreprise.sql`, le référent d'une entreprise : un stagiaire choisi, ou une
+**171, 172, 173 et 174 sont jouées — l'utilisateur l'a annoncé le 2026-09-22 au soir ; constaté le jour même
+par l'API, sans SQL, le code déployé (l'interface servie porte le bloc « Référent », les quinze cases et le
+pied des fenêtres corrigé) :**
+
+- **174** : `GET /companies/:id` (`SELECT *`) renvoie `representative_first_name` et
+  `representative_learner_id`. ⚠️ La clé étrangère `fk_company_referent_learner`, posée par une DEUXIÈME
+  instruction, ne se voit pas par l'API ; pour lever le doute, une requête — elle doit rendre 1 :
+  `SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='impastio' AND CONSTRAINT_NAME='fk_company_referent_learner';`
+- **173** : `GET /stagiaires/:id` (`SELECT *`) renvoie les quinze clés.
+- **172** : `GET /stagiaires/:id` renvoie les trois clés du type de four.
+- **171** : les 1080 fiches lues une à une par l'API (des comptes, aucun nom rapatrié) : 10 portent un lieu
+  de naissance, 0 hors capitales. C'est l'état que produit la 171 — sans prouver à lui seul qu'elle a
+  tourné (les dix pouvaient déjà l'être), ce qui ne change rien : c'est l'état voulu.
+
+Ce qu'elles font, et leurs reverts :
+
+**174** (`174_referent_entreprise.sql`, le référent d'une entreprise : un stagiaire choisi, ou une
 personne en nom et prénom). Deux colonnes : `company.representative_first_name` (le prénom —
 `representative_name` porte alors le NOM seul ; les fiches d'avant gardent leur nom complet, que
 `nomReferent` lit tel quel) et `company.representative_learner_id` (le stagiaire référent, FK ON DELETE SET
 NULL ; ses civilité, prénom et nom sont recopiés, et suivent sa fiche). Sans elle, le prénom rejoint le nom
 dans la forme d'avant (« JEAN DUPONT ») et le lien n'est pas gardé — l'écran le dit (« sauf le lien vers le
 stagiaire référent »). Elle se vérifie par l'API : `GET /companies/:id` (`SELECT *`) renvoie les deux clés.
-Son revert replie le prénom dans le nom, puis retire les colonnes : seul le lien se perd. À jouer de
-préférence AVANT l'outil `completer-entreprises.js` : il écrit alors le prénom et le nom du dirigeant à part.
+Son revert replie le prénom dans le nom, puis retire les colonnes : seul le lien se perd. L'outil
+`completer-entreprises.js` écrit donc désormais le prénom et le nom du dirigeant à part.
 
-**173 — À JOUER** (`173_projet_cases.sql`, quinze cases de plus dans « Votre projet », TINYINT(1)
+**173** (`173_projet_cases.sql`, quinze cases de plus dans « Votre projet », TINYINT(1)
 comme les autres : le TYPE D'ACTIVITÉ — `project_dine_in`, `project_takeaway`, `project_by_slice`,
 `project_vending`, `project_catering`, `project_add_on` —, l'ÉQUIPEMENT — `project_kneader`,
 `project_sheeter`, `project_fridge_counter`, et `project_oven_owned` (« déjà acheté », sous « Four ») —,
@@ -191,14 +209,14 @@ catalogue de l'écran (`src/app/ui/lib/projet.js`), dans celui du serveur (`src/
 part aux partenaires, dans `LEARNER_FIELDS` / `CASES` / `conditions.js`, et dans une migration —
 `projet-cases.test.js` refuse qu'un seul de ces endroits l'oublie.
 
-**172 — À JOUER** (`172_projet_types_four.sql`, le TYPE de four sous la case « Four » de « Votre
+**172** (`172_projet_types_four.sql`, le TYPE de four sous la case « Four » de « Votre
 projet » : `project_oven_wood`, `project_oven_electric`, `project_oven_gas`, TINYINT(1) comme les six
 cases du projet). Sans elle, les types ne s'enregistrent pas, et le formulaire le DIT (« sauf le type de
 four : la migration 172 n'est pas jouée ») ; l'export des partenaires dit « four » comme avant
 (`colonnesProjetSql`). Elle se vérifie par l'API : `GET /stagiaires/:id` (`SELECT *`) renvoie les trois clés.
 Son revert retire les colonnes — les types cochés sont perdus, la case « Four » reste.
 
-**171 — À JOUER** (`171_lieu_naissance_capitales.sql`, le lieu de naissance des fiches DÉJÀ en base
+**171** (`171_lieu_naissance_capitales.sql`, le lieu de naissance des fiches DÉJÀ en base
 passé en capitales, « comme la ville » — même forme que la 162, octets comparés). Migration de
 DONNÉES : invisible à tout contrôle de schéma. Sans elle, rien ne casse : le code met déjà le lieu
 en capitales à chaque enregistrement (`CAPITALES_STAGIAIRE`, fiche ET espace stagiaire) ; seules les
