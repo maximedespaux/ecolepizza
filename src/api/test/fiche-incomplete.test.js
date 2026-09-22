@@ -65,15 +65,29 @@ test('ni la formation ni l\'entreprise ne se complètent sur la fiche stagiaire'
     for (const cle of tout) assert.ok(!cles(rien, tout).includes(cle), `${cle} ne vient pas de la fiche`);
 });
 
-test('le bandeau lit les MÊMES colonnes que l\'export envoyé aux partenaires', () => {
+test('le bandeau lit les MÊMES colonnes que l\'export envoyé aux partenaires', async () => {
     /* Sinon il dirait complet un champ que l'export enverrait vide — ou l'inverse. */
     const EXPORT = lire('controllers/consentement.controller.js');
     for (const [cle, col] of Object.entries(COLONNES)) {
         assert.match(EXPORT, new RegExp(`\\b${cle}: l\\.${col} \\|\\| ''`), `${cle} → ${col}`);
     }
-    for (const col of PROJETS) assert.match(EXPORT, new RegExp(`\\['${col}', '`), `projet : ${col}`);
-    assert.strictEqual((EXPORT.match(/\['project_[a-z]+', '/g) || []).length, PROJETS.length,
-        'autant de cases de projet des deux côtés');
+    /* LE PROJET : la même phrase, construite par la même fonction (lib/projet.js). Le bandeau le dit
+       manquant exactement quand le partenaire recevrait une phrase vide — case par case, sur tout le
+       catalogue de l'écran. Une case de l'AVANCEMENT seule (local trouvé…) ne suffit pas : elle ne
+       part pas au partenaire. */
+    assert.match(EXPORT, /projet: phraseProjet\(l\),/);
+    assert.match(EXPORT, /const \{ phraseProjet, colonnesProjetSql \} = require\('\.\.\/lib\/projet\.js'\);/);
+    const { CASES_PROJET, PRECISIONS_FOUR } = await import('../../app/ui/lib/projet.js');
+    const { phraseProjet, COLONNES_PHRASE } = require('../lib/projet.js');
+    assert.deepStrictEqual(PROJETS, COLONNES_PHRASE, 'le bandeau lit les colonnes de la phrase');
+    for (const k of CASES_PROJET) {
+        // Une précision du four coche « Four » à l'enregistrement (normaliserSaisie).
+        const l = { ...COMPLETE, project_oven: PRECISIONS_FOUR.includes(k) ? 1 : 0, [k]: 1 };
+        const manque = cles(l, ['projet']).includes('projet');
+        assert.strictEqual(manque, phraseProjet(l) === '', `${k} : le bandeau et l'export disent la même chose`);
+    }
+    assert.ok(cles({ ...COMPLETE, project_oven: 0, project_premises: 1 }, ['projet']).includes('projet'),
+        'l\'avancement seul ne renseigne pas le projet');
 });
 
 test('la fiche est servie avec ce qui lui manque, et ne tombe pas si le calcul échoue', () => {

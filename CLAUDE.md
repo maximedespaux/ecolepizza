@@ -100,8 +100,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-21** :
-**1685 tests — 1678 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
+**1692 tests — 1685 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,13 +154,28 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **171 et 172 à jouer (relevé le 2026-09-22)**
+## 4. Migrations — **171, 172 et 173 à jouer (relevé le 2026-09-22)**
+
+**173 — À JOUER** (`173_projet_cases.sql`, quinze cases de plus dans « Votre projet », TINYINT(1)
+comme les autres : le TYPE D'ACTIVITÉ — `project_dine_in`, `project_takeaway`, `project_by_slice`,
+`project_vending`, `project_catering`, `project_add_on` —, l'ÉQUIPEMENT — `project_kneader`,
+`project_sheeter`, `project_fridge_counter`, et `project_oven_owned` (« déjà acheté », sous « Four ») —,
+l'AVANCEMENT — `project_premises`, `project_funded`, `project_opening_soon`, `project_support` — et
+`project_more_training`). Indépendante de la 172. Sans elle, ces cases ne s'enregistrent pas, et le
+formulaire le DIT (« sauf les nouvelles cases du projet : la migration 173 n'est pas jouée ») ; l'export
+et la liste les lisent NULL (`colonnesProjetSql`). Elle se vérifie par l'API : `GET /stagiaires/:id`
+(`SELECT *`) renvoie les quinze clés. Son revert retire les colonnes — les cases cochées sont perdues.
+⚠️ L'avancement et la formation complémentaire NE PARTENT PAS aux partenaires (le stagiaire consent à
+« la nature de mon projet ») : l'export ne les lit même pas. **Une case de plus** s'écrit dans le
+catalogue de l'écran (`src/app/ui/lib/projet.js`), dans celui du serveur (`src/api/lib/projet.js`) si elle
+part aux partenaires, dans `LEARNER_FIELDS` / `CASES` / `conditions.js`, et dans une migration —
+`projet-cases.test.js` refuse qu'un seul de ces endroits l'oublie.
 
 **172 — À JOUER** (`172_projet_types_four.sql`, le TYPE de four sous la case « Four » de « Votre
 projet » : `project_oven_wood`, `project_oven_electric`, `project_oven_gas`, TINYINT(1) comme les six
 cases du projet). Sans elle, les types ne s'enregistrent pas, et le formulaire le DIT (« sauf le type de
 four : la migration 172 n'est pas jouée ») ; l'export des partenaires dit « four » comme avant
-(`colonneOuNull`). Elle se vérifie par l'API : `GET /stagiaires/:id` (`SELECT *`) renvoie les trois clés.
+(`colonnesProjetSql`). Elle se vérifie par l'API : `GET /stagiaires/:id` (`SELECT *`) renvoie les trois clés.
 Son revert retire les colonnes — les types cochés sont perdus, la case « Four » reste.
 
 **171 — À JOUER** (`171_lieu_naissance_capitales.sql`, le lieu de naissance des fiches DÉJÀ en base

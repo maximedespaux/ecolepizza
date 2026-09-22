@@ -3,11 +3,11 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const consentements = require('../lib/consentements.js');
 const { etatContrat } = require('../lib/contratPartenaire.js');
-/* `project_improvement` (migration 158) peut ne pas être en base : les deux SELECT explicites
-   ci-dessous la demandent donc par `colonneOuNull`, qui rend « NULL AS project_improvement »
-   tant qu'elle manque. Sans alias, la ligne n'aurait pas la clé du tout et l'export ne saurait
-   pas distinguer « case absente » de « case non cochée ». */
-const { colonneOuNull } = require('../lib/colonnes.js');
+/* Les cases du projet arrivées par migration (158, 172, 173) peuvent ne pas être en base : les deux
+   SELECT explicites ci-dessous les demandent donc par `colonnesProjetSql`, qui rend « NULL AS
+   project_dine_in » tant que la colonne manque. Sans alias, la ligne n'aurait pas la clé du tout et
+   l'export ne saurait pas distinguer « case absente » de « case non cochée ». */
+const { phraseProjet, colonnesProjetSql } = require('../lib/projet.js');
 
 /**
  * LE CÔTÉ ORGANISME DU REGISTRE — voir qui a répondu quoi, saisir une réponse donnée hors ligne,
@@ -112,9 +112,7 @@ async function sessionAvecInscrits(conn, sessionId, orgId) {
            pas partir par erreur. */
         `SELECT l.id, l.first_name, l.last_name, l.email, l.phone,
                 l.civility, l.address, l.zip_code, l.town, l.professional_status,
-                l.project_creation, l.project_takeover, l.project_oven, l.project_truck,
-                l.project_job, ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
-                ${await colonnesTypesFour(conn)},
+                ${await colonnesProjetSql(conn)},
                 c.name AS company_name, c.siret AS company_siret,
                 c.legal_status AS company_legal, c.naf_ape AS company_naf,
                 c.address AS company_address, c.zip_code AS company_zip, c.town AS company_town
@@ -339,28 +337,10 @@ const setConsentPourStagiaire = async (req, res) => {
  * divergé — et une divergence ici ne se voit pas : elle produit un export qui envoie un champ de
  * trop, sans erreur ni alerte.
  */
-/* LE PROJET EST UNE SÉRIE DE BOOLÉENS EN BASE. Les envoyer tels quels donnerait autant de colonnes
-   de 0 et de 1 à décoder ; on les rassemble en une phrase lisible. */
-const PROJETS = [
-    ['project_creation', 'création'], ['project_takeover', 'reprise'],
-    ['project_oven', 'four'], ['project_truck', 'camion'],
-    ['project_job', 'recherche de poste'], ['project_improvement', 'perfectionnement'],
-];
-/* LE FOUR, ET DUQUEL (migration 172) : « four (bois, gaz) » plutôt que « four » — c'est la première
-   question d'un fabricant de fours. Sans type coché, « four », comme avant. */
-const TYPES_FOUR = [['project_oven_wood', 'bois'], ['project_oven_electric', 'électrique'], ['project_oven_gas', 'gaz']];
-function phraseProjet(l) {
-    return PROJETS.filter(([c]) => Number(l[c]) === 1).map(([c, mot]) => {
-        if (c !== 'project_oven') return mot;
-        const types = TYPES_FOUR.filter(([t]) => Number(l[t]) === 1).map(([, t]) => t);
-        return types.length ? `four (${types.join(', ')})` : mot;
-    }).join(', ');
-}
-/* Les types de four, demandés de façon tolérante : sans la migration 172, NULL — l'export ne tombe
-   pas pour une colonne absente, il dit « four » comme avant. */
-const colonnesTypesFour = async (conn) =>
-    (await Promise.all(TYPES_FOUR.map(([c]) => colonneOuNull(conn, 'learner', c, 'l.')))).join(', ');
-
+/* LE PROJET, sa phrase et ses colonnes : lib/projet.js — le catalogue partagé avec le bandeau de la
+   fiche incomplète et la liste des stagiaires. L'AVANCEMENT du projet n'y figure pas, délibérément :
+   le stagiaire consent à transmettre « la nature de mon projet », pas son financement ni sa date
+   d'ouverture (cf. l'en-tête de lib/projet.js). */
 async function composerLignes(conn, orgId, retenus, etats) {
     const choisis = await consentements.champsOrganisme(conn, orgId);
     const champsParStagiaire = new Map(retenus.map((l) => {
@@ -491,10 +471,8 @@ const produireTransmissionPartenaire = async (req, res) => {
            cours n'a pas encore de stagiaires « formés », et l'école les transmet à la clôture. */
         const [inscrits] = await conn.query(
             `SELECT l.id, l.first_name, l.last_name, l.email, l.phone, l.civility, l.address,
-                    l.zip_code, l.town, l.professional_status, l.project_creation,
-                    l.project_takeover, l.project_oven, l.project_truck, l.project_job,
-                    ${await colonneOuNull(conn, 'learner', 'project_improvement', 'l.')},
-                    ${await colonnesTypesFour(conn)},
+                    l.zip_code, l.town, l.professional_status,
+                    ${await colonnesProjetSql(conn)},
                     c.name AS company_name, c.siret AS company_siret, c.legal_status AS company_legal,
                     c.naf_ape AS company_naf, c.address AS company_address,
                     c.zip_code AS company_zip, c.town AS company_town,

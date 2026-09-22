@@ -12,6 +12,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dossierAffiche } from "../lib/lienDossier.js";
 import FicheIncomplete from "../components/FicheIncomplete.jsx";
+import { lignesProjet } from "../lib/projet.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
@@ -241,22 +242,9 @@ function StagiaireDetail() {
     );
   }
 
-  /* LE PROJET EN DEUX, comme dans le formulaire (2026-09-22) : sa NATURE, et l'ÉQUIPEMENT qu'il
-     appelle — le four avec son type (migration 172), le camion. */
-  const natureProjet = [
-    l.project_creation && "Création",
-    l.project_takeover && "Reprise",
-    l.project_job && "Cherche poste pizzaïolo(la)",
-    /* Absent de cette liste depuis la migration 158 (vu le 2026-09-21) : qui ne cochait QUE
-       « Perfectionnement » lisait « Aucun projet renseigné » sur sa fiche — le défaut même que la
-       case avait été créée pour corriger. */
-    l.project_improvement && "Perfectionnement",
-  ].filter(Boolean).join(" · ");
-  const typesFour = [l.project_oven_wood && "bois", l.project_oven_electric && "électrique", l.project_oven_gas && "gaz"].filter(Boolean);
-  const equipement = [
-    l.project_oven && (typesFour.length ? `Four (${typesFour.join(", ")})` : "Four"),
-    l.project_truck && "Camion / Remorque",
-  ].filter(Boolean).join(" · ");
+  /* LE PROJET, UNE LIGNE PAR QUESTION, comme dans le formulaire (2026-09-22) : nature, type
+     d'activité, équipement — le four avec ses précisions —, avancement (lib/projet.js). */
+  const projet = lignesProjet(l);
 
   const c = l.company;
 
@@ -571,12 +559,8 @@ function StagiaireDetail() {
         </Card>
 
         <Card title={T("target", "Projet")}>
-          {natureProjet || equipement ? (
-            <>
-              <Row label="Nature" value={natureProjet} />
-              <Row label="Équipement" value={equipement} />
-            </>
-          ) : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
+          {projet.length ? projet.map((r) => <Row key={r.label} label={r.label} value={r.value} />)
+            : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
           {/* LA NOTE (migration 168), sous le projet comme dans le formulaire. Du texte simple : ses
               retours à la ligne sont gardés (`pre-wrap`), et un mot sans fin ne sort pas de la carte. */}
           {l.note_libre && (

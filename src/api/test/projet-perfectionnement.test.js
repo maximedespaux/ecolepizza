@@ -17,10 +17,16 @@ const CONDITIONS = lire('lib/conditions.js');
 /* `[a-z_]+` et non `[a-z]+` : depuis la migration 172, `project_oven_wood` et ses voisines — lues
    `project_oven` par l'ancienne expression, elles auraient passé le test sans y figurer. */
 const projets = (texte) => [...new Set([...texte.matchAll(/project_[a-z_]+/g)].map((m) => m[0]))].sort();
+const catalogue = () => import('../../app/ui/lib/projet.js');
+const { phraseProjet } = require('../lib/projet.js');
 
-test('les trois listes de « Votre projet » disent le même ensemble', () => {
-    /* `fin` se cherche APRÈS `deb`, sinon `indexOf` le trouve au début du fichier et la tranche
-       revient vide — l'assertion aurait comparé deux listes vides, donc réussi pour rien. */
+test('les trois listes de « Votre projet » disent le même ensemble', async () => {
+    /* DEPUIS LE 2026-09-22, ELLES DÉRIVENT TOUTES TROIS DU CATALOGUE (lib/projet.js) : vingt-quatre
+       cases recopiées trois fois n'auraient pas tenu. Le test vérifie donc la dérivation — et
+       qu'aucune case n'est plus écrite à la main dans la modale, où elle échapperait aux trois. */
+    const { CASES_PROJET } = await catalogue();
+    assert.ok(CASES_PROJET.includes('project_improvement'), 'la case existe dans le catalogue');
+    assert.strictEqual(new Set(CASES_PROJET).size, CASES_PROJET.length, 'aucune case en double');
     const bloc = (deb, fin) => {
         const i = MODALE.indexOf(deb);
         assert.ok(i >= 0, `marqueur introuvable : ${deb}`);
@@ -28,32 +34,33 @@ test('les trois listes de « Votre projet » disent le même ensemble', () => {
         assert.ok(j > i, `fin introuvable après ${deb}`);
         return MODALE.slice(i, j);
     };
-    const dansEmpty = projets(bloc('const EMPTY', 'const BOOL_FIELDS'));
-    const dansBool = projets(bloc('const BOOL_FIELDS', 'const dateOnly'));
-    /* Jusqu'au titre de la NOTE, et non au premier `</div>` : depuis le 2026-09-22, le projet tient en
-       deux groupes, et le type de four vit dans un bloc à lui — la première balise fermante coupait
-       la liste avant le camion. */
-    const rendues = projets(bloc('<h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet', '<h3 id="note-libre-titre"'));
-
-    assert.ok(dansEmpty.includes('project_improvement'), 'la case existe dans l\'état initial');
-    assert.deepStrictEqual(dansBool, dansEmpty, 'BOOL_FIELDS suit EMPTY');
-    assert.deepStrictEqual(rendues, dansEmpty, 'les cases rendues suivent EMPTY');
+    assert.match(bloc('const EMPTY', 'const BOOL_FIELDS'), /\.\.\.Object\.fromEntries\(CASES_PROJET\.map\(\(k\) => \[k, false\]\)\),/,
+        'l\'état initial');
+    assert.match(MODALE, /const BOOL_FIELDS = \[\.\.\.CASES_PROJET, "a_recontacter"\];/, 'la conversion en booléens');
+    /* Les cases rendues : chaque groupe, chaque case, chaque précision du four — lues sur `form`. */
+    const rendues = bloc('<h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet', '<h3 id="note-libre-titre"');
+    assert.match(rendues, /\{GROUPES_PROJET\.map\(\(g\) => \([\s\S]*\{g\.cases\.map\(\(c\) => \([\s\S]*checked=\{!!form\[c\.k\]\}[\s\S]*\{c\.precisions\.map\(\(pr\) => \([\s\S]*checked=\{!!form\[pr\.k\]\}/);
+    // « Four » seul reste nommé : `toggleFour` emporte ses précisions.
+    assert.deepStrictEqual(projets(MODALE), ['project_oven'], 'aucune autre case écrite à la main');
 });
 
-test('« Perfectionnement » est connu partout où le projet est lu ou écrit', () => {
+test('« Perfectionnement » est connu partout où le projet est lu ou écrit', async () => {
     /* Six endroits touchent ces colonnes. En oublier un ne casse rien de visible : la case se
        coche, ne part pas dans l'export au partenaire, et ne peut pas servir de condition de
-       document — on ne s'en aperçoit que le jour du contrôle. */
+       document — on ne s'en aperçoit que le jour du contrôle. (Toutes les cases du catalogue :
+       projet-cases.test.js.) */
     assert.match(LEARNER, /'project_improvement',/, 'écrite par la fiche');
     assert.match(CONDITIONS, /'learner\.project_improvement'/, 'utilisable comme condition…');
     assert.match(CONDITIONS, /project_improvement: 'Projet : perfectionnement'/, '…avec son libellé');
-    assert.match(CONSENT, /\['project_improvement', 'perfectionnement'\]/, 'dite dans l\'export partenaire');
-    assert.strictEqual((CONSENT.match(/colonneOuNull\(conn, 'learner', 'project_improvement'/g) || []).length, 2,
+    assert.strictEqual(phraseProjet({ project_improvement: 1 }), 'perfectionnement', 'dite dans l\'export partenaire');
+    assert.strictEqual((CONSENT.match(/\$\{await colonnesProjetSql\(conn\)\},/g) || []).length, 2,
         'les DEUX SELECT explicites la demandent de façon tolérante');
     /* Le septième, oublié jusqu'au 2026-09-21 : la carte « Projet » de la fiche. Qui ne cochait que
        « Perfectionnement » y lisait « Aucun projet renseigné ». */
+    const { lignesProjet } = await catalogue();
+    assert.deepStrictEqual(lignesProjet({ project_improvement: 1 }), [{ label: 'Nature', value: 'Perfectionnement' }]);
     const FICHE = readFileSync(path.join(__dirname, '../../app/ui/pages/StagiaireDetail.jsx'), 'utf8');
-    assert.match(FICHE, /l\.project_improvement && "Perfectionnement",/, 'affichée sur la fiche');
+    assert.match(FICHE, /const projet = lignesProjet\(l\);/, 'affichée sur la fiche');
 });
 
 test('la liste blanche d\'écriture est filtrée sur les colonnes que la table porte', () => {

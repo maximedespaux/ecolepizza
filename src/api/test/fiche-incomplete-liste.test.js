@@ -7,9 +7,9 @@
  * quelque chose ? ».
  *
  * TROIS PIÈGES, éprouvés ici sur le vrai contrôleur et une fausse base :
- *   · la civilité et les six cases du projet sont LUES pour le calcul, mais ne partent pas avec la
+ *   · la civilité et les cases du projet sont LUES pour le calcul, mais ne partent pas avec la
  *     liste — elle compte plus de mille lignes, et n'en avait pas besoin jusqu'ici ;
- *   · la case « perfectionnement » arrive avec la migration 158 : sans elle, la liste ne doit pas
+ *   · des cases arrivent avec des migrations (158, 172, 173) : sans elles, la liste ne doit pas
  *     tomber (NULL, comme dans l'export des partenaires) ;
  *   · un registre des partenaires illisible prive la liste du repère, jamais de ses lignes.
  */
@@ -18,7 +18,12 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
-let colonnes = ['project_improvement'];
+const { COLONNES_PHRASE } = require('../lib/projet.js');
+/* Les colonnes « tardives » que la fausse table porte : toutes, ou aucune (migrations non jouées). */
+const TARDIVES = COLONNES_PHRASE.filter((c) => !['project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job'].includes(c));
+let colonnes = TARDIVES;
+const ORIGINE = ['id', 'organization_id', 'first_name', 'last_name', 'civility', 'project_creation', 'project_takeover',
+    'project_oven', 'project_truck', 'project_job'];
 let partenaires = () => [{ name: 'Moulins du Sud' }];
 let champsEcole = 'nom,prenom,email,telephone,adresse,code_postal,ville';
 let requeteListe = '';
@@ -26,7 +31,8 @@ const LIGNES = [
     { id: 'l1', organization_id: 'o1', first_name: 'Marie', last_name: 'DURAND', email: 'marie@exemple.fr', phone: '06 11 22 33 44',
       birthday: null, zip_code: '65300', town: 'LANNEMEZAN', address: '1 rue Haute', professional_status: 'Salariée', levels: '',
       financing: 'PARTICULIER', opco: null, created_at: '2026-09-01', civility: 'Mme', project_creation: 1, project_takeover: 0,
-      project_oven: 0, project_truck: 0, project_job: 0, project_improvement: 0, company_id: null, company_name: null, account_email: null },
+      project_oven: 0, project_truck: 0, project_job: 0, project_improvement: 0, company_id: null, company_name: null, account_email: null,
+      project_dine_in: 1 },
     { id: 'l2', organization_id: 'o1', first_name: 'Paul', last_name: 'MARTIN', email: 'paul@exemple.fr', phone: '06 55 66 77 88',
       birthday: null, zip_code: '', town: null, address: '   ', professional_status: null, levels: '',
       financing: 'PARTICULIER', opco: null, created_at: '2026-09-02', civility: null, project_creation: 0, project_takeover: 0,
@@ -36,6 +42,8 @@ const faux = {
     promise: () => ({
         query: async (sql, params) => {
             if (/information_schema\.columns[\s\S]*column_name = \?/.test(sql)) return [colonnes.includes(params[1]) ? [{ 1: 1 }] : []];
+            // Toute la table d'un coup (colonnesProjetSql).
+            if (/information_schema\.columns[\s\S]*table_name = 'learner'/.test(sql)) return [[...ORIGINE, ...colonnes].map((c) => ({ c }))];
             if (/FROM partner p\s+WHERE p\.organization_id = \? AND p\.recoit_coordonnees = 1/.test(sql)) return [partenaires()];
             if (/SELECT partner_fields FROM organization/.test(sql)) return [[{ partner_fields: champsEcole }]];
             return [[]];
@@ -64,7 +72,7 @@ function lister() {
 }
 
 test('la ligne incomplète porte ce qui lui manque ; la complète, rien', async () => {
-    colonnes = ['project_improvement']; partenaires = () => [{ name: 'Moulins du Sud' }];
+    colonnes = TARDIVES; partenaires = () => [{ name: 'Moulins du Sud' }];
     const { data } = await lister();
     const [marie, paul] = data;
     assert.deepStrictEqual(paul.champs_manquants, ['Adresse postale', 'Code postal', 'Ville'],
@@ -75,20 +83,28 @@ test('la ligne incomplète porte ce qui lui manque ; la complète, rien', async 
 test('civilité et projet servent au calcul, pas à la charge utile', async () => {
     const { data } = await lister();
     for (const l of data) {
-        for (const cle of ['civility', 'project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job', 'project_improvement']) {
+        // Marie a « pizzeria sur place » (173) cochée : lue pour le calcul, elle ne part pas non plus.
+        for (const cle of ['civility', ...COLONNES_PHRASE]) {
             assert.ok(!(cle in l), `${cle} ne part pas avec la liste`);
         }
     }
 });
 
-test('sans la migration 158, la liste tient : NULL pour la case « perfectionnement »', async () => {
+test('sans les migrations 158, 172 et 173, la liste tient : NULL pour les cases qui n\'existent pas', async () => {
     colonnes = [];
     const { data } = await lister();
-    assert.match(requeteListe, /NULL AS project_improvement/);
+    for (const c of ['project_improvement', 'project_oven_wood', 'project_dine_in', 'project_oven_owned']) {
+        assert.match(requeteListe, new RegExp(`NULL AS ${c}\\b`), `${c} : lue NULL`);
+    }
+    assert.match(requeteListe, /l\.project_creation\b/, 'les cases d\'origine, elles, sont lues');
     assert.strictEqual(data.length, 2);
-    colonnes = ['project_improvement'];
+    colonnes = TARDIVES;
     await lister();
-    assert.match(requeteListe, /l\.project_improvement/);
+    for (const c of ['project_improvement', 'project_oven_wood', 'project_dine_in', 'project_oven_owned']) {
+        assert.match(requeteListe, new RegExp(`l\\.${c}\\b`), `${c} : lue une fois la migration jouée`);
+    }
+    // L'avancement ne part pas aux partenaires : la liste ne le lit même pas.
+    assert.doesNotMatch(requeteListe, /project_premises|project_funded|project_more_training/);
 });
 
 test('registre des partenaires illisible : la liste perd le repère, pas ses lignes', async () => {
