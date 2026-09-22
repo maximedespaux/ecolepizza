@@ -154,9 +154,16 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **une à jouer : la 175 (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **la 175 est jouée, À CONSTATER (relevé le 2026-09-22, au soir)**
 
-**175 est À JOUER** (`175_audit_identifiant_texte.sql`, le journal d'audit qui perdait en silence les
+**175 : JOUÉE selon l'utilisateur (2026-09-22, vers 18 h 40), PAS ENCORE CONSTATÉE.** À 18 h 41, le code de
+la PR #168 était en ligne (fusionnée à 18 h 39), mais aucun modèle n'avait été enregistré depuis : le
+journal ne pouvait encore rien dire. Le Droit à l'image, enregistré à 18 h 12, l'a été sous l'ANCIEN code,
+dont la ligne d'audit était refusée — ni sa présence ni son absence ne prouvent quoi que ce soit. Les lignes
+`template.save` à `entity_id: null` des 1er et 2 août sont anciennes, et ne comptent pas non plus : seule une
+ligne ÉCRITE APRÈS 18 h 39 tranche. Constater par l'une des deux voies décrites ci-dessous.
+
+(`175_audit_identifiant_texte.sql`, le journal d'audit qui perdait en silence les
 modèles et les rôles). `audit_log.entity_id` passe de `uuid` à `varchar(64)`. Un modèle de document se
 désigne par son SLUG (« grille-jury ») et un rôle système par son NOM (« FORMATEUR ») : la colonne uuid
 refusait la LIGNE ENTIÈRE, et `GET /api/audit?q=template` ne rendait aucune ligne `template.save`. Sept
@@ -175,14 +182,20 @@ nulle part — MariaDB les a refusées —, et les lignes « [object Object] » 
 défaut de famille, corrigé le même jour : l'appel passait un objet) ne disent pas de quelle catégorie il
 s'agissait.
 
-⚠️ **LE DROIT À L'IMAGE ATTEND UN ENREGISTREMENT, pas une migration (2026-09-22).** La réponse du
+**LE DROIT À L'IMAGE EST ENREGISTRÉ — constaté le 2026-09-22 à 18 h 40 par l'API** : `GET /templates`
+rend `has_body: true` (daté de 18 h 12) et `GET /templates/droit-image/body` rend le corps sans `propose`, mot
+pour mot la proposition de l'éditeur (14 jetons, 3315 caractères). Ce corps est ANTÉRIEUR aux espaces
+insécables du commit ec3121df : ses « : » et « ; » suivent une espace ordinaire. Rendu à la même date avec
+les vraies longueurs (raison sociale, les 12 informations annoncées aux partenaires), aucun ne commençait une
+ligne — rien à reprendre tant que personne ne s'en plaint.
+Ce qui suit est l'historique de ce chantier, gardé pour ses explications. La réponse du
 stagiaire (photos, et partenaires à part) vit au registre des consentements — finalité `droit_image`,
 aucune migration : la 130 a été pensée pour — et le document l'imprime par les jetons « Autorisations »
 ({Case photos oui}…). Mais le modèle `droit-image` de production ne sert PAS : son fichier Word est en
 base avec un genre resté « builder » sans corps, donc `getTemplateContent` rend `null` et la liste des
 modèles dit « à créer » (même cas pour `convention` et `convocation`, relevé le même jour). L'éditeur
-propose le document de l'école recomposé avec les cases (`lib/modelesProposes.js`) : **il faut l'ouvrir
-dans Modèles → Droit à l'image, le relire, puis ENREGISTRER** — rien n'est écrit avant. Un document qui
+propose le document de l'école recomposé avec les cases (`lib/modelesProposes.js`) : il fallait l'ouvrir
+dans Modèles → Droit à l'image, le relire, puis ENREGISTRER — rien n'est écrit avant (fait). Un document qui
 porte ces jetons ne se signe qu'une fois la question répondue (`consentementsManquants`), par toutes
 les routes, et garde la réponse du jour de sa signature (`reponsesDuDocument`).
 
