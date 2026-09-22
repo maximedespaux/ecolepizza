@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1762 tests — 1755 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1776 tests — 1769 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,26 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **aucune à jouer (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **une à jouer : la 175 (relevé le 2026-09-22, au soir)**
+
+**175 est À JOUER** (`175_audit_identifiant_texte.sql`, le journal d'audit qui perdait en silence les
+modèles et les rôles). `audit_log.entity_id` passe de `uuid` à `varchar(64)`. Un modèle de document se
+désigne par son SLUG (« grille-jury ») et un rôle système par son NOM (« FORMATEUR ») : la colonne uuid
+refusait la LIGNE ENTIÈRE, et `GET /api/audit?q=template` ne rendait aucune ligne `template.save`. Sept
+appels de `logAudit` sur 139 sont concernés — `template.save` (deux), `.upload`, `.delete`, `.reset`,
+`.duplicate`, et `accessprofile.system`. Aucune jointure ni aucun index ne porte sur la colonne ; la cloche
+n'en tire un lien que pour Learner, Company et TrainingSession, toujours en UUID. Sans la migration, le code
+garde la ligne SANS son identifiant, et la console le dit une seule fois (`lib/audit.js`).
+**Elle se vérifie par l'API, sans SQL** : enregistrer un modèle — l'enregistrement du Droit à l'image, attendu
+ci-dessous, fait l'affaire —, puis `GET /api/audit?q=template` : la ligne `template.save` porte
+`entity_id: "droit-image"`. Une ligne à `entity_id: null` : le code est déployé, la 175 pas encore. Aucune
+ligne : ni l'un ni l'autre. Ou une requête, qui doit rendre `varchar` et `64` :
+`SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='audit_log' AND column_name='entity_id';`
+Son revert remet `uuid` après avoir passé à NULL les identifiants qui n'en sont pas (les lignes restent) :
+laissé à lui-même, l'ALTER échouerait en mode strict. ⚠️ Les traces de modèles et de rôles d'AVANT n'existent
+nulle part — MariaDB les a refusées —, et les lignes « [object Object] » des catégories de partenaires (même
+défaut de famille, corrigé le même jour : l'appel passait un objet) ne disent pas de quelle catégorie il
+s'agissait.
 
 ⚠️ **LE DROIT À L'IMAGE ATTEND UN ENREGISTREMENT, pas une migration (2026-09-22).** La réponse du
 stagiaire (photos, et partenaires à part) vit au registre des consentements — finalité `droit_image`,
