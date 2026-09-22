@@ -13,6 +13,7 @@ const { couperSessions } = require('./auth.controller.js'); // évincer les sess
 const { resolveurBadges, resoudreCsv } = require('../lib/badges.js');
 const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
 const { suivreStagiaire } = require('../lib/referentEntreprise.js');
+const { MAX_LIGNES, analyserStagiaires, bilan } = require('../lib/importFiches.js');
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
@@ -860,7 +861,56 @@ const deleteStagiaireAccount = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/stagiaires/import — l'import CSV (demandé le 2026-09-22 ; les règles : lib/importFiches.js).
+ * Corps : { lignes: [{ _ligne, last_name, first_name, … }], essai }.
+ *
+ * SANS `essai: false`, RIEN NE S'ÉCRIT : une requête qui oublie le drapeau reste un essai. L'import
+ * refait tous les contrôles de l'essai plutôt que de croire l'écran, et chaque fiche créée l'est comme
+ * à la main — mêmes colonnes (champsEcrivables), même trace au journal, pas de compte de connexion.
+ */
+const importLearners = async (req, res) => {
+    const lignes = Array.isArray(req.body?.lignes) ? req.body.lignes : null;
+    const essai = req.body?.essai !== false;
+    if (!lignes || !lignes.length) return res.status(422).json({ error: 'Aucune ligne à importer.' });
+    if (lignes.length > MAX_LIGNES) return res.status(422).json({ error: `Trop de lignes (${lignes.length}) : ${MAX_LIGNES} au plus par import.` });
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        // La date en TEXTE : un objet Date se décalerait d'un jour selon le fuseau, et ne se comparerait plus.
+        const [existants] = await conn.query(
+            "SELECT email, last_name, first_name, DATE_FORMAT(birthday, '%Y-%m-%d') AS birthday FROM learner WHERE organization_id = ?", [orgId]);
+        const [entreprises] = await conn.query('SELECT id, name, siret, zip_code FROM company WHERE organization_id = ?', [orgId]);
+        const resultats = analyserStagiaires(lignes, { existants, entreprises, normaliser: normaliserSaisie, reEmail: RE_EMAIL });
+        if (!essai) {
+            const champs = await champsEcrivables(conn);
+            for (const r of resultats.filter((x) => x.statut === 'a_creer')) {
+                const cols = champs.filter((f) => r.valeurs[f] !== undefined);
+                const id = crypto.randomUUID();
+                try {
+                    await conn.query(
+                        `INSERT INTO learner (id, organization_id, company_id, user_id, ${cols.join(', ')})
+                         VALUES (?, ?, ?, ?, ${cols.map(() => '?').join(', ')})`,
+                        [id, orgId, r.company_id || null, null, ...cols.map((f) => valeurStockee(f, clean(r.valeurs[f]), false))]);
+                    logAudit(req, 'learner.create', 'Learner', id);
+                    r.statut = 'cree';
+                } catch (e) {
+                    // Une ligne qui échoue n'arrête pas les autres : elle est dite, les suivantes passent.
+                    console.error('Import stagiaires, ligne', r.ligne, ':', e.message);
+                    r.statut = 'erreur'; r.motif = 'l\'écriture a échoué';
+                }
+            }
+        }
+        // Les valeurs ne repartent pas : l'écran les a déjà, et une réponse n'a pas à faire l'écho de mille fiches.
+        const sortie = resultats.map(({ valeurs, company_id, ...r }) => r);
+        res.json({ data: { essai, bilan: bilan(sortie), resultats: sortie } });
+    } catch (err) {
+        console.error('Erreur import stagiaires :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
-    deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL,
+    deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL, importLearners,
 };

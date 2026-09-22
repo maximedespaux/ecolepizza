@@ -3091,6 +3091,31 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 }
 /* Au téléphone, les deux choix à la taille du doigt : la pilule de base fait 27 px de haut. */
 @media(max-width:600px){.referent-modes .seg-btn{min-height:40px;padding:8px 14px}}
+/* L'IMPORT CSV (ImportCsv.jsx) : le fichier, la correspondance de ses colonnes, puis le bilan de
+   l'essai et de l'import. Les listes défilent dans la fenêtre : un fichier de mille lignes n'y pousse
+   pas le pied hors de l'écran. */
+.import-csv-aide{margin:0 0 12px}
+.import-csv-boutons{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.import-csv-erreur{margin:8px 0;color:var(--ember1);font-weight:600;font-size:13.5px}
+/* En ligne, pas en flex : un nom de fichier long passe à la ligne sans laisser l'icône seule sur la sienne. */
+.import-csv-nom{margin:4px 0 10px;overflow-wrap:anywhere}
+.import-csv-nom svg{vertical-align:-2px;margin-right:4px}
+.import-csv-colonnes{display:flex;flex-direction:column;border:1px solid var(--border-soft);border-radius:10px;max-height:340px;overflow:auto}
+.import-csv-colonne{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:8px 10px;border-top:1px solid var(--border-soft)}
+.import-csv-colonne:first-child{border-top:0}
+.import-csv-entete{display:flex;flex-direction:column;min-width:0}
+.import-csv-entete b,.import-csv-entete .hint{overflow-wrap:anywhere}
+.import-csv-entete .hint{font-size:12px}
+.import-csv-bilan{margin-top:14px}
+.import-csv-comptes{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.import-csv-lignes{list-style:none;margin:0;padding:0;border:1px solid var(--border-soft);border-radius:10px;max-height:320px;overflow:auto}
+.import-csv-lignes>li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 10px;border-top:1px solid var(--border-soft);font-size:13.5px}
+.import-csv-lignes>li:first-child{border-top:0}
+.import-csv-ligne{color:var(--muted);font-variant-numeric:tabular-nums}
+.import-csv-qui{font-weight:600;overflow-wrap:anywhere}
+.import-csv-motif{color:var(--muted)}
+.import-csv-avert{margin:2px 0 0;padding-left:18px;flex-basis:100%;color:var(--muted);font-size:12.5px}
+@media(max-width:560px){.import-csv-colonne{grid-template-columns:minmax(0,1fr);gap:6px}}
 .gs-price .inp{width:78px;flex:0 0 auto}
 
 /* Fiche technique — curseur de prix double poignée */

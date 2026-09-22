@@ -513,6 +513,13 @@ export function getCompanies() {
 export function createCompany(payload) {
   return request("/companies", { method: "POST", body: JSON.stringify(payload) });
 }
+/* L'IMPORT CSV (2026-09-22) : `essai` par défaut — sans `false` explicite, le serveur n'écrit rien. */
+export function importStagiaires(lignes, essai = true) {
+  return request("/stagiaires/import", { method: "POST", body: JSON.stringify({ lignes, essai }) });
+}
+export function importEntreprises(lignes, essai = true) {
+  return request("/companies/import", { method: "POST", body: JSON.stringify({ lignes, essai }) });
+}
 export function getCompany(id) {
   return request(`/companies/${id}`);
 }

@@ -13,6 +13,7 @@ import { Requis } from "../components/Field.jsx";
 import { useListeBornee } from "../lib/listeBornee.js";
 import { dateFr } from "../lib/format.js";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
+import ImportCsv from "../components/ImportCsv.jsx";
 import { nomReferent, referentAvecCivilite, messageReferentPerdu } from "../lib/referent.js";
 
 /**
@@ -26,6 +27,7 @@ export default function Entreprises() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [importer, setImporter] = useState(false); // l'import CSV (2026-09-22)
   /* TRI DANS LA PAGE, PAS DANS LE TABLEAU. `DataTable` ne trie pas, et il ne le POURRAIT pas
      ici : la liste lui est passée déjà COUPÉE à `max` lignes (quatre cent soixante et onze
      entreprises, on n'en montre qu'une tranche). Trier à l'intérieur ne trierait que la tranche
@@ -70,7 +72,12 @@ export default function Entreprises() {
     <>
       <PageHead eyebrow="Formation" title="Entreprises"
         lead="Les entreprises clientes de l'organisme. Regroupe des stagiaires sous une même entreprise et inscris-les en une fois."
-        actions={<button className="btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Nouvelle entreprise</button>} />
+        actions={
+          <>
+            <button className="btn ghost" onClick={() => setImporter(true)}><Icon name="upload" size={15} /> Importer</button>
+            <button className="btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Nouvelle entreprise</button>
+          </>
+        } />
 
       <StatusMessage status={status} />
 
@@ -168,6 +175,10 @@ export default function Entreprises() {
         )}
       </Card>
 
+      {importer && (
+        <ImportCsv type="entreprises" onClose={() => setImporter(false)}
+          onImporte={(n) => { load(); setStatus({ type: "success", message: `${n} entreprise${n > 1 ? "s" : ""} importée${n > 1 ? "s" : ""}.` }); }} />
+      )}
       {creating && <CreateCompanyModal onClose={() => setCreating(false)}
         onCreated={(id, info) => { setCreating(false); navigate(`/entreprises/${id}`, info ? { state: { info } } : undefined); }}
         onError={(m) => setStatus({ type: "error", message: m })} />}

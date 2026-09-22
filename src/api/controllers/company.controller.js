@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { appliquerReferent, nomReferent } = require('../lib/referentEntreprise.js');
+const { MAX_LIGNES, analyserEntreprises, bilan } = require('../lib/importFiches.js');
 const bcrypt = require('bcrypt');
 const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
@@ -1000,4 +1001,46 @@ const createRepresentativeAccount = async (req, res) => {
     }
 };
 
-module.exports = { getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, normaliserEntreprise, RE_EMAIL_ENT };
+/**
+ * POST /api/companies/import — l'import CSV des entreprises (demandé le 2026-09-22 ; lib/importFiches.js).
+ * Même contrat que celui des stagiaires : sans `essai: false`, rien ne s'écrit ; l'import refait les
+ * contrôles ; chaque fiche est créée comme à la main (colonnes présentes, prénom du référent replié
+ * dans son nom avant la migration 174, trace au journal).
+ */
+const importCompanies = async (req, res) => {
+    const lignes = Array.isArray(req.body?.lignes) ? req.body.lignes : null;
+    const essai = req.body?.essai !== false;
+    if (!lignes || !lignes.length) return res.status(422).json({ error: 'Aucune ligne à importer.' });
+    if (lignes.length > MAX_LIGNES) return res.status(422).json({ error: `Trop de lignes (${lignes.length}) : ${MAX_LIGNES} au plus par import.` });
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [existantes] = await conn.query('SELECT name, siret, zip_code FROM company WHERE organization_id = ?', [orgId]);
+        const resultats = analyserEntreprises(lignes, { existantes, normaliser: normaliserEntreprise, reEmail: RE_EMAIL_ENT, erreurTva });
+        if (!essai) {
+            const colonnes = await colonnesEntreprise(conn);
+            for (const r of resultats.filter((x) => x.statut === 'a_creer')) {
+                const id = crypto.randomUUID();
+                try {
+                    await appliquerReferent(conn, orgId, r.valeurs, colonnes);
+                    const cols = colonnes.filter((k) => r.valeurs[k] !== undefined);
+                    await conn.query(
+                        `INSERT INTO company (id, organization_id, ${cols.join(', ')}) VALUES (?, ?, ${cols.map(() => '?').join(', ')})`,
+                        [id, orgId, ...cols.map((k) => clean(r.valeurs[k]))]);
+                    logAudit(req, 'company.create', 'Company', id);
+                    r.statut = 'cree';
+                } catch (e) {
+                    console.error('Import entreprises, ligne', r.ligne, ':', e.message);
+                    r.statut = 'erreur'; r.motif = 'l\'écriture a échoué';
+                }
+            }
+        }
+        const sortie = resultats.map(({ valeurs, ...r }) => r);
+        res.json({ data: { essai, bilan: bilan(sortie), resultats: sortie } });
+    } catch (err) {
+        console.error('Erreur import entreprises :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, normaliserEntreprise, RE_EMAIL_ENT };
