@@ -376,6 +376,16 @@ export function updateMemo(id, payload) {
 export function deleteMemo(id) {
   return request(`/memos/${id}`, { method: "DELETE" });
 }
+/* Ce que @ et # proposent (migration 177) : six par type au plus, et seulement les rubriques que
+   la personne peut ouvrir. Silencieux : il se rappelle à chaque lettre tapée. */
+export function chercherCiblesMemo(q, genre) {
+  return request(`/memos/cibles?q=${encodeURIComponent(q || "")}&genre=${encodeURIComponent(genre || "")}`, { silent: true });
+}
+/* « J'ai ouvert mon mémo » : les mentions qui me visent cessent d'être neuves. Un GESTE, pas un
+   rafraîchissement — sinon la pastille s'éteindrait toute seule, sans que personne n'ait rien lu. */
+export function marquerMemosVus() {
+  return request("/memos/vus", { method: "POST", silent: true });
+}
 /* Efface MES mémos cochés, jamais ceux des autres. */
 export function clearMemosFaits() {
   return request("/memos/faits", { method: "DELETE" });

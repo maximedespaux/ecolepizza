@@ -46,6 +46,10 @@ const faux = {
             const q = sql.replace(/\s+/g, ' ').trim();
             etat.requetes.push({ q, params });
             if (etat.absente) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
+            /* CE FICHIER DÉCRIT LES RÈGLES DE LA 176, SANS LES LIENS : la table `memo_lien` répond
+               donc absente, et le contrôleur retombe sur la forme d'avant (sa cascade). Les liens et
+               les mentions ont leur propre fichier, `memos-liens.test.js`. */
+            if (/memo_lien/.test(q)) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
             /* LA BASE FACTICE OBÉIT À LA REQUÊTE, elle ne refait pas la règle à sa place : si la
                clause de visibilité disparaissait du code, ce faux la rendrait quand même — et le
                test resterait vert sur un mémo privé devenu visible. */
@@ -154,7 +158,8 @@ test('je vois les miens et ceux que l\'équipe partage, jamais le privé d\'un a
 test('le compteur du bouton ne compte que ce qui est ÉCHU ou dû aujourd\'hui', async () => {
     reinitialiser();
     const r = await appeler(ctrl.countMemos);
-    assert.deepStrictEqual(r.corps.data, { echus: 2, disponible: true });
+    /* `nouveaux` est arrivé avec les mentions (177) : ici, sans la table, il vaut zéro. */
+    assert.deepStrictEqual(r.corps.data, { echus: 2, nouveaux: 0, disponible: true });
     const q = derniere(/SELECT COUNT/).q;
     assert.match(q, /m\.fait_le IS NULL/, 'un mémo fait n\'attend plus rien');
     assert.match(q, /m\.echeance IS NOT NULL AND m\.echeance <= CURDATE\(\)/, 'sans échéance, rien n\'est dû');
@@ -223,7 +228,7 @@ test('sans la 176, l\'écran le DIT et rien ne casse', async () => {
     assert.strictEqual(liste.corps.data, null, 'null : l\'écran sait qu\'il n\'a rien à afficher');
     assert.match(liste.corps.message, /migration 176/);
     const compte = await appeler(ctrl.countMemos);
-    assert.deepStrictEqual(compte.corps.data, { echus: 0, disponible: false }, 'aucun chiffre sur le bouton');
+    assert.deepStrictEqual(compte.corps.data, { echus: 0, nouveaux: 0, disponible: false }, 'aucun chiffre sur le bouton');
     const creation = await appeler(ctrl.createMemo, { body: { texte: 'Rappeler' } });
     assert.strictEqual(creation.code, 503);
     assert.match(creation.corps.message, /migration 176/);

@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1796 tests — 1789 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1810 tests — 1803 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,7 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **une à jouer : la 176 ; la 175 jouée, à constater (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **deux à jouer : 176 et 177 ; la 175 jouée, à constater (relevé le 2026-09-22, au soir)**
 
 **176 est À JOUER** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
 faire, demandés le 2026-09-22). Une table `memo` — auteur, texte, échéance facultative, partage,
@@ -170,6 +170,25 @@ non jouée) », le compteur reste vide et l'écriture répond 503. **Elle se vé
 requête, qui doit rendre 1 :
 `SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo';`
 ⚠️ Son revert SUPPRIME la table : tous les mémos, privés et partagés, faits ou non.
+
+**177 est À JOUER** (`177_memo_liens.sql`, ce qu'un mémo DÉSIGNE : les liens écrits avec @ et #, demandés
+le 2026-09-22 après la 176 — à jouer APRÈS elle, la table s'y accroche par une clé étrangère). `@` trouve
+QUI (stagiaire, entreprise, membre de l'équipe), `#` trouve QUOI (session, partenaire, facture) : la liste
+vit dans `lib/memos.js`, des DEUX côtés, tenue par un test. Le texte du mémo reste ce qu'on a tapé — les
+liens vivent dans `memo_lien`, en puces sous la phrase, ce qui évite d'analyser de la prose à chaque
+affichage. `cible_id` n'a PAS de clé étrangère (elle vise six tables) : d'où `libelle`, le nom figé au
+moment du choix, qui reste lisible si la fiche disparaît. MENTIONNER UN COLLÈGUE est le seul lien qui fait
+plus que lier : le mémo lui devient visible même non partagé, il peut le cocher (pas le supprimer ni le
+partager), et une SECONDE pastille — bleue, à gauche de celle des échéances — compte sur son bouton ce
+qu'il n'a pas encore ouvert. Elle s'éteint à l'écran dès l'ouverture, et le serveur n'est prévenu qu'à la
+FERMETURE : marqué à l'ouverture, « Nouveau pour vous » disparaissait de la liste au moment même où elle
+s'affichait. Chacun ne se voit proposer que les rubriques qu'il peut ouvrir (`nav_access`), et jamais
+lui-même. Sans la migration, les mémos marchent sans liens, et un mémo à liens n'est pas créé à moitié
+(503, et le mémo est retiré). **Elle se vérifie par l'API, sans SQL** : écrire un mémo en choisissant
+quelqu'un derrière @, puis `GET /api/memos` — la ligne porte `liens: [...]`. Ou une requête, qui doit
+rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo_lien';`
+⚠️ Son revert efface tous les liens et toutes les mentions. Les mémos, eux, gardent leur texte.
 
 
 **175 : JOUÉE selon l'utilisateur (2026-09-22, vers 18 h 40), PAS ENCORE CONSTATÉE.** À 18 h 41, le code de
