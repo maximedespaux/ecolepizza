@@ -292,3 +292,30 @@ test("l'organisme ne peut pas écraser ce que le stagiaire a répondu lui-même"
     assert.doesNotMatch(rendu, /lui-même|lui seul/,
         'Aucune forme genrée dans les textes affichés de cet écran.');
 });
+
+test('les messages de la carte de consentement s\'affichent vraiment', () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       LE DÉFAUT, trouvé le 2026-09-22 en remaniant la page d'une session.
+
+       `StatusMessage` ne lit QU'UNE prop : `status`. La carte de consentement l'appelait avec
+       `type=` et `message=` — deux props qu'il ignore — donc `status` valait `undefined`, donc le
+       composant rendait `null`. Les DEUX messages de cette carte n'existaient nulle part :
+       l'erreur de chargement (« Migration 130 non jouée. », qu'un commentaire du fichier promet
+       d'afficher « au lieu d'une carte vide qui se lirait comme “personne n'a consenti” ») et
+       l'échec d'une saisie, qui laissait croire que le refus avait été enregistré.
+
+       RIEN NE POUVAIT LE SIGNALER : des props inconnues ne provoquent aucune erreur, le rendu est
+       simplement vide. Le linteur n'y voit rien non plus — c'est du JSX parfaitement valide.
+       Les trente-neuf autres appels de l'application utilisaient déjà la bonne forme ; celui-ci
+       était le seul, et c'est justement ce qui le rendait invisible. */
+    const composant = lire(path.join(UI, 'components/SessionConsentements.jsx'));
+    const attendue = lire(path.join(UI, 'components/StatusMessage.jsx'));
+    assert.match(attendue, /function StatusMessage\(\{ status \}\)/,
+        'Ce test suppose que StatusMessage ne lit que `status` — si la signature change, le relire.');
+    assert.doesNotMatch(composant, /<StatusMessage[^>]*\b(type|message)=/,
+        'Un message passé en `type=`/`message=` ne s\'affiche PAS : StatusMessage attend `status`.');
+    assert.match(composant, /<StatusMessage status=\{\{ type: "error", message: erreur \}\} \/>/,
+        'L\'erreur de chargement doit être rendue.');
+    assert.match(composant, /<StatusMessage status=\{status\} \/>/,
+        'Et l\'échec d\'une saisie aussi.');
+});

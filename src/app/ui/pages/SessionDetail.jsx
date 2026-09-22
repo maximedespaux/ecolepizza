@@ -497,12 +497,28 @@ function SessionDetail() {
             moment où la question se pose vraiment.
             Réservé à qui peut MODIFIER la session : savoir qui a refusé de céder ses coordonnées
             n'aide en rien à enseigner. Un formateur n'y accède que si l'organisme lui a accordé
-            Sessions en modification — c'est alors ce que le serveur lui accorde aussi. */}
-        {peutModifier && <SessionConsentements sessionId={id} canEdit={peutModifier} />}
-        {/* LE DROIT À L'IMAGE, MÊME CARTE, MÊMES RÈGLES (2026-09-22) : qui a répondu, et la saisie
-            d'une réponse donnée sur papier. Sa réponse s'imprime sur le document « Droit à
-            l'image ». */}
-        {peutModifier && <SessionConsentements sessionId={id} canEdit={peutModifier} finalite="droit_image" />}
+            Sessions en modification — c'est alors ce que le serveur lui accorde aussi.
+
+            LES DEUX CÔTE À CÔTE, MOITIÉ-MOITIÉ (2026-09-22). C'est deux fois la MÊME question —
+            qui a répondu, qui n'a rien dit — posée sur deux sujets, avec la même liste de noms
+            en dessous. Empilées, elles répétaient l'exercice sur toute la hauteur de l'écran et
+            repoussaient les retraits et les intervenants hors de vue ; côte à côte, on lit d'un
+            coup d'œil qui manque à l'appel des deux côtés.
+            `grid cols-2` ET NON DEUX LARGEURS À 50 % : la grille retombe d'elle-même sur une
+            colonne quand l'écran se resserre. À 50 % en dur, deux colonnes de noms tiendraient
+            encore sur un téléphone, chacune réduite à trois lettres.
+            LA CONDITION EST PORTÉE PAR LE CONTENEUR, plus par chaque carte : une grille vide
+            reste un enfant du conteneur au-dessus et lui prendrait un `gap` de 16 px pour rien —
+            un blanc sans raison au milieu de la page, pour qui ne peut pas modifier la session. */}
+        {peutModifier && (
+          <div className="grid cols-2">
+            <SessionConsentements sessionId={id} canEdit={peutModifier} />
+            {/* LE DROIT À L'IMAGE, MÊME CARTE, MÊMES RÈGLES (2026-09-22) : qui a répondu, et la
+                saisie d'une réponse donnée sur papier. Sa réponse s'imprime sur le document
+                « Droit à l'image ». */}
+            <SessionConsentements sessionId={id} canEdit={peutModifier} finalite="droit_image" />
+          </div>
+        )}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={peutModifier} />
       </div>

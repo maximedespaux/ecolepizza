@@ -5035,12 +5035,19 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
 .consent-bloc{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
 .consent-bloc-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
   color:var(--muted);margin-bottom:10px}
-.consent-ligne{display:flex;align-items:flex-start;gap:14px;padding:12px 13px;
+/* TOUTES PRÉFIXÉES PAR `.consent-bloc` (2026-09-22), et c'est une correction. `.consent-ligne`
+   désigne DEUX choses sans rapport : une autorisation du profil (un intitulé, une explication, un
+   interrupteur) et une ligne de suivi sur la page d'une session (un nom, une date, deux boutons).
+   Écrites sur la classe nue, ces règles s'appliquaient aux deux — et comme le bloc de la session
+   vient PLUS BAS dans ce fichier, c'est LUI qui gagnait : le profil perdait son rythme, et la
+   carte de session héritait en retour du `flex-direction:column` ci-dessous, qui sur un téléphone
+   centrait les noms et les boutons au milieu de la ligne. Chacune chez soi. */
+.consent-bloc .consent-ligne{display:flex;align-items:flex-start;gap:14px;padding:12px 13px;
   background:var(--surface2);border-radius:10px}
-.consent-ligne > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.consent-ligne b{font-size:14px}
-.consent-ligne .hint{font-size:12px;line-height:1.45}
-@media (max-width:640px){ .consent-ligne{flex-direction:column} }
+.consent-bloc .consent-ligne > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.consent-bloc .consent-ligne b{font-size:14px}
+.consent-bloc .consent-ligne .hint{font-size:12px;line-height:1.45}
+@media (max-width:640px){ .consent-bloc .consent-ligne{flex-direction:column} }
 
 /* — BANDEAU D'INFORMATION (confidentialité) —
    EN BAS ET NON EN HAUT : un bandeau haut repousse toute la page et se lit comme une alerte. En
@@ -5076,6 +5083,13 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
    RÈGLES DE BASE D'ABORD, MÉDIA-QUERY ENSUITE. Une `@media` écrite AVANT la règle de base est
    écrasée par elle : la cascade départage à spécificité égale par l'ORDRE, pas par la présence
    d'une condition. Le piège a déjà coûté deux passes dans ce fichier. */
+/* LA CARTE EST SON PROPRE CADRE DE RÉFÉRENCE (2026-09-22). Depuis que la transmission aux
+   partenaires et le droit à l'image vont CÔTE À CÔTE sur la page d'une session, cette carte
+   n'occupe plus la largeur de l'écran mais la moitié. Une `@media` réglée sur la fenêtre ne le
+   verrait pas : sur un grand écran, elle laisserait trois éléments serrés dans une colonne de
+   450 px — le nom rogné à « Beauch… » pour loger deux boutons et une date. C'est la place RÉELLE
+   de la carte qui doit décider, comme pour `.dt-wrap`. */
+.consent-carte{container-type:inline-size}
 .consent-groupe{margin:14px 0}
 .consent-groupe-tt{display:flex;align-items:center;gap:7px;margin-bottom:6px;font-size:13px}
 .consent-ligne{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;
@@ -5084,6 +5098,17 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
   text-overflow:ellipsis;white-space:nowrap}
 .consent-quand{font-size:11px;white-space:nowrap}
 .consent-actions{display:flex;gap:5px;flex-shrink:0}
+/* Les actions passent SOUS le nom quand la carte se resserre : à trois éléments sur une ligne,
+   le nom se réduisait à quelques lettres pour laisser la place à deux boutons. Une demi-colonne
+   sur un écran large et un téléphone posent exactement le même problème, d'où la mesure prise
+   sur la carte et non sur la fenêtre.
+   Les sélecteurs sont préfixés par le conteneur : `.consent-ligne` sert AUSSI aux autorisations
+   du profil, qui n'ont ni nom ni actions et vivent en pleine largeur. */
+@container (max-width:520px){
+  .consent-carte .consent-ligne{flex-wrap:wrap}
+  .consent-carte .consent-nom{flex-basis:100%;white-space:normal}
+  .consent-carte .consent-actions{margin-left:auto}
+}
 
 .consent-source{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 12px;
   border:1px dashed var(--border);border-radius:9px;margin:10px 0}
@@ -5117,11 +5142,9 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
   min-width:0}
 
 @media (max-width:640px){
-  /* Les actions passent SOUS le nom : à trois éléments sur une ligne, le nom se réduisait à
-     quelques lettres pour laisser la place à deux boutons. */
-  .consent-ligne{flex-wrap:wrap}
-  .consent-nom{flex-basis:100%;white-space:normal}
-  .consent-actions{margin-left:auto}
+  /* Le repli des lignes de suivi a quitté cette `@media` pour un `@container` plus haut : il
+     dépend de la largeur de la CARTE, pas de celle de la fenêtre. Ne reste ici que l'envoi,
+     qui occupe toute la page sur la fiche d'un partenaire. */
   .consent-envoi-ligne select{min-width:0;flex-basis:100%}
 }
 
