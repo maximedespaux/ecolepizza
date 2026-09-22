@@ -131,17 +131,23 @@ function SessionConsentements({ sessionId, canEdit, finalite = "partenaires" }) 
     </span>
   );
 
+  /* `status={…}` ET NON `type=… message=…` : ce composant n'a jamais lu que la prop `status`, si
+     bien que les deux messages de cette carte ne s'affichaient NULLE PART — elle rendait un cadre
+     vide là où elle promettait de dire « migration 130 non jouée », et une saisie refusée par le
+     serveur ne laissait aucune trace à l'écran. Rien ne le signalait : un composant qui reçoit
+     des props qu'il ignore rend `null` sans bruit, et les trente-neuf autres appels de
+     l'application utilisaient déjà la bonne forme. */
   if (erreur) {
     return (
-      <Card title={titre}>
-        <StatusMessage type="error" message={erreur} />
+      <Card title={titre} className="consent-carte">
+        <StatusMessage status={{ type: "error", message: erreur }} />
       </Card>
     );
   }
   if (!data) return null;
   if (!data.stagiaires.length) {
     return (
-      <Card title={titre}>
+      <Card title={titre} className="consent-carte">
         <p className="hint" style={{ margin: 0 }}>Aucun stagiaire inscrit à cette session.</p>
       </Card>
     );
@@ -220,10 +226,10 @@ function SessionConsentements({ sessionId, canEdit, finalite = "partenaires" }) 
   };
 
   return (
-    <Card title={titre}>
+    <Card title={titre} className="consent-carte">
       <p className="hint" style={{ marginTop: 0 }}>{question.annonce}</p>
 
-      {status && <StatusMessage type={status.type} message={status.message} />}
+      <StatusMessage status={status} />
 
       {canEdit && (
         <div className="consent-source">

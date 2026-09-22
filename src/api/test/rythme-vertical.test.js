@@ -197,3 +197,79 @@ test("une date n'est pas un montant : elle ne doit pas être masquée", () => {
         'La date du journal doit utiliser `.chiffres`…');
     assert.doesNotMatch(comp, /className="[^"]*\btnum\b[^"]*">\{[^}]*j\.sent_at/, '…et non `.tnum`.');
 });
+
+test('les deux cartes de consentement partagent une ligne, et se replient d\'elles-mêmes', () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       CE QUE L'ÉCOLE A DEMANDÉ (2026-09-22) : « Transmission aux partenaires » et « Droit à
+       l'image » côte à côte, moitié-moitié. Deux fois la même question sur deux sujets, avec la
+       même liste de noms dessous : empilées, elles tenaient deux écrans à elles seules.
+
+       TROIS FAÇONS DE RATER CE CÔTE À CÔTE, et ce test les refuse toutes les trois.
+
+       1. DEUX LARGEURS À 50 % EN DUR. Elles tiendraient encore sur un téléphone, chaque colonne
+          réduite à trois lettres de nom. `grid cols-2` retombe à une colonne quand l'écran se
+          resserre — c'est la classe de la maison, et elle porte déjà ce repli.
+       2. LA CONDITION LAISSÉE SUR CHAQUE CARTE. Le conteneur se rendrait quand même, vide, et
+          prendrait un `gap` de 16 px au conteneur du dessus : un blanc sans raison au milieu de
+          la page pour qui ne peut pas modifier la session.
+       3. LE REPLI DES LIGNES RÉGLÉ SUR LA FENÊTRE. Une `@media` ne voit pas qu'une carte n'a
+          plus que la MOITIÉ de la page : sur un grand écran, le nom se ferait rogner pour loger
+          la date et deux boutons. La mesure doit porter sur la carte, d'où le `@container`. */
+    const page = fs.readFileSync(path.join(UI, 'pages/SessionDetail.jsx'), 'utf8');
+
+    /* On part de la PREMIÈRE carte et on remonte : la page ouvre déjà une autre grille à deux
+       colonnes plus haut (l'inscription), et chercher la première du fichier tomberait dessus. */
+    const c = page.indexOf('<SessionConsentements');
+    assert.ok(c > 0, 'La page doit porter la carte des consentements.');
+    const ouverture = page.lastIndexOf('<div className="grid cols-2">', c);
+    assert.ok(ouverture > 0, 'Les deux consentements doivent partager une grille à deux colonnes.');
+    const grille = page.slice(ouverture, page.indexOf('</div>', c));
+    assert.equal((grille.match(/<SessionConsentements/g) || []).length, 2,
+        'Les DEUX cartes vivent dans cette grille — sinon elles ne sont pas côte à côte.');
+    assert.doesNotMatch(page, /\{peutModifier && <SessionConsentements/,
+        'La condition se porte sur le CONTENEUR : une grille vide prendrait un `gap` pour rien.');
+    assert.match(CSS, /\.cols-2\{grid-template-columns:minmax\(0,1fr\)\}/,
+        '`.cols-2` doit retomber à une colonne quand la place manque.');
+
+    /* LE REPLI DES LIGNES SE MESURE SUR LA CARTE. */
+    assert.match(CSS, /\.consent-carte\{container-type:inline-size\}/,
+        'La carte doit être son propre cadre de référence.');
+    const cq = CSS.match(/@container \(max-width:520px\)\{([\s\S]*?)\n\}/);
+    assert.ok(cq, 'Le repli des lignes de suivi doit vivre dans un `@container`.');
+    assert.match(cq[1], /\.consent-carte \.consent-nom\{flex-basis:100%/,
+        'Le nom reprend toute la ligne dès que la carte se resserre.');
+    /* ET PLUS DANS LA `@media` : deux règles concurrentes sur la même ligne, l'une réglée sur la
+       fenêtre et l'autre sur la carte, finiraient par se contredire. */
+    const media = CSS.match(/@media \(max-width:640px\)\{([\s\S]*?)\n\}/g) || [];
+    for (const m of media) {
+        assert.doesNotMatch(m, /\n\s*\.consent-nom\{/,
+            'Le repli du nom ne doit plus dépendre de la largeur de la FENÊTRE.');
+    }
+
+    /* `.consent-ligne` SERT AUSSI AUX AUTORISATIONS DU PROFIL, qui n'ont ni nom ni boutons et
+       occupent toute la largeur : le repli ne doit pas les atteindre, d'où le préfixe. */
+    assert.doesNotMatch(cq[1], /\n\s*\.consent-ligne\{/,
+        'Les règles du repli sont préfixées par la carte, pas posées sur la classe nue.');
+});
+
+test('`.consent-ligne` ne mélange plus le profil et la page d\'une session', () => {
+    /* ─────────────────────────────────────────────────────────────────────────────────────────
+       DEUX ÉCRANS SANS RAPPORT PORTAIENT LA MÊME CLASSE, et le second écrasait le premier.
+
+       `.consent-ligne` désigne une autorisation dans le profil (intitulé, explication,
+       interrupteur) ET une ligne de suivi sur la page d'une session (nom, date, deux boutons).
+       Les deux séries de règles étaient écrites sur la classe nue ; celle de la session venant
+       PLUS BAS dans la feuille, elle gagnait partout. Le profil perdait le rythme qu'il décrit
+       (12 px de garniture, alignement en haut), et la carte de session héritait en retour du
+       `flex-direction:column` du profil : sur un téléphone, les noms et les boutons se
+       retrouvaient CENTRÉS au milieu de la ligne — constaté au banc le 2026-09-22.
+
+       Ce n'est pas une question de goût : deux composants qui ne se connaissent pas ne doivent
+       pas pouvoir se déplacer l'un l'autre en changeant une ligne de CSS. */
+    assert.match(CSS, /\.consent-bloc \.consent-ligne\{display:flex;align-items:flex-start/,
+        'Les lignes du profil se nomment par leur bloc.');
+    assert.doesNotMatch(CSS, /\n\.consent-ligne\{display:flex;align-items:flex-start/,
+        'Plus aucune règle du profil sur la classe nue.');
+    assert.doesNotMatch(CSS, /\{ ?\.consent-ligne\{flex-direction:column\}/,
+        'Le passage en colonne du profil ne doit pas atteindre la carte de session.');
+});
