@@ -531,6 +531,8 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates
    aucun dossier à lire et sortiraient vides. */
 const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
+/* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens). */
+const STAGIAIRE_NOMMES = ['D_Naissance'];
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
@@ -555,6 +557,14 @@ const getTokens = async (req, res) => {
             }
         }
         const groups = await fieldTokenGroups(orgId);
+        /* LA DATE DE NAISSANCE N'Y ÉTAIT PAS — signalé par l'école le 2026-09-22. Le groupe
+           « Stagiaire » se construit depuis les Champs documents, et ceux-ci écartent les colonnes
+           DATE (`sqlToType`, lib/conditions.js) : {D_Naissance} se remplissait si on le TAPAIT, et
+           restait introuvable dans la palette. Le jeton nommé rejoint donc le groupe où l'on cherche
+           une donnée du stagiaire, déjà mise en forme (JJ/MM/AAAA) par `resolveTokens`. */
+        let stagiaire = groups.find((g) => g.group === 'Stagiaire');
+        if (!stagiaire) { stagiaire = { group: 'Stagiaire', tokens: [] }; groups.push(stagiaire); }
+        stagiaire.tokens.push(...catalogGroup('Stagiaire').tokens.filter((t) => STAGIAIRE_NOMMES.includes(t.key)));
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
