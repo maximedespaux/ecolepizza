@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1778 tests — 1771 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1796 tests — 1789 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,23 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **la 175 est jouée, À CONSTATER (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **une à jouer : la 176 ; la 175 jouée, à constater (relevé le 2026-09-22, au soir)**
+
+**176 est À JOUER** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
+faire, demandés le 2026-09-22). Une table `memo` — auteur, texte, échéance facultative, partage,
+`fait_le`/`fait_par`. Un mémo est PRIVÉ ; son auteur peut le partager, et alors tout le personnel le
+voit et peut le cocher, mais lui seul le supprime ou le reprend (le privé d'un autre répond 404, jamais
+403 : un 403 dirait qu'il existe). Le bouton de la barre du haut, à côté de la cloche, compte les mémos
+ÉCHUS ou dus AUJOURD'HUI — pas les lignes de la liste, un compteur qui ne descend jamais cesse d'être
+lu — et la même liste s'affiche sur le tableau de bord. AUCUNE TRACE AU JOURNAL D'AUDIT, exprès : il
+alimente l'« Activité récente » que tout le bureau lit, et les pense-bêtes privés y défileraient.
+Sans la migration, rien ne casse : la liste et la carte disent « pas encore disponibles (migration 176
+non jouée) », le compteur reste vide et l'écriture répond 503. **Elle se vérifie par l'API, sans SQL** :
+écrire un mémo depuis le bouton, puis `GET /api/memos` rend une liste (et non `data: null`). Ou une
+requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo';`
+⚠️ Son revert SUPPRIME la table : tous les mémos, privés et partagés, faits ou non.
+
 
 **175 : JOUÉE selon l'utilisateur (2026-09-22, vers 18 h 40), PAS ENCORE CONSTATÉE.** À 18 h 41, le code de
 la PR #168 était en ligne (fusionnée à 18 h 39), mais aucun modèle n'avait été enregistré depuis : le

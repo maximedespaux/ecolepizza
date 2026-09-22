@@ -9,8 +9,9 @@ import { playNotif, isNotifMuted, setNotifMuted } from "../lib/notifSound.js";
 import { Icon } from "./Icon.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
 import SpaceSwitcher from "./SpaceSwitcher.jsx";
+import MemoBouton from "./MemoBouton.jsx";
 
-/** Barre supérieure : fil d'Ariane, notifications, thème, déconnexion. */
+/** Barre supérieure : fil d'Ariane, mémos, notifications, thème, déconnexion. */
 function Topbar({ onMenu }) {
   const { logout } = useContext(UserContext);
   const { pathname } = useLocation();
@@ -105,6 +106,10 @@ function Topbar({ onMenu }) {
       >
         <Icon name={muted ? "volume-off" : "volume"} size={17} />
       </button>
+
+      {/* LE MÉMO À CÔTÉ DE LA CLOCHE : les deux disent « ce qui t'attend ». La cloche porte ce que
+          l'application a remarqué, le mémo ce qu'on s'est noté soi-même. */}
+      <MemoBouton />
 
       <button
         className={"icon-btn bell" + (ringing ? " ring" : "")}
