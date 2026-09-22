@@ -20,7 +20,9 @@
  *     colonne déclarée dans schema.sql refuserait, comme MariaDB en mode strict ;
  *   · avant la migration, la trace est gardée SANS son identifiant plutôt que perdue, et la
  *     console le dit UNE fois, pas à chaque appel ;
- *   · le revert efface ce qu'un uuid ne peut pas contenir AVANT de rétrécir la colonne.
+ *   · le revert efface ce qu'un uuid ne peut pas contenir AVANT de rétrécir la colonne ;
+ *   · aucun appel ne passe un OBJET à logAudit : les trois des catégories de partenaires le
+ *     faisaient, et le journal y lisait « [object Object] », sans entité ni identifiant.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -74,6 +76,7 @@ function nouvelleBase(o = {}) {
     return {
         typeEntityId: typeColonne('audit_log', 'entity_id'),
         modeles: [],     // lignes document_template déjà en base
+        categories: [],  // lignes partner_category déjà en base
         tentatives: [],  // paramètres de CHAQUE INSERT INTO audit_log, réussi ou non
         journal: [],     // les lignes réellement écrites
         panne: null,     // une erreur que l'INSERT renvoie quoi qu'on lui donne
@@ -91,6 +94,11 @@ const faux = {
             if (/^SELECT slug FROM document_template WHERE organization_id = \? AND slug IN \(\?\)/.test(q)) {
                 return [base.modeles.filter((m) => m.organization_id === params[0] && params[1].includes(m.slug))];
             }
+            if (/^SELECT COALESCE\(MAX\(sort_order\), 0\) AS n FROM partner_category/.test(q)) return [[{ n: 0 }]];
+            if (/^SELECT id, code, label FROM partner_category WHERE id = \? AND organization_id = \?/.test(q)) {
+                return [base.categories.filter((c) => c.id === params[0] && c.organization_id === params[1])];
+            }
+            if (/^SELECT COUNT\(\*\) AS n FROM partner WHERE organization_id = \? AND category = \?/.test(q)) return [[{ n: 0 }]];
             if (/^(INSERT|UPDATE|DELETE)/.test(q)) return [{ affectedRows: 1 }];
             return [[]];
         },
@@ -113,6 +121,7 @@ require.cache[cheminDb] = { id: cheminDb, filename: cheminDb, loaded: true, expo
 
 const tpl = require('../controllers/template.controller.js');
 const roles = require('../controllers/accessProfile.controller.js');
+const partenaires = require('../controllers/partner.controller.js');
 const { lienDeLEntite } = require('../lib/activite.js');
 const { MODELES: MODELES_JURY } = require('../lib/modelesJury.js');
 
@@ -130,6 +139,29 @@ function reponse() {
 }
 /** Ce que le journal a retenu : action, entité, identifiant. */
 const traces = () => base.journal.map((l) => [l.action, l.entity, l.entity_id]);
+
+/** Les sources de l'API (hors tests et dépendances), chemin relatif → contenu. */
+function sourcesApi() {
+    const API = path.join(__dirname, '..');
+    const out = new Map();
+    const parcourir = (dir) => {
+        for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (['node_modules', 'test', 'uploads'].includes(f.name)) continue;
+            const p = path.join(dir, f.name);
+            if (f.isDirectory()) parcourir(p);
+            else if (f.name.endsWith('.js')) out.set(path.relative(API, p), fs.readFileSync(p, 'utf8'));
+        }
+    };
+    parcourir(API);
+    return out;
+}
+/* Sans commentaires : ils CITENT la forme fautive pour dire de ne pas l'écrire. Aucune chaîne de
+   l'API ne contient « /* » (vérifié le 2026-09-22), et un « // » ne compte que précédé d'un blanc
+   — « https:// » reste donc intact. Les sauts de ligne restent : le numéro de ligne d'un fautif
+   doit être le vrai. */
+const sansCommentaires = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '))
+    .replace(/(^|\s)\/\/.*$/gm, '$1');
 
 /** Un `lib/audit.js` NEUF : ce qu'il a déjà signalé vit dans le module, pour tout le processus. */
 function auditNeuf() {
@@ -172,19 +204,7 @@ test('qui lit entity_id, et pourquoi un slug n\'y casse rien', () => {
        aucun écran qui l'affiche. Le journal (`GET /api/audit`) et la cloche la renvoient telle
        quelle. Un fichier de plus qui la nomme est un lecteur de plus : qu'il sache qu'elle ne
        contient pas que des UUID. */
-    const API = path.join(__dirname, '..');
-    const lecteurs = [];
-    const parcourir = (dir) => {
-        for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (['node_modules', 'test', 'uploads'].includes(f.name)) continue;
-            const p = path.join(dir, f.name);
-            if (f.isDirectory()) parcourir(p);
-            else if (f.name.endsWith('.js') && /\bentity_id\b/.test(fs.readFileSync(p, 'utf8'))) {
-                lecteurs.push(path.relative(API, p));
-            }
-        }
-    };
-    parcourir(API);
+    const lecteurs = [...sourcesApi()].filter(([, src]) => /\bentity_id\b/.test(src)).map(([rel]) => rel);
     assert.deepStrictEqual(lecteurs.sort(), [
         'controllers/audit.controller.js', 'controllers/notification.controller.js',
         'lib/activite.js', 'lib/audit.js',
@@ -326,6 +346,50 @@ test('une autre panne : pas de second essai, une ligne de console, et jamais d\'
         await assert.doesNotReject(logAudit(undefined, 'template.save'));
         await assert.doesNotReject(logAudit({}, 'template.save'));
     });
+});
+
+// ── Les appels : quatre arguments à plat ────────────────────────────────────────────────────
+
+test('logAudit reçoit ses arguments À PLAT : jamais un objet pour l\'action ni pour l\'identifiant', () => {
+    /* `logAudit(req, { action, entity, entityId })` passe sans la moindre erreur : la colonne
+       `action` reçoit « [object Object] », l'entité et l'identifiant restent vides. Les tests de
+       libellés lisent les codes par des motifs `logAudit(req, '…'` : un appel en objet leur était
+       INVISIBLE — c'est ainsi que les trois des catégories de partenaires ont échappé à tout
+       contrôle, après que le consentement de l'espace stagiaire eut été corrigé du même défaut. */
+    let appels = 0;
+    const fautifs = [];
+    for (const [rel, brut] of sourcesApi()) {
+        const src = sansCommentaires(brut);
+        const ligne = (i) => `${rel}:${src.slice(0, i).split('\n').length}`;
+        for (const m of src.matchAll(/logAudit\(\s*req\s*,\s*(\S)/g)) {
+            appels += 1;
+            if (m[1] === '{' || m[1] === '[') fautifs.push(`${ligne(m.index)} : l'action est un objet`);
+        }
+        for (const m of src.matchAll(/logAudit\(\s*req\s*,[^,]+,[^,]+,\s*[{[]/g)) {
+            fautifs.push(`${ligne(m.index)} : l'identifiant est un objet`);
+        }
+    }
+    // Le compte protège le test lui-même : un motif qui ne trouverait plus rien passerait au vert.
+    assert.ok(appels >= 139, `appels de logAudit trouvés : ${appels}`);
+    assert.deepStrictEqual(fautifs, []);
+});
+
+test('les catégories de partenaires : le journal dit ce qui s\'est passé, et sur quoi', async () => {
+    base = nouvelleBase();
+    const cree = reponse();
+    await console_(() => partenaires.createPartnerCategory(requete({ body: { label: 'Meuniers' } }), cree));
+    assert.strictEqual(cree.code, 201);
+    const id = cree.corps.data.id;
+    assert.match(id, UUID);
+
+    base.categories.push({ id, organization_id: 'o1', code: 'MEUNIERS', label: 'Meuniers' });
+    await console_(() => partenaires.updatePartnerCategory(requete({ params: { cid: id }, body: { label: 'Minoteries' } }), reponse()));
+    await console_(() => partenaires.deletePartnerCategory(requete({ params: { cid: id } }), reponse()));
+    assert.deepStrictEqual(traces(), [
+        ['CREATE', 'partner_category', id],
+        ['UPDATE', 'partner_category', id],
+        ['DELETE', 'partner_category', id],
+    ]);
 });
 
 // ── La migration et son revert ──────────────────────────────────────────────────────────────

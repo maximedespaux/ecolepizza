@@ -48,6 +48,7 @@ const SECTION_PAR_ENTITE = {
        entité pointe la rubrique où se fait le GESTE, pas celle où l'on consulte le résultat. */
     EvaluationGrille: '/formations', EvaluationNote: '/sessions', EvaluationVerdict: '/sessions', ExamSession: '/sessions',
     Partner: '/partenaires', PartnerContribution: '/partenaires', PartnerProduct: '/partenaires',
+    partner_category: '/partenaires',
     Opco: '/opcos', Organization: '/reglages', Archive: '/suivi',
     CommunityPost: '/communaute', CommunityAnswer: '/communaute', Recipe: '/communaute',
     AccessProfile: '/roles', User: '/equipe',
@@ -90,6 +91,8 @@ const ENTITES_REGLAGE = new Set([
     // Catalogue partenaire et stock : des tarifs et des références. Une CONTRIBUTION, en
     // revanche, est de l'argent qui arrive — elle reste un événement.
     'Partner', 'PartnerProduct', 'InventoryItem',
+    // Les catégories qui rangent l'annuaire des partenaires : un classement, pas un événement.
+    'partner_category',
     // Paramétrage de la maison : facturation, comptabilité, rôles, équipe, financeurs.
     'BillingProfile', 'AccountingSettings', 'Opco', 'Organization', 'AccessProfile', 'User',
     // Administration de Pizza Quest.

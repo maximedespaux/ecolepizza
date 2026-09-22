@@ -301,6 +301,7 @@ const ENTITY_LABEL = {
     Partner: ['Partenaire', 'm'],
     PartnerContribution: ['Financement', 'm'],
     PartnerProduct: ['Produit partenaire', 'm'],
+    partner_category: ['Catégorie de partenaire', 'f'],
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],

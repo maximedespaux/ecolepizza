@@ -38,6 +38,11 @@ function identifiantRefuse(err) {
 /**
  * Journalise une action sensible (best-effort, non bloquant).
  *
+ * QUATRE ARGUMENTS À PLAT, jamais un objet : `logAudit(req, { action, entity, entityId })`
+ * écrit « [object Object] » dans la colonne `action` et laisse l'entité vide. C'est arrivé deux
+ * fois (le consentement de l'espace stagiaire, puis les catégories de partenaires), et
+ * `audit-identifiant-entite.test.js` le refuse désormais.
+ *
  * L'identifiant n'est pas toujours un UUID : un modèle de document se désigne par son slug, un
  * rôle système par son nom. La colonne prend tout ce qui tient en 64 caractères (migration 175).
  *
