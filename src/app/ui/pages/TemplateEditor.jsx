@@ -100,6 +100,10 @@ function TemplateEditor() {
   const navigate = useNavigate();
   const [catalog, setCatalog] = useState([]);
   const [status, setStatus] = useState(null);
+  /* UN MODÈLE PROPOSÉ, PAS ENCORE ENREGISTRÉ (le « Droit à l'image », sur une page blanche) : le
+     serveur le dit, l'écran le montre jusqu'au premier enregistrement. Sans ce mot, on croirait le
+     modèle déjà en service alors que la liste des modèles dit toujours « à créer ». */
+  const [propose, setPropose] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -162,6 +166,7 @@ function TemplateEditor() {
         registerTokenGroups(cat.data || []);
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
         const d = res.data || {};
+        setPropose(d.propose || null);
         if (body) body.commands.setContent(d.body_html || "<p></p>");
         if (header) header.commands.setContent(d.header_html || "");
         if (footer) footer.commands.setContent(d.footer_html || "");
@@ -343,6 +348,7 @@ function TemplateEditor() {
         layout: { bleed, noLetterhead },
       });
       setStatus({ type: "success", message: "Modèle enregistré." });
+      setPropose(null);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
   }
@@ -364,6 +370,12 @@ function TemplateEditor() {
         </div>
 
         <StatusMessage status={status} />
+        {propose && (
+          <p className="tpl-propose" role="note">
+            <Icon name="file-text" size={15} aria-hidden="true" />
+            <span><b>Modèle proposé, pas encore enregistré.</b> {propose}</span>
+          </p>
+        )}
 
         {!showPreview && <RichToolbar editor={target} />}
       </div>

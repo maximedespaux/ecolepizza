@@ -13,6 +13,8 @@ const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
 const { identiteExemple } = require('../lib/echantillons.js');
 const { MODELES: MODELES_JURY } = require('../lib/modelesJury.js');
+// Le « Droit à l'image » proposé à une page blanche (jamais écrit sans enregistrement).
+const { MODELES_PROPOSES } = require('../lib/modelesProposes.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -841,7 +843,11 @@ const getTemplateBody = async (req, res) => {
         /* Les signataires du modèle : l'éditeur n'offre « Signature de l'intervenant » que si
            « Externe » est coché — le seul cas où quelqu'un viendra la remplir. */
         const signers = etape.slug ? stepSigners(etape) : [];
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, signers, body_html: '', header_html: '', footer_html: '', layout: null } });
+        /* PAGE BLANCHE : un modèle PROPOSÉ s'il en existe un pour ce slug (lib/modelesProposes.js) —
+           le « Droit à l'image », ses cases remplacées par celles qui se cochent. Rien n'est écrit :
+           `propose` le dit à l'éditeur, et c'est l'enregistrement qui le fera exister. */
+        const propose = content ? null : MODELES_PROPOSES[req.params.slug] || null;
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, signers, body_html: propose ? propose.body : '', header_html: '', footer_html: '', layout: null, propose: propose ? propose.note : null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
             return res.json({ data: { slug: req.params.slug, kind: 'docx', doc_type: docType, company_level: companyLevel, signers, body_html: '', header_html: '', footer_html: '', layout: null } });
