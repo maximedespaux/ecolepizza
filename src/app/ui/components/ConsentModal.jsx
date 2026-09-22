@@ -26,37 +26,54 @@ import { dateHeure } from "../lib/format.js";
  * « Je refuse » en gris pâle est un choix guidé, et un choix guidé n'est pas libre. Le refus doit
  * être aussi facile à cliquer que l'accord.
  */
-const CLE_RELANCES = "impasto.consent.relances";
 const MAX_RELANCES = 3;
 
-const relances = () => {
-  try { return Number(localStorage.getItem(CLE_RELANCES)) || 0; } catch { return 0; }
+/* UN COMPTEUR PAR QUESTION (2026-09-22, avec le droit à l'image). Un compteur unique aurait fait
+   taire la question des photos chez quiconque avait fermé trois fois celle des partenaires — une
+   question qu'on ne lui avait pourtant jamais posée. Les partenaires gardent la clé d'origine : les
+   compteurs déjà posés restent justes. */
+const CLE_RELANCES_DE = (cle) => `impasto.consent.relances${cle === "partenaires" ? "" : "." + cle}`;
+
+const relances = (cle) => {
+  try { return Number(localStorage.getItem(CLE_RELANCES_DE(cle))) || 0; } catch { return 0; }
 };
-const compterUneRelance = () => {
-  try { localStorage.setItem(CLE_RELANCES, String(relances() + 1)); } catch { /* ignore */ }
+const compterUneRelance = (cle) => {
+  try { localStorage.setItem(CLE_RELANCES_DE(cle), String(relances(cle) + 1)); } catch { /* ignore */ }
 };
+
+/**
+ * LA PROCHAINE QUESTION À POSER, parmi celles qu'on n'a ni déjà répondues dans cette fenêtre, ni
+ * cessé de poser.
+ *
+ * DEUX DÉCLENCHEURS, CHACUN SOUS SON COMPTEUR DE RELANCES.
+ *  · JAMAIS DEMANDÉ (`accorde === null`) — la première fenêtre.
+ *  · LISTE ÉLARGIE (`ajoutes.length`) — l'école transmet désormais des informations que cette
+ *    personne-là n'a pas vues quand elle a répondu. Son accord ne les couvre pas : tant qu'elle n'a
+ *    pas revu la question, ces colonnes sortent VIDES de l'export.
+ * Un REFUS ne déclenche ni l'un ni l'autre : le serveur ne remonte `ajoutes` que pour un accord
+ * (art. 4(11) — reposer la question à qui a dit non le pousse à accepter pour avoir la paix).
+ * Élargir la liste ne rouvre donc pas un dossier clos.
+ */
+function prochaine(toutes, repondues = []) {
+  const liste = toutes.filter((f) => !repondues.includes(f.cle) && relances(f.cle) < MAX_RELANCES);
+  return liste.find((f) => f.accorde === null) || liste.find((f) => f.ajoutes?.length) || null;
+}
 
 export default function ConsentModal() {
   const [aDemander, setADemander] = useState(null);   // la finalité à poser, ou null
+  const [toutes, setToutes] = useState([]);           // l'état de chaque finalité, pour enchaîner
+  const [repondues, setRepondues] = useState([]);     // celles répondues dans cette fenêtre
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState(null);
 
   useEffect(() => {
-    if (relances() >= MAX_RELANCES) return;
     getMyConsents().then((r) => {
       // `null` : migration non jouée, ou compte sans fiche stagiaire. Rien à demander.
       const liste = r?.data;
       if (!Array.isArray(liste)) return;
-      /* DEUX DÉCLENCHEURS, ET UN SEUL COMPTEUR DE RELANCES.
-         · JAMAIS DEMANDÉ (`accorde === null`) — la première fenêtre.
-         · LISTE ÉLARGIE (`ajoutes.length`) — l'école transmet désormais des informations que
-           cette personne-là n'a pas vues quand elle a répondu. Son accord ne les couvre pas :
-           tant qu'elle n'a pas revu la question, ces colonnes sortent VIDES de l'export.
-         Un REFUS ne déclenche ni l'un ni l'autre : le serveur ne remonte `ajoutes` que pour un
-         accord (art. 4(11) — reposer la question à qui a dit non le pousse à accepter pour avoir
-         la paix). Élargir la liste ne rouvre donc pas un dossier clos. */
-      const premiere = liste.find((f) => f.accorde === null) || liste.find((f) => f.ajoutes?.length);
-      if (premiere) { setADemander(premiere); compterUneRelance(); }
+      setToutes(liste);
+      const premiere = prochaine(liste);
+      if (premiere) { setADemander(premiere); compterUneRelance(premiere.cle); }
     }).catch(() => { /* silencieux : une demande de consentement ne doit pas casser l'écran */ });
   }, []);
 
@@ -64,11 +81,19 @@ export default function ConsentModal() {
 
   const maj = aDemander.accorde === true && aDemander.ajoutes?.length > 0;
 
+  /* DEUX QUESTIONS SE SUIVENT DANS LA MÊME FENÊTRE (partenaires, puis photos) : répondre à la
+     première présente la seconde, au lieu de la renvoyer à la prochaine connexion — où elle
+     reviendrait par surprise, déjà comptée comme une relance. Fermer arrête tout, sans rien écrire. */
   const repondre = async (accorde, conserver) => {
     setBusy(true); setErreur(null);
     try {
       await setMyConsent(aDemander.cle, accorde, conserver);
-      setADemander(null);
+      const faites = [...repondues, aDemander.cle];
+      const suivante = prochaine(toutes, faites);
+      setRepondues(faites);
+      if (suivante) compterUneRelance(suivante.cle);
+      setADemander(suivante);
+      setBusy(false);
     } catch (e) { setErreur(e.message); setBusy(false); }
   };
 
@@ -101,7 +126,9 @@ export default function ConsentModal() {
           <p className="consent-texte">{aDemander.formulation}</p>
 
           <div className="consent-dest">
-            <b>Qui recevra ces informations</b>
+            {/* « Qui recevra ces informations » pour des partenaires, « Où ces photos peuvent
+                paraître » pour des photos : c'est le serveur qui le dit, avec la question. */}
+            <b>{aDemander.titreDestinataires || "Qui recevra ces informations"}</b>
             <span>{aDemander.destinataires}</span>
           </div>
 

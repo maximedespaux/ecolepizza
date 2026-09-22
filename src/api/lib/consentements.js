@@ -36,6 +36,36 @@ const FINALITES = {
            jouée. L'école peut désormais restreindre cette liste depuis ses réglages ; sans la
            colonne, on retombe ici, c'est-à-dire sur ce qui était annoncé jusqu'alors. */
         champsParDefaut: ['nom', 'prenom', 'email', 'telephone', 'formation', 'dates_session'],
+        /* Le titre de l'encadré qui suit la phrase. Pour des partenaires, ce sont des DESTINATAIRES ;
+           pour des photos, des supports : le même encadré ne peut pas porter le même mot. */
+        titreDestinataires: 'Qui recevra ces informations',
+    },
+    /* LE DROIT À L'IMAGE (demandé le 2026-09-22). Le document « Droit à l'image » portait deux cases,
+       « □ Autorise □ N'autorise pas », que personne ne pouvait cocher en ligne : le PDF signé ne
+       disait pas ce que le stagiaire avait choisi. La réponse vit désormais ici, datée avec sa
+       phrase, et le document l'imprime par ses jetons ({Case photos oui}…, cf. `valeursJetons`).
+
+       UNE FINALITÉ À PART, ET NON UNE CASE DE PLUS SUR LES PARTENAIRES. Le document de l'école
+       mettait photos et transmission aux partenaires sous une seule réponse ; l'école a choisi de
+       les séparer (2026-09-22). Accepter l'un ne vaut pas accepter l'autre, et chacun se retire
+       seul.
+
+       SA PHRASE EST FIXE, à la différence de celle des partenaires qui se dérive des champs choisis :
+       rien ici ne varie d'une école à l'autre. Elle reprend les supports du document de l'école —
+       site internet, réseaux sociaux, lettres d'information — sans les nommer un à un : le document,
+       lui, peut le faire. Reformuler ici ne change que les réponses À VENIR, chaque ligne du registre
+       gardant la sienne. */
+    droit_image: {
+        cle: 'droit_image',
+        titre: 'Diffuser des photos de moi prises pendant la formation',
+        formulation: 'J\'autorise l\'école à diffuser les photographies prises au cours de la formation '
+            + 'sur lesquelles j\'apparais, afin de faire connaître ses formations : sur son site internet, '
+            + 'sur ses réseaux sociaux et dans ses lettres d\'information envoyées par e-mail ou par SMS. '
+            + 'Je peux revenir sur ce choix à tout moment depuis mon profil. Refuser n\'a aucune '
+            + 'conséquence sur ma formation, mon inscription ou mon accès aux services de l\'école.',
+        destinataires: 'Le site internet de l\'école, ses réseaux sociaux et ses lettres d\'information '
+            + '(e-mail ou SMS).',
+        titreDestinataires: 'Où ces photos peuvent paraître',
     },
 };
 
@@ -137,6 +167,19 @@ function champsValides(liste) {
 }
 
 /**
+ * « mon nom, mon prénom et mon adresse e-mail » — les champs dits comme la phrase les dit, dans
+ * l'ordre du catalogue ; '' s'il n'y en a aucun. La phrase ET le document « Droit à l'image »
+ * ({Données partenaires}) l'emploient : le papier signé annonce donc exactement ce que le
+ * stagiaire a lu, et non la liste que le modèle aurait recopiée un jour à la main.
+ */
+function listeAnnoncee(champs) {
+    const liste = champsValides(champs).map((c) => CHAMPS_TRANSMISSIBLES[c].annonce);
+    return liste.length === 0 ? ''
+        : liste.length === 1 ? liste[0]
+            : `${liste.slice(0, -1).join(', ')} et ${liste[liste.length - 1]}`;
+}
+
+/**
  * LA PHRASE SOUMISE À LA PERSONNE, CONSTRUITE DEPUIS LES CHAMPS — jamais écrite à côté.
  *
  * C'est le point qui rend l'ensemble tenable. Tant que le texte était figé et la liste de champs
@@ -149,14 +192,10 @@ function champsValides(liste) {
  * c'est exactement ce qui permet de savoir à quoi chacun a dit oui.
  */
 function formulationPour(champs) {
-    const retenus = champsValides(champs);
-    const liste = retenus.map((c) => CHAMPS_TRANSMISSIBLES[c].annonce);
     /* AUCUN CHAMP COCHÉ : la phrase ne doit pas devenir « J'accepte que l'école communique à ses
        partenaires », qui ne veut rien dire. On l'énonce, plutôt que de produire un texte bancal
        qu'on ferait ensuite signer. */
-    const quoi = liste.length === 0 ? null
-        : liste.length === 1 ? liste[0]
-            : `${liste.slice(0, -1).join(', ')} et ${liste[liste.length - 1]}`;
+    const quoi = listeAnnoncee(champs);
     if (!quoi) {
         return 'Aucune information n\'est actuellement transmise aux partenaires de l\'école.';
     }
@@ -364,9 +403,10 @@ async function etatCourant(conn, orgId, learnerId) {
                 : [...FINALITES.partenaires.champsParDefaut];
         }
         const champs = await champsOrganisme(conn, orgId);
-        return FINALITES_CONNUES.map((k) => ({
+        return FINALITES_CONNUES.map((k) => (k !== 'partenaires' ? etatTexteFixe(k, par[k]) : {
             cle: k,
             titre: FINALITES[k].titre,
+            titreDestinataires: FINALITES[k].titreDestinataires,
             /* LA PHRASE DU JOUR, dérivée des champs actuellement choisis. Celle qui a été
                ACCEPTÉE est ailleurs — figée sur la ligne du registre — et c'est la comparaison
                des deux qui dit si l'accord couvre encore ce qu'on transmet. */
@@ -394,6 +434,19 @@ async function etatCourant(conn, orgId, learnerId) {
         if (isMissingSchema(e)) return null;
         throw e;
     }
+}
+
+/* UNE FINALITÉ À PHRASE FIXE (le droit à l'image) : ni champs à choisir, ni liste élargie à faire
+   revoir. Sa question ne revient donc que si elle n'a JAMAIS été posée — un refus reste un refus. */
+function etatTexteFixe(k, r) {
+    const f = FINALITES[k];
+    return {
+        cle: k, titre: f.titre, titreDestinataires: f.titreDestinataires,
+        formulation: f.formulation, champs: [], destinataires: f.destinataires,
+        accorde: r ? r.accorde : null,
+        decide_at: r ? r.decide_at : null,
+        champsAnnonces: [], ajoutes: [],
+    };
 }
 
 /**
@@ -481,6 +534,18 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
     const src = source || 'espace_stagiaire';
     if (!SOURCES[src]) return { ok: false, message: `Source de réponse inconnue : ${src}.` };
     try {
+        /* UNE PHRASE FIXE SE FIGE TELLE QUELLE (le droit à l'image) : ni partenaires à lire, ni
+           champs à retenir — la colonne `champs` (135) reste vide, elle ne concerne que les
+           partenaires. Cette écriture vaut donc avant comme après la 135. */
+        if (finalite !== 'partenaires') {
+            await conn.query(
+                `INSERT INTO consent_record
+                   (id, organization_id, learner_id, finalite, accorde, destinataires, formulation, source, saisi_par)
+                 VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [orgId, learnerId, finalite, accorde ? 1 : 0,
+                 f.destinataires.slice(0, 500), f.formulation.slice(0, 600), src, saisiPar || null]);
+            return { ok: true };
+        }
         // La liste TELLE QU'ELLE EST AU MOMENT DE LA RÉPONSE : c'est elle que la personne a lue.
         const destinataires = await destinatairesPartenaires(conn, orgId);
         /* CE QUI A ÉTÉ ANNONCÉ, FIGÉ AVEC LA RÉPONSE. La phrase seule ne suffirait pas : la
@@ -563,10 +628,117 @@ async function ontReponduEuxMemes(conn, orgId, learnerIds, finalite = 'partenair
     }
 }
 
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LES RÉPONSES SUR LE PAPIER — les jetons « Autorisations » des documents (2026-09-22).
+
+   UN JETON PAR CASE, et non un seul qui écrirait « ☒ Autorise ☐ N'autorise pas » : le document de
+   l'école place ses cases lui-même, avec ses mots et sa mise en page. Il suffit d'y remplacer chaque
+   « □ » par le jeton de la case qui lui revient.
+
+   CE QU'AFFICHE UN DOCUMENT SIGNÉ NE BOUGE PLUS. Les réponses s'y lisent À LA DATE DE SA SIGNATURE
+   (`reponsesDuDocument`) : un stagiaire qui retire son accord en juin ne change pas ce que montre le
+   document signé en mars. Le registre, en ajout seul, permet cette lecture sans rien recopier.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Chaque jeton, et la question dont il imprime la réponse. */
+const JETONS_CONSENTEMENT = {
+    'Case photos oui': 'droit_image',
+    'Case photos non': 'droit_image',
+    'Choix photos': 'droit_image',
+    'Case partenaires oui': 'partenaires',
+    'Case partenaires non': 'partenaires',
+    'Choix partenaires': 'partenaires',
+    'Données partenaires': 'partenaires',
+};
+
+/**
+ * Les questions dont ces jetons impriment la réponse, DANS L'ORDRE OÙ LE DOCUMENT LES IMPRIME : le
+ * « Droit à l'image » dit « 1. Photographies » puis « 2. Partenaires », et c'est dans cet ordre que
+ * le stagiaire doit y répondre. `cles` arrive dans l'ordre de lecture du modèle.
+ */
+function finalitesDesJetons(cles) {
+    const vues = [];
+    for (const k of cles || []) {
+        const f = JETONS_CONSENTEMENT[k];
+        if (f && !vues.includes(f)) vues.push(f);
+    }
+    return vues;
+}
+
+/**
+ * La dernière réponse de chaque finalité, telle qu'elle était quand le document a été SIGNÉ — ou
+ * aujourd'hui, s'il ne l'est pas. Rend `{ finalite: { accorde, champs } }` ; `null` sans registre.
+ *
+ * LA BORNE EST CALCULÉE PAR LA BASE, pas par une date reconstruite en JavaScript : le pilote lit une
+ * date dans le fuseau du processus, la base la rend dans celui de la session, et l'écart a déjà
+ * fait vivre un lien de signature deux heures de trop (cf. public.controller, `loadLink`). Sans
+ * signature, `COALESCE` retombe sur `decide_at` lui-même : aucune borne.
+ */
+async function reponsesDuDocument(conn, orgId, learnerId, documentId) {
+    if (!learnerId) return {};
+    const requete = (avecChamps) => `SELECT finalite, accorde, ${avecChamps ? 'champs' : 'NULL AS champs'}
+           FROM consent_record
+          WHERE organization_id = ? AND learner_id = ?
+            AND decide_at <= COALESCE((SELECT signed_at FROM generated_document WHERE id = ?), decide_at)
+          ORDER BY decide_at DESC`;
+    const args = [orgId, learnerId, documentId || null];
+    let rows;
+    try {
+        /* `champs` arrive avec la 135 : son absence est un état légitime, on relit sans. */
+        try { [rows] = await conn.query(requete(true), args); }
+        catch (e) { if (!isMissingSchema(e)) throw e; [rows] = await conn.query(requete(false), args); }
+    } catch (e) {
+        if (isMissingSchema(e)) return null;
+        throw e;
+    }
+    const par = {};
+    /* LA PREMIÈRE RENCONTRÉE L'EMPORTE, c'est-à-dire la plus récente. Deux réponses à la même
+       seconde : même règle que `etatParStagiaire`, aucune n'est écrasée au hasard. */
+    for (const r of rows) {
+        if (par[r.finalite]) continue;
+        par[r.finalite] = {
+            accorde: Number(r.accorde) === 1,
+            /* `champs` à NULL = réponse d'avant la 135 : les six d'origine, seule liste possible. */
+            champs: r.finalite === 'partenaires'
+                ? (r.champs ? champsValides(r.champs) : [...FINALITES.partenaires.champsParDefaut]) : [],
+        };
+    }
+    return par;
+}
+
+const CASE_COCHEE = '☒';
+const CASE_VIDE = '☐';
+
+/**
+ * Les valeurs des jetons « Autorisations », depuis `{ reponses, champsDuJour }` (cf. loadContext).
+ *
+ * SANS RÉPONSE, LES DEUX CASES RESTENT VIDES et le choix s'imprime vide : c'est le document tel qu'il
+ * était, et il ne se SIGNE pas dans cet état (cf. `consentementsManquants`, document.controller).
+ * {Données partenaires} dit la liste ANNONCÉE à la personne quand elle a répondu — celle de sa
+ * question, pas celle du jour, qui a pu s'élargir depuis.
+ */
+function valeursJetons(etat) {
+    const rep = (etat && etat.reponses) || {};
+    const photos = rep.droit_image;
+    const part = rep.partenaires;
+    const coche = (r, oui) => (r && r.accorde === oui ? CASE_COCHEE : CASE_VIDE);
+    const choix = (r) => (!r ? '' : r.accorde ? 'autorise' : 'n’autorise pas');
+    return {
+        'Case photos oui': coche(photos, true),
+        'Case photos non': coche(photos, false),
+        'Choix photos': choix(photos),
+        'Case partenaires oui': coche(part, true),
+        'Case partenaires non': coche(part, false),
+        'Choix partenaires': choix(part),
+        'Données partenaires': listeAnnoncee(part ? part.champs : ((etat && etat.champsDuJour) || [])),
+    };
+}
+
 module.exports = {
     FINALITES, FINALITES_CONNUES, SOURCES, GROUPES,
     aReponduLuiMeme, ontReponduEuxMemes,
-    CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, champsOrganisme,
+    CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, listeAnnoncee, champsOrganisme,
     destinatairesPartenaires, partenairesDestinataires, aDesDestinataires, manquantsParSession,
     etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
+    JETONS_CONSENTEMENT, finalitesDesJetons, reponsesDuDocument, valeursJetons,
 };

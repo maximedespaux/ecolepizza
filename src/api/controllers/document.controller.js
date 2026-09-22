@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { templateSlugFor, renderTemplate } = require('../lib/docxfill.js');
+const { templateSlugFor, renderTemplate, jetonsDuDocx } = require('../lib/docxfill.js');
 // Fichiers importés chiffrés AU REPOS, comme les pièces : une convention signée porte un nom,
 // une adresse et une image de signature.
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
@@ -39,7 +39,9 @@ async function docSignedByCompany(conn, orgSteps, doc) {
 }
 const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
-const { findMissingTokens } = require('../lib/tokens.js');
+const { findMissingTokens, usedTokenKeys } = require('../lib/tokens.js');
+// Les réponses du stagiaire (photos, partenaires) que certains documents impriment.
+const consentements = require('../lib/consentements.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
@@ -372,8 +374,64 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // Jetons personnalisés de l'organisme (calculés à partir des autres au rendu).
     let customTokens = [];
     try { customTokens = await loadCustomTokens(organizationId); } catch { /* migration absente */ }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult };
+    /* LES RÉPONSES DU STAGIAIRE (photos, partenaires) — jetons « Autorisations ». Telles qu'elles
+       étaient à la SIGNATURE de ce document s'il est signé, sinon telles qu'aujourd'hui (cf.
+       `reponsesDuDocument`) : retirer son accord en juin ne réécrit pas le document signé en mars.
+       Sans registre (migration 130), les cases sortent vides et le document reste lisible. */
+    let consentementsCtx = { reponses: {}, champsDuJour: [] };
+    if (learner && learner.id) {
+        try {
+            const reponses = await consentements.reponsesDuDocument(conn, organizationId, learner.id, documentId);
+            consentementsCtx = { reponses: reponses || {}, champsDuJour: await consentements.champsOrganisme(conn, organizationId) };
+        } catch (e) { console.error('Réponses du stagiaire illisibles :', e.message); }
+    }
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx };
 }
+
+/* Les jetons d'un modèle, quel que soit son format : éditeur (corps, en-tête, pied) ou Word. */
+function jetonsDuContenu(content) {
+    if (!content) return new Set();
+    if (content.kind === 'docx') return jetonsDuDocx(content.buffer);
+    if (content.kind !== 'builder') return new Set();
+    const cles = new Set();
+    for (const partie of [content.html, content.header, content.footer]) for (const k of usedTokenKeys(partie)) cles.add(k);
+    return cles;
+}
+
+/**
+ * LES QUESTIONS QUE CE DOCUMENT IMPRIME ET QUI N'ONT PAS ENCORE DE RÉPONSE (photos, partenaires).
+ *
+ * Un modèle qui porte {Case photos oui} imprime la réponse du stagiaire. Signé sans elle, il ne
+ * dirait rien : c'est exactement le défaut du « □ Autorise □ N'autorise pas » d'avant, que personne
+ * ne pouvait cocher en ligne. L'écran pose donc ces questions AVANT de proposer la signature, et
+ * chaque route qui signe pour le stagiaire les vérifie à son tour.
+ *
+ * C'EST LE MODÈLE QUI DÉCIDE, par ses jetons — jamais le type de document : un contrat qui
+ * imprimerait la réponse « partenaires » la demanderait de même (CLAUDE.md § 2.2).
+ *
+ * Rien à demander pour un document déjà signé (sa réponse est figée), sans stagiaire, ni sans
+ * registre : la réponse ne pourrait pas s'enregistrer, et bloquer ferait pire qu'imprimer des cases
+ * vides, comme avant.
+ */
+async function consentementsManquants(conn, orgId, doc) {
+    if (!doc || !doc.learner_id || doc.status === 'SIGNE' || isEmargDoc(doc)) return [];
+    let slug = doc.template_slug;
+    if (!slug) {
+        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+        const f = (ctx.formations && ctx.formations[0]) || {};
+        slug = templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    }
+    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    const finalites = consentements.finalitesDesJetons(jetonsDuContenu(content));
+    if (!finalites.length) return [];
+    const etat = await consentements.etatCourant(conn, orgId, doc.learner_id);
+    if (!etat) return [];
+    // Dans l'ordre du document, pas dans celui du registre (cf. finalitesDesJetons).
+    return finalites.map((c) => etat.find((f) => f.cle === c)).filter((f) => f && f.accorde === null);
+}
+
+/* « Diffuser des photos… » et « Transmettre mes coordonnées… » : ce qui manque, dit en clair. */
+const questionsEnClair = (manquants) => manquants.map((f) => `« ${f.titre} »`).join(' et ');
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
 // (grille visuelle) + un bloc de signatures ÉLECTRONIQUES (stagiaire + organisme).
@@ -785,6 +843,24 @@ const getDocument = async (req, res) => {
             : null;
 
         const html = (importe || modele_fichier) ? null : await buildDocHtml(conn, doc.organization_id, doc);
+        /* LES QUESTIONS QUE CE DOCUMENT IMPRIME, encore sans réponse (photos, partenaires) : l'écran
+           les pose au stagiaire AVANT de lui proposer de signer, et les annonce au personnel. Une
+           lecture qui échoue ne doit pas empêcher d'afficher le document : la signature, elle,
+           refera le contrôle. */
+        let questions = [];
+        if (!importe) {
+            try { questions = await consentementsManquants(conn, doc.organization_id, doc); }
+            catch (e) { console.error('Questions du document illisibles :', e.message); }
+        }
+        /* LE STAGIAIRE LUI-MÊME ? Lui seul peut répondre — une réponse donnée à sa place ne vaudrait
+           rien. L'écran lui pose donc la question, et se contente de PRÉVENIR tout autre lecteur :
+           le personnel, ou le représentant d'une entreprise. */
+        let peutRepondre = false;
+        if (questions.length) {
+            const [[proprio]] = await conn.query(
+                'SELECT user_id FROM learner WHERE id = ? AND organization_id = ?', [doc.learner_id, doc.organization_id]);
+            peutRepondre = !!(proprio && proprio.user_id && proprio.user_id === req.user.id);
+        }
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
         // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
@@ -816,6 +892,12 @@ const getDocument = async (req, res) => {
                    corps, simplement pas un corps à rendre. Sans cette nuance l'écran
                    annoncerait « ce document n'a pas encore de modèle » au-dessus du PDF. */
                 no_template: !importe && !modele_fichier && (html === null || html === undefined),
+                // Les questions à poser avant de signer : leur phrase, telle qu'elle sera figée.
+                questions_consentement: questions.map((f) => ({
+                    cle: f.cle, titre: f.titre, formulation: f.formulation,
+                    destinataires: f.destinataires, titreDestinataires: f.titreDestinataires,
+                })),
+                peut_repondre: peutRepondre,
             },
         });
     } catch (err) {
@@ -1343,6 +1425,21 @@ const signDocument = async (req, res) => {
         if (!isStaff && await docSignedByCompany(conn, orgSteps, rows[0])) {
             return res.status(422).json({ message: "Ce document doit être signé par l'entreprise (représentant)." });
         }
+        /* UNE RÉPONSE QUE LE DOCUMENT IMPRIME NE SE SIGNE PAS EN BLANC. L'écran la demande avant,
+           mais c'est ici que la règle tient : un envoi direct ne doit pas pouvoir la contourner.
+           Le personnel ne répond pas à la place du stagiaire depuis cette route — une réponse
+           papier se saisit sur la page de la session, avec sa source. */
+        const manquants = await consentementsManquants(conn, req.user.organization_id, rows[0]);
+        if (manquants.length) {
+            const deux = manquants.length > 1;
+            return res.status(422).json({
+                message: isStaff
+                    ? `Le stagiaire n'a pas encore répondu à ${questionsEnClair(manquants)}, et ce document imprime ${deux ? 'ses réponses' : 'sa réponse'}. `
+                      + `Il répond depuis son espace, ou vous enregistrez ${deux ? 'ses réponses papier' : 'sa réponse papier'} sur la page de la session.`
+                    : `Répondez d'abord à ${questionsEnClair(manquants)} : ${deux ? 'vos réponses s\'impriment' : 'votre réponse s\'imprime'} sur ce document.`,
+                consentements: manquants.map((f) => f.cle),
+            });
+        }
 
         await applyLearnerSignature(conn, req.user.organization_id, rows[0], {
             signerName: signer_name, signatureData: signature_data,
@@ -1525,4 +1622,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair };

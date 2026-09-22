@@ -41,7 +41,11 @@ test('les relances sont bornées', () => {
        le consentement extorqué qu'on cherche à éviter : après trois fois, on cesse de la poser. */
     const src = lire(path.join(UI, 'components/ConsentModal.jsx'));
     assert.match(src, /const MAX_RELANCES = 3;/);
-    assert.match(src, /if \(relances\(\) >= MAX_RELANCES\) return;/);
+    /* UN COMPTEUR PAR QUESTION depuis le droit à l'image (2026-09-22) : trois fermetures de la
+       question des partenaires ne doivent pas taire celle des photos, jamais posée. La borne, elle,
+       reste la même pour chacune. */
+    assert.match(src, /relances\(f\.cle\) < MAX_RELANCES/);
+    assert.match(src, /const CLE_RELANCES_DE = \(cle\) =>/);
 });
 
 test('le registre AJOUTE une ligne, il n\'en modifie aucune', () => {

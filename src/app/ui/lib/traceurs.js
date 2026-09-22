@@ -150,10 +150,11 @@ export const TRACEURS = [
   },
   {
     cle: 'impasto.consent.relances', nature: 'local', exempte: true,
-    role: 'Compter combien de fois la demande de consentement a été présentée sans réponse',
+    role: 'Compter combien de fois chaque demande de consentement a été présentée sans réponse',
     detail: 'Elle sert à ARRÊTER de vous la reposer. Fermer la fenêtre sans répondre n\'est pas un '
       + 'refus, donc la question revient, mais pas indéfiniment : après trois fois, elle ne '
-      + 'réapparaît plus et reste accessible depuis votre profil.',
+      + 'réapparaît plus et reste accessible depuis votre profil. Un compte par question '
+      + '(partenaires, photos) : ne pas répondre à l\'une ne fait pas taire l\'autre.',
     duree: 'Jusqu\'à effacement',
   },
   {

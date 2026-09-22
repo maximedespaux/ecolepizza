@@ -13,6 +13,8 @@ const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
 const { identiteExemple } = require('../lib/echantillons.js');
 const { MODELES: MODELES_JURY } = require('../lib/modelesJury.js');
+// Le « Droit à l'image » proposé à une page blanche (jamais écrit sans enregistrement).
+const { MODELES_PROPOSES } = require('../lib/modelesProposes.js');
 
 // Colonnes de métadonnées d'étape lues depuis document_template.
 const META_COLS = 'slug, label, doc_type, kind, sort_order, signable, stagiaire_sign, applies_when, active, deleted';
@@ -512,7 +514,7 @@ async function loadCustomTokens(orgId) {
 // Ordre d'affichage canonique des groupes de la palette (du plus utile au plus rare).
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
-    'Stagiaire', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
+    'Stagiaire', 'Autorisations', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
     'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Examen', 'Lieu de formation',
     'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
@@ -520,7 +522,10 @@ const GROUP_ORDER = [
 /* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
    détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
    après le seuil. */
-const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)']);
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)',
+    /* Photos puis partenaires, et dans chacun « Autorise » avant « N'autorise pas » : l'ordre où
+       les cases se posent sur le document. Trié par libellé, « Partenaires » passerait devant. */
+    'Autorisations']);
 
 // Groupes de jetons cachés selon le TYPE de document :
 //  - Document ENTREPRISE (company_level=1) : pas de stagiaire unique → on masque les
@@ -529,8 +534,10 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates
 //    masque le groupe « Groupe entreprise ».
 /* Une évaluation note UNE personne : sur un document de groupe, ces jetons n'auraient
    aucun dossier à lire et sortiraient vides. */
-const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Inscription', 'Évaluation pratique', 'Jury']);
+const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Autorisations', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
+/* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens). */
+const STAGIAIRE_NOMMES = ['D_Naissance'];
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
@@ -555,6 +562,14 @@ const getTokens = async (req, res) => {
             }
         }
         const groups = await fieldTokenGroups(orgId);
+        /* LA DATE DE NAISSANCE N'Y ÉTAIT PAS — signalé par l'école le 2026-09-22. Le groupe
+           « Stagiaire » se construit depuis les Champs documents, et ceux-ci écartent les colonnes
+           DATE (`sqlToType`, lib/conditions.js) : {D_Naissance} se remplissait si on le TAPAIT, et
+           restait introuvable dans la palette. Le jeton nommé rejoint donc le groupe où l'on cherche
+           une donnée du stagiaire, déjà mise en forme (JJ/MM/AAAA) par `resolveTokens`. */
+        let stagiaire = groups.find((g) => g.group === 'Stagiaire');
+        if (!stagiaire) { stagiaire = { group: 'Stagiaire', tokens: [] }; groups.push(stagiaire); }
+        stagiaire.tokens.push(...catalogGroup('Stagiaire').tokens.filter((t) => STAGIAIRE_NOMMES.includes(t.key)));
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
@@ -575,6 +590,10 @@ const getTokens = async (req, res) => {
            on les tapait, et n'apparaissaient nulle part. Le même défaut que celui mesuré sur
            l'évaluation pratique, resté invisible deux ans faute d'écran qui s'en serve. */
         groups.push(catalogGroup('Examen'));
+        /* LES RÉPONSES DU STAGIAIRE (photos, partenaires), pour le document « Droit à l'image » ou
+           tout autre qui voudrait les imprimer. Un modèle qui en porte une ne se signe qu'une fois
+           la question répondue (cf. consentementsManquants, document.controller). */
+        groups.push(catalogGroup('Autorisations'));
         groups.push(factureTokensGroup());
         // Sur une facture/devis, l'ACHETEUR est un stagiaire OU une entreprise. Ses coordonnées
         // (e-mail, téléphone, adresse…) existent déjà dans les Champs documents (field:learner.* /
@@ -824,7 +843,11 @@ const getTemplateBody = async (req, res) => {
         /* Les signataires du modèle : l'éditeur n'offre « Signature de l'intervenant » que si
            « Externe » est coché — le seul cas où quelqu'un viendra la remplir. */
         const signers = etape.slug ? stepSigners(etape) : [];
-        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, signers, body_html: '', header_html: '', footer_html: '', layout: null } });
+        /* PAGE BLANCHE : un modèle PROPOSÉ s'il en existe un pour ce slug (lib/modelesProposes.js) —
+           le « Droit à l'image », ses cases remplacées par celles qui se cochent. Rien n'est écrit :
+           `propose` le dit à l'éditeur, et c'est l'enregistrement qui le fera exister. */
+        const propose = content ? null : MODELES_PROPOSES[req.params.slug] || null;
+        if (!content) return res.json({ data: { slug: req.params.slug, kind: 'builder', doc_type: docType, company_level: companyLevel, signers, body_html: propose ? propose.body : '', header_html: '', footer_html: '', layout: null, propose: propose ? propose.note : null } });
         if (content.kind === 'docx') {
             // Ancien modèle .docx sans corps éditable : on renvoie un corps vide à composer.
             return res.json({ data: { slug: req.params.slug, kind: 'docx', doc_type: docType, company_level: companyLevel, signers, body_html: '', header_html: '', footer_html: '', layout: null } });

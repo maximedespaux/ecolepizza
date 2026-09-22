@@ -499,6 +499,10 @@ function SessionDetail() {
             n'aide en rien à enseigner. Un formateur n'y accède que si l'organisme lui a accordé
             Sessions en modification — c'est alors ce que le serveur lui accorde aussi. */}
         {peutModifier && <SessionConsentements sessionId={id} canEdit={peutModifier} />}
+        {/* LE DROIT À L'IMAGE, MÊME CARTE, MÊMES RÈGLES (2026-09-22) : qui a répondu, et la saisie
+            d'une réponse donnée sur papier. Sa réponse s'imprime sur le document « Droit à
+            l'image ». */}
+        {peutModifier && <SessionConsentements sessionId={id} canEdit={peutModifier} finalite="droit_image" />}
         <SessionRetraits startDate={session.start_date} endDate={session.end_date} />
         <SessionIntervenants sessionId={id} startDate={session.start_date} endDate={session.end_date} canEdit={peutModifier} />
       </div>

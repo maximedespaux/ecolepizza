@@ -50,13 +50,32 @@ const ETATS = {
 
 const etatDe = (s) => (s.accorde === null ? ETATS.jamais : s.accorde ? ETATS.oui : ETATS.non);
 
+/* DEUX QUESTIONS, UNE MÊME CARTE (2026-09-22) : la transmission aux partenaires, et le droit à
+   l'image. Les règles sont celles du registre, identiques pour les deux — trois états, la parole
+   du stagiaire qui ne s'écrase pas, une origine pour chaque saisie. Seuls le titre et l'annonce
+   changent. */
+const QUESTIONS = {
+  partenaires: {
+    titre: "Transmission aux partenaires", icone: "handshake",
+    annonce: "Les coordonnées d'un stagiaire ne partent chez un partenaire qu'avec son accord. Cette "
+      + "liste est composée par le serveur : elle écarte d'elle-même les refus et les personnes "
+      + "jamais sollicitées.",
+  },
+  droit_image: {
+    titre: "Droit à l'image", icone: "camera",
+    annonce: "Une photo où apparaît un stagiaire ne se diffuse qu'avec son accord. Sa réponse "
+      + "s'imprime sur le document « Droit à l'image », qui ne se signe qu'une fois la réponse donnée.",
+  },
+};
+
 /** Échappement CSV : une virgule ou un guillemet dans un nom casserait la colonne suivante. */
 const csvCell = (v) => {
   const t = String(v ?? "");
   return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 };
 
-function SessionConsentements({ sessionId, canEdit }) {
+function SessionConsentements({ sessionId, canEdit, finalite = "partenaires" }) {
+  const question = QUESTIONS[finalite] || QUESTIONS.partenaires;
   const [data, setData] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [status, setStatus] = useState(null);
@@ -65,7 +84,7 @@ function SessionConsentements({ sessionId, canEdit }) {
 
   async function charger() {
     try {
-      const r = await getSessionConsents(sessionId);
+      const r = await getSessionConsents(sessionId, finalite);
       setData(r.data);
       setErreur(null);
     } catch (e) {
@@ -78,7 +97,7 @@ function SessionConsentements({ sessionId, canEdit }) {
 
   useEffect(() => {
     charger();
-  }, [sessionId]);
+  }, [sessionId, finalite]);
 
   const groupes = useMemo(() => {
     const g = { jamais: [], oui: [], non: [] };
@@ -89,7 +108,7 @@ function SessionConsentements({ sessionId, canEdit }) {
   async function repondrePour(learnerId, accorde) {
     setBusy(learnerId); setStatus(null);
     try {
-      await setSessionConsent(sessionId, learnerId, accorde, source);
+      await setSessionConsent(sessionId, learnerId, accorde, source, finalite);
       await charger();
       /* LA PASTILLE « SESSIONS » COMPTE LES GENS JAMAIS SOLLICITÉS : celui-ci vient de l'être,
          elle doit descendre tout de suite. Sans ce signal, la barre latérale ne se remet à jour
@@ -108,7 +127,7 @@ function SessionConsentements({ sessionId, canEdit }) {
 
   const titre = (
     <span className="card-ttl">
-      <Icon name="handshake" size={16} /> Transmission aux partenaires
+      <Icon name={question.icone} size={16} /> {question.titre}
     </span>
   );
 
@@ -202,20 +221,16 @@ function SessionConsentements({ sessionId, canEdit }) {
 
   return (
     <Card title={titre}>
-      <p className="hint" style={{ marginTop: 0 }}>
-        Les coordonnées d'un stagiaire ne partent chez un partenaire qu'avec son accord. Cette
-        liste est composée par le serveur : elle écarte d'elle-même les refus et les personnes
-        jamais sollicitées.
-      </p>
+      <p className="hint" style={{ marginTop: 0 }}>{question.annonce}</p>
 
       {status && <StatusMessage type={status.type} message={status.message} />}
 
       {canEdit && (
         <div className="consent-source">
-          <label htmlFor="consent-src">
+          <label htmlFor={`consent-src-${finalite}`}>
             <Icon name="clipboard-check" size={13} /> Origine des réponses que je saisis
           </label>
-          <select id="consent-src" value={source} onChange={(e) => setSource(e.target.value)}>
+          <select id={`consent-src-${finalite}`} value={source} onChange={(e) => setSource(e.target.value)}>
             {Object.entries(data.sources)
               /* « Espace stagiaire » est exclu : c'est la seule origine que le stagiaire produit
                  lui-même, et l'offrir ici permettrait d'inscrire au registre un accord « donné en
