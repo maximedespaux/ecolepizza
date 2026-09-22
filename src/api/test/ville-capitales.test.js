@@ -112,7 +112,10 @@ test('les quatre formulaires mettent la ville en capitales dès la frappe', () =
     assert.match(fiche, /if \(k === "representative_name" \|\| k === "town"\) return v\.toLocaleUpperCase\("fr"\);/);
 
     const espace = lire('src/app/ui/components/ProfileModal.jsx');
-    assert.match(espace, /k === "last_name" \|\| k === "company_town" \? e\.target\.value\.toLocaleUpperCase\("fr"\)/);
+    /* D'autres champs peuvent suivre dans la même condition — le lieu de naissance l'a rejointe le
+       2026-09-22 (lieu-naissance-capitales.test.js) ; ce qui compte ici, c'est que le nom ET la
+       ville de l'entreprise y restent. */
+    assert.match(espace, /k === "last_name" \|\| k === "company_town"( \|\| k === "[a-z_]+")* \? e\.target\.value\.toLocaleUpperCase\("fr"\)/);
 });
 
 test('l\'exemple affiché montre le format attendu', () => {

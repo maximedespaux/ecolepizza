@@ -21,8 +21,10 @@ function enCapitales(v) {
 
 /* LA VILLE a rejoint les deux listes le 2026-09-17, à la demande de l'école. Relevé ce jour-là en
    production : 670 villes distinctes chez les stagiaires, 667 une fois mises en capitales — trois
-   s'écrivaient de deux façons, et comptaient donc double partout où l'on regroupe par ville. */
-const CAPITALES_STAGIAIRE = ['last_name', 'town'];
+   s'écrivaient de deux façons, et comptaient donc double partout où l'on regroupe par ville.
+   LE LIEU DE NAISSANCE l'a suivie le 2026-09-22 (« comme la ville ») : c'est une ville aussi, et il
+   s'imprime sur les mêmes documents. Les fiches déjà en base passent par la migration 171. */
+const CAPITALES_STAGIAIRE = ['last_name', 'town', 'birth_place'];
 const CAPITALES_ENTREPRISE = ['representative_name', 'town'];
 
 /** Copie de `corps` où les champs listés passent en capitales — QUAND ILS SONT PRÉSENTS : un champ

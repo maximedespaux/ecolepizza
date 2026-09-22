@@ -1279,6 +1279,16 @@ tbody tr:last-child td{border-bottom:none}
 .carte-wrap .leaflet-pane,.carte-wrap .leaflet-top,.carte-wrap .leaflet-bottom{z-index:1}
 .carte-map{height:560px;width:100%}
 .carte-map .leaflet-popup-content{font-family:var(--font-b);font-size:13px}
+/* Les stagiaires d'une même ville, en un point qui porte leur nombre (lib/carteGroupes.js) ; au
+   clic, leur liste. `pt-groupe-ic` remplace la classe par défaut des icônes HTML de Leaflet, qui
+   leur donne un fond et un cadre blancs. */
+.pt-groupe-ic{background:none;border:0}
+.pt-groupe{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:2px solid #fff;
+  color:#fff;font:800 12px/1 var(--font-b);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+.pt-liste{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.pt-liste li{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.pt-liste i{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.pt-liste span{color:#686f8c;font-size:12px}
 /* Le Plan IGN (Carte.jsx, FOND_DE_CARTE) est un plan routier, coloré et très étiqueté : désaturé,
    éclairci et un peu voilé, il redevient un fond, proche du fond gris clair qu'il remplace, et les
    bulles comme les points de couleur restent ce qu'on voit d'abord. Sur le seul calque des tuiles —

@@ -11,6 +11,14 @@ function deptOf(zip) {
     return z.slice(0, 2);                            // « 20 » = Corse
 }
 
+/* OÙ SE TROUVE LE POINT D'UN STAGIAIRE — une seule règle, lue par le géocodage ET par la carte :
+   un professionnel dont l'entreprise a une adresse est situé à l'adresse EXACTE de l'entreprise ;
+   tous les autres — particuliers, ou entreprise sans adresse — à leur VILLE, jamais à leur adresse
+   personnelle (donnée personnelle). La carte en déduit qui regrouper : les stagiaires situés à la
+   ville partagent tous le même point, ceux d'une entreprise ont chacun le leur. Deux copies de la
+   règle finiraient par regrouper un point qui n'est pas celui de la ville, ou l'inverse. */
+const aAdresseEntreprise = (r) => r.financing === 'PROFESSIONNEL' && !!(r.c_address || r.c_zip || r.c_town);
+
 /**
  * GET /api/carte — répartition géographique des stagiaires.
  * Renvoie l'agrégat par département (depuis le code postal) ET les points
@@ -21,7 +29,8 @@ const getCarte = (req, res) => {
     // Niveau = celui de la formation de l'inscription la plus récente du stagiaire.
     const sql = `
         SELECT l.id, l.first_name, l.last_name, l.town, l.zip_code, l.address,
-               l.lat, l.lng, l.geo_precision, l.levels,
+               l.lat, l.lng, l.geo_precision, l.levels, l.financing, l.company_id,
+               c.name AS company_name, c.address AS c_address, c.zip_code AS c_zip, c.town AS c_town,
                (SELECT p.level
                   FROM enrollment e
                   JOIN training_session s ON s.id = e.session_id
@@ -40,6 +49,7 @@ const getCarte = (req, res) => {
                   JOIN training_program p ON p.id = s.program_id
                  WHERE e.learner_id = l.id) AS formation_codes
           FROM learner l
+          LEFT JOIN company c ON c.id = l.company_id
          WHERE l.organization_id = ?`;
     db.query(sql, [orgId], async (err, rows) => {
         if (err) {
@@ -83,6 +93,9 @@ const getCarte = (req, res) => {
                     level: badges[0] || r.level || null,
                     program_code: r.program_code || formations[0] || null, // formation la plus récente (couleur du point)
                     formations, // codes des formations suivies (pour le filtre)
+                    /* À l'adresse de son entreprise : un point à lui, jamais regroupé avec la ville.
+                       `null` : situé à sa ville, avec tous ceux de cette ville. */
+                    entreprise: aAdresseEntreprise(r) ? (r.company_name || 'Entreprise') : null,
                 });
             } else if (r.address || r.zip_code) {
                 pending++; // géocodable mais pas encore géocodé
@@ -128,7 +141,7 @@ const geocodeLearners = (req, res) => {
             //  · professionnel avec entreprise → adresse EXACTE de l'entreprise ;
             //  · particulier → VILLE uniquement (confidentialité : jamais l'adresse perso).
             const inputs = rows.map((r) => {
-                const pro = r.financing === 'PROFESSIONNEL' && (r.c_address || r.c_zip || r.c_town);
+                const pro = aAdresseEntreprise(r);
                 return pro
                     ? { id: r.id, address: r.c_address, zip_code: r.c_zip, town: r.c_town }
                     : { id: r.id, address: null, zip_code: r.zip_code, town: r.town };
