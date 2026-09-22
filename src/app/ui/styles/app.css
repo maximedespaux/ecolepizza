@@ -1695,7 +1695,20 @@ tbody tr:last-child td{border-bottom:none}
 @media(max-width:600px){.modal .x{width:44px;height:44px;flex:none;margin:-6px -8px -6px 0}}
 .modal .x:hover{color:var(--text);background:var(--surface2)}
 .mbody{padding:18px 20px;overflow-y:auto}
-.mfoot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
+.mfoot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
+/* UN BOUTON DE PIED NE SE COUPE PAS, IL PASSE À LA LIGNE (2026-09-22). `.btn` masque son débordement
+   (`overflow:hidden`), et dans une rangée flex une boîte qui masque son débordement peut rétrécir
+   jusqu'à zéro. À 375 px, « Supprimer le stagiaire » se lisait « Supprimer le sta », et les quatre
+   boutons du document côté personnel (Fermer, Ouvrir le PDF, PDF, Lien externe) étaient tous
+   rognés. Sans rétrécissement, la rangée déborde, et `flex-wrap` la replie. Là où tout tient sur une
+   ligne, sur ordinateur notamment, rien ne bouge. */
+.mfoot .btn{flex-shrink:0}
+/* UN PIED QUI PORTE AUSSI UNE SUPPRESSION (fiche stagiaire) : la suppression à gauche, les actions
+   principales à droite, chacune poussée par sa marge automatique. Sur la même ligne quand la place
+   suffit ; au téléphone, la suppression reste seule au-dessus, À GAUCHE — sans sa marge, le pied
+   (aligné à droite) la posait juste au-dessus d'« Enregistrer », là où le pouce va toucher. */
+.mfoot-actions{display:flex;gap:8px;margin-left:auto}
+.mfoot-suppr{margin-right:auto}
 .mbody textarea.inp{width:100%;resize:vertical;line-height:1.45}
 /* SUR TÉLÉPHONE, chaque pixel de marge est pris au contenu : vingt pixels autour de la fenêtre et
    vingt dans chaque bloc laissaient 295 px utiles sur 375. `dvh` suit la barre d'adresse qui

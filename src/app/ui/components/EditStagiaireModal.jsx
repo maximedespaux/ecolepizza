@@ -442,9 +442,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
             </form>
           )}
         </div>
-        <div className="mfoot" style={{ justifyContent: onDelete ? "space-between" : "flex-end" }}>
-          {onDelete && <button type="button" className="btn ghost danger" onClick={onDelete}>Supprimer le stagiaire</button>}
-          <div style={{ display: "flex", gap: 8 }}>
+        {/* Plus de `justifyContent` en ligne : les marges automatiques placent la suppression à gauche et
+            Annuler / Enregistrer à droite, qu'ils partagent une ligne (ordinateur) ou non (téléphone,
+            où les trois boutons ne tiennent pas sur une ligne). */}
+        <div className="mfoot">
+          {onDelete && <button type="button" className="btn ghost danger mfoot-suppr" onClick={onDelete}>Supprimer le stagiaire</button>}
+          <div className="mfoot-actions">
             <button type="button" className="btn ghost" onClick={onClose}>Annuler</button>
             <button type="submit" form="stagiaire-form" className="btn primary" disabled={saving || loading || noteTropLongue}>
               {saving ? "Enregistrement…" : id ? "Enregistrer" : "Ajouter le stagiaire"}
