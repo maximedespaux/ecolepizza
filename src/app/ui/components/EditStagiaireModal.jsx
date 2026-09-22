@@ -4,6 +4,7 @@ import { Field, SelectField } from "./Field.jsx";
 import { OPCOS } from "../lib/opco.js";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 import { compterMots, NOTE_STAGIAIRE_MOTS_MAX } from "../lib/mots.js";
+import { GROUPES_PROJET, CASES_PROJET, PRECISIONS_FOUR, MIGRATION_DES_CASES } from "../lib/projet.js";
 import { bumpBadges } from "../lib/events.js";
 
 const CIVILITES = ["M.", "Mme"];
@@ -34,19 +35,19 @@ const EMPTY = {
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
   financing: "PARTICULIER", opco: "", levels: "", completed_levels: "", company_id: "",
-  project_creation: false, project_takeover: false, project_oven: false, project_truck: false, project_job: false,
-  project_improvement: false,
-  project_oven_wood: false, project_oven_electric: false, project_oven_gas: false, // migration 172 : le type de four
+  /* Les cases de « Votre projet », toutes décochées : elles viennent du catalogue (lib/projet.js),
+     comme `BOOL_FIELDS` ci-dessous et les cases rendues — une seule liste, qui ne peut plus diverger. */
+  ...Object.fromEntries(CASES_PROJET.map((k) => [k, false])),
   note_libre: "", // migration 168 : la note en texte simple, sous « Votre projet »
   a_recontacter: false, // migration 169 : le rappel (liste de priorité, tableau de bord, pastille du menu)
 };
 
 /* LA LISTE DOIT SUIVRE `EMPTY` : `toForm` lit les autres clés en `?? ""`, si bien qu'un booléen
    oublié ici arriverait à `false`… puis à la chaîne vide au premier enregistrement. Trois listes
-   disent le même ensemble dans ce fichier (EMPTY, BOOL_FIELDS, les cases rendues) — un test le
-   vérifie, parce qu'elles ont vocation à diverger. */
-const BOOL_FIELDS = ["project_creation", "project_takeover", "project_oven", "project_truck", "project_job", "project_improvement",
-  "project_oven_wood", "project_oven_electric", "project_oven_gas", "a_recontacter"];
+   disent le même ensemble dans ce fichier (EMPTY, BOOL_FIELDS, les cases rendues) : pour le projet,
+   elles dérivent toutes trois du catalogue depuis qu'il compte vingt-quatre cases (2026-09-22). Un
+   test le vérifie quand même — le rappel, lui, est encore écrit à la main. */
+const BOOL_FIELDS = [...CASES_PROJET, "a_recontacter"];
 const dateOnly = (v) => (v ? String(v).slice(0, 10) : "");
 
 function toForm(d) {
@@ -109,10 +110,10 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   // et « Jean@X.fr » puis « jean@x.fr » finiraient en deux comptes pour la même personne.
   const setEmail = (e) => setForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }));
   const toggle = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked }));
-  /* « Four » décoché emporte ses types : un type de four sans four est une contradiction (le serveur,
-     lui, coche « Four » dès qu'un type l'est). */
+  /* « Four » décoché emporte ses précisions (type, déjà acheté) : un four à bois sans four est une
+     contradiction (le serveur, lui, coche « Four » dès qu'une précision l'est). */
   const toggleFour = (e) => setForm((p) => ({ ...p, project_oven: e.target.checked,
-    ...(e.target.checked ? {} : { project_oven_wood: false, project_oven_electric: false, project_oven_gas: false }) }));
+    ...(e.target.checked ? {} : Object.fromEntries(PRECISIONS_FOUR.map((k) => [k, false]))) }));
   const toggleLevel = (code) => setForm((p) => {
     const s = new Set((p.levels || "").split(",").map((x) => x.trim()).filter(Boolean));
     const cs = new Set((p.completed_levels || "").split(",").map((x) => x.trim()).filter(Boolean));
@@ -175,8 +176,11 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
       /* LE SERVEUR DIT CE QU'IL A LAISSÉ TOMBER (`ignores` : colonne absente, migration non jouée).
          Même règle que l'écran de l'organisme : un « enregistré » qui tairait la note perdue serait
          un succès qui ment — elle aurait disparu à la réouverture, sans un mot. */
+      /* Les cases du projet arrivées par migration (172, 173) : une seule mention par migration —
+         « sauf les nouvelles cases du projet : la migration 173 n'est pas jouée ». */
+      const CASES_PERDUES = { 172: "le type de four", 173: "les nouvelles cases du projet" };
       const PERDUS = { note_libre: ["la note", 168], a_recontacter: ["le rappel « à recontacter »", 169],
-        project_oven_wood: ["le type de four", 172], project_oven_electric: ["le type de four", 172], project_oven_gas: ["le type de four", 172] };
+        ...Object.fromEntries(Object.entries(MIGRATION_DES_CASES).filter(([, m]) => CASES_PERDUES[m]).map(([k, m]) => [k, [CASES_PERDUES[m], m]])) };
       const sauf = (r) => {
         // Une clé par LIBELLÉ : trois types de four laissés de côté disent « le type de four », une fois.
         const p = [...new Map((r?.ignores || []).filter((k) => PERDUS[k]).map((k) => [PERDUS[k][0], k])).values()];
@@ -310,40 +314,33 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
 
               <div className="divider" />
               <h3 style={{ fontSize: 15, marginBottom: 10 }}>Votre projet</h3>
-              {/* DEUX QUESTIONS, qui se mêlaient sur une seule ligne (séparées le 2026-09-22) : la NATURE
-                  du projet — créer, reprendre, chercher un poste, se perfectionner — et l'ÉQUIPEMENT
-                  qu'il appelle : un four, et duquel, ou un camion. « Perfectionnement » (migration 158) :
-                  qui exerce déjà et vient se perfectionner n'avait aucune case, et ressortait avec un
-                  projet VIDE, indiscernable d'une fiche non remplie. */}
+              {/* QUATRE QUESTIONS, qui se mêlaient sur une seule ligne (séparées le 2026-09-22) : la NATURE
+                  du projet — créer, reprendre, chercher un poste, se perfectionner —, le TYPE D'ACTIVITÉ,
+                  l'ÉQUIPEMENT qu'il appelle — un four, et duquel —, et son AVANCEMENT. Les cases, leurs
+                  groupes et leurs libellés viennent du catalogue (lib/projet.js). */}
               <div className="projet-groupes">
-                <fieldset className="projet-groupe">
-                  <legend>Nature du projet</legend>
-                  {[["project_creation", "Création"], ["project_takeover", "Reprise"], ["project_job", "Cherche poste pizzaïolo(la)"], ["project_improvement", "Perfectionnement"]].map(([k, lab]) => (
-                    <label key={k} className="projet-case">
-                      <input type="checkbox" checked={!!form[k]} onChange={toggle(k)} /> {lab}
-                    </label>
-                  ))}
-                </fieldset>
-                <fieldset className="projet-groupe">
-                  <legend>Équipement</legend>
-                  <label className="projet-case">
-                    <input type="checkbox" checked={!!form.project_oven} onChange={toggleFour} /> Four
-                  </label>
-                  {/* Le TYPE de four (migration 172), une fois « Four » coché : c'est la première question
-                      d'un fabricant de fours, et elle part aux partenaires. Bois ET gaz : un four mixte. */}
-                  {form.project_oven && (
-                    <div className="projet-sous" role="group" aria-label="Type de four">
-                      {[["project_oven_wood", "Bois"], ["project_oven_electric", "Électrique"], ["project_oven_gas", "Gaz"]].map(([k, lab]) => (
-                        <label key={k} className="projet-case">
-                          <input type="checkbox" checked={!!form[k]} onChange={toggle(k)} /> {lab}
+                {GROUPES_PROJET.map((g) => (
+                  <fieldset key={g.titre} className="projet-groupe">
+                    <legend>{g.titre}</legend>
+                    {g.cases.map((c) => (
+                      <div key={c.k}>
+                        <label className="projet-case">
+                          <input type="checkbox" checked={!!form[c.k]} onChange={c.precisions ? toggleFour : toggle(c.k)} /> {c.l}
                         </label>
-                      ))}
-                    </div>
-                  )}
-                  <label className="projet-case">
-                    <input type="checkbox" checked={!!form.project_truck} onChange={toggle("project_truck")} /> Camion / Remorque
-                  </label>
-                </fieldset>
+                        {/* Les précisions du four (type, déjà acheté), une fois « Four » coché. */}
+                        {c.precisions && form[c.k] && (
+                          <div className="projet-sous" role="group" aria-label={`Précisions : ${c.l}`}>
+                            {c.precisions.map((pr) => (
+                              <label key={pr.k} className="projet-case">
+                                <input type="checkbox" checked={!!form[pr.k]} onChange={toggle(pr.k)} /> {pr.l}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </fieldset>
+                ))}
               </div>
 
               {/* LA NOTE, sous le projet (demandé le 2026-09-21) : du texte simple, 128 mots au plus.

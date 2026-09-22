@@ -15,8 +15,9 @@ const { capitaliser, CAPITALES_STAGIAIRE, CAPITALES_ENTREPRISE } = require('../l
 /* Le compte des mots de la réponse libre d'un QCM : le MÊME que celui de l'écran (ui/lib/mots.js),
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
-const { colonneExiste, colonneOuNull, largeurColonne } = require('../lib/colonnes.js');
+const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
 const { champsManquants } = require('../lib/ficheIncomplete.js');
+const { PRECISIONS_FOUR, COLONNES_PHRASE, colonnesProjetSql } = require('../lib/projet.js');
 const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
@@ -95,6 +96,12 @@ const LEARNER_FIELDS = [
        ensemble possibles (un four mixte). Filtrés comme les autres sur les colonnes que la table
        porte : sans la migration, ils ne s'enregistrent pas, et `ignores` le dit à l'écran. */
     'project_oven_wood', 'project_oven_electric', 'project_oven_gas',
+    /* Migration 173 : le type d'activité, le reste de l'équipement (et le four déjà acheté),
+       l'avancement du projet, l'intérêt pour une formation. Mêmes règles : filtrées sur les colonnes
+       que la table porte, et signalées à l'écran si la migration manque. */
+    'project_dine_in', 'project_takeaway', 'project_by_slice', 'project_vending', 'project_catering', 'project_add_on',
+    'project_kneader', 'project_sheeter', 'project_fridge_counter', 'project_oven_owned',
+    'project_premises', 'project_funded', 'project_opening_soon', 'project_support', 'project_more_training',
     // Cadres exclusifs accordés par l'école (migration 113) — même idiome que `levels` : une
     // liste séparée par des virgules. Passe par cette liste blanche, donc par PATCH /:id, donc
     // par `authorizeRoles(...ADMIN_ROLES)` : un formateur ne peut pas s'accorder un Champion.
@@ -165,7 +172,10 @@ function refusNote(body) {
    rappel arrive déjà ramenée à 0 ou 1 (normaliserSaisie) : sans cette règle, décocher avant la
    migration 169 aurait annoncé « sauf le rappel » pour une case qui ne disait rien. */
 const CASES = new Set(['project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job',
-    'project_improvement', 'project_oven_wood', 'project_oven_electric', 'project_oven_gas', 'a_recontacter']);
+    'project_improvement', 'project_oven_wood', 'project_oven_electric', 'project_oven_gas',
+    'project_dine_in', 'project_takeaway', 'project_by_slice', 'project_vending', 'project_catering', 'project_add_on',
+    'project_kneader', 'project_sheeter', 'project_fridge_counter', 'project_oven_owned',
+    'project_premises', 'project_funded', 'project_opening_soon', 'project_support', 'project_more_training', 'a_recontacter']);
 function champsIgnores(body, champs) {
     const perdu = (f) => (CASES.has(f) ? estCoche(body[f])
         : body[f] !== undefined && body[f] !== null && body[f] !== '' && body[f] !== false);
@@ -201,9 +211,10 @@ function normaliserSaisie(b) {
     if (out.email != null) out.email = String(out.email).trim().toLowerCase();
     if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
     if (out.a_recontacter !== undefined) out.a_recontacter = estCoche(out.a_recontacter) ? 1 : 0;
-    /* UN TYPE DE FOUR SANS FOUR EST UNE CONTRADICTION : le formulaire les lie, mais la route accepte
-       d'autres appelants. Un type coché coche « Four » — l'export dirait sinon « bois » sans four. */
-    if (['project_oven_wood', 'project_oven_electric', 'project_oven_gas'].some((k) => estCoche(out[k]))) out.project_oven = 1;
+    /* UN FOUR À BOIS SANS FOUR EST UNE CONTRADICTION : le formulaire les lie, mais la route accepte
+       d'autres appelants. Une précision cochée — un type, ou « déjà acheté » (173) — coche « Four » :
+       l'export, qui ne les dit qu'entre les parenthèses du four, les tairait sinon. */
+    if (PRECISIONS_FOUR.some(({ c }) => estCoche(out[c]))) out.project_oven = 1;
     if (out.france_travail_id != null) out.france_travail_id = String(out.france_travail_id).trim();
     /* L'ANCIENNE SAISIE « EN LIGNE » d'une entreprise (`company: {…}`, cf. createLearner et
        updateLearner) écrit dans `company` sans passer par la normalisation de l'entreprise. Plus
@@ -219,17 +230,16 @@ function normaliserSaisie(b) {
 const getLearners = async (req, res) => {
     const organizationId = req.user.organization_id;
     const q = req.query.q ? `%${req.query.q}%` : '%';
-    /* Civilité et projet : lus pour le repère « Fiche incomplète » (plus bas), jamais renvoyés.
-       La case « perfectionnement » arrive avec la 158 : sans elle, NULL — la liste ne tombe pas
-       pour une colonne absente (même précaution que l'export des partenaires). */
-    const projetPerf = await colonneOuNull(db.promise(), 'learner', 'project_improvement', 'l.');
+    /* Civilité et projet : lus pour le repère « Fiche incomplète » (plus bas), jamais renvoyés. Les
+       cases arrivées par migration (158, 172, 173) se lisent NULL tant que la leur n'est pas jouée :
+       la liste ne tombe pas pour une colonne absente (lib/projet.js, comme l'export des partenaires). */
+    const colonnesProjet = await colonnesProjetSql(db.promise());
 
     db.query(
         `SELECT l.id, l.organization_id, l.first_name, l.last_name, l.email, l.phone,
                 l.birthday, l.zip_code, l.town, l.address, l.professional_status, l.levels,
                 l.financing, l.opco, l.created_at,
-                l.civility, l.project_creation, l.project_takeover, l.project_oven,
-                l.project_truck, l.project_job, ${projetPerf},
+                l.civility, ${colonnesProjet},
                 l.company_id, c.name AS company_name,
                 u.email AS account_email
          FROM learner l
@@ -265,12 +275,10 @@ const getLearners = async (req, res) => {
             } catch (e) {
                 console.error('Liste des stagiaires, champs manquants :', e.message);
             }
-            const data = results.map(({ account_email, levels, civility, project_creation, project_takeover,
-                project_oven, project_truck, project_job, project_improvement, ...rest }) => {
-                const manque = transmis ? champsManquants({
-                    ...rest, civility, project_creation, project_takeover, project_oven, project_truck,
-                    project_job, project_improvement,
-                }, transmis).map((m) => m.libelle) : [];
+            const data = results.map((ligne) => {
+                const manque = transmis ? champsManquants(ligne, transmis).map((m) => m.libelle) : [];
+                const { account_email, levels, ...rest } = ligne;
+                for (const c of ['civility', ...COLONNES_PHRASE]) delete rest[c]; // lus, jamais renvoyés
                 return {
                     ...rest, levels: resoudreCsv(levels, resoudre), has_account: !!account_email,
                     ...(manque.length ? { champs_manquants: manque } : {}),

@@ -19,6 +19,7 @@
  * la fiche. Les champs de l'ENTREPRISE non plus : ils se complètent sur la fiche entreprise.
  */
 const { CHAMPS_TRANSMISSIBLES } = require('./consentements.js');
+const { COLONNES_PHRASE, phraseProjet } = require('./projet.js');
 
 /* La colonne de la fiche derrière chaque champ « stagiaire » du catalogue — LA MÊME que lit
    l'export envoyé aux partenaires (consentement.controller, `valeurs`). Un test vérifie qu'elles
@@ -29,9 +30,11 @@ const COLONNES = {
     adresse: 'address', code_postal: 'zip_code', ville: 'town',
     statut: 'professional_status',
 };
-/* Le projet est six cases en base ; l'export n'envoie que celles qui sont cochées. Aucune cochée,
-   c'est un projet vide. */
-const PROJETS = ['project_creation', 'project_takeover', 'project_oven', 'project_truck', 'project_job', 'project_improvement'];
+/* Le projet est une série de cases, dont l'export fait une phrase (lib/projet.js). Il MANQUE quand
+   cette phrase serait vide : la même fonction que l'export, donc la même réponse que ce que
+   recevrait le partenaire. L'avancement (local trouvé, financement…), qui ne lui part pas, ne suffit
+   donc pas à dire le projet renseigné. `PROJETS` : les colonnes que cette règle lit. */
+const PROJETS = COLONNES_PHRASE;
 
 /** Toujours vérifiés, que l'école transmette ou non. */
 const ESSENTIELS = ['email', 'telephone', 'adresse', 'code_postal', 'ville'];
@@ -52,9 +55,7 @@ function champsManquants(learner, transmis = []) {
         if (cle !== 'projet' && !COLONNES[cle]) continue; // session ou entreprise
         const partenaires = envoyes.has(cle);
         if (!partenaires && !ESSENTIELS.includes(cle)) continue;
-        const manque = cle === 'projet'
-            ? !PROJETS.some((c) => Number(l[c]) === 1)
-            : vide(l[COLONNES[cle]]);
+        const manque = cle === 'projet' ? phraseProjet(l) === '' : vide(l[COLONNES[cle]]);
         if (manque) out.push({ cle, libelle: CHAMPS_TRANSMISSIBLES[cle].libelle, partenaires });
     }
     return out;
