@@ -101,6 +101,8 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   // VILLE en majuscules aussi, même règle et même locale — le serveur l'applique de toute façon
   // (src/api/lib/saisie.js) ; la faire dès la frappe évite qu'elle change de casse à l'enregistrement.
   const setVille = (e) => setForm((p) => ({ ...p, town: e.target.value.toLocaleUpperCase("fr") }));
+  // LIEU DE NAISSANCE aussi, depuis le 2026-09-22 : c'est une ville, même règle, même locale.
+  const setLieuNaissance = (e) => setForm((p) => ({ ...p, birth_place: e.target.value.toLocaleUpperCase("fr") }));
   // E-MAIL en minuscules et sans espace : c'est aussi l'identifiant de connexion du stagiaire,
   // et « Jean@X.fr » puis « jean@x.fr » finiraient en deux comptes pour la même personne.
   const setEmail = (e) => setForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }));
@@ -233,7 +235,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
               </div>
               <div className="row2">
                 <Field label="Date de naissance" type="date" value={form.birthday} onChange={set("birthday")} />
-                <Field label="Lieu de naissance" value={form.birth_place} onChange={set("birth_place")} placeholder="Tarbes" />
+                <Field label="Lieu de naissance" value={form.birth_place} onChange={setLieuNaissance} placeholder="TARBES" />
               </div>
               <div className="row2">
                 <Field label="Téléphone" value={form.phone} onChange={set("phone")} placeholder="06 12 34 56 78" requis />

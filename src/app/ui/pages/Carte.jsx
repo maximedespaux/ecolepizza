@@ -3,8 +3,9 @@ import { getCarte, geocodeCarte, getFormations } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
-import { LEVELS, colorForLevel, LEVEL_LABEL, setBadgeColors, codesDuPoint } from "../lib/levels.js";
+import { LEVELS, colorForLevel, setBadgeColors, codesDuPoint } from "../lib/levels.js";
 import { normaliseRecherche } from "../lib/format.js";
+import { grouperPoints, couleurDuPoint, couleurDuGroupe, encartStagiaire, encartVille, echapper } from "../lib/carteGroupes.js";
 
 // Centroïdes (préfecture) par département — suffisant pour une carte à bulles.
 const DEPTS = {
@@ -229,18 +230,32 @@ function Carte() {
          revenir d'abord à « Tous les départements ». Elles restent, estompées ; celle du
          département ouvert cède la place à ses points. */
       for (const d of filtered) if (d.dept !== dept) bulle(d, true);
-      // Points précis (stagiaires géocodés) du département, colorés par niveau.
+      /* Les points du département (lib/carteGroupes.js) : UN PAR VILLE pour les stagiaires situés
+         à leur ville — ils partagent tous le même point, et empilés un seul se voyait —, un par
+         stagiaire pour ceux d'une entreprise, situés à son adresse exacte. Tout ce qui vient de la
+         base passe par `echapper` : Leaflet l'écrit en innerHTML. */
       const pts = [];
-      for (const p of deptPoints) {
-        // Couleur du point = couleur de la formation suivie (la plus récente), sinon niveau.
-        const col = colorForLevel(p.program_code || p.level);
-        const m = L.circleMarker([p.lat, p.lng], {
-          radius: 7, weight: 1.5, color: "#fff", fillColor: col, fillOpacity: 0.9,
-        });
-        m.bindPopup(`<b>${p.name}</b><br>${p.town || ""}<br><span style="color:${col}">${p.program_code || LEVEL_LABEL[p.level] || "Formation non définie"}</span>`);
-        m.bindTooltip(p.name, { direction: "top" });
-        group.addLayer(m);
-        pts.push([p.lat, p.lng]);
+      for (const g of grouperPoints(deptPoints)) {
+        if (g.groupe) {
+          const m = L.marker([g.lat, g.lng], {
+            icon: L.divIcon({
+              className: "pt-groupe-ic", iconSize: [28, 28], iconAnchor: [14, 14],
+              html: `<span class="pt-groupe" style="background:${echapper(couleurDuGroupe(g))}">${g.points.length}</span>`,
+            }),
+          });
+          m.bindPopup(encartVille(g), { maxHeight: 260 });
+          m.bindTooltip(`${echapper(g.ville)} · ${g.points.length} stagiaires`, { direction: "top", offset: [0, -12] });
+          group.addLayer(m);
+        } else {
+          const p = g.points[0];
+          const m = L.circleMarker([p.lat, p.lng], {
+            radius: 7, weight: 1.5, color: "#fff", fillColor: couleurDuPoint(p), fillOpacity: 0.9,
+          });
+          m.bindPopup(encartStagiaire(p));
+          m.bindTooltip(echapper(p.name), { direction: "top" });
+          group.addLayer(m);
+        }
+        pts.push([g.lat, g.lng]);
       }
       map.addLayer(group);
       layerRef.current = group;

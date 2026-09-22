@@ -365,11 +365,11 @@ function InfosTab({ onSaved }) {
   const [msg, setMsg] = useState(null); // { ok, text }
 
   useEffect(() => { getMyInfos().then((r) => setF(r.data || {})).catch(() => setF({})); }, []);
-  /* Le NOM DE FAMILLE et la VILLE DE L'ENTREPRISE en capitales dès la frappe : le serveur les y
-     met de toute façon (src/api/lib/saisie.js), et sans ça ils changeraient de casse sous les yeux
-     du stagiaire au prochain chargement. */
+  /* Le NOM DE FAMILLE, la VILLE DE L'ENTREPRISE et le LIEU DE NAISSANCE en capitales dès la frappe :
+     le serveur les y met de toute façon (src/api/lib/saisie.js), et sans ça ils changeraient de casse
+     sous les yeux du stagiaire au prochain chargement. */
   const set = (k) => (e) => setF((p) => ({
-    ...p, [k]: k === "last_name" || k === "company_town" ? e.target.value.toLocaleUpperCase("fr") : e.target.value,
+    ...p, [k]: k === "last_name" || k === "company_town" || k === "birth_place" ? e.target.value.toLocaleUpperCase("fr") : e.target.value,
   }));
 
   async function save() {
