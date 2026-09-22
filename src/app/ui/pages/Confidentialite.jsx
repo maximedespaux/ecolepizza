@@ -127,7 +127,7 @@ export default function Confidentialite() {
                     <b>Uniquement avec votre accord.</b> Cette transmission n'a lieu que si vous
                     l'avez explicitement acceptée. Refuser n'a aucune conséquence sur votre
                     formation, et vous pouvez revenir sur votre réponse à tout moment depuis
-                    <b> Mon profil → Visibilité</b>. Votre réponse est conservée avec sa date.
+                    <b> Mon profil → Confidentialité</b>. Votre réponse est conservée avec sa date.
                   </span>
                 )}
               </li>

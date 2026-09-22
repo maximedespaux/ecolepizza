@@ -46,37 +46,37 @@ const ESPACE = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
  * de la formation, dont le stagiaire accuse réception dans son espace.
  */
 const DROIT_IMAGE = {
-    note: 'Il reprend votre document « Droit à l’image », avec deux paires de cases (photos, partenaires) '
-        + 'qui se cochent selon la réponse du stagiaire. Relisez-le, complétez-le si besoin, puis enregistrez : '
+    note: 'Il reprend votre document «\u00a0Droit à l’image\u00a0», avec deux paires de cases (photos, partenaires) '
+        + 'qui se cochent selon la réponse du stagiaire. Relisez-le, complétez-le si besoin, puis enregistrez\u00a0: '
         + 'rien n’est enregistré avant.',
     body: [
         P('<span style="font-size: 20pt;"><strong>Autorisation</strong></span>', CENTRE),
         P('<em>Cette autorisation devra être conservée par l’organisateur</em>', CENTRE),
         P('<br>'),
-        P('<strong>Objet :</strong>'),
+        P('<strong>Objet&nbsp;:</strong>'),
         liste(['Autorisation de publication de photographies', 'Communication des données personnelles à nos partenaires']),
         P('<br>'),
         P(`Je soussigné(e) ${jeton('Personne')}`),
         /* L'ADRESSE SUR SA LIGNE : à la suite, elle poussait le téléphone en bout de ligne, et le
            numéro se coupait en deux au rendu. */
-        P(`Adresse : ${jeton('Adresse')}`),
-        P(`Mail : ${jeton('Email')}${ESPACE}Téléphone : ${jeton('Téléphone')}`),
+        P(`Adresse&nbsp;: ${jeton('Adresse')}`),
+        P(`Mail&nbsp;: ${jeton('Email')}${ESPACE}Téléphone&nbsp;: ${jeton('Téléphone')}`),
         P('<br>'),
         P('<strong>1. Photographies</strong>'),
         P(`${jeton('Case photos oui')} Autorise${ESPACE}${jeton('Case photos non')} N’autorise pas`),
         P(`${jeton('Organisme')} à diffuser des photographies prises au cours de la formation dans le but de `
-          + 'promouvoir ses formations. Cette autorisation est valable pour :', JUSTIF),
-        liste(['la publication sur son site internet ;', 'la publication sur ses réseaux sociaux ;',
+          + 'promouvoir ses formations. Cette autorisation est valable pour&nbsp;:', JUSTIF),
+        liste(['la publication sur son site internet&nbsp;;', 'la publication sur ses réseaux sociaux&nbsp;;',
             'l’envoi de ses lettres d’information, par e-mail ou par SMS.']),
         P('<br>'),
         P('<strong>2. Partenaires</strong>'),
         P(`${jeton('Case partenaires oui')} Autorise${ESPACE}${jeton('Case partenaires non')} N’autorise pas`),
-        P(`${jeton('Organisme')} à transmettre ${jeton('Données partenaires')} à ses partenaires, dans le cadre de :`, JUSTIF),
-        liste(['la communication d’exclusivités sur leurs produits ou services ;',
+        P(`${jeton('Organisme')} à transmettre ${jeton('Données partenaires')} à ses partenaires, dans le cadre de&nbsp;:`, JUSTIF),
+        liste(['la communication d’exclusivités sur leurs produits ou services&nbsp;;',
             'l’envoi d’informations commerciales et promotionnelles liées à leurs activités.']),
         P('<br>'),
         P(`Fait à ${jeton('Ville organisme')}, le ${jeton('Jour1')}`),
-        P('Signature :'),
+        P('Signature&nbsp;:'),
         P(jeton('Signature stagiaire')),
     ].join(''),
 };

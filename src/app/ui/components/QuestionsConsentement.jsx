@@ -38,7 +38,7 @@ export default function QuestionsConsentement({ questions, onRepondu }) {
       <p className="doc-questions-intro">
         <Icon name="shield" size={15} aria-hidden="true" />
         <span>
-          <b>Avant de signer :</b> ce document imprime votre réponse
+          <b>Avant de signer&nbsp;:</b> ce document imprime votre réponse
           {questions.length > 1 ? ` à ${questions.length} questions.` : "."}
         </span>
       </p>

@@ -64,7 +64,7 @@ const QUESTIONS = {
   droit_image: {
     titre: "Droit à l'image", icone: "camera",
     annonce: "Une photo où apparaît un stagiaire ne se diffuse qu'avec son accord. Sa réponse "
-      + "s'imprime sur le document « Droit à l'image », qui ne se signe qu'une fois la réponse donnée.",
+      + "s'imprime sur le document «\u00a0Droit à l'image\u00a0», qui ne se signe qu'une fois la réponse donnée.",
   },
 };
 

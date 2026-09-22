@@ -431,7 +431,7 @@ async function consentementsManquants(conn, orgId, doc) {
 }
 
 /* « Diffuser des photos… » et « Transmettre mes coordonnées… » : ce qui manque, dit en clair. */
-const questionsEnClair = (manquants) => manquants.map((f) => `« ${f.titre} »`).join(' et ');
+const questionsEnClair = (manquants) => manquants.map((f) => `«\u00a0${f.titre}\u00a0»`).join(' et ');
 
 // Un document d'émargement (type EMARGEMENT) : rendu via le moteur d'émargement
 // (grille visuelle) + un bloc de signatures ÉLECTRONIQUES (stagiaire + organisme).
@@ -1436,7 +1436,7 @@ const signDocument = async (req, res) => {
                 message: isStaff
                     ? `Le stagiaire n'a pas encore répondu à ${questionsEnClair(manquants)}, et ce document imprime ${deux ? 'ses réponses' : 'sa réponse'}. `
                       + `Il répond depuis son espace, ou vous enregistrez ${deux ? 'ses réponses papier' : 'sa réponse papier'} sur la page de la session.`
-                    : `Répondez d'abord à ${questionsEnClair(manquants)} : ${deux ? 'vos réponses s\'impriment' : 'votre réponse s\'imprime'} sur ce document.`,
+                    : `Répondez d'abord à ${questionsEnClair(manquants)}\u00a0: ${deux ? 'vos réponses s\'impriment' : 'votre réponse s\'imprime'} sur ce document.`,
                 consentements: manquants.map((f) => f.cle),
             });
         }

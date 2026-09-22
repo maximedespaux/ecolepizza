@@ -95,7 +95,9 @@ test('la page de confidentialité dit que cette transmission repose sur l\'accor
     const page = lire(path.join(UI, 'pages/Confidentialite.jsx'));
     assert.match(page, /Uniquement avec votre accord/,
         "Sans cette mention, un lecteur comprend que ses coordonnées partent de toute façon.");
-    assert.match(page, /Mon profil → Visibilité/, 'et la page doit dire OÙ revenir sur sa réponse');
+    /* L'ONGLET S'APPELLE « Confidentialité » depuis le 2026-09-22 : il s'appelait « Visibilité », et
+       la fenêtre de consentement envoyait vers un onglet « Confidentialité » qui n'existait pas. */
+    assert.match(page, /Mon profil → Confidentialité/, 'et la page doit dire OÙ revenir sur sa réponse');
 });
 
 test('le code marche sans la migration 130', () => {

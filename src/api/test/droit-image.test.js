@@ -230,7 +230,7 @@ test('le stagiaire ne signe pas un document qui imprime une réponse qu\'il n\'a
         body: { signer_name: 'Jean Dupont', signature_data: SIGNATURE } });
     assert.strictEqual(r.code, 422);
     assert.deepStrictEqual(r.corps.consentements, ['droit_image']);
-    assert.match(r.corps.message, /Répondez d'abord à « Diffuser des photos de moi prises pendant la formation »/);
+    assert.match(r.corps.message, /Répondez d'abord à «\u00a0Diffuser des photos de moi prises pendant la formation\u00a0»\u00a0:/);
 });
 
 test('le personnel non plus : on lui dit où saisir une réponse papier', async () => {
@@ -342,4 +342,49 @@ test('la palette propose les jetons, hors documents d\'entreprise', () => {
     assert.match(tpl, /groups\.push\(catalogGroup\('Autorisations'\)\);/);
     /* Un document d'entreprise n'a pas de stagiaire unique dont imprimer la réponse. */
     assert.match(tpl, /const HIDDEN_FOR_COMPANY = new Set\(\[[^\]]*'Autorisations'/);
+});
+
+// ── Les mots de l'écran ──────────────────────────────────────────────────────────────────────
+
+test('le chemin « Mon profil → … » mène à un onglet qui existe', () => {
+    /* LE DÉFAUT (2026-09-22) : la fenêtre de consentement envoyait vers « Mon profil →
+       Confidentialité », et l'onglet s'appelait « Visibilité ». L'école a choisi de renommer
+       l'onglet. Ce test lit les onglets du profil et chaque chemin annoncé aux stagiaires. */
+    const profil = lire(path.join(UI, 'components/ProfileModal.jsx'));
+    const onglets = [...profil.matchAll(/onClick=\{\(\) => setTab\("[a-z]+"\)\}>([^<]+)<\/button>/g)].map((m) => m[1]);
+    assert.ok(onglets.includes('Confidentialité'), `onglets trouvés : ${onglets.join(', ')}`);
+    for (const f of ['components/ConsentModal.jsx', 'components/QuestionsConsentement.jsx', 'pages/Confidentialite.jsx']) {
+        const chemins = [...lire(path.join(UI, f)).matchAll(/Mon profil → ([A-ZÉa-zéèêàç ]+?)(?=<|[.,])/g)].map((m) => m[1].trim());
+        assert.ok(chemins.length, `${f} doit dire où changer sa réponse`);
+        for (const c of chemins) assert.ok(onglets.includes(c), `${f} envoie vers « ${c} », qui n'est pas un onglet du profil`);
+    }
+    /* Et la section ne répète pas le nom de l'onglet qui la contient. */
+    assert.match(profil, /<div className="consent-bloc-t">Mes autorisations<\/div>/);
+});
+
+test('aucune ponctuation haute ne peut commencer une ligne', () => {
+    /* Relevé sur téléphone : « …ses formations » en bout de ligne, et la suivante commençait par
+       « : sur son site internet ». Devant « : ; » et à l'intérieur des guillemets, l'espace est
+       insécable ; une espace ordinaire à ces endroits laisse le navigateur couper la ligne. */
+    const ordinaire = / [:;»]|« /;
+    const textes = {
+        'la question': lib.FINALITES.droit_image.formulation,
+        'les supports': lib.FINALITES.droit_image.destinataires,
+        'le refus de signer': docCtrl.questionsEnClair([lib.FINALITES.droit_image, lib.FINALITES.partenaires]),
+        ...Object.fromEntries(TOKEN_CATALOG.find((g) => g.group === 'Autorisations').tokens.map((t) => [`le jeton ${t.key}`, t.label])),
+    };
+    for (const [quoi, texte] of Object.entries(textes)) {
+        assert.doesNotMatch(texte, ordinaire, `${quoi} : « ${texte} »`);
+    }
+    assert.match(lib.FINALITES.droit_image.formulation, /formations\u00a0: sur son site internet/);
+    /* Le document proposé, une fois ses balises retirées : ses deux-points et ses points-virgules
+       suivent une espace insécable (&nbsp;), comme la note qui l'annonce dans l'éditeur. */
+    const { MODELES_PROPOSES } = require('../lib/modelesProposes.js');
+    const texteDuModele = MODELES_PROPOSES['droit-image'].body.replace(/<[^>]+>/g, '');
+    assert.doesNotMatch(texteDuModele, / [:;]/, 'le document proposé');
+    assert.doesNotMatch(MODELES_PROPOSES['droit-image'].note, ordinaire, 'la note de l\'éditeur');
+    const q = lire(path.join(UI, 'components/QuestionsConsentement.jsx'));
+    assert.match(q, /<b>Avant de signer&nbsp;:<\/b>/);
+    const vue = lire(path.join(UI, 'components/DocumentViewModal.jsx'));
+    assert.match(vue, /`«\\u00a0\$\{q\.titre\}\\u00a0»`/, 'les titres cités par la ligne d\'attente');
 });
