@@ -3,9 +3,40 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { getNotesSession, saveNote, saveVerdict, cloturerCandidat } = require('./evaluation.controller.js');
+const { lirePlage } = require('../lib/plageHoraire.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 const SLOT_LABEL = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
+
+/* LES HEURES SONT-ELLES EN BASE ? (migration 181) Sondé une fois par requête, jamais mis en
+   cache : une migration jouée pendant que le serveur tourne doit se voir sans redémarrage, et la
+   requête est une lecture d'`information_schema`, pas un balayage de table. */
+async function colonnesHoraires(conn) {
+    try {
+        const [[r]] = await conn.query(
+            `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+              WHERE table_schema = DATABASE() AND table_name = 'session_intervenant_slot'
+                AND column_name IN ('heure_debut', 'heure_fin')`);
+        return Number(r && r.n) === 2;
+    } catch { return false; }
+}
+
+/* LES DEMI-JOURNÉES, avec leurs heures quand la colonne existe. Cascade sur
+   ER_BAD_FIELD_ERROR : le code doit rendre la même forme AVANT et APRÈS la migration, les
+   heures en moins. */
+async function lireCreneaux(conn, ids) {
+    const base = `SELECT session_intervenant_id AS si, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot`;
+    const fin = ` FROM session_intervenant_slot WHERE session_intervenant_id IN (?)`;
+    try {
+        const [rows] = await conn.query(
+            `${base}, TIME_FORMAT(heure_debut, '%H:%i') AS debut, TIME_FORMAT(heure_fin, '%H:%i') AS fin${fin}`, [ids]);
+        return rows;
+    } catch (e) {
+        if (e && e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+        const [rows] = await conn.query(base + fin, [ids]);
+        return rows;
+    }
+}
 
 // Vérifie que la session appartient à l'organisme du jeton.
 async function ownSession(conn, orgId, sessionId) {
@@ -32,15 +63,17 @@ const listSessionIntervenants = async (req, res) => {
         );
         if (assigned.length) {
             const ids = assigned.map((a) => a.id);
-            const [slots] = await conn.query(
-                `SELECT session_intervenant_id AS si, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot
-                 FROM session_intervenant_slot WHERE session_intervenant_id IN (?)`,
-                [ids]
-            );
+            const slots = await lireCreneaux(conn, ids);
             const by = {};
-            for (const s of slots) (by[s.si] = by[s.si] || []).push({ date: s.date, slot: s.slot });
+            for (const s of slots) {
+                (by[s.si] = by[s.si] || []).push({ date: s.date, slot: s.slot, debut: s.debut || null, fin: s.fin || null });
+            }
             for (const a of assigned) a.slots = by[a.id] || [];
         }
+        /* `horaires` DIT À L'ÉCRAN CE QU'IL PEUT PROPOSER. Sans la 181, il affiche les cases sans
+           les deux champs d'heures et l'explique, au lieu de laisser saisir des heures que
+           l'enregistrement jetterait en silence. */
+        const horaires = await colonnesHoraires(conn);
 
         // Vivier : comptes INTERVENANT actifs non déjà affectés à CETTE session.
         const [roster] = await conn.query(
@@ -50,7 +83,7 @@ const listSessionIntervenants = async (req, res) => {
              ORDER BY last_name, first_name`,
             [orgId, req.params.id]
         );
-        res.json({ data: { assigned, roster } });
+        res.json({ data: { assigned, roster, horaires } });
     } catch (err) {
         console.error('Erreur liste intervenants session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -96,17 +129,39 @@ const setIntervenantSlots = async (req, res) => {
         if (!si) return res.status(404).json({ message: 'Affectation introuvable' });
 
         const list = Array.isArray(req.body?.slots) ? req.body.slots : [];
+        const horaires = await colonnesHoraires(conn);
         await conn.query('DELETE FROM session_intervenant_slot WHERE session_intervenant_id = ?', [si.id]);
+        let heuresPerdues = 0;
         for (const s of list) {
             const date = String(s.date || '').slice(0, 10);
             const slot = String(s.slot || '');
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !SLOTS.includes(slot)) continue;
-            await conn.query(
-                'INSERT IGNORE INTO session_intervenant_slot (id, session_intervenant_id, date, slot) VALUES (?, ?, ?, ?)',
-                [crypto.randomUUID(), si.id, date, slot]);
+            /* UNE PLAGE INCOMPLÈTE OU À L'ENVERS N'EST PAS ENREGISTRÉE, et la demi-journée l'est
+               quand même : ce qui compte d'abord, c'est qu'il était là. `lirePlage` est la seule
+               règle (lib/plageHoraire.js), partagée avec la feuille d'émargement. */
+            const p = lirePlage(s.debut, s.fin);
+            if (horaires) {
+                await conn.query(
+                    `INSERT IGNORE INTO session_intervenant_slot
+                        (id, session_intervenant_id, date, slot, heure_debut, heure_fin)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [crypto.randomUUID(), si.id, date, slot, p ? p.debut : null, p ? p.fin : null]);
+            } else {
+                if (p) heuresPerdues += 1;
+                await conn.query(
+                    'INSERT IGNORE INTO session_intervenant_slot (id, session_intervenant_id, date, slot) VALUES (?, ?, ?, ?)',
+                    [crypto.randomUUID(), si.id, date, slot]);
+            }
         }
         logAudit(req, 'session.intervenant.slots', 'TrainingSession', req.params.id);
-        res.json({ success: true, message: 'Demi-journées enregistrées.' });
+        /* ON LE DIT PLUTÔT QUE DE REFUSER : les demi-journées, elles, sont bien enregistrées.
+           Un 503 aurait fait croire que rien n'était passé, et l'école aurait tout ressaisi. */
+        res.json({
+            success: true, horaires,
+            message: heuresPerdues
+                ? 'Demi-journées enregistrées, SANS les heures : la migration 181 n’est pas jouée.'
+                : 'Demi-journées enregistrées.',
+        });
     } catch (err) {
         console.error('Erreur demi-journées intervenant :', err);
         res.status(500).json({ error: 'Internal Server Error' });

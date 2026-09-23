@@ -4,6 +4,7 @@
 const crypto = require('crypto');
 const { htmlToPdf } = require('./docxpdf.js');
 const { decrypt } = require('./crypto.js');
+const { plageFr } = require('./plageHoraire.js');
 const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est chiffré au repos
 
 const SLOT = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
@@ -118,6 +119,53 @@ function mergeEmargConfig(raw) {
 // 1 mm ≈ 3.7795 px (96 dpi) — pour les attributs width/height des images.
 const MM = 3.7795;
 
+/**
+ * LES INTERVENANTS D'UNE SESSION, avec leurs demi-journées ET leurs heures (migration 181).
+ *
+ * UNE SEULE DÉFINITION POUR LES DEUX CHEMINS. La même requête vivait en double — la feuille
+ * archivée et son aperçu —, et ajouter les heures à l'une seulement aurait donné un aperçu qui
+ * ne ressemble pas au PDF : le défaut le plus coûteux de cet écran, puisqu'on ne le voit qu'une
+ * fois le document signé.
+ *
+ * CASCADE SUR ER_BAD_FIELD_ERROR : sans la 181, on relit sans les heures et la feuille sort
+ * exactement comme avant.
+ */
+async function chargerIntervenants(conn, sessionId) {
+    const base = `SELECT si.user_id, si.specialty, u.first_name, u.last_name,
+                         DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot`;
+    const suite = ` FROM session_intervenant si
+             JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
+             LEFT JOIN user u ON u.id = si.user_id
+             WHERE si.session_id = ?`;
+    let lignes;
+    try {
+        [lignes] = await conn.query(`${base}, sis.heure_debut AS hd, sis.heure_fin AS hf${suite}`, [sessionId]);
+    } catch (err) {
+        if (err && err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+        [lignes] = await conn.query(base + suite, [sessionId]);
+    }
+    const parUtilisateur = {};
+    for (const a of lignes) {
+        const iv = parUtilisateur[a.user_id] || (parUtilisateur[a.user_id] = {
+            user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(),
+            specialty: a.specialty, assigned: new Set(), heures: {},
+        });
+        const cle = `${a.date}|${a.slot}`;
+        iv.assigned.add(cle);
+        const plage = plageFr(a.hd, a.hf);
+        if (plage) iv.heures[cle] = plage;
+    }
+    return parUtilisateur;
+}
+
+/** Les intervenants en ligne de feuille : ils ne signent QUE les demi-journées qu'ils assurent. */
+const lignesIntervenants = (parUtilisateur, ivSig) => Object.values(parUtilisateur).map((iv) => ({
+    role: 'intervenant', name: iv.name, specialty: iv.specialty,
+    sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null,
+    appliesTo: (k) => iv.assigned.has(k),
+    heuresDe: (k) => iv.heures[k] || '',
+}));
+
 function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const cfg = mergeEmargConfig(config);
     const dens = DENSITY[cfg.density] || DENSITY.normal;
@@ -188,11 +236,22 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const colWpx = px(colW), nameWpx = px(nameW), rowHpx = px(rowH);
     // Cellule signature : image dimensionnée à la case, case vide, ou grisée (non concerné).
     // LibreOffice respecte mieux les attributs HTML (width/height/bgcolor) que le CSS.
-    const cell = (dataUrl, applies) => {
+    /* LES HEURES AU-DESSUS DE LA SIGNATURE (migration 181). Un intervenant externe ne suit pas
+       les horaires des stagiaires — l'expert hygiène passe de 10 h à 12 h 30 —, si bien que la
+       ligne « Horaires » du haut ne parle pas de lui. Sa case portait donc une signature muette :
+       on savait QU'il était là, jamais QUAND. La plage se glisse au-dessus de l'image, et non
+       à côté : la colonne fait 12 à 20 mm, deux informations côte à côte n'y tiendraient pas.
+       Sans heures (cas de toutes les demi-journées d'avant la 181), rien ne s'ajoute. */
+    const cell = (dataUrl, applies, heures) => {
         if (!applies) return `<td width="${colWpx}" height="${rowHpx}" bgcolor="#f4f4f6"></td>`;
+        const h = heures ? `<div class="hr">${esc(heures)}</div>` : '';
         const v = decrypt(dataUrl);
-        if (v) return `<td width="${colWpx}" height="${rowHpx}"><img src="${v}" width="${px(sigW)}" height="${px(sigH)}" style="object-fit:contain"/></td>`;
-        return `<td width="${colWpx}" height="${rowHpx}"></td>`;
+        /* L'IMAGE PERD LA HAUTEUR DE LA LIGNE D'HEURES, sinon la case grandit et la feuille ne
+           tient plus sur une page — LibreOffice n'honore aucune hauteur de tableau (CLAUDE.md § 3),
+           c'est le CONTENU qui la fait. */
+        const imgH = heures ? Math.max(4, sigH - dens.sub * 0.4) : sigH;
+        if (v) return `<td width="${colWpx}" height="${rowHpx}">${h}<img src="${v}" width="${px(sigW)}" height="${px(imgH)}" style="object-fit:contain"/></td>`;
+        return `<td width="${colWpx}" height="${rowHpx}">${h}</td>`;
     };
     // Cellules des colonnes personnalisées : texte fixe répété, ou case vide à remplir.
     const exFilled = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}" height="${rowHpx}">${esc(x.text || '')}</td>`).join('');
@@ -200,7 +259,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
     const roleSub = (r) => r === 'stagiaire' ? 'Stagiaire' : r === 'intervenant' ? 'Intervenant' : r === 'organisme' ? 'Organisme de formation' : '';
     const rowFor = (p) => `<tr>
         <td class="nm" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${roleSub(p.role) ? `<div class="sub">${roleSub(p.role)}</div>` : ''}</td>
-        ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k)); }).join('')}${exFilled(afterEx)}
+        ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k), p.heuresDe ? p.heuresDe(k) : ''); }).join('')}${exFilled(afterEx)}
     </tr>`;
 
     // Lignes récap (horaires / volume) : plage horaire et durée par demi-journée.
@@ -251,6 +310,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         td.nm .sub{font-weight:400;font-size:${dens.sub}px;color:#8a8f99}
         tr.info td{background:#faf7f2;font-size:${dens.sub}px;color:#555;padding:1px 3px}
         tr.info td.ilabel{font-weight:600;color:#333;text-align:left}
+        td .hr{font-size:${dens.sub}px;color:#555;line-height:1.1;white-space:nowrap}
         .foot{margin-top:10px;font-size:10px}
         .foot td{vertical-align:bottom}
         .stamp{text-align:center}
@@ -380,24 +440,8 @@ async function regenEmargement(conn, orgId, enrollmentId) {
              WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
             [e.session_id]
         );
-        // Intervenants affectés (avec leurs demi-journées).
-        const [ivAssign] = await conn.query(
-            `SELECT si.user_id, si.specialty, u.first_name, u.last_name,
-                    DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot
-             FROM session_intervenant si
-             JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
-             LEFT JOIN user u ON u.id = si.user_id
-             WHERE si.session_id = ?`,
-            [e.session_id]
-        );
-        const ivByUser = {};
-        for (const a of ivAssign) {
-            const iv = ivByUser[a.user_id] || (ivByUser[a.user_id] = {
-                user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(),
-                specialty: a.specialty, assigned: new Set(),
-            });
-            iv.assigned.add(`${a.date}|${a.slot}`);
-        }
+        // Intervenants affectés (avec leurs demi-journées et leurs heures).
+        const ivByUser = await chargerIntervenants(conn, e.session_id);
 
         // Colonnes de la grille : demi-journées existantes (date|slot).
         const sheetKeys = new Set(rows.map((r) => `${r.date}|${r.slot}`));
@@ -410,10 +454,7 @@ async function regenEmargement(conn, orgId, enrollmentId) {
                 role: 'formateur', name: `${f.last_name || ''} ${f.first_name || ''}`.trim(),
                 sigOf: (k) => trSig[`${f.id}|${k}`] || null, appliesTo: (k) => sheetKeys.has(k),
             })),
-            ...Object.values(ivByUser).map((iv) => ({
-                role: 'intervenant', name: iv.name, specialty: iv.specialty,
-                sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null, appliesTo: (k) => iv.assigned.has(k),
-            })),
+            ...lignesIntervenants(ivByUser, ivSig),
         ];
         const allSignedFlag = rows.every((r) => r.signature_data);
         const status = allSignedFlag ? 'SIGNE' : 'ARCHIVE';
@@ -546,23 +587,13 @@ async function buildEmargementDocHtml(conn, orgId, enrollmentId, opts = {}) {
         `SELECT u.id, u.first_name, u.last_name FROM session_trainer st JOIN user u ON u.id = st.user_id WHERE st.session_id = ? ORDER BY u.last_name, u.first_name`,
         [e.session_id]
     );
-    const [ivAssign] = await conn.query(
-        `SELECT si.user_id, si.specialty, u.first_name, u.last_name, DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot
-         FROM session_intervenant si JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
-         LEFT JOIN user u ON u.id = si.user_id WHERE si.session_id = ?`,
-        [e.session_id]
-    );
-    const ivByUser = {};
-    for (const a of ivAssign) {
-        const iv = ivByUser[a.user_id] || (ivByUser[a.user_id] = { user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(), specialty: a.specialty, assigned: new Set() });
-        iv.assigned.add(`${a.date}|${a.slot}`);
-    }
+    const ivByUser = await chargerIntervenants(conn, e.session_id);
     const sheetKeys = new Set(rows.map((r) => `${r.date}|${r.slot}`));
     const learnerName = `${e.last_name || ''} ${e.first_name || ''}`.trim();
     const participants = [
         { role: 'stagiaire', name: learnerName, sigOf: (k) => learnerSig[k] || null, appliesTo: (k) => sheetKeys.has(k) },
         ...formateurs.map((f) => ({ role: 'formateur', name: `${f.last_name || ''} ${f.first_name || ''}`.trim(), sigOf: (k) => trSig[`${f.id}|${k}`] || null, appliesTo: (k) => sheetKeys.has(k) })),
-        ...Object.values(ivByUser).map((iv) => ({ role: 'intervenant', name: iv.name, specialty: iv.specialty, sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null, appliesTo: (k) => iv.assigned.has(k) })),
+        ...lignesIntervenants(ivByUser, ivSig),
     ];
 
     // La feuille = la grille (signatures visuelles par demi-journée). La signature
