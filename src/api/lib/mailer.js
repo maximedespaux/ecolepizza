@@ -83,7 +83,19 @@ function envoiPossible(kind) {
  * `text` est optionnel : à défaut, une version texte est dérivée du HTML (les clients sans HTML,
  * et les filtres anti-spam, veulent une alternative texte).
  */
-async function sendMail({ to, subject, html, text, kind }) {
+/**
+ * `bcc` — LA COPIE CACHÉE, ajoutée le 2026-09-23 pour les envois à un groupe.
+ *
+ * DEUX USAGES, ET UN SEUL MÉCANISME : écrire à quinze stagiaires en UN message sans qu'aucun ne
+ * voie l'adresse des autres, et garder une copie dans la boîte de l'école. Le « À » reste
+ * l'adresse de l'école dans ce cas — un message SANS destinataire visible part en indésirable
+ * chez la plupart des fournisseurs.
+ *
+ * CE QU'UNE COPIE CACHÉE NE PERMET PLUS : personnaliser. Un seul corps part à tout le monde, donc
+ * pas de {Prénom}. C'est l'appelant qui tranche (cf. mailing.controller), parce que lui seul sait
+ * ce que le message contient.
+ */
+async function sendMail({ to, bcc, subject, html, text, kind }) {
     if (!to) return { sent: false, reason: 'destinataire absent' };
     /* Interrupteur par organisme (réglages « Mailing », migration 138). `kind` est OPTIONNEL :
        un envoi sans type n'est jamais filtré. `require` local exprès — évite tout problème
@@ -97,6 +109,7 @@ async function sendMail({ to, subject, html, text, kind }) {
         await t.sendMail({
             from: from(),
             to,
+            ...(bcc && bcc.length ? { bcc: Array.isArray(bcc) ? bcc.join(', ') : bcc } : {}),
             subject,
             html,
             text: text || htmlToText(html),

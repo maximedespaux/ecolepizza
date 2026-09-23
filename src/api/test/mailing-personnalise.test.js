@@ -170,3 +170,46 @@ test('les cinq types de l\'écran sont ceux du catalogue', () => {
     const org = lire(path.join(API, 'lib/orgContext.js'));
     for (const cle of lib.CLES_MAIL) assert.match(org, new RegExp(`${cle}: 'mail_${cle}'`));
 });
+
+test('plusieurs destinataires partent en COPIE CACHÉE, et jamais en copie visible', () => {
+    /* CE QUE L'ÉCOLE A DEMANDÉ (2026-09-23) : quand plusieurs personnes reçoivent le même
+       message, elles doivent être en Cci — pas en Cc, qui donnerait l'adresse de chaque
+       stagiaire à tous les autres. Et une copie doit arriver dans la boîte de l'école.
+
+       LA LIMITE EST STRUCTURELLE, ET C'EST LE MESSAGE QUI TRANCHE : une copie cachée n'a qu'UN
+       corps pour tout le monde, donc aucun {Prénom} ne peut y être rempli. Un message
+       personnalisé part donc une fois par personne — sinon quinze stagiaires liraient
+       « Bonjour Camille ». */
+    const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
+    assert.match(src, /const personnalise = \/\\\{\(Prénom\|Nom\)\\\}\/\.test\(/,
+        'la présence d’un jeton personnel décide du mode');
+    assert.match(src, /const enCci = !personnalise && avec\.length > 1 && !!adresseEcole;/);
+    /* LE « À » EST L'ÉCOLE : un message sans destinataire visible part en indésirable. */
+    assert.match(src, /sendMail\(\{ to: adresseEcole, bcc: avec\.map\(\(l\) => l\.email\), subject, html \}\)/);
+    assert.ok(!/\bcc:/.test(src.replace(/bcc:/g, '')), 'aucune copie VISIBLE nulle part');
+
+    /* UNE SEULE COPIE À L'ÉCOLE en mode individuel : la mettre en copie de chaque message lui en
+       ferait quinze dans sa boîte pour un seul envoi. Et elle est annoncée pour ce qu'elle est. */
+    assert.match(src, /if \(adresseEcole && envoyes > 0\)/);
+    assert.match(src, /\[Copie\] \$\{subject\}/);
+    assert.match(src, /Copie de l’envoi à \$\{envoyes\} destinataire/);
+
+    /* LE MAILER SAIT METTRE EN CCI, et seulement quand on lui en donne. */
+    const mailer = sansCommentaires(lire(path.join(API, 'lib/mailer.js')));
+    assert.match(mailer, /async function sendMail\(\{ to, bcc, subject, html, text, kind \}\)/);
+    assert.match(mailer, /\.\.\.\(bcc && bcc\.length \? \{ bcc: Array\.isArray\(bcc\) \? bcc\.join\(', '\) : bcc \} : \{\}\)/);
+});
+
+test('l\'écran annonce AVANT l\'envoi ce que les destinataires verront', () => {
+    /* La question « qui verra l’adresse de qui » se pose avant d’envoyer, jamais après. */
+    const page = sansCommentaires(lire(path.join(UI, 'pages/Mailing.jsx')));
+    assert.match(page, /const enCci = !personnalise && nbDest > 1 && !!cibles\?\.copie_ecole;/);
+    assert.match(page, /copie cachée<\/b>&nbsp;: personne ne voit l'adresse des autres/);
+    assert.match(page, /il partira <b>une fois par personne<\/b>/);
+    /* Et la copie : dite quand elle part, dite aussi quand elle NE PART PAS — sans quoi l'école
+       croirait garder une trace qu'elle n'a pas. */
+    assert.match(page, /Aucune copie pour l'école&nbsp;: renseignez son adresse/);
+    /* LA MÊME RÈGLE DES DEUX CÔTÉS : l'écran ne doit pas annoncer un mode que le serveur ne
+       choisirait pas. */
+    assert.match(page, /const personnalise = \/\\\{\(Prénom\|Nom\)\\\}\/\.test\(/);
+});

@@ -217,6 +217,10 @@ const getDestinataires = async (req, res) => {
                un détail à masquer — c'est une fiche à compléter. */
             sans_email: liste.filter((l) => !l.email).map((l) => [l.last_name, l.first_name].filter(Boolean).join(' ')),
             envoi_possible: envoiPossible(),
+            /* L'ADRESSE DE L'ÉCOLE, pour que l'écran puisse annoncer la copie — et dire qu'il n'y
+               en aura pas quand l'organisme n'a pas d'adresse renseignée, plutôt que de laisser
+               croire à une copie qui ne partira jamais. */
+            copie_ecole: orgContext.orgInfo().email || null,
         } });
     } catch (err) {
         console.error('Erreur destinataires mailing :', err);
@@ -249,22 +253,65 @@ const envoyerGroupe = async (req, res) => {
 
         const o = orgContext.orgInfo();
         const orgName = o.short_name || o.legal_name || null;
+        const adresseEcole = o.email || null;
         let envoyes = 0;
         let echecs = 0;
-        for (const l of avec) {
-            const valeurs = {
-                'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
-            };
+
+        /* ── CCI OU UN MESSAGE PAR PERSONNE : c'est LE MESSAGE qui décide ────────────────────
+           Une copie cachée envoie UN SEUL corps à tout le monde : personne ne voit l'adresse des
+           autres, mais plus rien ne peut être personnalisé. Un message qui porte {Prénom} ou
+           {Nom} doit donc partir une fois par personne — sinon quinze stagiaires recevraient
+           « Bonjour Camille ».
+           C'est la seule règle qui tienne sans demander à l'utilisateur de comprendre le
+           mécanisme : il écrit, et l'envoi s'adapte. L'écran annonce lequel des deux s'appliquera,
+           pour qu'il n'ait pas à le deviner. */
+        const personnalise = /\{(Prénom|Nom)\}/.test(`${lu.valeurs.objet} ${lu.valeurs.corps}`);
+        const enCci = !personnalise && avec.length > 1 && !!adresseEcole;
+
+        if (enCci) {
+            const valeurs = { 'Prénom': '', Nom: '', Organisme: orgName || 'École Pizza' };
             const { subject, html } = modeles.messageGroupeEmail({
                 objet: rendre(lu.valeurs.objet, valeurs),
                 corps: rendre(lu.valeurs.corps, valeurs),
                 orgName,
             });
-            /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Celui-ci
-               est un geste délibéré, déclenché à l'instant — le couper au nom d'un réglage fait
-               pour les envois automatiques rendrait le bouton muet sans rien expliquer. */
-            const r = await sendMail({ to: l.email, subject, html });
-            if (r.sent) envoyes += 1; else echecs += 1;
+            /* LE « À » EST L'ÉCOLE, les stagiaires sont en Cci : un message sans destinataire
+               visible part en indésirable chez la plupart des fournisseurs. L'école a du même
+               coup sa copie, sans envoi supplémentaire. */
+            const r = await sendMail({ to: adresseEcole, bcc: avec.map((l) => l.email), subject, html });
+            if (r.sent) envoyes = avec.length; else echecs = avec.length;
+        } else {
+            for (const l of avec) {
+                const valeurs = {
+                    'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
+                };
+                const { subject, html } = modeles.messageGroupeEmail({
+                    objet: rendre(lu.valeurs.objet, valeurs),
+                    corps: rendre(lu.valeurs.corps, valeurs),
+                    orgName,
+                });
+                /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Celui-ci
+                   est un geste délibéré, déclenché à l'instant — le couper au nom d'un réglage fait
+                   pour les envois automatiques rendrait le bouton muet sans rien expliquer. */
+                const r = await sendMail({ to: l.email, subject, html });
+                if (r.sent) envoyes += 1; else echecs += 1;
+            }
+            /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : mettre l'école en copie de
+               chaque message lui en ferait quinze dans sa boîte pour un seul envoi. Elle reçoit
+               donc UN exemplaire, annoncé pour ce qu'il est — sans quoi il se lirait comme un
+               message adressé à elle. */
+            if (adresseEcole && envoyes > 0) {
+                const valeurs = { 'Prénom': avec[0].first_name || '', Nom: avec[0].last_name || '', Organisme: orgName || 'École Pizza' };
+                const entete = `<p style="margin:0 0 14px;padding:10px 12px;background:#f7f8fb;border:1px solid #e6e8ee;`
+                    + `border-radius:8px;font-size:13px;color:#5e5e68">Copie de l’envoi à ${envoyes} destinataire`
+                    + `${envoyes > 1 ? 's' : ''} — ${cible || 'groupe'}. Chacun a reçu ce message avec ses propres informations.</p>`;
+                const { subject, html } = modeles.messageGroupeEmail({
+                    objet: rendre(lu.valeurs.objet, valeurs),
+                    corps: rendre(lu.valeurs.corps, valeurs),
+                    orgName,
+                });
+                await sendMail({ to: adresseEcole, subject: `[Copie] ${subject}`, html: html.replace('<h1', `${entete}<h1`) });
+            }
         }
 
         /* LA TRACE, MÊME PARTIELLE : ce qui est parti est parti. Une table absente ne doit pas
@@ -282,7 +329,8 @@ const envoyerGroupe = async (req, res) => {
             journalise = false;
         }
         logAudit(req, 'mail.envoi', 'MailEnvoi', null);
-        res.json({ data: { envoyes, echecs, cible, journalise } });
+        res.json({ data: { envoyes, echecs, cible, journalise, mode: enCci ? 'cci' : 'individuel',
+            copie: !!adresseEcole } });
     } catch (err) {
         console.error('Erreur envoi groupe :', err);
         res.status(500).json({ error: 'Internal Server Error' });

@@ -316,10 +316,11 @@ function Groupe({ onStatus }) {
     try {
       const r = await envoyerMailGroupe({ type, id, objet, corps });
       const d = r.data;
+      const comment = d.mode === "cci" ? " en un seul envoi, adresses masquées" : "";
       onStatus({ type: d.echecs ? "info" : "success",
         message: d.echecs
           ? `${d.envoyes} envoyé(s), ${d.echecs} en échec — les adresses en échec sont à vérifier.`
-          : `${d.envoyes} e-mail(s) envoyé(s).` });
+          : `${d.envoyes} destinataire(s)${comment}.${d.copie ? " Une copie est partie à l'école." : ""}` });
       setObjet(""); setCorps(""); setApercu(null);
       getEnvoisMail().then((x) => setJournal(x.data || [])).catch(() => {});
     } catch (e) { onStatus({ type: "error", message: e.message }); }
@@ -327,6 +328,12 @@ function Groupe({ onStatus }) {
   }
 
   const pret = objet.trim() && corps.trim() && (cibles?.destinataires?.length || 0) > 0;
+  /* COMMENT CE MESSAGE PARTIRA, dit AVANT de l'envoyer — et c'est le message lui-même qui décide.
+     La même règle qu'au serveur : un texte qui porte {Prénom} ou {Nom} ne peut pas partir en une
+     seule fois, puisqu'un envoi en copie cachée n'a qu'un seul corps pour tout le monde. */
+  const personnalise = /\{(Prénom|Nom)\}/.test(`${objet} ${corps}`);
+  const nbDest = cibles?.destinataires?.length || 0;
+  const enCci = !personnalise && nbDest > 1 && !!cibles?.copie_ecole;
   return (
     <>
       <Card title={<span className="card-ttl"><Icon name="send" size={15} /> Écrire à un groupe</span>}>
@@ -383,6 +390,26 @@ function Groupe({ onStatus }) {
           <textarea id="mail-corps" className="inp" rows={8} value={corps} onChange={(e) => setCorps(e.target.value)}
             placeholder={"Bonjour {Prénom},\n\nVotre session démarre lundi à 9 h au 12 rue des Pizzaiolos.\n\nÀ lundi !"} />
         </div>
+        {/* CE QUE LES DESTINATAIRES VERRONT LES UNS DES AUTRES : la question se pose avant
+            l'envoi, jamais après. Un « Cc » n'existe pas ici — il exposerait l'adresse de chaque
+            stagiaire à tous les autres. */}
+        {nbDest > 0 && (
+          <p className="hint" style={{ margin: "0 0 10px" }}>
+            {enCci ? (
+              <><Icon name="eye-off" size={12} /> Un <b>seul envoi</b>, tous les destinataires en
+                <b> copie cachée</b>&nbsp;: personne ne voit l'adresse des autres.</>
+            ) : personnalise ? (
+              <><Icon name="info" size={12} /> Votre message contient <b>{"{Prénom}"}</b> ou <b>{"{Nom}"}</b>&nbsp;:
+                il partira <b>une fois par personne</b>, chacune avec ses propres informations. Retirez ces
+                jetons pour un envoi unique en copie cachée.</>
+            ) : (
+              <><Icon name="info" size={12} /> Un message par personne.</>
+            )}
+            {cibles?.copie_ecole
+              ? <> Une <b>copie</b> part à <b>{cibles.copie_ecole}</b>.</>
+              : <> Aucune copie pour l'école&nbsp;: renseignez son adresse dans Paramètres → Organisme.</>}
+          </p>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="btn sm" onClick={voir} disabled={!objet.trim() || !corps.trim()}>
             <Icon name="eye" size={13} /> Aperçu
