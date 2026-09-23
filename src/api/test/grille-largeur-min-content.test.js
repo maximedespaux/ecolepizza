@@ -44,8 +44,11 @@ test('la ligne « derniers dossiers » tient sur deux lignes tronquées', () => 
     /* À 440 px, moins la barre d'avancement, la colonne laisse ~296 px : sur une seule ligne,
        le nom — la seule chose qu'on cherche ici — partageait la place avec un titre de
        formation coupé en plein mot. */
-    const bloc = TABLEAU.slice(TABLEAU.indexOf('Derniers dossiers'));
-    const ligne = bloc.slice(0, bloc.indexOf('</Card>'));
+    /* LA LIGNE A QUITTÉ LA CARTE pour une fonction (2026-09-23) : elle sert telle quelle sous
+       une entreprise et hors de tout groupe. On lit donc `ligneDossier`, et non plus le corps de
+       la carte — qui contient désormais AUSSI l'en-tête d'entreprise, avec sa propre troncature. */
+    const bloc = TABLEAU.slice(TABLEAU.indexOf('function ligneDossier(e)'));
+    const ligne = bloc.slice(0, bloc.indexOf('\n  return ('));
     assert.match(ligne, /<span style=\{\{ flex: 1, minWidth: 0 \}\}>/,
         'le conteneur doit pouvoir rétrécir, sinon la troncature ne se déclenche jamais');
     assert.match(ligne, /\{e\.first_name\} \{e\.last_name\}/);

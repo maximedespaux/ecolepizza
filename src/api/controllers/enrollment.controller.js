@@ -23,6 +23,11 @@ const getEnrollments = async (req, res) => {
             `SELECT e.id, e.organization_id, e.learner_id, e.session_id, e.company_id,
                     e.financing, e.crm_stage, e.conformite_score, e.created_at,
                     l.first_name, l.last_name, l.opco,
+                    /* LE NOM DE L'ENTREPRISE, et pas seulement son identifiant : le tableau de
+                       bord range les stagiaires d'une même entreprise sous elle, et un identifiant
+                       ne s'affiche pas. Jointure À GAUCHE : la plupart des dossiers n'ont pas
+                       d'entreprise, et une jointure fermée les ferait tous disparaître. */
+                    c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
                     /* Pour l'avancement réel, calculé plus bas : le parcours dépend du code RS
                        et du volet hygiène de la formation. */
@@ -34,6 +39,7 @@ const getEnrollments = async (req, res) => {
                     COALESCE(dc.doc_signed, 0) AS doc_signed
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = e.company_id
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
              LEFT JOIN (

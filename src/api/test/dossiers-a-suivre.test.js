@@ -291,7 +291,7 @@ test('suivi : le compteur compte TOUS les complets et sert d\'interrupteur', () 
     assert.match(SUIVI, /onClick=\{\(\) => setVoirComplets\(/);
     /* Les agrégats d'entreprise se calculent sur la liste ENTIÈRE, et le masquage vient après :
        masquer d'abord ferait baisser le pourcentage d'une entreprise à chaque dossier terminé. */
-    assert.match(SUIVI, /for \(const d of dossiersVus\)/);
+    assert.match(SUIVI, /grouperParEntreprise\(dossiersVus\)/);
     assert.match(SUIVI, /useMemo\(\(\) => sansLesComplets\(groups, voirComplets\)/);
     assert.match(SUIVI, /\{affiches\.map\(\(g\) =>/);
 });
@@ -302,4 +302,50 @@ test('suivi : le libellé « En cours » d\'une feuille de route ne prend pas la
     const CSS = lireUi('styles/app.css');
     assert.match(CSS, /\.progress\{height:9px;/, 'la barre existe toujours sous ce nom');
     assert.match(CSS, /\.rm-tag\.progress\{height:auto;background:none;border-radius:0;overflow:visible\}/);
+});
+
+/* ─── Les stagiaires d'une entreprise, rangés sous elle (2026-09-23) ───────────────────────── */
+
+test('tableau de bord : les stagiaires d\'une entreprise se rangent sous elle, et elle est cliquable', async () => {
+    /* LE BESOIN, posé depuis le tableau de bord : « Baptiste vient d'une entreprise, et
+       l'entreprise a elle aussi des documents à signer. » Éparpillés dans « Derniers dossiers »,
+       rien ne disait qu'ils venaient du même employeur — et la convention de formation, elle,
+       n'est sur la fiche d'AUCUN d'entre eux : elle est sur celle de l'entreprise. */
+    const { grouperParEntreprise } = await regleUi();
+    const g = grouperParEntreprise([
+        { id: '1', company_id: 'c1', company_name: 'PIZZERIA DEL SOL' },
+        { id: '2', company_id: null },
+        { id: '3', company_id: 'c1', company_name: 'PIZZERIA DEL SOL' },
+        { id: '4', company_id: 'c2', company_name: 'LES BRAISES' },
+    ]);
+    assert.deepStrictEqual(g.map((x) => x.type), ['company', 'solo', 'company']);
+    /* L'ORDRE REÇU EST CONSERVÉ, et un groupe prend la place de son PREMIER membre : la carte
+       reste triée comme elle l'était (le plus pressé devant). Rassemblés en fin de liste, les
+       dossiers d'une entreprise arrivée ce matin passeraient sous ceux de la semaine dernière. */
+    assert.deepStrictEqual(g[0].members.map((m) => m.id), ['1', '3']);
+    assert.strictEqual(g[0].company_name, 'PIZZERIA DEL SOL');
+    assert.strictEqual(g[1].d.id, '2');
+
+    /* SANS NOM, UN LIBELLÉ PLUTÔT QU'UN VIDE : l'identifiant ne s'affiche pas, et une ligne sans
+       titre se lirait comme un bogue. */
+    const [anonyme] = grouperParEntreprise([{ id: '5', company_id: 'c9' }]);
+    assert.strictEqual(anonyme.company_name, 'Entreprise');
+
+    /* LA MÊME RÈGLE DES DEUX CÔTÉS : le suivi la lisait déjà, écrite chez lui. Deux boucles
+       côte à côte auraient rangé les mêmes dossiers autrement, sans que rien ne le signale. */
+    assert.match(lireUi('pages/Suivi.jsx'), /grouperParEntreprise\(dossiersVus\)/);
+    const TB = lireUi('pages/Dashboard.jsx');
+    assert.match(TB, /grouperParEntreprise\(recent\)/);
+    /* LE NOM MÈNE À LA FICHE DE L'ENTREPRISE — c'est tout l'objet de la demande —, et seulement
+       si le rôle peut l'ouvrir : sa page est réservée à l'administration, et un lien offert au
+       formateur l'aurait renvoyé à l'accueil sans un mot (même garde que `ficheOuvrable`). */
+    assert.match(TB, /const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen\(user, ENTREE_ENTREPRISES\)/);
+    assert.match(TB, /entrepriseOuvrable \? \(\s*<Link to=\{`\/entreprises\/\$\{g\.company_id\}`\}/);
+
+    /* ET LE NOM DE L'ENTREPRISE DOIT ARRIVER : le dossier ne portait que `company_id`, qui ne
+       s'affiche pas. Jointure À GAUCHE — la fermer ferait disparaître tous les dossiers sans
+       entreprise, c'est-à-dire la plupart. */
+    const CTRL = lire('controllers/enrollment.controller.js');
+    assert.match(CTRL, /c\.name AS company_name,/);
+    assert.match(CTRL, /LEFT JOIN company c ON c\.id = e\.company_id/);
 });

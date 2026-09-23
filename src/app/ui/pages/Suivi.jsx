@@ -15,7 +15,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
-import { sansLesComplets } from "../lib/dossiersASuivre.js";
+import { sansLesComplets, grouperParEntreprise } from "../lib/dossiersASuivre.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
@@ -126,25 +126,15 @@ function Suivi() {
   // Cliquer un manque filtre la liste : la page se termine par un geste, pas par un constat.
   const dossiersVus = useMemo(() => dossiersDuManque(dossiers, manqueFiltre), [dossiers, manqueFiltre]);
 
-  // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
-  // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
-  // On préserve l'ordre de tri du backend (incomplets d'abord).
+  /* Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise apparaît sous
+     l'entreprise (complétion agrégée), les autres restent autonomes. On préserve l'ordre de tri
+     du backend (incomplets d'abord).
+     LE REGROUPEMENT LUI-MÊME VIT DANS `lib/dossiersASuivre.js` depuis le 2026-09-23, partagé avec
+     le tableau de bord : deux boucles écrites côte à côte auraient fini par ranger les mêmes
+     dossiers autrement, et personne n'aurait su laquelle dit vrai. Les agrégats, eux, restent
+     ici — le tableau de bord n'en a pas l'usage. */
   const groups = useMemo(() => {
-    const byCompany = new Map();
-    const out = [];
-    for (const d of dossiersVus) {
-      if (d.company_id) {
-        let g = byCompany.get(d.company_id);
-        if (!g) {
-          g = { type: "company", company_id: d.company_id, company_name: d.company_name || "Entreprise", members: [] };
-          byCompany.set(d.company_id, g);
-          out.push(g);
-        }
-        g.members.push(d);
-      } else {
-        out.push({ type: "solo", d });
-      }
-    }
+    const out = grouperParEntreprise(dossiersVus);
     // Agrégats par entreprise : % = somme(étapes faites)/somme(étapes) ; score = pire membre.
     for (const g of out) {
       if (g.type !== "company") continue;
