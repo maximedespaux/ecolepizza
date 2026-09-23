@@ -95,14 +95,46 @@ async function profilActivite(userId) {
  * un formateur ne pourrait en voir que deux, et sa cloche paraîtrait vide alors qu'elle ne
  * l'est pas.
  */
-async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
-    /* DEUX FILTRES, QUI NE RÉPONDENT PAS À LA MÊME QUESTION.
-       `entitesVisibles` dit ce que cette personne a le DROIT de voir ; `estEvenement` dit ce
-       qui MÉRITE une cloche. Sans le second, le carillon annonçait « Produit partenaire
-       modifié » ou « Modèle enregistré » — configurer l'outil n'est pas un événement, et la
-       cloche n'était qu'un second journal d'audit, plus court et moins consultable. */
+/* DEUX FILTRES, QUI NE RÉPONDENT PAS À LA MÊME QUESTION.
+   `entitesVisibles` dit ce que cette personne a le DROIT de voir ; `estEvenement` dit ce qui
+   MÉRITE une cloche. Sans le second, le carillon annonçait « Produit partenaire modifié » ou
+   « Modèle enregistré » — configurer l'outil n'est pas un événement, et la cloche n'était qu'un
+   second journal d'audit, plus court et moins consultable.
+   EXTRAIT ICI parce que la LISTE et le COMPTE doivent poser exactement le même filtre : deux
+   copies finiraient par diverger, et la pastille annoncerait des lignes introuvables. */
+function entitesDeLActivite({ role, navAccess }) {
     const visibles = entitesVisibles(sectionsVisibles({ role, navAccess }));
-    const entites = (visibles || Object.keys(SECTION_PAR_ENTITE)).filter(estEvenement);
+    return (visibles || Object.keys(SECTION_PAR_ENTITE)).filter(estEvenement);
+}
+
+/**
+ * COMBIEN DE LIGNES D'ACTIVITÉ JE N'AI PAS VUES — le vrai compte, pris en base.
+ *
+ * PAS LA LONGUEUR DE LA LISTE : elle s'arrête à trente lignes, si bien que la pastille
+ * plafonnait à trente sans jamais le dire. Le compte, lui, interroge le journal entier.
+ * La liste regroupe les gestes consécutifs identiques (douze inscriptions d'un coup = une
+ * ligne) ; le compte, lui, compte les ÉVÉNEMENTS. C'est la question posée : « combien de choses
+ * se sont passées depuis ma dernière lecture ».
+ */
+async function compteActivite({ orgId, moi, role, navAccess, vue, dormant }) {
+    /* `dormant` : migration 142 non jouée, on ne sait pas où en est la lecture — donc tout est
+       réputé lu, et aucune pastille ne saute. Même règle que `estLu`. */
+    if (dormant) return 0;
+    const entites = entitesDeLActivite({ role, navAccess });
+    if (entites.length === 0) return 0;
+    const params = [orgId, moi, ...entites];
+    /* `vue` NULL = rien n'a jamais été marqué comme lu : tout est neuf, et c'est vrai (estLu). */
+    const depuis = vue ? ' AND a.created_at > ?' : '';
+    if (vue) params.push(vue);
+    const [[row]] = await db.promise().query(
+        `SELECT COUNT(*) AS n FROM audit_log a
+          WHERE a.organization_id = ? AND a.user_id IS NOT NULL AND a.user_id <> ?
+                AND a.entity IN (${entites.map(() => '?').join(',')})${depuis}`, params);
+    return Number((row && row.n) || 0);
+}
+
+async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
+    const entites = entitesDeLActivite({ role, navAccess });
     if (entites.length === 0) return [];
 
     const params = [orgId, moi];
@@ -188,10 +220,29 @@ const getNotifications = async (req, res) => {
            n'appelle aucun geste, et depuis ce matin elle n'est même plus cliquable. */
         // Le format « AAAA-MM-JJ hh:mm » se trie comme une date : comparaison de chaînes suffisante.
         const tri = (a, b) => (a.created_at < b.created_at ? 1 : -1);
-        /* Le compte des non-lus, lui, reste sur l'ENSEMBLE : la pastille de la cloche annonce
-           un total, pas le contenu de l'onglet ouvert. */
-        const unread = [...notifs, ...activite].filter((r) => !r.is_read).length;
-        res.json({ data: notifs.sort(tri), activite: activite.sort(tri), unread });
+
+        /* ── LE VRAI COMPTE DES NON-LUES, ET PAS LA LONGUEUR DES LISTES ────────────────────
+           Les deux listes sont coupées (40 alertes, 30 lignes d'activité) : compter dedans
+           faisait plafonner la pastille à ce que la page pouvait afficher, sans que rien ne le
+           dise. Une cloche qui affiche « 40 » à quelqu'un qui en a deux cents ne ment pas à
+           moitié — elle donne un chiffre précis, donc crédible, et faux.
+           DEUX COMPTES SÉPARÉS parce que ce sont deux natures : une ALERTE appelle un geste,
+           l'ACTIVITÉ informe. Les écrans les montrent maintenant de deux couleurs, et chacune
+           doit pouvoir dire son propre nombre. `unread` reste leur somme, pour ce qui le lit
+           encore. */
+        const [[compteur]] = await db.promise().query(
+            `SELECT COUNT(*) AS n FROM notification
+              WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL) AND is_read = 0`,
+            [orgId, moi]);
+        const nonLuesAlertes = Number((compteur && compteur.n) || 0);
+        const nonLuesActivite = await compteActivite({ orgId, moi, role, navAccess, vue, dormant });
+
+        res.json({
+            data: notifs.sort(tri),
+            activite: activite.sort(tri),
+            unread: nonLuesAlertes + nonLuesActivite,
+            non_lues: { alertes: nonLuesAlertes, activite: nonLuesActivite },
+        });
     } catch (err) {
         console.error('Erreur notifications :', err);
         res.status(500).json({ error: 'Internal Server Error' });

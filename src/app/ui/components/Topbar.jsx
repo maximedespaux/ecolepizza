@@ -7,6 +7,7 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { subscribeRealtime } from "../lib/realtime.js";
 import { playNotif, isNotifMuted, setNotifMuted } from "../lib/notifSound.js";
 import { Icon } from "./Icon.jsx";
+import { compteurPastille } from "../lib/format.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 import SpaceSwitcher from "./SpaceSwitcher.jsx";
 import MemoBouton from "./MemoBouton.jsx";
@@ -17,7 +18,12 @@ function Topbar({ onMenu }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const title = PAGE_TITLES[pathname] || "";
-  const [unread, setUnread] = useState(0);
+  /* DEUX COMPTES, DEUX COULEURS — comme le bouton des mémos juste à côté. Le ROUGE dit ce qui
+     appelle un geste (les alertes), le BLEU ce qui s'est passé dans l'équipe. Un seul nombre
+     mêlait les deux : on voyait « 12 » et on ouvrait pour découvrir douze lignes de journal,
+     alors que la seule chose qui attendait vraiment était une commande boutique. */
+  const [alertes, setAlertes] = useState(0);
+  const [activite, setActivite] = useState(0);
   const [muted, setMuted] = useState(isNotifMuted());
   const [ringing, setRinging] = useState(false);
   const prevAlertes = useRef(null); // null = premier chargement (pas de son)
@@ -40,14 +46,20 @@ function Topbar({ onMenu }) {
      au même instant : chaque son correspond à quelque chose de visible. L'ACTIVITÉ est une
      information : elle s'affiche, elle ne sonne plus.
 
-     On compte donc les alertes non lues (`data`), pas le total (`unread`), qui inclut l'activité.
-     La pastille, elle, garde le total : elle dit « il y a des choses à lire », le son dit
-     « quelque chose vous attend ». */
+     On sonne donc sur le compte des ALERTES non lues, jamais sur le total. Les pastilles, elles,
+     disent les deux — chacune la sienne, rouge pour ce qui attend, bleue pour ce qui s'est
+     passé : elles disent « il y a des choses à lire », le son dit « quelque chose vous
+     attend ». */
   const loadNotifs = () =>
     getNotifications()
       .then((r) => {
-        setUnread(r.unread || 0);
-        const alertes = (r.data || []).filter((x) => !x.is_read).length;
+        /* LE COMPTE VIENT DU SERVEUR (`non_lues`), pas de la longueur des listes : elles sont
+           coupées à 40 et 30 lignes, et la pastille plafonnait donc là sans le dire. Le repli
+           sur les listes garde l'écran juste face à un serveur pas encore déployé. */
+        const n = r.non_lues || {};
+        const alertes = n.alertes !== undefined ? n.alertes : (r.data || []).filter((x) => !x.is_read).length;
+        setAlertes(alertes);
+        setActivite(n.activite !== undefined ? n.activite : (r.activite || []).filter((x) => !x.is_read).length);
         /* LA GARDE ANTI-ÉCHO RESTE, pour les alertes que je provoque moi-même : signer à la place
            d'un stagiaire crée « Document signé » pour tout l'organisme. Le repère est posé par
            apiClient, partagé entre les onglets du navigateur. Les relances d'émargement, elles,
@@ -116,10 +128,15 @@ function Topbar({ onMenu }) {
         style={{ position: "relative" }}
         onClick={() => navigate("/notifications")}
         title="Notifications"
-        aria-label={unread > 0 ? `Notifications (${unread} non lues)` : "Notifications"}
+        aria-label={alertes + activite > 0
+          ? `Notifications : ${alertes} alerte${alertes > 1 ? "s" : ""} et ${activite} ligne${activite > 1 ? "s" : ""} d'activité non lues`
+          : "Notifications"}
       >
         <Icon name="bell" size={18} />
-        {unread > 0 && <span className="notif-dot">{unread > 9 ? "9+" : unread}</span>}
+        {/* LE ROUGE EN HAUT À DROITE, LE BLEU EN HAUT À GAUCHE : exactement la disposition du
+            bouton des mémos, pour que les deux couleurs veuillent dire la même chose partout. */}
+        {alertes > 0 && <span className="notif-dot">{compteurPastille(alertes)}</span>}
+        {activite > 0 && <span className="notif-dot ton-equipe">{compteurPastille(activite)}</span>}
       </button>
 
       <ThemeToggle />

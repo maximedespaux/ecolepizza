@@ -326,5 +326,10 @@ test('le bouton porte deux pastilles, et la seconde s\'éteint à l\'ouverture',
     const compter = src.slice(src.indexOf('const compter'), src.indexOf('useEffect'));
     assert.doesNotMatch(compter, /marquerMemosVus/);
     const css = lire(path.join(UI, 'styles/app.css'));
-    assert.match(css, /\.memo-dot-neuf\{position:absolute;top:-5px;left:-5px/, 'à gauche, en face de celle des échéances');
+    /* EN BAS À GAUCHE DEPUIS LE 2026-09-23, et non plus en haut : les deux pastilles d'un même
+       bouton sont ancrées par des bords opposés, donc celle de gauche grandit vers la droite.
+       À trois chiffres, elle recouvrait la rouge — mesuré au banc. Séparées en hauteur, elles
+       ne peuvent plus se rencontrer. */
+    assert.match(css, /\.memo-dot-neuf\{position:absolute;bottom:-5px;left:-5px/,
+        'en bas à gauche, en face de celle des échéances');
 });

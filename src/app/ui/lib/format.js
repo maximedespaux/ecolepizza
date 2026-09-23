@@ -10,6 +10,22 @@ export function initials(first = "", last = "") {
 }
 
 /** Prix en euros formaté FR (2 décimales max — évite les TTC à rallonge type 10,692). */
+/**
+ * LE NOMBRE D'UNE PASTILLE — le VRAI, pas « 9+ ».
+ *
+ * CE QU'IL REMPLACE : `n > 9 ? "9+" : n`, écrit à quatre endroits. Au-delà de neuf, la cloche
+ * disait la même chose qu'on en ait dix ou deux cents — or c'est précisément quand il y en a
+ * beaucoup qu'on veut le savoir : « 9+ » n'aide pas à décider s'il faut ouvrir maintenant.
+ * La pastille est un `min-width` avec de la garniture : elle s'allonge en pilule sans casser.
+ *
+ * UN PLAFOND QUAND MÊME, à mille : au-delà, le nombre exact n'apprend plus rien (« 1247 » ou
+ * « 1248 », on ouvrira de toute façon) et la pastille deviendrait un bandeau sur un téléphone.
+ */
+export function compteurPastille(n) {
+  const v = Math.max(0, Math.round(Number(n) || 0));
+  return v > 999 ? "999+" : String(v);
+}
+
 export function euro(value) {
   return `${Number(value || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`;
 }
