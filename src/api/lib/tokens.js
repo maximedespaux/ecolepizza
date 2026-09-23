@@ -97,17 +97,23 @@ const TOKEN_CATALOG = [
     {
         group: 'Stagiaire',
         tokens: [
-            { key: 'Personne', label: 'Nom complet', sample: 'M. Jean Dupont' },
+            /* UNE SEULE IDENTITÉ D'EXEMPLE dans tout le catalogue, et le nom en capitales comme
+               l'école le saisit : trois orthographes du même personnage (« Dupont », « DUPONT »,
+               « Camille BERGER ») laissaient croire à trois mises en forme différentes. */
+            { key: 'Personne', label: 'Nom complet', sample: 'M. Jean DUPONT' },
             { key: 'Civilité', label: 'Civilité', sample: 'M.' },
             { key: 'Prénom', label: 'Prénom', sample: 'Jean' },
-            { key: 'Nom', label: 'Nom', sample: 'Dupont' },
-            { key: 'Adresse', label: 'Adresse complète', sample: '12 rue des Fours, 33000 Bordeaux' },
+            { key: 'Nom', label: 'Nom', sample: 'DUPONT' },
+            { key: 'Adresse', label: 'Adresse complète', sample: '12 rue des Fours, 33000 BORDEAUX' },
             { key: 'CP', label: 'Code postal', sample: '33000' },
-            { key: 'Ville', label: 'Ville', sample: 'Bordeaux' },
+            /* LES VILLES SONT STOCKÉES EN CAPITALES (migration 162) : l'exemple le montrait en
+               minuscules, donc sous une forme que le document n'imprime jamais. */
+            { key: 'Ville', label: 'Ville', sample: 'BORDEAUX' },
             { key: 'Email', label: 'E-mail', sample: 'jean.dupont@email.fr' },
             { key: 'Téléphone', label: 'Téléphone', sample: '06 12 34 56 78' },
             { key: 'D_Naissance', label: 'Date de naissance', sample: '15/04/1990' },
-            { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'Toulouse' },
+            /* Même règle pour le lieu de naissance (migration 171). */
+            { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'TOULOUSE' },
             { key: 'Statut', label: 'Statut professionnel', sample: "Demandeur d'emploi" },
             { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A' },
         ],
@@ -155,14 +161,31 @@ const TOKEN_CATALOG = [
         group: 'Session',
         tokens: [
             { key: 'Jour1', label: 'Date de début', sample: '02/06/2025' },
-            { key: 'endDate', label: 'Date de fin', sample: '06/06/2025' },
+            /* CLÉ EN ANGLAIS AU MILIEU DE JETONS FRANÇAIS : elle vient des tout premiers
+               modèles et ne se renomme plus sans casser les documents qui l'emploient — l'aide des
+               jetons personnalisés la cite d'ailleurs en exemple. On la garde, et on le dit. */
+            { key: 'endDate', label: 'Date de fin', sample: '06/06/2025',
+              desc: 'La clé s’écrit en anglais (héritage des premiers modèles) ; sa valeur est bien '
+                  + 'la date de fin de session, au format 06/06/2025.' },
             { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025' },
             { key: 'Formateur', label: 'Formateur', sample: 'Marc Leblanc' },
-            { key: 'Lundi', label: 'Date — Lundi (jour 1)', sample: '02/06/2025' },
-            { key: 'Mardi', label: 'Date — Mardi (jour 2)', sample: '03/06/2025' },
-            { key: 'Mercredi', label: 'Date — Mercredi (jour 3)', sample: '04/06/2025' },
-            { key: 'Jeudi', label: 'Date — Jeudi (jour 4)', sample: '05/06/2025' },
-            { key: 'Vendredi', label: 'Date — Vendredi (jour 5)', sample: '06/06/2025' },
+            /* CES CINQ JETONS NE DONNENT PAS LE JOUR QU'ILS NOMMENT, et le libellé le disait
+               pourtant (« Date — Mardi (jour 2) »). Ils donnent le 1er, 2e, 3e… JOUR OUVRÉ à
+               partir du début de la session (`businessDay`) : une session qui commence un mercredi
+               remplit {Lundi} avec le mercredi, {Mardi} avec le jeudi. Leurs noms viennent des
+               modèles d'origine, où les sessions commençaient toutes un lundi ; on ne peut plus
+               les renommer sans casser les documents qui les emploient, mais on peut cesser de
+               promettre ce qu'ils ne font pas. */
+            { key: 'Lundi', label: 'Jour 1 de la session', sample: '02/06/2025',
+              desc: '1er jour ouvré de la session — le jour du début, quel qu’il soit.' },
+            { key: 'Mardi', label: 'Jour 2 de la session', sample: '03/06/2025',
+              desc: '2e jour ouvré après le début. Une session qui commence un mercredi met ici le jeudi.' },
+            { key: 'Mercredi', label: 'Jour 3 de la session', sample: '04/06/2025',
+              desc: '3e jour ouvré après le début (les samedis et dimanches sont sautés).' },
+            { key: 'Jeudi', label: 'Jour 4 de la session', sample: '05/06/2025',
+              desc: '4e jour ouvré après le début.' },
+            { key: 'Vendredi', label: 'Jour 5 de la session', sample: '06/06/2025',
+              desc: '5e jour ouvré après le début.' },
             /* Le seul jeton qui RAPPROCHE le calendrier de la session et les horaires de la
                formation : les autres donnent soit des dates, soit du texte libre, jamais les deux. */
             { key: 'HorairesJours', label: 'Journées et horaires', sample: 'Lundi 8h45-12h00 & 13h00-17h15\nMardi 8h00-12h00 & 13h00-17h00' },
@@ -176,7 +199,12 @@ const TOKEN_CATALOG = [
             { key: 'Acompte', label: 'Acompte', sample: '450 €' },
             { key: 'Reste à payer', label: 'Reste à payer (prix − acompte)', sample: '1 050 €' },
             { key: 'Prix HT', label: 'Prix HT', sample: '1 500 €' },
-            { key: 'TVA', label: 'Montant de la TVA', sample: '0 €' },
+            /* « 0 € » ÉTAIT IMPOSSIBLE : `euro(0)` rend une chaîne VIDE, exprès — un zéro imprimé
+               sur une convention exonérée se lit comme une erreur de saisie. L'exemple montre donc
+               un montant réel ; sur une formation exonérée, le jeton sort vide. */
+            { key: 'TVA', label: 'Montant de la TVA', sample: '300 €',
+              desc: 'Vide quand la formation est exonérée de TVA — un « 0 € » imprimé se lirait '
+                  + 'comme une erreur.' },
             { key: 'Taux TVA', label: 'Taux de TVA', sample: 'Exonérée' },
             { key: 'Prix TTC', label: 'Prix TTC', sample: '1 500 €' },
         ],
@@ -211,8 +239,8 @@ const TOKEN_CATALOG = [
     {
         group: 'Organisme',
         tokens: [
-            { key: 'Organisme', label: 'Nom de l’organisme', sample: 'École Pizzaïolo Despaux' },
-            { key: 'Organisme court', label: 'Nom court', sample: 'Impastio' },
+            { key: 'Organisme', label: 'Nom de l’organisme', sample: 'École Pizza — Jean-Jacques Despaux' },
+            { key: 'Organisme court', label: 'Nom court', sample: 'École Pizza' },
             { key: 'Responsable', label: 'Responsable', sample: 'Jean-Jacques Despaux' },
             { key: 'Siret organisme', label: 'SIRET', sample: '987 654 321 00019' },
             { key: 'TVA organisme', label: 'N° TVA', sample: 'FR76987654321' },
@@ -221,7 +249,7 @@ const TOKEN_CATALOG = [
             { key: 'Ville organisme', label: 'Ville', sample: 'BORDEAUX' },
             { key: 'Code postal organisme', label: 'Code postal', sample: '33000' },
             { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'SAS' },
-            { key: 'Capital organisme', label: 'Capital social', sample: '2000 euros' },
+            { key: 'Capital organisme', label: 'Capital social', sample: '2 000 €' },
             { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136' },
             { key: 'NAF organisme', label: 'Code NAF/APE', sample: '8559A' },
             { key: 'Téléphone organisme', label: 'Téléphone', sample: '05 56 00 00 00' },
@@ -233,6 +261,12 @@ const TOKEN_CATALOG = [
     },
     {
         group: 'Facture',
+        /* ⚠️ LES MONTANTS DE FACTURE S'ÉCRIVENT AVEC UN POINT ET DEUX DÉCIMALES — « 17.82 € ».
+           C'est ce que produit le code (`toFixed(2)`, ici comme dans invoice.controller), et les
+           exemples le disaient en virgule : la palette promettait une typographie française que
+           le document n'imprime pas. Les exemples disent désormais la vérité. Passer à la
+           virgule est une correction À PART : elle touche le rendu de toutes les factures, y
+           compris celles déjà émises si on les réimprime. */
         tokens: [
             { key: 'Numéro facture', label: 'Numéro', sample: 'F-2026-0012' },
             { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
@@ -241,19 +275,19 @@ const TOKEN_CATALOG = [
             // Échantillon neutre : il est REMPLACÉ par l'identité fictive tirée à l'aperçu
             // (cf. lib/echantillons.js). Il portait le nom réel de l'utilisateur, ce qui rendait
             // l'aperçu indiscernable d'une vraie facture.
-            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'Camille BERGER' },
-            { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 Bordeaux' },
+            { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'M. Jean DUPONT' },
+            { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 BORDEAUX' },
             { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
-            { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
-            { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
-            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
-            { key: 'Total remise', label: 'Total des remises', sample: '4,20 €',
-              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0,00 € » '
+            { key: 'Total HT', label: 'Total hors taxes', sample: '17.82 €' },
+            { key: 'Total TVA', label: 'Total TVA', sample: '3.56 €' },
+            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21.38 €' },
+            { key: 'Total remise', label: 'Total des remises', sample: '4.20 €',
+              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0.00 € » '
                   + 'quand il n’y a aucune remise. Vaut 0 sur les factures émises avant que la '
                   + 'remise ne soit enregistrée (migration 122).' },
-            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
+            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20.00 % sur 17.82 € : 3.56 €' },
             { key: 'Règlement', label: 'Moyen(s) de paiement', sample: 'Espèces + CB' },
-            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300,00 € · CB : 700,00 €' },
+            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300.00 € · CB : 700.00 €' },
             { key: 'Règlements', label: 'Tableau des règlements', sample: '(tableau moyen / montant)' },
             { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
         ],
@@ -267,15 +301,17 @@ const TOKEN_CATALOG = [
                demandé. {Date} RESTE au catalogue — les modèles qui l'emploient continuent de le faire,
                et le contrôle des jetons inconnus continue de le reconnaître. Seul {Today} est proposé
                dans la palette : deux entrées pour une même valeur n'apprendraient rien. */
-            { key: 'Today', label: 'Date du jour', sample: '11/09/2026' },
+            /* MÊME VALEUR QUE {Date}, donc MÊME EXEMPLE : deux dates différentes pour un seul
+               jeton laissaient croire à deux choses distinctes. */
+            { key: 'Today', label: 'Date du jour', sample: '06/07/2026' },
         ],
     },
     {
         group: 'Signature',
         tokens: [
-            { key: 'Signature stagiaire', label: 'Signature du stagiaire', sample: '✍ (signée à la signature)' },
-            { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée)' },
-            { key: 'Nom signataire', label: 'Nom du signataire', sample: 'M. Jean Dupont' },
+            { key: 'Signature stagiaire', label: 'Signature du stagiaire', sample: '✍ (cadre rempli au moment de la signature)' },
+            { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée dans Paramètres → Organisme)' },
+            { key: 'Nom signataire', label: 'Nom du signataire', sample: 'M. Jean DUPONT' },
             { key: 'Date signature', label: 'Date de signature', sample: '06/07/2026' },
         ],
     },
@@ -293,7 +329,7 @@ const TOKEN_CATALOG = [
             { key: 'PV', label: 'Numéro de procès-verbal', sample: 'EPJJD-EX-2026-014' },
             { key: 'Date examen', label: "Date de la session d'examen", sample: '12/11/2026' },
             { key: 'Lieu examen', label: "Lieu de la session (adresse)", sample: '101 rue Alsace-Lorraine, 65300 Lannemezan' },
-            { key: 'Centre examen', label: 'Centre habilité', sample: 'École Pizzaïolo Jean-Jacques Despaux' },
+            { key: 'Centre examen', label: 'Centre habilité', sample: 'École Pizza — Jean-Jacques Despaux' },
             { key: "Voie d'accès", label: "Voie d'accès du candidat", sample: 'Formation continue' },
             // Le jury, membre par membre. Sa composition est une condition de validité :
             // majorité extérieure à l'organisme, et aucun membre n'ayant formé le candidat.
