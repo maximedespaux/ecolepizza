@@ -14,13 +14,14 @@ import ProgressPct from "../components/ProgressPct.jsx";
 import ARecontacter from "../components/ARecontacter.jsx";
 import MemoListe from "../components/MemoListe.jsx";
 import { ROLES_MEMO } from "../lib/memos.js";
-import { dossiersASuivre } from "../lib/dossiersASuivre.js";
+import { dossiersASuivre, grouperParEntreprise } from "../lib/dossiersASuivre.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { NAV, canOpen } from "../lib/nav.js";
 
 // L'entrée « Stagiaires » du menu : une ligne de dossier n'est un lien que si le menu l'offre.
 const ENTREE_STAGIAIRES = NAV.flatMap((g) => g.items).find((it) => it.to === "/stagiaires");
+const ENTREE_ENTREPRISES = NAV.flatMap((g) => g.items).find((it) => it.to === "/entreprises");
 
 /* `T00:00:00` FORCE LA LECTURE EN HEURE LOCALE. Sans lui, `new Date("2026-09-14")` se lit en
    UTC et l'affichage reculerait d'un jour sur tout fuseau négatif. Même idiome que les cinq
@@ -45,6 +46,10 @@ function Dashboard() {
      dont le menu n'offre pas « Stagiaires » voit donc ces lignes, et un lien l'aurait renvoyé vers
      l'accueil, sans un mot. Pour lui, elles restent de simples lignes. */
   const ficheOuvrable = !!ENTREE_STAGIAIRES && canOpen(user, ENTREE_STAGIAIRES);
+  /* MÊME PRUDENCE POUR L'ENTREPRISE : sa fiche est réservée à l'administration. Un formateur voit
+     donc le nom de l'employeur — c'est une information utile — mais pas un lien qui le renverrait
+     à l'accueil sans un mot. */
+  const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen(user, ENTREE_ENTREPRISES);
   /* Combien de fiches « à recontacter » (migration 169) — `null` tant que la liste n'a pas répondu.
      C'est ce qui empêche la ligne « Rien ne demande d'action » de mentir quand des gens attendent
      un appel : elle ne s'affiche qu'une fois ce compte CONNU et nul. */
@@ -58,6 +63,9 @@ function Dashboard() {
   const [todos, setTodos] = useState([]);
   const [upcoming, setUpcoming] = useState(null); // `null` = on charge, `[]` = rien à venir
   const [recent, setRecent] = useState([]);
+  /* Les mêmes dossiers, rangés sous leur entreprise quand ils en ont une — la règle partagée avec
+     le suivi (lib/dossiersASuivre.js). */
+  const groupesRecents = useMemo(() => grouperParEntreprise(recent), [recent]);
   const [activity, setActivity] = useState([]);
   const [org, setOrg] = useState(null);
   const [partenaires, setPartenaires] = useState(null);   // `null` = on charge
@@ -203,6 +211,46 @@ function Dashboard() {
     load();
   }, []);
 
+  /* UNE LIGNE DE DOSSIER, une seule définition : elle sert telle quelle sous une entreprise et
+     hors de tout groupe. Recopiée dans les deux branches, elle aurait divergé au premier ajout. */
+  function ligneDossier(e) {
+    const contenu = (
+      <>
+        {/* DEUX LIGNES, comme la liste des inscrits d'une session et la revue des pièces.
+            Sur une seule, la colonne ne laisse que ~296 px : le titre de formation le plus
+            long de l'école y était coupé en plein mot, et le nom — la seule chose qu'on
+            cherche dans « derniers dossiers » — se retrouvait à l'étroit. */}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {e.first_name} {e.last_name}
+          </b>
+          <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {e.program_title || "Formation"}
+          </span>
+          {/* Pourquoi un dossier plus ancien est là : sa session est finie, lui pas encore. Sa
+              propre ligne : à la suite de l'intitulé, l'ellipse la coupait sur téléphone, date
+              comprise — justement ce qu'il fallait lire. */}
+          {e.echu && <span className="dossier-echu">Session terminée le {dateFr(e.end_date || e.start_date)}</span>}
+        </span>
+        {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
+            à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
+            étaient tous à « ROUGE » pour un avancement de 31, 0, 19, 44 et 19 %. */}
+        <ProgressPct percent={e.percent} score={e.score} />
+      </>
+    );
+    /* LA LIGNE MÈNE À LA FICHE DU STAGIAIRE, ouverte sur CE dossier (demandé le 2026-09-21) :
+       une fiche a un onglet par dossier, et s'ouvrait sur le premier (lib/lienDossier.js). */
+    return (
+      <div key={e.id} className="dossier-ligne">
+        {ficheOuvrable ? (
+          <Link to={lienDossier(e.learner_id, e.id)} className="rowlink dossier-lien" title="Ouvrir la fiche du stagiaire">
+            {contenu}
+          </Link>
+        ) : contenu}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="hero">
@@ -327,42 +375,42 @@ function Dashboard() {
             ))
           ) : recent.length === 0 ? (
             <p className="lead" style={{ margin: 0 }}>Aucun dossier pour le moment.</p>
-          ) : recent.map((e) => {
-            const contenu = (
-              <>
-                {/* DEUX LIGNES, comme la liste des inscrits d'une session et la revue des pièces.
-                    Sur une seule, la colonne ne laisse que ~296 px : le titre de formation le plus
-                    long de l'école y était coupé en plein mot, et le nom — la seule chose qu'on
-                    cherche dans « derniers dossiers » — se retrouvait à l'étroit. */}
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {e.first_name} {e.last_name}
-                  </b>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {e.program_title || "Formation"}
+          ) : groupesRecents.map((g) => {
+            /* UNE ENTREPRISE, PUIS SES STAGIAIRES DESSOUS (demandé le 2026-09-23). Éparpillés
+               dans la liste, rien ne disait qu'ils venaient tous du même employeur — et
+               l'entreprise, elle, a ses PROPRES documents à signer (convention, accord de prise
+               en charge), qui ne sont sur la fiche d'aucun d'entre eux. Son nom mène donc à sa
+               fiche : c'est là qu'on va, pas sur le dossier d'un stagiaire au hasard.
+               Le groupe prend la place de son premier membre, si bien que l'ordre de la carte —
+               le plus pressé devant — ne change pas. */
+            if (g.type === "company") {
+              const tete = (
+                <>
+                  <span className="dossier-groupe-ic"><Icon name="building" size={14} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {g.company_name}
+                    </b>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      {g.members.length} stagiaire{g.members.length > 1 ? "s" : ""} · ses documents se signent sur sa fiche
+                    </span>
                   </span>
-                  {/* Pourquoi un dossier plus ancien est là : sa session est finie, lui pas encore. Sa
-                      propre ligne : à la suite de l'intitulé, l'ellipse la coupait sur téléphone, date
-                      comprise — justement ce qu'il fallait lire. */}
-                  {e.echu && <span className="dossier-echu">Session terminée le {dateFr(e.end_date || e.start_date)}</span>}
-                </span>
-                {/* L'AVANCEMENT RÉEL, pas `conformite_score` : cette colonne est écrite « ROUGE »
-                    à l'inscription et n'est jamais recalculée. Les cinq dossiers de l'école y
-                    étaient tous à « ROUGE » pour un avancement de 31, 0, 19, 44 et 19 %. */}
-                <ProgressPct percent={e.percent} score={e.score} />
-              </>
-            );
-            /* LA LIGNE MÈNE À LA FICHE DU STAGIAIRE, ouverte sur CE dossier (demandé le 2026-09-21) :
-               une fiche a un onglet par dossier, et s'ouvrait sur le premier (lib/lienDossier.js). */
-            return (
-              <div key={e.id} className="dossier-ligne">
-                {ficheOuvrable ? (
-                  <Link to={lienDossier(e.learner_id, e.id)} className="rowlink dossier-lien" title="Ouvrir la fiche du stagiaire">
-                    {contenu}
-                  </Link>
-                ) : contenu}
-              </div>
-            );
+                  {entrepriseOuvrable && <Icon name="chevron-right" size={15} aria-hidden="true" />}
+                </>
+              );
+              return (
+                <div key={`co:${g.company_id}`} className="dossier-groupe">
+                  <div className="dossier-groupe-tete">
+                    {entrepriseOuvrable ? (
+                      <Link to={`/entreprises/${g.company_id}`} className="rowlink dossier-lien"
+                        title={`Ouvrir la fiche de ${g.company_name}`}>{tete}</Link>
+                    ) : tete}
+                  </div>
+                  <div className="dossier-groupe-membres">{g.members.map(ligneDossier)}</div>
+                </div>
+              );
+            }
+            return ligneDossier(g.d);
           })}
         </Card>
 

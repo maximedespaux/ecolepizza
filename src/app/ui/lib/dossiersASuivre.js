@@ -60,6 +60,39 @@ export function dossiersASuivre(enr, actives, estPassee) {
     return { aSuivre, derniers };
 }
 
+/**
+ * LES DOSSIERS RANGÉS SOUS LEUR ENTREPRISE — la même règle pour le suivi et le tableau de bord.
+ *
+ * QUAND UNE ENTREPRISE INSCRIT SON MONDE, ses stagiaires ne se lisent pas un par un : elle a ses
+ * propres documents à signer (convention, accord de prise en charge), et c'est vers SA fiche qu'il
+ * faut aller. Éparpillés dans la liste, ils obligeaient à retrouver de tête qui venait d'où.
+ *
+ * L'ORDRE REÇU EST CONSERVÉ, et un groupe prend la place de son PREMIER membre : la liste reste
+ * triée comme elle l'était (le plus pressé, ou le plus récent, devant). Le regrouper en fin de
+ * liste ferait disparaître une entreprise arrivée ce matin sous des dossiers de la semaine passée.
+ *
+ * Le groupe ne porte ici QUE l'identité et les membres : le suivi y ajoute ses agrégats
+ * (pourcentage, pire score, feuille de route), le tableau de bord n'en a pas besoin.
+ *
+ * @param liste  dossiers portant `company_id` / `company_name` (GET /enrollments, GET /suivi)
+ * @returns [{ type: "solo", d } | { type: "company", company_id, company_name, members }]
+ */
+export function grouperParEntreprise(liste) {
+    const parEntreprise = new Map();
+    const out = [];
+    for (const d of liste || []) {
+        if (!d.company_id) { out.push({ type: "solo", d }); continue; }
+        let g = parEntreprise.get(d.company_id);
+        if (!g) {
+            g = { type: "company", company_id: d.company_id, company_name: d.company_name || "Entreprise", members: [] };
+            parEntreprise.set(d.company_id, g);
+            out.push(g);
+        }
+        g.members.push(d);
+    }
+    return out;
+}
+
 /** Un dossier complet : toutes ses étapes faites — le « VERT » du serveur, 100 %. */
 export const estComplet = (d) => !!d && d.score === "VERT";
 

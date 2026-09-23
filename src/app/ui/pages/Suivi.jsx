@@ -1,13 +1,13 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
   importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
-import { peutEcrire } from "../lib/nav.js";
+import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -15,7 +15,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Roadmap from "../components/Roadmap.jsx";
 import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
-import { sansLesComplets } from "../lib/dossiersASuivre.js";
+import { sansLesComplets, grouperParEntreprise } from "../lib/dossiersASuivre.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
@@ -90,7 +90,15 @@ function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
   );
 }
 
+/* L'entrée « Entreprises » du menu : la fiche d'une entreprise n'est un lien que si le menu
+   l'offre — c'est la décision même de la garde de route. Un auditeur, qui lit le suivi sans
+   pouvoir ouvrir une entreprise, ne se voit donc pas proposer un lien qui le renverrait à
+   l'accueil. (Le tableau de bord fait pareil, cf. Dashboard.jsx.) */
+const ENTREE_ENTREPRISES = NAV.flatMap((g) => g.items).find((it) => it.to === "/entreprises");
+
 function Suivi() {
+  const { user } = useContext(UserContext);
+  const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen(user, ENTREE_ENTREPRISES);
   const navigate = useNavigate();
   const [tab, setTab] = useState("conformite");
   const [dossiers, setDossiers] = useState([]);
@@ -126,25 +134,15 @@ function Suivi() {
   // Cliquer un manque filtre la liste : la page se termine par un geste, pas par un constat.
   const dossiersVus = useMemo(() => dossiersDuManque(dossiers, manqueFiltre), [dossiers, manqueFiltre]);
 
-  // Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise
-  // apparaît sous l'entreprise (complétion agrégée), les autres restent autonomes.
-  // On préserve l'ordre de tri du backend (incomplets d'abord).
+  /* Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise apparaît sous
+     l'entreprise (complétion agrégée), les autres restent autonomes. On préserve l'ordre de tri
+     du backend (incomplets d'abord).
+     LE REGROUPEMENT LUI-MÊME VIT DANS `lib/dossiersASuivre.js` depuis le 2026-09-23, partagé avec
+     le tableau de bord : deux boucles écrites côte à côte auraient fini par ranger les mêmes
+     dossiers autrement, et personne n'aurait su laquelle dit vrai. Les agrégats, eux, restent
+     ici — le tableau de bord n'en a pas l'usage. */
   const groups = useMemo(() => {
-    const byCompany = new Map();
-    const out = [];
-    for (const d of dossiersVus) {
-      if (d.company_id) {
-        let g = byCompany.get(d.company_id);
-        if (!g) {
-          g = { type: "company", company_id: d.company_id, company_name: d.company_name || "Entreprise", members: [] };
-          byCompany.set(d.company_id, g);
-          out.push(g);
-        }
-        g.members.push(d);
-      } else {
-        out.push({ type: "solo", d });
-      }
-    }
+    const out = grouperParEntreprise(dossiersVus);
     // Agrégats par entreprise : % = somme(étapes faites)/somme(étapes) ; score = pire membre.
     for (const g of out) {
       if (g.type !== "company") continue;
@@ -286,20 +284,35 @@ function Suivi() {
                   const cOpen = !!open[ckey];
                   return (
                     <div key={ckey} className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--ember1, #c0392b)" }}>
-                      <button type="button" onClick={() => toggle(ckey)} className="suivi-ligne">
-                        <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
-                        <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
-                        <span className="suivi-ligne-texte">
-                          <b>{g.company_name}</b>
-                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                            {g.members.length} stagiaire(s){complets > 0 ? ` dont ${complets} complet${complets > 1 ? "s" : ""}` : ""} · {g.done}/{g.total} étape(s)
+                      {/* DÉPLIER N'EST PAS ALLER VOIR (2026-09-23, comme au tableau de bord).
+                          L'en-tête n'était qu'une bascule : on ouvrait le groupe, on lisait ses
+                          stagiaires, et l'ENTREPRISE — qui a ses propres documents à signer, la
+                          convention, l'accord de prise en charge — restait hors d'atteinte. Le
+                          lien vit À CÔTÉ du bouton, jamais dedans : un lien dans un bouton n'est
+                          pas du HTML valide, et le clic déclencherait les deux. */}
+                      <div className="suivi-groupe-tete">
+                        <button type="button" onClick={() => toggle(ckey)} className="suivi-ligne">
+                          <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
+                          <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
+                          <span className="suivi-ligne-texte">
+                            <b>{g.company_name}</b>
+                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                              {g.members.length} stagiaire(s){complets > 0 ? ` dont ${complets} complet${complets > 1 ? "s" : ""}` : ""} · {g.done}/{g.total} étape(s)
+                            </span>
                           </span>
-                        </span>
-                        <span className="suivi-ligne-etat">
-                          <ProgressPct percent={g.percent} score={g.score} />
-                          <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
-                        </span>
-                      </button>
+                          <span className="suivi-ligne-etat">
+                            <ProgressPct percent={g.percent} score={g.score} />
+                            <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
+                          </span>
+                        </button>
+                        {entrepriseOuvrable && (
+                          <Link to={`/entreprises/${g.company_id}`} className="card-more suivi-groupe-fiche"
+                            title={`Ouvrir la fiche de ${g.company_name}`}
+                            aria-label={`Ouvrir la fiche de ${g.company_name}`}>
+                            Sa fiche <Icon name="chevron-right" size={13} aria-hidden="true" />
+                          </Link>
+                        )}
+                      </div>
                       {cOpen && (
                         <div className="suivi-groupe-membres">
                           {g.documents?.length > 0 && (
