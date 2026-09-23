@@ -2823,6 +2823,20 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .sess-comp{display:flex;flex-direction:column}
 .sess-comp-hd{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--text);background:var(--surface2);border:1px solid var(--border-soft);border-radius:8px;padding:6px 10px;margin-top:4px}
 .sess-comp .sess-comp-hd{margin-bottom:2px}
+/* LES INSCRITS D'UNE ENTREPRISE, EN RETRAIT DERRIÈRE UN FILET (2026-09-23). L'intitulé se lisait
+   comme un simple séparateur : rien ne disait où le groupe s'arrête, et le premier individuel qui
+   suivait paraissait encore appartenir à l'entreprise. La dernière ligne perd son filet horizontal
+   — deux traits à deux pixels d'écart se lisent comme une erreur. Même retrait qu'au tableau de
+   bord (.dossier-groupe-membres), à un détail près : ici la ligne porte déjà une avatar de 30 px,
+   d'où un retrait plus court, sinon les noms partent trop loin de leur entreprise. */
+.sess-comp-membres{margin-left:9px;padding-left:13px;border-left:2px solid var(--border)}
+.sess-comp-membres > div:last-child{border-bottom:none}
+/* L'intitulé cliquable : même allure que le bandeau, plus le chevron qui se décale au survol. */
+.sess-comp-lien{color:var(--text)}
+.sess-comp-lien .arch-count{margin-left:auto}
+.sess-comp-lien svg:last-child{flex:none;transition:transform .2s var(--spring)}
+.sess-comp-lien:hover{background:var(--surface3);border-color:var(--border)}
+.sess-comp-lien:hover svg:last-child{transform:translateX(3px)}
 .sess-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
 .sess-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:all .15s}
 .sess-tab:hover{border-color:var(--blue);color:var(--text)}
