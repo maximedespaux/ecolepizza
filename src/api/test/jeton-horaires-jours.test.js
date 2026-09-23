@@ -32,12 +32,20 @@ test('le cas demandé : un horaire par journée', () => {
 
 test('une seule ligne vaut pour toutes les journées', () => {
     // La forme la plus courante : mêmes horaires tous les jours, écrits une fois.
-    const r = horairesParJour('9h00 – 12h30 / 13h30 – 17h00', 3, LUNDI);
+    const r = horairesParJour('9h00 - 12h30 / 13h30 - 17h00', 3, LUNDI);
     assert.deepStrictEqual(r.split('\n'), [
         'Lundi 9h00-12h30 & 13h30-17h00',
         'Mardi 9h00-12h30 & 13h30-17h00',
         'Mercredi 9h00-12h30 & 13h30-17h00',
     ]);
+
+    /* LE TIRET N'EST QU'UN ORNEMENT — la lecture ne retient que les heures. Les exemples de
+       l'écran proposaient un tiret demi-cadratin (2026-09-23 : « trop spécifique », il ne se
+       tape pas au clavier) et proposent désormais le trait d'union. Les horaires DÉJÀ saisis
+       avec l'ancien caractère doivent continuer de se lire exactement pareil : ce qui suit
+       l'exige, faute de quoi la moindre variante de saisie viderait une feuille d'émargement. */
+    assert.strictEqual(horairesParJour('9h00 – 12h30 / 13h30 – 17h00', 3, LUNDI), r);
+    assert.strictEqual(horairesParJour('9h00/12h30 - 13h30/17h00', 3, LUNDI), r, 'ni le séparateur');
 });
 
 test('une plage de jours, et son exception', () => {

@@ -208,7 +208,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config }) {
         <td class="nm ilabel" width="${nameWpx}">${esc(label)}</td>
         ${exEmpty(beforeEx)}${cols.map((c) => `<td width="${colWpx}">${esc(fn(c))}</td>`).join('')}${exEmpty(afterEx)}
     </tr>`;
-    const timeCell = (c) => { const r = rangeFor(c); return r ? `${fmtHM(r[0])} – ${fmtHM(r[1])}` : ''; };
+    const timeCell = (c) => { const r = rangeFor(c); return r ? `${fmtHM(r[0])} - ${fmtHM(r[1])}` : ''; };
     const volCell = (c) => { const r = rangeFor(c); return r ? fmtDur(r[1] - r[0]) : ''; };
 
     // Assemblage : ligne « Horaires » au-dessus du stagiaire, ligne « Volume horaire » au-dessus du 1er formateur.

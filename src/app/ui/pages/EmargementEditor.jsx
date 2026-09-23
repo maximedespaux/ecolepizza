@@ -219,7 +219,7 @@ export function EmargementPreview({ cfg, org }) {
     { MATIN: ["8h00", "12h00"], APRES_MIDI: ["13h00", "16h30"] },
   ];
   const toM = (t) => { const m = t.match(/(\d+)h(\d*)/); return +m[1] * 60 + (m[2] ? +m[2] : 0); };
-  const sTime = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; return r ? `${r[0]} – ${r[1]}` : ""; };
+  const sTime = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; return r ? `${r[0]} - ${r[1]}` : ""; };
   const sVol = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; if (!r) return ""; const d = toM(r[1]) - toM(r[0]); return `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`; };
 
   const cell = (i, on) => on ? (
@@ -250,7 +250,7 @@ export function EmargementPreview({ cfg, org }) {
           <div style={{ color: "#444", lineHeight: 1.5, marginTop: 3 }}>
             Intitulé de l'action de formation : <b>Pizzaïolo Niveau I</b> (NIV1)<br />
             Date(s) : <b>du 06/07/2026 au 07/07/2026</b>Semaine 28/2026{cfg.show_duration ? " · Durée : 2 jours · 14 h" : ""}<br />
-            {cfg.show_horaires ? <>Horaires : 9h00 – 12h30 / 13h30 – 17h00<br /></> : null}
+            {cfg.show_horaires ? <>Horaires : 9h00 - 12h30 / 13h30 - 17h00<br /></> : null}
             {cfg.header_note ? <>{cfg.header_note}<br /></> : null}
             {cfg.show_lieu && orgAddr ? `Lieu : ${orgAddr}` : null}
           </div>
