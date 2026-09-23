@@ -5849,3 +5849,14 @@ label .requis {
 .mail-biblio-vignette img{width:72px;height:54px;object-fit:cover;display:block}
 .mail-biblio-x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:99px;border:0;
   background:var(--red);color:#fff;font-size:12px;line-height:1;display:grid;place-items:center}
+/* La liste des destinataires d'un envoi groupé : repliée, décochable, et qui défile au-delà
+   d'une dizaine de noms — une session de trente occuperait sinon tout l'écran. */
+.mail-destinataires{margin:0 0 10px;border:1px dashed var(--border);border-radius:10px;padding:8px 12px}
+.mail-destinataires > summary{cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px}
+.mail-destinataires-liste{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow:auto;margin-top:8px}
+.mail-destinataires-liste label{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;font-size:13px}
+.mail-destinataires-liste label:hover{background:var(--surface2)}
+/* Un nom décoché reste LISIBLE, seulement pâli : le cacher ferait croire qu'il n'a jamais été
+   dans la liste, et on ne saurait plus qui l'on a retiré. */
+.mail-destinataires-liste label.off{opacity:.5;text-decoration:line-through}
+.mail-destinataires-liste .hint{margin-left:auto;font-size:11.5px}

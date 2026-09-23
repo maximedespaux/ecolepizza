@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getOrganisation, updateOrganisation, getModelesMail, saveModeleMail, resetModeleMail,
   apercuMail, destinatairesMail, envoyerMailGroupe, getEnvoisMail, getSessions, getFormations,
@@ -374,6 +374,12 @@ function BarreInsertion({ jetons, onInserer, onStatus }) {
 function Groupe({ onStatus }) {
   const [type, setType] = useState("session");
   const [id, setId] = useState("");
+  /* UNE SEMAINE SE DÉSIGNE PAR DEUX NOMBRES, pas par un identifiant : « S38 — 2026 » n'est pas
+     une ligne en base, c'est ce qu'ont en commun les sessions de ces jours-là. */
+  const [semaine, setSemaine] = useState("");
+  /* CEUX QU'ON RETIRE DE L'ENVOI. On part de « tout le monde » : décocher est un geste rare, et
+     une liste qu'il faudrait cocher personne par personne ferait manquer quelqu'un. */
+  const [ecartes, setEcartes] = useState(() => new Set());
   const [sessions, setSessions] = useState([]);
   const [formations, setFormations] = useState([]);
   const [objet, setObjet] = useState("");
@@ -391,10 +397,29 @@ function Groupe({ onStatus }) {
 
   useEffect(() => {
     setCibles(null);
-    if (!id) return;
-    destinatairesMail({ type, id }).then((r) => setCibles(r.data)).catch((e) => onStatus({ type: "error", message: e.message }));
-  }, [type, id, onStatus]);
+    setEcartes(new Set());
+    const quoi = type === "semaine"
+      ? (semaine ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) } : null)
+      : (id ? { type, id } : null);
+    if (!quoi) return;
+    destinatairesMail(quoi).then((r) => setCibles(r.data)).catch((e) => onStatus({ type: "error", message: e.message }));
+  }, [type, id, semaine, onStatus]);
 
+  /* LES SEMAINES QUI ONT DES SESSIONS, tirées des sessions elles-mêmes : proposer les
+     cinquante-deux semaines de l'année ferait chercher les trois qui comptent. */
+  const semaines = useMemo(() => {
+    const m = new Map();
+    for (const s of sessions) {
+      if (!s.week || !s.year) continue;
+      const cle = `${s.year}-${s.week}`;
+      m.set(cle, (m.get(cle) || 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([cle, n]) => ({ cle, annee: Number(cle.split("-")[0]), sem: Number(cle.split("-")[1]), n }))
+      .sort((a, b) => (b.annee - a.annee) || (b.sem - a.sem));
+  }, [sessions]);
+
+  const retenus = (cibles?.destinataires || []).filter((d) => !ecartes.has(d.id));
   const choix = type === "session" ? sessions : formations;
   const nom = (o) => (type === "session"
     ? `${o.code || o.title || "Session"} — ${o.start_date || ""}`
@@ -407,11 +432,19 @@ function Groupe({ onStatus }) {
   }
 
   async function envoyer() {
-    const n = cibles?.destinataires?.length || 0;
+    const n = retenus.length;
     if (!window.confirm(`Envoyer ce message à ${n} stagiaire${n > 1 ? "s" : ""} ? L'envoi part tout de suite et ne se rattrape pas.`)) return;
     setBusy(true); onStatus(null);
     try {
-      const r = await envoyerMailGroupe({ type, id, objet, corps });
+      /* ON GARDE LA CIBLE D'ORIGINE tant que personne n'est écarté : le journal dit alors
+         « Semaine 38 — 2026 (2 sessions) », ce qui se relit. Dès qu'on décoche, l'envoi porte la
+         liste des personnes — le serveur ne saurait pas deviner lesquelles on a retirées. */
+      const cible = ecartes.size === 0
+        ? (type === "semaine"
+          ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) }
+          : { type, id })
+        : { type: "stagiaires", ids: retenus.map((d) => d.id) };
+      const r = await envoyerMailGroupe({ ...cible, objet, corps });
       const d = r.data;
       const comment = d.mode === "cci" ? " en un seul envoi, adresses masquées" : "";
       onStatus({ type: d.echecs ? "info" : "success",
@@ -424,12 +457,12 @@ function Groupe({ onStatus }) {
     finally { setBusy(false); }
   }
 
-  const pret = objet.trim() && corps.trim() && (cibles?.destinataires?.length || 0) > 0;
+  const pret = objet.trim() && corps.trim() && retenus.length > 0;
   /* COMMENT CE MESSAGE PARTIRA, dit AVANT de l'envoyer — et c'est le message lui-même qui décide.
      La même règle qu'au serveur : un texte qui porte {Prénom} ou {Nom} ne peut pas partir en une
      seule fois, puisqu'un envoi en copie cachée n'a qu'un seul corps pour tout le monde. */
   const personnalise = /\{(Prénom|Nom)\}/.test(`${objet} ${corps}`);
-  const nbDest = cibles?.destinataires?.length || 0;
+  const nbDest = retenus.length;
   const enCci = !personnalise && nbDest > 1 && !!cibles?.copie_ecole;
   return (
     <>
@@ -445,23 +478,67 @@ function Groupe({ onStatus }) {
         <div className="row2" style={{ alignItems: "flex-start" }}>
           <div className="field">
             <label htmlFor="mail-type">À qui</label>
-            <select id="mail-type" className="inp" value={type} onChange={(e) => { setType(e.target.value); setId(""); }}>
+            <select id="mail-type" className="inp" value={type}
+              onChange={(e) => { setType(e.target.value); setId(""); setSemaine(""); }}>
               <option value="session">Les inscrits d'une session</option>
+              {/* LA SEMAINE, parce que c'est ainsi que l'école voit son planning : la S38 porte
+                  deux sessions et cinq personnes, et on leur écrit UNE fois. */}
+              <option value="semaine">Tous les inscrits d'une semaine</option>
               <option value="formation">Tous les inscrits d'une formation</option>
             </select>
           </div>
           <div className="field">
-            <label htmlFor="mail-cible">{type === "session" ? "Session" : "Formation"}</label>
-            <select id="mail-cible" className="inp" value={id} onChange={(e) => setId(e.target.value)}>
-              <option value="">Choisir…</option>
-              {choix.map((o) => <option key={o.id} value={o.id}>{nom(o)}</option>)}
-            </select>
+            <label htmlFor="mail-cible">
+              {type === "session" ? "Session" : type === "semaine" ? "Semaine" : "Formation"}
+            </label>
+            {type === "semaine" ? (
+              <select id="mail-cible" className="inp" value={semaine} onChange={(e) => setSemaine(e.target.value)}>
+                <option value="">Choisir…</option>
+                {semaines.map((w) => (
+                  <option key={w.cle} value={w.cle}>
+                    S{w.sem} — {w.annee} ({w.n} session{w.n > 1 ? "s" : ""})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select id="mail-cible" className="inp" value={id} onChange={(e) => setId(e.target.value)}>
+                <option value="">Choisir…</option>
+                {choix.map((o) => <option key={o.id} value={o.id}>{nom(o)}</option>)}
+              </select>
+            )}
           </div>
         </div>
 
+        {/* QUI VA RECEVOIR, NOMMÉMENT, ET DÉCOCHABLE. Une session porte parfois quelqu'un à qui
+            ce message-là ne s'adresse pas (il a déjà répondu, il est parti) : sans la liste, il
+            fallait renoncer à l'envoi groupé et écrire à la main. On part de tout le monde
+            coché — décocher est le geste rare. */}
+        {cibles && cibles.destinataires.length > 0 && (
+          <details className="mail-destinataires">
+            <summary>
+              Voir et choisir les destinataires
+              <span className="arch-count">{retenus.length} sur {cibles.destinataires.length}</span>
+            </summary>
+            <div className="mail-destinataires-liste">
+              {cibles.destinataires.map((d) => (
+                <label key={d.id} className={ecartes.has(d.id) ? "off" : ""}>
+                  <input type="checkbox" checked={!ecartes.has(d.id)}
+                    onChange={() => setEcartes((e) => {
+                      const n2 = new Set(e);
+                      if (n2.has(d.id)) n2.delete(d.id); else n2.add(d.id);
+                      return n2;
+                    })} />
+                  <span>{d.nom}</span>
+                  <span className="hint">{d.email}</span>
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
+
         {cibles && (
           <p className="hint" style={{ margin: "0 0 10px" }}>
-            <b>{cibles.destinataires.length}</b> destinataire{cibles.destinataires.length > 1 ? "s" : ""}
+            <b>{retenus.length}</b> destinataire{retenus.length > 1 ? "s" : ""}
             {cibles.sans_email.length > 0 && (
               <> · <b>{cibles.sans_email.length}</b> sans adresse e-mail ({cibles.sans_email.join(", ")}) —
                 leur fiche est à compléter, ils ne recevront rien.</>
@@ -508,7 +585,7 @@ function Groupe({ onStatus }) {
           </button>
           <span style={{ flex: 1 }} />
           <button type="button" className="btn primary sm" onClick={envoyer} disabled={!pret || busy || !cibles?.envoi_possible}>
-            <Icon name="send" size={13} /> {busy ? "Envoi…" : `Envoyer${cibles ? ` à ${cibles.destinataires.length}` : ""}`}
+            <Icon name="send" size={13} /> {busy ? "Envoi…" : `Envoyer${cibles ? ` à ${retenus.length}` : ""}`}
           </button>
         </div>
         {apercu && <Apercu rendu={apercu} />}
