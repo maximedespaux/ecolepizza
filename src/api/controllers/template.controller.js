@@ -402,7 +402,10 @@ function computedGroup() {
 function groupTokensGroup() {
     const byKey = {};
     for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
-    const tokens = ['Stagiaires'].map((k) => byKey[k]).filter(Boolean)
+    /* LA PALETTE N'EST PAS LE CATALOGUE : un jeton ajouté au catalogue et oublié ICI se résout
+       si on le tape, et reste introuvable dans l'éditeur. C'est le défaut déjà payé deux fois
+       (évaluation pratique, examen) ; {Nombre stagiaires} entre donc en même temps que le jeton. */
+    const tokens = ['Stagiaires', 'Nombre stagiaires'].map((k) => byKey[k]).filter(Boolean)
         .map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
     return { group: 'Groupe entreprise', tokens };
 }

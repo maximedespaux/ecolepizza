@@ -224,6 +224,16 @@ const TOKEN_CATALOG = [
             { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
             { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
             { key: 'Stagiaires', label: 'Liste des stagiaires (un nom par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
+            /* COMBIEN L'ENTREPRISE EN ENVOIE — demandé le 2026-09-23. La convention l'écrit en
+               toutes lettres (« la société inscrit 3 salariés »), et jusqu'ici il fallait compter
+               les lignes de {Stagiaires} à la main puis retaper le chiffre : deux sources pour un
+               même fait, et la seconde ne se corrigeait pas quand quelqu'un s'ajoutait. */
+            { key: 'Nombre stagiaires', label: 'Nombre de stagiaires envoyés', sample: '3',
+              desc: 'Les stagiaires de CETTE entreprise inscrits à CETTE session, comptés au '
+                  + 'moment où le document se rend — comme {Stagiaires}, dont c’est le nombre de '
+                  + 'lignes. Vide sur un document qui ne concerne pas un groupe d’entreprise. '
+                  + 'L’accord reste au modèle : écrivez « stagiaire(s) », ou une phrase qui '
+                  + 'tienne au singulier comme au pluriel.' },
         ],
     },
     {
@@ -1131,7 +1141,7 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 // on ne les compte pas comme « information manquante » à la génération.
 const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
-    'Today', 'Date', 'Stagiaires',
+    'Today', 'Date', 'Stagiaires', 'Nombre stagiaires',
     'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
     /* LES RÉPONSES DU STAGIAIRE : vides tant qu'il n'a pas répondu, et c'est la SIGNATURE qui
        l'exige, pas la génération. Les compter « manquantes » bloquerait l'aperçu du document —
@@ -1368,6 +1378,13 @@ function resolveTokens(ctx = {}) {
         'Email financeur': fin.email || '', 'Téléphone financeur': fin.phone || '',
         // Groupe (document entreprise) : tableau HTML de tous les stagiaires du groupe.
         Stagiaires: stagiairesTable(ctx.groupStagiaires),
+        /* LE NOMBRE VIENT DE LA MÊME LISTE que {Stagiaires} : un compte calculé ailleurs
+           finirait par dire autre chose que la liste imprimée juste à côté.
+           VIDE, ET NON « 0 », QUAND IL N'Y A PAS DE GROUPE : ce jeton n'a de sens que sur un
+           document d'entreprise ; « 0 stagiaire » sur une convention individuelle se lirait
+           comme une erreur, et c'est simplement une question qui ne se pose pas. */
+        'Nombre stagiaires': Array.isArray(ctx.groupStagiaires) && ctx.groupStagiaires.length
+            ? String(ctx.groupStagiaires.length) : '',
         // Organisme
         Organisme: o.legal_name || '', 'Organisme court': o.short_name || '', Responsable: o.manager || '',
         'Siret organisme': o.siret || '', 'TVA organisme': o.vat_number || '', NDA: o.nda || '',
