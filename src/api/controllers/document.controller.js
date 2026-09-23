@@ -584,10 +584,46 @@ async function prepareLearnerDoc(conn, orgId, { learnerId, type, templateSlug, t
  * rendrait indiscernable ce qui ne doit surtout pas l'être. Qui a importé et quand sont
  * enregistrés à côté, sur le fichier.
  */
+/**
+ * CE QU'UN DOCUMENT IMPORTÉ A LE DROIT D'ÊTRE (2026-09-23).
+ *
+ * LE DÉFAUT QUE ÇA FERME. Le `mimetype` arrivait du CLIENT et était stocké tel quel, puis
+ * renvoyé en `Content-Type` avec `Content-Disposition: inline` par `getDocumentFile`. Déposer un
+ * fichier annoncé `text/html` et l'ouvrir exécutait donc son contenu dans l'origine de l'API,
+ * dans la session de qui le relit. ⚠️ `nosniff` (server.js) n'y pouvait rien : il empêche de
+ * DEVINER un type, pas d'en DÉCLARER un.
+ *
+ * La liste est celle des deux autres dépôts (pièces, remises), plus le traitement de texte : un
+ * document signé revient souvent en .docx par messagerie, et cet écran sert justement à le
+ * rattacher. Le TYPE RETENU est celui de la liste, jamais la chaîne reçue.
+ */
+const MIMES_IMPORT = {
+    'application/pdf': 'application/pdf',
+    'image/png': 'image/png',
+    'image/jpeg': 'image/jpeg',
+    'image/webp': 'image/webp',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword': 'application/msword',
+};
+/* SOUS LA COUPURE DE `multer` (25 Mo, document.routes.js), pour que le refus vienne d'ici avec
+   une phrase lisible plutôt que d'une erreur brute de transport. */
+const MAX_IMPORT_OCTETS = 20 * 1024 * 1024;
+
+/** Un fichier qui n'est ni PDF ni image ne s'ouvre PAS dans l'onglet : il se télécharge. */
+const AFFICHABLES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/webp']);
+
 const importDocumentFile = async (req, res) => {
     const orgId = req.user.organization_id;
     const f = req.file;
     if (!f || !f.buffer || !f.buffer.length) return res.status(422).json({ error: 'Aucun fichier reçu.' });
+    const mime = MIMES_IMPORT[String(f.mimetype || '')];
+    if (!mime) {
+        return res.status(415).json({ message: 'Format refusé : PDF, image (PNG, JPEG, WebP) ou document Word.' });
+    }
+    if (f.buffer.length > MAX_IMPORT_OCTETS) {
+        return res.status(413).json({ message: `Fichier trop lourd (${Math.round(MAX_IMPORT_OCTETS / 1024 / 1024)} Mo maximum).` });
+    }
     try {
         const conn = db.promise();
         let documentId = req.body.document_id || null;
@@ -625,7 +661,7 @@ const importDocumentFile = async (req, res) => {
                 `INSERT INTO document_fichier (id, document_id, nom, mime, bytes, taille, importe_par)
                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 [crypto.randomUUID(), documentId, String(f.originalname || '').slice(0, 200),
-                 f.mimetype || 'application/pdf', encryptBytes(f.buffer), f.buffer.length, req.user.id || null]);
+                 mime, encryptBytes(f.buffer), f.buffer.length, req.user.id || null]);
         } catch (e) {
             if (e && e.code === 'ER_NO_SUCH_TABLE') {
                 return res.status(409).json({ error: "Migration 145 non jouée : l'import de documents n'est pas encore disponible." });
@@ -665,8 +701,14 @@ const getDocumentFile = async (req, res) => {
         const f = rows[0];
         if (f) {
             const clair = decryptBytes(f.bytes);
-            res.setHeader('Content-Type', f.mime || 'application/pdf');
-            res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.nom || 'document')}"`);
+            /* DÉFENSE DE PROFONDEUR SUR LES LIGNES DÉJÀ EN BASE. L'écriture est filtrée depuis
+               2026-09-23, mais les fichiers importés AVANT portent encore le type que le client
+               avait annoncé. On ne sert donc en ligne que ce qui se regarde dans un onglet ; tout
+               le reste se TÉLÉCHARGE, et un type inconnu devient un flux d'octets. */
+            const type = AFFICHABLES.has(f.mime) ? f.mime : 'application/octet-stream';
+            const pose = AFFICHABLES.has(f.mime) ? 'inline' : 'attachment';
+            res.setHeader('Content-Type', type);
+            res.setHeader('Content-Disposition', `${pose}; filename="${encodeURIComponent(f.nom || 'document')}"`);
             return res.send(clair);
         }
 
