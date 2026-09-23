@@ -14,6 +14,7 @@ import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { etatPourLeStagiaire } from "../lib/documentsDossier.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
+import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -173,7 +174,9 @@ function StudentFormationDetail() {
       <StatusMessage status={status} />
 
       {/* Sélecteur de fichier partagé (déclenché par « Fournir »/« Renvoyer »). */}
-      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFichier} />
+      {/* `image/*` laissait choisir un SVG ou un HEIC, que le serveur refuse : la liste est
+          désormais celle qu'il accepte vraiment (lib/formatsDepot.js). */}
+      <input ref={fileRef} type="file" accept={ACCEPT_PIECE} style={{ display: "none" }} onChange={onFichier} />
 
       {data && (
         <Card title="Mon parcours">

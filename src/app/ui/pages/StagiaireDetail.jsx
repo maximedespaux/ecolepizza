@@ -23,6 +23,7 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
 import { GROUPES_DOC, repartirDocuments, sansSignature, documentsHorsParcours } from "../lib/documentsDossier.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
+import { ACCEPT_PIECE, ACCEPT_DOCUMENT } from "../lib/formatsDepot.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
@@ -307,6 +308,11 @@ function StagiaireDetail() {
        son type. L'attribut suit donc l'étape visée, il n'est pas figé dans le JSX. */
     const plusieurs = !!step.piece && (step.fichiers_attendus || 1) > 1;
     if (fichierRef.current) fichierRef.current.multiple = plusieurs;
+    /* `accept` SUIT L'ÉTAPE, pour la MÊME raison que `multiple` juste au-dessus : le sélecteur est
+       partagé, et les deux gestes n'acceptent pas les mêmes formats. Il annonçait `.doc,.docx`
+       pour tout le monde, y compris pour une PIÈCE justificative que le serveur refuse en 415 —
+       le fichier paraissait valide dans la fenêtre de choix, et le refus tombait après. */
+    if (fichierRef.current) fichierRef.current.accept = step.piece ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
     fichierRef.current?.click();
   }
 
@@ -657,8 +663,10 @@ function StagiaireDetail() {
               onCharge={(d) => setDocsEtapes(new Set((d?.steps || []).map((x) => x.docId).filter(Boolean)))}
               renderFin={bandeauFinFormation}
             />
+            {/* `accept` est posé par `demanderImport`, pas ici : il dépend de l'étape visée. La
+                valeur du JSX n'est donc qu'un DÉFAUT, le plus restrictif des deux. */}
             <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
-              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
+              accept={ACCEPT_PIECE} aria-hidden="true" tabIndex={-1} />
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
             <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
             {/* L'AUTRE SENS, juste en dessous : ce que l'ÉCOLE remet. Les deux cartes se

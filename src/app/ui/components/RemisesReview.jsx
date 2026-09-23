@@ -5,6 +5,7 @@ import Badge from "./Badge.jsx";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
+import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
 
 /**
  * DOCUMENTS REMIS AU STAGIAIRE — côté PERSONNEL, pour un dossier (enrollment) donné.
@@ -112,7 +113,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
                   {r.sans_objet ? "Rétablir" : "Sans objet"}
                 </button>
                 <input type="file" ref={(el) => { champs.current[r.remise_type_id] = el; }} style={{ display: "none" }}
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  accept={ACCEPT_PIECE}
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; envoyer(r.remise_type_id, f); }} />
                 {/* Rien a deposer sur une remise ecartee : la commande disparait plutot que de
                     rester vivante sur une etape qui ne concerne plus personne. */}
