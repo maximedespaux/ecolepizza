@@ -5803,3 +5803,17 @@ label .requis {
 .compteur-bascule:disabled{cursor:default}
 .compteur-bascule i{font-style:normal;font-weight:600;color:var(--ember1)}
 .compteur-bascule[aria-pressed="true"] i{color:var(--muted)}
+
+/* — MAILING — les e-mails que l'école réécrit, et ceux qu'elle écrit (migration 178). */
+.mail-jetons{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px}
+.mail-jetons .btn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+/* L'APERÇU DANS UN CADRE ISOLÉ : le HTML d'un e-mail porte ses propres styles, et injecté dans
+   la page il emporterait la mise en page de l'application avec lui. */
+.mail-apercu{margin-top:14px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.mail-apercu > b{display:flex;align-items:center;gap:7px;padding:9px 12px;font-size:12.5px;
+  background:var(--surface2);border-bottom:1px solid var(--border)}
+.mail-apercu iframe{display:block;width:100%;height:460px;border:0;background:#f4f5f8}
+.mail-journal{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.mail-journal li{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:13px;
+  padding-bottom:8px;border-bottom:1px solid var(--border-soft)}
+.mail-journal li:last-child{border-bottom:0;padding-bottom:0}

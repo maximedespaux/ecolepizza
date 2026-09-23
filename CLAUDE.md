@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1835 tests — 1828 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1844 tests — 1837 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,30 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **deux à jouer : 176 et 177 ; la 175 jouée, à constater (relevé le 2026-09-22, au soir)**
+## 4. Migrations — **trois à jouer : 176, 177 et 178 ; la 175 jouée, à constater (relevé le 2026-09-23)**
+
+**178 est À JOUER** (`178_mails_personnalises.sql`, les e-mails de l'école écrits par l'école, demandé le
+2026-09-23). Deux tables. `mail_modele` : le texte d'un e-mail AUTOMATIQUE quand l'école l'a réécrit — une
+ligne par type (credentials, reset, forgot, security, notifications), avec l'objet, le titre et deux zones
+de prose. Rien n'y est créé d'avance : sans ligne, c'est le texte livré avec l'application qui sert, et
+c'est le cas normal ; « revenir au texte d'origine » SUPPRIME la ligne. `mail_envoi` : la trace d'un envoi
+à un groupe (objet, corps, cible, nombre d'envoyés et d'échecs, identifiants des destinataires), au même
+titre que le journal des transmissions aux partenaires.
+CE QUI EST MODIFIABLE, ET CE QUI NE L'EST PAS : la prose, jamais la charpente. L'encadré des identifiants,
+le bouton, et les deux phrases « Si c'est bien vous » / « Si ce n'est PAS vous » d'une alerte de sécurité
+restent dans le code — une école qui réécrirait tout pourrait envoyer une alerte sans son garde-fou. Le
+texte saisi est du TEXTE : il est échappé au rendu (`lib/mailsPersonnalises.js`), les liens écrits en clair
+deviennent cliquables, et un jeton inconnu est REFUSÉ à l'enregistrement plutôt qu'imprimé en accolades
+chez un stagiaire.
+Sans elle, rien ne casse : les e-mails gardent leur texte d'origine, l'écran des textes dit « pas encore
+disponible » et l'envoi à un groupe répond 503. ⚠️ Le cache des textes (`lib/orgContext.js`) est rechargé à
+CHAQUE enregistrement en plus du sondage des dix minutes : sans ce rappel, l'école attendrait dix minutes
+pour voir sa propre correction partir. **Elle se vérifie par l'API, sans SQL** : réécrire un e-mail dans
+Paramètres → Mailing → Textes, puis `GET /api/mailing/modeles` — la ligne porte `perso: true`. Ou une
+requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name IN ('mail_modele','mail_envoi');`
+⚠️ Son revert SUPPRIME les deux tables : les textes réécrits reviennent à ceux d'origine sans prévenir, et
+l'historique des envois disparaît.
 
 **176 est À JOUER** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
 faire, demandés le 2026-09-22). Une table `memo` — auteur, texte, échéance facultative, partage,
