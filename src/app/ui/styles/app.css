@@ -2820,6 +2820,15 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .ent-brk{display:flex;align-items:center;gap:6px;margin:6px 0;padding:6px 10px;font-size:12px;font-weight:600;color:var(--ember1);background:var(--surface2);border:1px dashed var(--ember1);border-radius:8px}
 .ent-brk-flag{font-size:13px}
 /* Onglets de session (détail formation stagiaire) */
+/* LES HEURES D'UNE DEMI-JOURNÉE D'INTERVENANT (migration 181) — sous la case, jamais à côté :
+   la colonne « Matin » fait la largeur de son intitulé, et deux champs `time` y tiendraient à
+   peine. Empilés, ils gardent la grille lisible sur un téléphone comme sur un écran.
+   `width:auto` : le sélecteur natif mesure ~85 px sur ordinateur et ~110 px sur téléphone, et
+   une largeur fixe couperait l'heure sur l'un des deux. */
+.interv-heures{display:flex;align-items:center;justify-content:center;gap:3px;margin-top:3px}
+.interv-heures input[type="time"]{width:auto;font-size:11px;padding:2px 4px;border:1px solid var(--border);
+  border-radius:6px;background:var(--surface);color:inherit}
+.interv-heures i{font-style:normal;color:var(--dim)}
 .sess-comp{display:flex;flex-direction:column}
 .sess-comp-hd{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--text);background:var(--surface2);border:1px solid var(--border-soft);border-radius:8px;padding:6px 10px;margin-top:4px}
 .sess-comp .sess-comp-hd{margin-bottom:2px}

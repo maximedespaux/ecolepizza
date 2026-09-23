@@ -52,18 +52,41 @@ function SessionIntervenants({ sessionId, startDate, endDate, canEdit }) {
     try { await removeSessionIntervenant(sessionId, si.id); load(); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  /* UNE SEULE ÉCRITURE POUR LES DEUX GESTES — cocher une demi-journée, changer une heure : la
+     route REMPLACE la liste entière, donc l'une et l'autre partent par le même chemin. */
+  async function enregistrer(si, next) {
+    setData((d) => ({ ...d, assigned: d.assigned.map((a) => (a.id === si.id ? { ...a, slots: next } : a)) }));
+    try {
+      const r = await setIntervenantSlots(sessionId, si.id, next);
+      /* Le serveur dit quand il a gardé les demi-journées SANS les heures (migration 181 non
+         jouée) : sans ce mot, on croirait avoir saisi des heures qui n'existent pas. */
+      if (r?.horaires === false) setStatus({ type: "error", message: r.message });
+      else setStatus(null);
+    } catch (e) { setStatus({ type: "error", message: e.message }); load(); }
+  }
   async function toggleSlot(si, date, slot) {
     const has = (si.slots || []).some((s) => s.date === date && s.slot === slot);
     const next = has
       ? si.slots.filter((s) => !(s.date === date && s.slot === slot))
-      : [...(si.slots || []), { date, slot }];
-    // Optimiste + persistance.
-    setData((d) => ({ ...d, assigned: d.assigned.map((a) => (a.id === si.id ? { ...a, slots: next } : a)) }));
-    try { await setIntervenantSlots(sessionId, si.id, next); }
-    catch (e) { setStatus({ type: "error", message: e.message }); load(); }
+      : [...(si.slots || []), { date, slot, debut: "", fin: "" }];
+    await enregistrer(si, next);
   }
+  /* LES HEURES NE PARTENT QU'UNE FOIS LES DEUX SAISIES : une plage à moitié remplie n'est pas
+     enregistrée (lib/plageHoraire.js côté serveur), et un aller-retour par frappe ferait
+     clignoter la ligne sans rien garder. On écrit donc au `blur`, ou dès que la paire est
+     complète. */
+  function changerHeure(si, date, slot, champ, valeur) {
+    const next = (si.slots || []).map((s) => (s.date === date && s.slot === slot ? { ...s, [champ]: valeur } : s));
+    setData((d) => ({ ...d, assigned: d.assigned.map((a) => (a.id === si.id ? { ...a, slots: next } : a)) }));
+    const ligne = next.find((s) => s.date === date && s.slot === slot);
+    if (ligne && ligne.debut && ligne.fin) enregistrer({ ...si, slots: next }, next);
+  }
+  const poserHeures = (si) => enregistrer(si, si.slots || []);
 
   const assigned = data?.assigned || [];
+  /* Sans la migration 181, les colonnes d'heures n'existent pas : on ne propose pas une
+     saisie que l'enregistrement jetterait, on l'explique une fois sous le tableau. */
+  const heuresPossibles = data?.horaires !== false;
   const roster = data?.roster || [];
 
   return (
@@ -97,10 +120,27 @@ function SessionIntervenants({ sessionId, startDate, endDate, canEdit }) {
                         <tr key={d}>
                           <td style={{ whiteSpace: "nowrap" }}>{frDay(d)}</td>
                           {HALF.map((h) => {
-                            const on = (si.slots || []).some((s) => s.date === d && s.slot === h.slot);
+                            const ligne = (si.slots || []).find((s) => s.date === d && s.slot === h.slot);
                             return (
                               <td key={h.slot} style={{ textAlign: "center" }}>
-                                <input type="checkbox" checked={on} disabled={!canEdit} onChange={() => toggleSlot(si, d, h.slot)} />
+                                <input type="checkbox" checked={!!ligne} disabled={!canEdit} onChange={() => toggleSlot(si, d, h.slot)}
+                                  aria-label={`${h.label} du ${frDay(d)}`} />
+                                {/* LES HEURES N'APPARAISSENT QU'UNE FOIS LA CASE COCHÉE : deux
+                                    champs vides sur chaque demi-journée non assurée feraient un
+                                    mur de quarante cases à ne pas remplir. */}
+                                {ligne && heuresPossibles && (
+                                  <span className="interv-heures">
+                                    <input type="time" value={ligne.debut || ""} disabled={!canEdit}
+                                      aria-label={`Début, ${h.label} du ${frDay(d)}`}
+                                      onChange={(e) => changerHeure(si, d, h.slot, "debut", e.target.value)}
+                                      onBlur={() => poserHeures(si)} />
+                                    <i>–</i>
+                                    <input type="time" value={ligne.fin || ""} disabled={!canEdit}
+                                      aria-label={`Fin, ${h.label} du ${frDay(d)}`}
+                                      onChange={(e) => changerHeure(si, d, h.slot, "fin", e.target.value)}
+                                      onBlur={() => poserHeures(si)} />
+                                  </span>
+                                )}
                               </td>
                             );
                           })}
@@ -108,6 +148,11 @@ function SessionIntervenants({ sessionId, startDate, endDate, canEdit }) {
                       ))}
                     </tbody>
                   </table>
+                  {!heuresPossibles && (
+                    <p className="hint" style={{ margin: "6px 0 0" }}>
+                      Les demi-journées s'enregistrent, mais pas leurs heures&nbsp;: la migration 181 n'est pas jouée.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
