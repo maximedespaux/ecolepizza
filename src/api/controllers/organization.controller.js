@@ -4,6 +4,7 @@ const consentements = require('../lib/consentements.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { mergeEmargConfig } = require('../lib/emargement.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 
 /**
  * GET /api/organisation — l'organisme de l'utilisateur connecté.
@@ -76,6 +77,49 @@ const updateOrganization = async (req, res) => {
     // Colonnes récentes potentiellement absentes (migration non jouée) : on réessaie sans elles.
     const OPTIONAL = new Set(['vat_rate', 'partner_fields', 'legal_status',
         'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications']);
+
+    /* LES DEUX IMAGES DE L'ORGANISME SONT DES DATA-URL RÉINJECTÉS DANS DU HTML : la signature par
+       le jeton RAW `signatureBox` (lib/tokens.js), le logo par la feuille d'émargement. C'était
+       le SEUL chemin « signature » qui ne passait pas par `estSignatureValide` — le représentant
+       et le signataire public, eux, l'ont depuis SECURITY_AUDIT #2. Sans lui, un data-URL du
+       genre `data:image/png;base64,AA"><img src=x onerror=…>` passait tel quel et s'exécutait à
+       l'aperçu d'un document, dans la session de l'administrateur qui le relit.
+       ⚠️ `nosniff` ne protège de rien ici : le type est DÉCLARÉ, pas deviné. Seul le motif ANCRÉ
+       de `estSignatureValide` ferme la porte, en interdisant tout caractère hors base64 — donc
+       ni guillemet ni chevron. */
+    /* ⚠️ ON NE VALIDE QUE CE QUI CHANGE, et cette nuance n'est pas du zèle. L'écran Réglages
+       renvoie le FORMULAIRE ENTIER à chaque enregistrement, signature comprise, telle qu'il l'a
+       reçue du serveur. Une image déposée AVANT cette garde — dans un format qu'elle n'accepte
+       pas — aurait donc fait échouer toute modification de l'adresse ou du SIRET, avec un message
+       parlant de signature. Le but est d'empêcher d'ENTRER une charge utile, pas de bloquer une
+       école sur ce qu'elle a déjà. */
+    const aImage = ['signature_image', 'logo_image'].some((f) => req.body[f]);
+    /* La lecture n'a lieu QUE si une image est envoyée : un enregistrement ordinaire — adresse,
+       SIRET, interrupteurs de mailing — ne paie pas une requête de plus. Et elle est GARDÉE :
+       si elle échoue, `inchange` reste vide et la validation s'applique à tout, ce qui est le
+       repli sûr (on refuse une image douteuse plutôt que de la laisser entrer). */
+    let inchange = {};
+    if (aImage) {
+        try {
+            const [lignes] = await db.promise().query(
+                'SELECT signature_image, logo_image FROM organization WHERE id = ?', [req.user.organization_id]);
+            const actuel = Array.isArray(lignes) ? lignes[0] : null;
+            if (actuel) inchange = { signature_image: decrypt(actuel.signature_image), logo_image: actuel.logo_image };
+        } catch (e) { console.error('[organisation] lecture des images :', e.message); }
+    }
+
+    for (const f of ['signature_image', 'logo_image']) {
+        const v = req.body[f];
+        if (v === undefined || v === null || v === '') continue; // vider reste permis
+        if (v === inchange[f]) continue;                         // déjà en base : on n'y touche pas
+        if (!estSignatureValide(v)) {
+            return res.status(422).json({
+                message: f === 'logo_image'
+                    ? 'Logo refusé : il doit être une image PNG, JPEG, GIF ou WebP de moins de 2 Mo.'
+                    : 'Signature refusée : elle doit être une image PNG, JPEG, GIF ou WebP de moins de 2 Mo.',
+            });
+        }
+    }
 
     const cols = [];
     const valOf = {};
