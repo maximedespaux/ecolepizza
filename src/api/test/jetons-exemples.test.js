@@ -55,16 +55,18 @@ test('les exemples de ville sont en CAPITALES, comme la base', () => {
 });
 
 test('les montants de FACTURE ont la forme que le code produit', () => {
-    /* `toFixed(2)` — ici comme dans invoice.controller — écrit « 17.82 € », avec un POINT. Les
-       exemples disaient « 17,82 € ». La virgule serait plus juste en français : c'est une
-       correction à part, qui touche le rendu de toutes les factures, y compris à la
-       réimpression d'une facture déjà émise. Tant qu'elle n'est pas faite, la palette dit vrai. */
+    /* LA CORRECTION EST FAITE (2026-09-23) : les factures écrivaient « 17.82 € », avec un POINT —
+       ce que produit `toFixed(2)` —, pendant que ces exemples promettaient déjà la virgule. Ce
+       test gelait alors le POINT, pour que la palette dise au moins la vérité. Il gèle
+       maintenant l'inverse, et dans le même but : les deux doivent s'accorder.
+       Le format vit dans `lib/montants.js`, un seul endroit ; ⚠️ le XML Factur-X garde le point,
+       la norme l'exige (cf. le test de `montants.js`). */
     const facture = TOKEN_CATALOG.find((g) => g.group === 'Facture').tokens;
     const montants = facture.filter((t) => /€/.test(t.sample));
     assert.ok(montants.length >= 4);
     for (const t of montants) {
-        assert.ok(!/\d,\d{2} €/.test(t.sample), `${t.key} : pas de virgule, le code n’en met pas`);
-        assert.match(t.sample, /\d\.\d{2} €/, `${t.key} : deux décimales après un point`);
+        assert.ok(!/\d\.\d{2} €/.test(t.sample), `${t.key} : plus de point décimal`);
+        assert.match(t.sample, /\d,\d{2} €/, `${t.key} : deux décimales après une virgule`);
     }
 });
 
