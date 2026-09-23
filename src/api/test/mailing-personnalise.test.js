@@ -265,3 +265,34 @@ test('la 180 range les images en base, et son revert dit ce qu\'il détruit', ()
     assert.ok(!/\\/.test(aller), 'aucune barre oblique inverse');
     assert.match(lire(path.join(MIG, '180_revert_mail_images.sql')), /CE QUI SE PERD/);
 });
+
+test('on écrit à une SEMAINE, et on peut en retirer quelqu\'un', () => {
+    /* CE QUE L'ÉCOLE A DEMANDÉ (2026-09-23) : la semaine 38 porte deux sessions et cinq
+       personnes. En visant les sessions une par une, on écrivait deux fois — et le second
+       message, tapé dix minutes plus tard, ne disait jamais tout à fait la même chose. */
+    const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
+    assert.match(src, /if \(type === 'semaine' && b\.semaine\)/);
+    assert.match(src, /WHERE s\.year = \? AND s\.week = \? AND e\.organization_id = \?/);
+    /* LE DÉDOUBLONNAGE EST INDISPENSABLE : quelqu'un d'inscrit aux DEUX sessions de la semaine
+       ne doit recevoir qu'un message. */
+    assert.match(src, /SELECT DISTINCT l\.id, l\.first_name, l\.last_name, l\.email\s*\n\s*FROM enrollment e\s*\n\s*JOIN training_session s/);
+    /* LE JOURNAL DIT LA SEMAINE, pas une liste d'identifiants : « Semaine 38 — 2026 (2 sessions) ». */
+    assert.match(src, /cible: `Semaine \$\{sem\} — \$\{annee\} \(\$\{nb\} session/);
+
+    const page = sansCommentaires(lire(path.join(UI, 'pages/Mailing.jsx')));
+    assert.match(page, /<option value="semaine">Tous les inscrits d'une semaine<\/option>/);
+    /* LES SEMAINES PROPOSÉES SONT CELLES QUI ONT DES SESSIONS : offrir les cinquante-deux
+       semaines de l'année ferait chercher les trois qui comptent. */
+    assert.match(page, /const semaines = useMemo\(/);
+    assert.match(page, /if \(!s\.week \|\| !s\.year\) continue;/);
+
+    /* ON PART DE TOUT LE MONDE COCHÉ : une liste qu'il faudrait cocher personne par personne
+       ferait manquer quelqu'un. Décocher est le geste rare. */
+    assert.match(page, /const retenus = \(cibles\?\.destinataires \|\| \[\]\)\.filter\(\(d\) => !ecartes\.has\(d\.id\)\)/);
+    /* ET LA CIBLE D'ORIGINE EST GARDÉE tant que personne n'est écarté : le journal reste
+       lisible (« Semaine 38 »), au lieu d'une liste d'identifiants. */
+    assert.match(page, /const cible = ecartes\.size === 0/);
+    assert.match(page, /\{ type: "stagiaires", ids: retenus\.map\(\(d\) => d\.id\) \}/);
+    /* UN NOM DÉCOCHÉ RESTE LISIBLE : le cacher ferait croire qu'il n'a jamais été dans la liste. */
+    assert.match(lire(path.join(UI, 'styles/app.css')), /\.mail-destinataires-liste label\.off\{opacity:\.5;text-decoration:line-through\}/);
+});

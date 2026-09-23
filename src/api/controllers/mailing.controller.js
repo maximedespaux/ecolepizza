@@ -215,6 +215,28 @@ async function resoudreCibles(conn, orgId, b) {
               WHERE s.id = ? AND s.organization_id = ?`, [b.id, orgId]);
         return { liste: rows, cible: s ? `Session ${s.code || s.title || ''} du ${s.debut || '?'}`.trim() : 'Session' };
     }
+    /* UNE SEMAINE, ET NON UNE SESSION : l'école écrit aux gens QU'ELLE A CETTE SEMAINE-LÀ
+       (demandé le 2026-09-23). La semaine 38 porte deux sessions et cinq personnes ; en visant
+       les sessions une par une, on écrivait deux fois — et le deuxième message, écrit dix
+       minutes plus tard, ne disait jamais tout à fait la même chose que le premier.
+       LE DÉDOUBLONNAGE EST DANS LE `DISTINCT` : quelqu'un d'inscrit aux deux sessions de la
+       semaine ne reçoit qu'un message. */
+    if (type === 'semaine' && b.semaine) {
+        const annee = Number(b.annee) || new Date().getFullYear();
+        const sem = Number(b.semaine) || 0;
+        const [rows] = await conn.query(
+            `SELECT DISTINCT l.id, l.first_name, l.last_name, l.email
+               FROM enrollment e
+               JOIN training_session s ON s.id = e.session_id
+               JOIN learner l ON l.id = e.learner_id
+              WHERE s.year = ? AND s.week = ? AND e.organization_id = ?
+              ORDER BY l.last_name, l.first_name`, [annee, sem, orgId]);
+        const [[n]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM training_session WHERE year = ? AND week = ? AND organization_id = ?',
+            [annee, sem, orgId]);
+        const nb = Number((n && n.n) || 0);
+        return { liste: rows, cible: `Semaine ${sem} — ${annee} (${nb} session${nb > 1 ? 's' : ''})` };
+    }
     if (type === 'formation' && b.id) {
         const [rows] = await conn.query(
             `SELECT DISTINCT l.id, l.first_name, l.last_name, l.email
