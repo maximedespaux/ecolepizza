@@ -248,6 +248,19 @@ app.listen(port, () => {
     setTimeout(relancer, 30 * 1000).unref?.();
     setInterval(relancer, 5 * 60 * 1000).unref?.();
 
+    /* « FORMATION À VALIDER » — un dossier à 100 %, session terminée, dont la formation n'est
+       pas encore marquée terminée (lib/relancesFinFormation.js). TOUTES LES SIX HEURES : la
+       question ne change qu'une fois par jour, et une alerte posée reste jusqu'à ce qu'on la
+       lise — repasser plus souvent ne ferait que relire la base pour rien. Une seule alerte par
+       dossier, et seulement sur les sessions terminées dans les 45 derniers jours : sans cette
+       fenêtre, le premier passage poserait des années de dossiers d'un coup. */
+    const { relancerFinFormation } = require('./lib/relancesFinFormation.js');
+    const relancerFin = () => relancerFinFormation({ conn: require('./config/database.js').promise(), notifier: notify })
+        .then((n) => { if (n) console.log(`[formations] ${n} formation(s) à valider signalée(s)`); })
+        .catch((err) => console.error('Formations à valider :', err.message));
+    setTimeout(relancerFin, 90 * 1000).unref?.();
+    setInterval(relancerFin, 6 * 60 * 60 * 1000).unref?.();
+
     /* ENVOIS PROGRAMMÉS — « trois mois après la fin de la session » (migration 179).
        TOUTES LES TRENTE MINUTES, et non toutes les cinq : la granularité d'une règle est le
        JOUR. Repasser plus souvent ne ferait qu'interroger la base pour rien ; repasser moins
