@@ -6,6 +6,7 @@ import { Field, SelectField } from "../components/Field.jsx";
 import { FORMES_JURIDIQUES } from "../lib/formesJuridiques.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import LocationsManager from "../components/LocationsManager.jsx";
+import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
 const FIELDS = [
   ["legal_name", "Raison sociale"], ["short_name", "Sigle"], ["manager", "Responsable"],
@@ -118,14 +119,17 @@ function Reglages() {
                   type="file"
                   accept="image/*"
                   style={{ display: "none" }}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const file = e.target.files && e.target.files[0];
-                    if (!file) return;
-                    if (file.size > 1024 * 1024) { setStatus({ type: "error", message: "Image trop lourde (max 1 Mo)." }); return; }
-                    const reader = new FileReader();
-                    reader.onload = () => setForm((p) => ({ ...p, signature_image: reader.result }));
-                    reader.readAsDataURL(file);
                     e.target.value = "";
+                    if (!file) return;
+                    /* PLUS DE REFUS À 1 Mo : l'image est RÉDUITE, elle n'a plus à être légère en
+                       arrivant. Profil `marque` — il garde la TRANSPARENCE, sans quoi la
+                       signature se poserait sur un rectangle blanc au milieu des documents. */
+                    try {
+                      const image = await reduireEnDataUrl(file, PROFILS.marque);
+                      setForm((p) => ({ ...p, signature_image: image }));
+                    } catch (err) { setStatus({ type: "error", message: err.message }); }
                   }}
                 />
               </label>

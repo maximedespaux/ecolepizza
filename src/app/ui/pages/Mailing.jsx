@@ -11,6 +11,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dateHeure } from "../lib/format.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 /**
  * MAILING — les e-mails de l'école : ceux qui partent tout seuls, et ceux qu'elle écrit.
@@ -324,7 +325,11 @@ function BarreInsertion({ jetons, onInserer, onStatus }) {
     setEnvoi(true);
     onStatus?.(null);
     try {
-      const r = await televerserImageMail(f);
+      /* RÉDUITE AVANT L'ENVOI : le serveur plafonne à 600 Ko, une photo de téléphone en pèse
+         3 à 5 — elle repartait en 413 sans que rien n'explique quoi faire. Et l'image voyage
+         en PIÈCE JOINTE avec CHAQUE message du groupe : son poids se multiplie par le nombre
+         de destinataires. */
+      const r = await televerserImageMail(await reduireSiImage(f, PROFILS.mail));
       onInserer(`![${r.data.nom || "image"}](image:${r.data.id})`);
       onStatus?.({ type: "success", message: "Image ajoutée : elle partira avec le message." });
     } catch (err) { onStatus?.({ type: "error", message: err.message }); }

@@ -13,6 +13,7 @@ import QuizModal from "../components/QuizModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { etatPourLeStagiaire } from "../lib/documentsDossier.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -89,7 +90,11 @@ function StudentFormationDetail() {
       /* ON CONTINUE après un refus : le motif est souvent PROPRE au fichier (taille, format),
          et abandonner les suivants les perdrait sans raison. Chaque refus garde le NOM du
          fichier, sans quoi il reste à deviner lequel n'est pas passé. */
-      try { await deposerPiece(id, pieceCible.current, f); envoyes += 1; }
+      /* LA PHOTO DE LA CARTE EST RÉDUITE AVANT DE PARTIR. C'est le cas d'usage de cet écran :
+         le stagiaire photographie sa pièce depuis son téléphone, et le cliché pèse 3 à 8 Mo pour
+         un plafond à 3. Le profil `piece` est LARGE et s'arrête à une qualité haute : ce document
+         doit rester LISIBLE, quelqu'un doit y lire un nom et une date. Un PDF passe intact. */
+      try { await deposerPiece(id, pieceCible.current, await reduireSiImage(f, PROFILS.piece)); envoyes += 1; }
       catch (err) { echecs.push(`${f.name} (${err.message})`); }
     }
     if (envoyes) load();

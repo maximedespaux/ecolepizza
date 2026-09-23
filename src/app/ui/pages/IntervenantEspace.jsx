@@ -12,6 +12,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import JuryGrille from "../components/JuryGrille.jsx";
 import BoutonsDocument from "../components/BoutonsDocument.jsx";
+import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
 const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
 
@@ -128,14 +129,15 @@ function IntervenantEspace() {
       load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  function onUpload(e) {
+  async function onUpload(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) { setStatus({ type: "error", message: "Choisissez un fichier image." }); return; }
-    const reader = new FileReader();
-    reader.onload = () => saveSignature(String(reader.result));
-    reader.readAsDataURL(file);
+    /* Même profil que le cachet : une signature s'imprime PAR-DESSUS une feuille d'émargement,
+       sa transparence n'est pas un détail. */
+    try { saveSignature(await reduireEnDataUrl(file, PROFILS.marque)); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   // Signature d'une demi-journée : cachet enregistré (1 clic) ou tracé.

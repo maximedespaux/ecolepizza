@@ -22,6 +22,7 @@ import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
 import { GROUPES_DOC, repartirDocuments, sansSignature, documentsHorsParcours } from "../lib/documentsDossier.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 const DOC_STATUS ={ A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], GENERE: ["Généré", "b"], ARCHIVE: ["Archivé", "n"] };
 
@@ -336,7 +337,10 @@ function StagiaireDetail() {
       const echecs = [];
       for (const f of fichiers) {
         try {
-          await deposerPiece(curEnrId, step.piece_id, f);
+          /* RÉDUITE AVANT L'ENVOI, comme du côté stagiaire : le secrétariat reçoit souvent la
+             photo par messagerie et la redépose telle quelle. Profil LARGE et qualité haute —
+             une pièce justificative doit rester lisible. Un PDF passe intact. */
+          await deposerPiece(curEnrId, step.piece_id, await reduireSiImage(f, PROFILS.piece));
           deposes += 1;
         } catch (err) {
           /* ON CONTINUE. S'arrêter au premier refus paraissait économe — la suite tomberait
@@ -371,7 +375,10 @@ function StagiaireDetail() {
     }
 
     const fd = new FormData();
-    fd.append("file", file);
+    /* UN DOCUMENT REÇU est tantôt un PDF, tantôt la photo d'un papier signé rapportée par le
+       stagiaire. Le second se réduit, le premier passe intact — c'est `reduireSiImage` qui fait
+       le tri, l'écran n'a pas à le savoir. */
+    fd.append("file", await reduireSiImage(file, PROFILS.piece), file.name);
     if (step.docId) {
       fd.append("document_id", step.docId);
     } else {

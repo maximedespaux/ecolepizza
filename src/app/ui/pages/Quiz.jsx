@@ -14,6 +14,7 @@ import { Squelette } from "../components/Squelette.jsx";
 import { colorForLevel, setBadgeColors } from "../lib/levels.js";
 import { MOTS_MAX_DEFAUT } from "../lib/mots.js";
 import { jourAffiche, parJour } from "../lib/qcmJours.js";
+import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
 const KINDS = [
   { v: "GRADED", label: "Noté (correction + score)" },
@@ -362,10 +363,16 @@ function QuizEditor({ quiz, formations, onClose, onSaved, onError }) {
               {q.image ? <img src={q.image} alt="" style={{ height: 56, maxWidth: 120, objectFit: "contain", border: "1px solid var(--border-soft)", borderRadius: 6, padding: 2 }} /> : <span className="sub" style={{ fontSize: 12 }}>Aucune image</span>}
               <label className="btn sm ghost" style={{ cursor: "pointer" }}>
                 {q.image ? "Remplacer" : "Ajouter"}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-                  const f = e.target.files?.[0]; if (!f) return;
-                  if (f.size > 2 * 1024 * 1024) { onError && onError("Image trop lourde (max 2 Mo)."); return; }
-                  const rd = new FileReader(); rd.onload = () => setQ(i, { image: rd.result }); rd.readAsDataURL(f);
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  /* PROFIL SERRÉ, et pas par avarice : l'image voyage dans le JSON du QCM ENTIER,
+                     plafonné à 2 Mo. Dix questions illustrées se partagent ce budget — trop
+                     grosses, elles ne font pas échouer « l'image », elles font échouer
+                     l'ENREGISTREMENT du QCM, ce qui est bien plus difficile à comprendre. */
+                  try { setQ(i, { image: await reduireEnDataUrl(f, PROFILS.quiz) }); }
+                  catch (err) { onError && onError(err.message); }
                 }} />
               </label>
               {q.image ? <button type="button" className="btn sm ghost" onClick={() => setQ(i, { image: null })}>Retirer</button> : null}

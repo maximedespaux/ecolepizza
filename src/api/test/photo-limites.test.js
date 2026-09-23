@@ -49,8 +49,12 @@ test('le plafond affiché vient du code, il n\'est pas retapé', () => {
     // Un nombre écrit en dur dans le JSX dériverait le jour où l'on change la réduction.
     assert.match(srcImage, /export const PHOTO_MAX_KO/, 'la limite doit etre exportee');
     assert.match(srcImage, /export const PHOTO_MAX_PX/, 'la taille aussi');
-    assert.match(srcImage, /\{ maxPx = PHOTO_MAX_PX, maxKo = PHOTO_MAX_KO \}/,
-        'la reduction doit utiliser ces memes constantes');
+    assert.match(srcImage, /maxPx = PHOTO_MAX_PX, maxKo = PHOTO_MAX_KO/,
+        'la reduction doit utiliser ces memes constantes par defaut');
+    /* ET LE PROFIL « publication » EST CELUI DE LA COMMUNAUTÉ : depuis qu'il y a des profils
+       (2026-09-23), c'est lui que l'écran emploie, et il doit porter les mêmes deux constantes —
+       sans quoi la mention affichée annoncerait des plafonds que la réduction n'applique pas. */
+    assert.match(srcImage, /publication: \{ maxPx: PHOTO_MAX_PX, maxKo: PHOTO_MAX_KO,/);
     assert.match(srcPost, /import \{ reduireImage, PHOTO_MAX_KO, PHOTO_MAX_PX \}/, 'l\'ecran doit les importer');
     assert.match(srcPost, /\{PHOTO_MAX_KO\} Ko et \{PHOTO_MAX_PX\} px maximum/, 'et les afficher, pas les retaper');
 });

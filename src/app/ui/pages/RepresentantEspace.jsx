@@ -7,6 +7,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import { Icon } from "../components/Icon.jsx";
+import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
 const DOC_STATUS = { A_FAIRE: ["À signer", "n"], ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé", "g"] };
 
@@ -36,14 +37,16 @@ function RepresentantEspace() {
       load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
-  function onUpload(e) {
+  async function onUpload(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) { setStatus({ type: "error", message: "Choisissez un fichier image." }); return; }
-    const reader = new FileReader();
-    reader.onload = () => saveStamp(String(reader.result));
-    reader.readAsDataURL(file);
+    /* LE CACHET SE POSE SUR UN DOCUMENT : sa transparence doit survivre (profil `marque`). Et le
+       serveur plafonne la data-URL à 2 Mo — or le base64 pèse un tiers de plus que les octets
+       qu'il transporte, si bien qu'une photo de tampon partait en refus sans rien expliquer. */
+    try { saveStamp(await reduireEnDataUrl(file, PROFILS.marque)); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   async function openPreview(doc) {
