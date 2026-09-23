@@ -247,4 +247,29 @@ app.listen(port, () => {
         .catch((err) => console.error('Relances d\u2019émargement :', err.message));
     setTimeout(relancer, 30 * 1000).unref?.();
     setInterval(relancer, 5 * 60 * 1000).unref?.();
+
+    /* ENVOIS PROGRAMMÉS — « trois mois après la fin de la session » (migration 179).
+       TOUTES LES TRENTE MINUTES, et non toutes les cinq : la granularité d'une règle est le
+       JOUR. Repasser plus souvent ne ferait qu'interroger la base pour rien ; repasser moins
+       souvent retarderait d'autant un message attendu le matin. Le passage rattrape les jours
+       manqués (fenêtre de `depuis` à aujourd'hui), si bien qu'un serveur arrêté une nuit ne perd
+       aucun envoi. Premier passage deux minutes après le démarrage, pour ne pas peser sur le
+       redéploiement lui-même. */
+    const { passerLesReglesMail } = require('./lib/passageMailsProgrammes.js');
+    const { messageGroupeEmail } = require('./lib/mailTemplates.js');
+    const { sendMail } = require('./lib/mailer.js');
+    const passerMails = () => passerLesReglesMail({
+        conn: require('./config/database.js').promise(),
+        orgName: org.orgInfo().short_name || org.orgInfo().legal_name || null,
+        envoyer: ({ to, objet, corps }) => {
+            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null });
+            /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une
+               règle posée par l'école est SON envoi — elle l'arrête par son propre interrupteur
+               « active », là où elle l'a écrite. */
+            return sendMail({ to, subject, html });
+        },
+    }).then((r) => { if (r.envoyes || r.echecs) console.log(`[mailing] ${r.envoyes} envoyé(s), ${r.echecs} échec(s)`); })
+        .catch((err) => console.error('Envois programmés :', err.message));
+    setTimeout(passerMails, 2 * 60 * 1000).unref?.();
+    setInterval(passerMails, 30 * 60 * 1000).unref?.();
 });

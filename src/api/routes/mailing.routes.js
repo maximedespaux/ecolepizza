@@ -1,6 +1,7 @@
 const express = require('express');
 const {
     getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
+    getRegles, creerRegle, modifierRegle, supprimerRegle,
 } = require('../controllers/mailing.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -22,5 +23,13 @@ router.post('/apercu', authorizeRoles(...ADMIN_ROLES), apercu);
 router.post('/destinataires', authorizeRoles(...ADMIN_ROLES), getDestinataires);
 router.post('/envoi', authorizeRoles(...ADMIN_ROLES), envoyerGroupe);
 router.get('/envois', authorizeRoles(...ADMIN_ROLES), getEnvois);
+
+/* LES ENVOIS PROGRAMMÉS (migration 179) — une règle part toute seule, ensuite, sans que personne
+   ne la relise. C'est donc bien de l'administration : la poser engage l'école auprès de gens
+   qu'elle ne choisira plus un par un. */
+router.get('/regles', authorizeRoles(...ADMIN_ROLES), getRegles);
+router.post('/regles', authorizeRoles(...ADMIN_ROLES), creerRegle);
+router.put('/regles/:id', authorizeRoles(...ADMIN_ROLES), modifierRegle);
+router.delete('/regles/:id', authorizeRoles(...ADMIN_ROLES), supprimerRegle);
 
 module.exports = router;

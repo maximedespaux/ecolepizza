@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   getOrganisation, updateOrganisation, getModelesMail, saveModeleMail, resetModeleMail,
   apercuMail, destinatairesMail, envoyerMailGroupe, getEnvoisMail, getSessions, getFormations,
+  getReglesMail, creerRegleMail, modifierRegleMail, supprimerRegleMail,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -57,10 +58,15 @@ function Mailing() {
           className={"tab" + (onglet === "groupe" ? " on" : "")} onClick={() => { setOnglet("groupe"); setStatus(null); }}>
           Écrire à un groupe
         </button>
+        <button type="button" role="tab" aria-selected={onglet === "programmes"}
+          className={"tab" + (onglet === "programmes" ? " on" : "")} onClick={() => { setOnglet("programmes"); setStatus(null); }}>
+          Envois programmés
+        </button>
       </div>
       {onglet === "envois" && <Interrupteurs onStatus={setStatus} />}
       {onglet === "textes" && <Textes onStatus={setStatus} />}
       {onglet === "groupe" && <Groupe onStatus={setStatus} />}
+      {onglet === "programmes" && <Programmes onStatus={setStatus} />}
     </>
   );
 }
@@ -405,6 +411,197 @@ function Groupe({ onStatus }) {
         </Card>
       )}
     </>
+  );
+}
+
+/* ── 4. Les envois programmés (migration 179) ──────────────────────────────────────────────── */
+/**
+ * UNE RÈGLE PART TOUTE SEULE, ENSUITE, SANS QUE PERSONNE NE LA RELISE — c'est ce qui la rend
+ * utile, et c'est aussi ce qui demande que l'écran soit franc : la phrase en clair (« 3 mois
+ * après la fin de la session »), ce qu'elle a déjà envoyé, et le fait qu'elle ne rattrape pas le
+ * passé. Une règle qu'on croit inactive et qui écrit à des stagiaires est le pire défaut possible
+ * de cet écran.
+ */
+function Programmes({ onStatus }) {
+  const [regles, setRegles] = useState(null);
+  const [cat, setCat] = useState(null);
+  const [indispo, setIndispo] = useState(null);
+  const [formations, setFormations] = useState([]);
+  const [edite, setEdite] = useState(null); // règle en cours d'édition, ou "neuve"
+
+  const charger = () => getReglesMail()
+    .then((r) => { setRegles(r.data || []); setCat(r.catalogue || null); setIndispo(r.disponible === false ? r.message : null); })
+    .catch((e) => onStatus({ type: "error", message: e.message }));
+  useEffect(() => {
+    charger();
+    getFormations().then((r) => setFormations(r.data || [])).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function supprimer(r) {
+    if (!window.confirm(`Supprimer « ${r.nom} » ? La mémoire de ce qui a déjà été envoyé part avec.`)) return;
+    try { await supprimerRegleMail(r.id); onStatus({ type: "success", message: "Règle supprimée." }); charger(); }
+    catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+
+  async function basculer(r) {
+    try {
+      await modifierRegleMail(r.id, { ...r, actif: !r.actif });
+      charger();
+    } catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+
+  if (!regles || !cat) return <Squelette lignes={3} h={72} />;
+  return (
+    <>
+      <Card title={<span className="card-ttl"><Icon name="clock" size={15} /> Envois programmés</span>}
+        more={!edite && !indispo && (
+          <button type="button" className="btn sm primary" onClick={() => setEdite("neuve")}>
+            <Icon name="plus" size={13} /> Nouvelle règle
+          </button>
+        )}>
+        {indispo && <p className="hint" style={{ marginTop: 0 }}><Icon name="info" size={12} /> {indispo}</p>}
+        <p className="hint" style={{ marginTop: 0 }}>
+          Un e-mail qui part tout seul, une fois par stagiaire, à une date calculée : «&nbsp;3 mois
+          après la fin de la session&nbsp;», «&nbsp;7 jours avant le début&nbsp;». <b>Une règle ne
+          rattrape jamais le passé</b> : elle ne vaut que pour les dates atteintes après sa création.
+        </p>
+
+        {edite && (
+          <EditeurRegle regle={edite === "neuve" ? null : edite} cat={cat} formations={formations}
+            onFerme={() => setEdite(null)} onEnregistre={() => { setEdite(null); charger(); }} onStatus={onStatus} />
+        )}
+
+        {!edite && (regles.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>Aucune règle pour l'instant.</p>
+        ) : (
+          <ul className="mail-regles">
+            {regles.map((r) => (
+              <li key={r.id} className={r.actif ? "" : "off"}>
+                <div>
+                  <b>{r.nom}</b>
+                  <span className="hint">
+                    {r.phrase}
+                    {r.formation_code || r.formation_titre ? ` · ${r.formation_code || r.formation_titre}` : " · toutes les formations"}
+                    {" · depuis le "}{r.depuis}
+                  </span>
+                  <span className="hint">
+                    {r.envoyes > 0 ? `${r.envoyes} envoyé${r.envoyes > 1 ? "s" : ""}` : "aucun envoi pour l'instant"}
+                    {r.echecs > 0 && ` · ${r.echecs} en échec`}
+                    {r.dernier && ` · dernier le ${r.dernier}`}
+                  </span>
+                </div>
+                <span className="mail-regle-actions">
+                  <button type="button" className={"btn sm" + (r.actif ? "" : " ghost")} onClick={() => basculer(r)}>
+                    {r.actif ? "Active" : "En pause"}
+                  </button>
+                  <button type="button" className="btn sm ghost" onClick={() => setEdite(r)}>Modifier</button>
+                  <button type="button" className="btn sm ghost" onClick={() => supprimer(r)} aria-label={`Supprimer ${r.nom}`}>
+                    <Icon name="trash" size={14} />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ))}
+      </Card>
+    </>
+  );
+}
+
+function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus }) {
+  const [v, setV] = useState(() => regle || {
+    nom: "", declencheur: "fin_session", sens: "apres", decalage: 3, unite: "mois",
+    program_id: null, objet: "", corps: "", actif: 1,
+  });
+  const [busy, setBusy] = useState(false);
+  const [apercu, setApercu] = useState(null);
+  const maj = (champ) => (e) => setV((p) => ({ ...p, [champ]: e.target.value }));
+
+  async function voir() {
+    onStatus(null);
+    try { setApercu((await apercuMail({ objet: v.objet, corps: v.corps })).data); }
+    catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+
+  async function enregistrer() {
+    setBusy(true); onStatus(null);
+    try {
+      const payload = { ...v, decalage: Number(v.decalage) || 0, program_id: v.program_id || null, actif: v.actif !== 0 };
+      if (regle) await modifierRegleMail(regle.id, payload); else await creerRegleMail(payload);
+      onStatus({ type: "success", message: regle ? "Règle enregistrée." : "Règle créée : elle vaut pour les dates atteintes à partir d'aujourd'hui." });
+      onEnregistre();
+    } catch (e) { onStatus({ type: "error", message: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mail-regle-form">
+      <div className="field">
+        <label htmlFor="regle-nom">Nom de la règle</label>
+        <input id="regle-nom" className="inp" value={v.nom} onChange={maj("nom")}
+          placeholder="Suivi à froid — 3 mois" />
+      </div>
+      <div className="mail-regle-quand">
+        <div className="field">
+          <label htmlFor="regle-decalage">Combien</label>
+          <input id="regle-decalage" className="inp" type="number" min="0" value={v.decalage} onChange={maj("decalage")} />
+        </div>
+        <div className="field">
+          <label htmlFor="regle-unite">Unité</label>
+          <select id="regle-unite" className="inp" value={v.unite} onChange={maj("unite")}>
+            {cat.unites.map((u) => <option key={u.cle} value={u.cle}>{u.libelle}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="regle-sens">Avant ou après</label>
+          <select id="regle-sens" className="inp" value={v.sens} onChange={maj("sens")}>
+            {cat.sens.map((x) => <option key={x.cle} value={x.cle}>{x.libelle}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="regle-declencheur">Quelle date</label>
+          <select id="regle-declencheur" className="inp" value={v.declencheur} onChange={maj("declencheur")}>
+            {cat.declencheurs.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="regle-formation">Formation</label>
+          <select id="regle-formation" className="inp" value={v.program_id || ""}
+            onChange={(e) => setV((p) => ({ ...p, program_id: e.target.value || null }))}>
+            <option value="">Toutes les formations</option>
+            {formations.map((f) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ""}{f.title}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="mail-jetons">
+        {cat.jetons.map((j) => (
+          <button key={j} type="button" className="btn ghost sm"
+            onClick={() => setV((p) => ({ ...p, corps: `${p.corps}{${j}}` }))}>{`{${j}}`}</button>
+        ))}
+        <span className="hint">Insérés à la fin du message.</span>
+      </div>
+      <div className="field">
+        <label htmlFor="regle-objet">Objet</label>
+        <input id="regle-objet" className="inp" value={v.objet} onChange={maj("objet")}
+          placeholder="Comment se passe la suite, {Prénom} ?" />
+      </div>
+      <div className="field">
+        <label htmlFor="regle-corps">Message</label>
+        <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
+          placeholder={"Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" className="btn sm" onClick={voir} disabled={!v.objet.trim() || !v.corps.trim()}>
+          <Icon name="eye" size={13} /> Aperçu
+        </button>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="btn ghost sm" onClick={onFerme}>Annuler</button>
+        <button type="button" className="btn primary sm" onClick={enregistrer} disabled={busy}>
+          {busy ? "…" : regle ? "Enregistrer" : "Créer la règle"}
+        </button>
+      </div>
+      {apercu && <Apercu rendu={apercu} />}
+    </div>
   );
 }
 

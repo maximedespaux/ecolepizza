@@ -6,6 +6,8 @@ const orgContext = require('../lib/orgContext.js');
 const {
     MODELES_MAIL, CLES_MAIL, JETONS_GROUPE, lireModeleMail, lireEnvoiGroupe, rendre,
 } = require('../lib/mailsPersonnalises.js');
+const { DECLENCHEURS, UNITES, SENS, phraseRegle, lireRegle } = require('../lib/mailsProgrammes.js');
+const { JETONS_REGLE } = require('../lib/passageMailsProgrammes.js');
 const modeles = require('../lib/mailTemplates.js');
 
 /**
@@ -305,5 +307,120 @@ const getEnvois = async (req, res) => {
     }
 };
 
+/* ── LES ENVOIS PROGRAMMÉS (migration 179) ─────────────────────────────────────────────────── */
+
+const MIGRATION_179 = 'Migration 179 non jouée : les envois programmés ne sont pas encore disponibles.';
+
+/** GET /api/mailing/regles — les règles, leur phrase, et ce qu'elles ont déjà envoyé. */
+const getRegles = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT r.id, r.nom, r.declencheur, r.sens, r.decalage, r.unite, r.program_id,
+                    r.objet, r.corps, r.actif, DATE_FORMAT(r.depuis, '%Y-%m-%d') AS depuis,
+                    p.code AS formation_code, p.title AS formation_titre,
+                    (SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'envoye') AS envoyes,
+                    (SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'echec') AS echecs,
+                    (SELECT DATE_FORMAT(MAX(x.envoye_le), '%Y-%m-%d %H:%i') FROM mail_regle_envoi x WHERE x.regle_id = r.id) AS dernier
+               FROM mail_regle r LEFT JOIN training_program p ON p.id = r.program_id
+              WHERE r.organization_id = ? ORDER BY r.created_at DESC`, [req.user.organization_id]);
+        res.json({
+            data: rows.map((r) => ({ ...r, phrase: phraseRegle(r) })),
+            /* L'ÉCRAN A BESOIN DU VOCABULAIRE, pas d'une liste recopiée à côté : déclencheurs,
+               unités, sens et jetons viennent d'ici, donc du même endroit que la règle. */
+            catalogue: {
+                declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
+                unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
+                sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
+                jetons: JETONS_REGLE,
+            },
+            disponible: true,
+        });
+    } catch (err) {
+        if (sansTable(err)) {
+            return res.json({ data: [], disponible: false, message: MIGRATION_179,
+                catalogue: {
+                    declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
+                    unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
+                    sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
+                    jetons: JETONS_REGLE,
+                } });
+        }
+        console.error('Erreur lecture règles mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/mailing/regles — créer une règle.
+ *
+ * `depuis` VAUT AUJOURD'HUI, ET N'EST PAS DEMANDÉ. C'est le garde-fou : une règle « trois mois
+ * après la fin » qui rattraperait le passé écrirait d'un coup à trois ans d'anciens stagiaires.
+ * L'école l'a tranché le 2026-09-23 — rien avant la création.
+ */
+const creerRegle = async (req, res) => {
+    const lu = lireRegle(req.body || {}, { jetons: JETONS_REGLE });
+    if (lu.erreur) return res.status(422).json({ message: lu.erreur });
+    const v = lu.valeurs;
+    try {
+        const id = crypto.randomUUID();
+        await db.promise().query(
+            `INSERT INTO mail_regle (id, organization_id, nom, declencheur, sens, decalage, unite,
+                    program_id, objet, corps, actif, depuis, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)`,
+            [id, req.user.organization_id, v.nom, v.declencheur, v.sens, v.decalage, v.unite,
+                v.program_id, v.objet, v.corps, v.actif, req.user.id]);
+        logAudit(req, 'mail.regle', 'MailRegle', id);
+        res.status(201).json({ data: { id, ...v, phrase: phraseRegle(v) } });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: MIGRATION_179 });
+        console.error('Erreur création règle mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mailing/regles/:id — modifier une règle. `depuis` NE BOUGE PAS : elle a déjà servi. */
+const modifierRegle = async (req, res) => {
+    const lu = lireRegle(req.body || {}, { jetons: JETONS_REGLE });
+    if (lu.erreur) return res.status(422).json({ message: lu.erreur });
+    const v = lu.valeurs;
+    try {
+        const [r] = await db.promise().query(
+            `UPDATE mail_regle SET nom = ?, declencheur = ?, sens = ?, decalage = ?, unite = ?,
+                    program_id = ?, objet = ?, corps = ?, actif = ?
+              WHERE id = ? AND organization_id = ?`,
+            [v.nom, v.declencheur, v.sens, v.decalage, v.unite, v.program_id, v.objet, v.corps,
+                v.actif, req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Règle introuvable.' });
+        logAudit(req, 'mail.regle', 'MailRegle', req.params.id);
+        res.json({ data: { id: req.params.id, ...v, phrase: phraseRegle(v) } });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: MIGRATION_179 });
+        console.error('Erreur modification règle mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/mailing/regles/:id — supprimer une règle.
+ *
+ * ELLE PART AVEC SA MÉMOIRE (cascade sur `mail_regle_envoi`), et c'est assumé : une règle
+ * supprimée ne reviendra pas, et garder la trace d'envois d'une règle disparue n'aide personne.
+ * Pour l'arrêter sans perdre la mémoire, il y a l'interrupteur « active ».
+ */
+const supprimerRegle = async (req, res) => {
+    try {
+        const [r] = await db.promise().query('DELETE FROM mail_regle WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Règle introuvable.' });
+        logAudit(req, 'mail.regle.suppression', 'MailRegle', req.params.id);
+        res.json({ data: { id: req.params.id } });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: MIGRATION_179 });
+        console.error('Erreur suppression règle mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = { getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
+    getRegles, creerRegle, modifierRegle, supprimerRegle,
     MAX_DESTINATAIRES, MIGRATION, JETONS_GROUPE };

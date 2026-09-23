@@ -781,6 +781,21 @@ export function envoyerMailGroupe(payload) {
 export function getEnvoisMail() {
   return request("/mailing/envois");
 }
+/* ENVOIS PROGRAMMÉS (migration 179) : « 3 mois après la fin de la session ». La réponse porte
+   aussi le VOCABULAIRE (déclencheurs, unités, jetons) — l'écran ne tient pas une seconde liste
+   qui finirait par diverger de celle du serveur. */
+export function getReglesMail() {
+  return request("/mailing/regles");
+}
+export function creerRegleMail(payload) {
+  return request("/mailing/regles", { method: "POST", body: JSON.stringify(payload) });
+}
+export function modifierRegleMail(id, payload) {
+  return request(`/mailing/regles/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function supprimerRegleMail(id) {
+  return request(`/mailing/regles/${id}`, { method: "DELETE" });
+}
 
 export function getSessions() {
   return request("/sessions");
