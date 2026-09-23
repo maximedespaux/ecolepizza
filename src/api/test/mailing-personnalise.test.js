@@ -167,7 +167,7 @@ test('un envoi à un groupe est borné, tracé, et ne se fait pas passer pour un
     const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
     /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Couper un envoi
        décidé à l'instant au nom d'un réglage fait pour autre chose rendrait le bouton muet. */
-    assert.match(src, /await sendMail\(\{ to: l\.email, subject, html, attachments: piecesImages\(images\) \}\);/);
+    assert.match(src, /await sendMail\(\{ to: l\.email, replyTo: adresseEcole, subject, html, attachments: piecesImages\(images\) \}\);/);
     /* SÉQUENTIEL : une rafale de trente connexions SMTP se traite comme du spam. */
     assert.match(src, /for \(const l of avec\) \{/);
     assert.match(src, /if \(avec\.length > MAX_DESTINATAIRES\)/);
@@ -226,7 +226,7 @@ test('chacun reçoit SON message, et l\'école en garde UNE copie', () => {
        message, et personne ne partage d'enveloppe, donc personne ne voit l'adresse d'un autre. */
     const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
     assert.match(src, /for \(const l of avec\) \{/);
-    assert.match(src, /await sendMail\(\{ to: l\.email, subject, html, attachments: piecesImages\(images\) \}\)/);
+    assert.match(src, /await sendMail\(\{ to: l\.email, replyTo: adresseEcole, subject, html, attachments: piecesImages\(images\) \}\)/);
     assert.ok(!/bcc:/.test(src), 'plus de copie cachée groupée');
 
     /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : la mettre en copie de chaque
@@ -295,4 +295,44 @@ test('on écrit à une SEMAINE, et on peut en retirer quelqu\'un', () => {
     assert.match(page, /\{ type: "stagiaires", ids: retenus\.map\(\(d\) => d\.id\) \}/);
     /* UN NOM DÉCOCHÉ RESTE LISIBLE : le cacher ferait croire qu'il n'a jamais été dans la liste. */
     assert.match(lire(path.join(UI, 'styles/app.css')), /\.mail-destinataires-liste label\.off\{opacity:\.5;text-decoration:line-through\}/);
+});
+
+test('un message écrit par l\'école n\'est pas « automatique », et la réponse arrive quelque part', () => {
+    /* DÉFAUT SIGNALÉ LE 2026-09-23 : tous les e-mails portaient « Message automatique — merci de
+       ne pas y répondre », y compris celui que quelqu'un venait d'écrire à la main. Le stagiaire
+       y lisait l'inverse de ce que l'école voulait : celui qui ne peut pas venir à la session
+       n'avait plus qu'à téléphoner, ou à ne rien dire. */
+    const auto = modeles.credentialsEmail({
+        firstName: 'Camille', email: 'c@exemple.fr', password: 'Aq7-42xb', loginUrl: '', orgName: 'École Pizza',
+    });
+    assert.match(auto.html, /Message automatique — merci de ne pas y répondre\./,
+        'un e-mail vraiment automatique garde sa mention : sa boîte n’est pas relevée');
+
+    const ecrit = modeles.messageGroupeEmail({
+        objet: 'Rappel', corps: 'Bonjour Camille,', orgName: 'École Pizza', repondreA: 'ecole@exemple.fr',
+    });
+    assert.ok(!/ne pas y répondre/.test(ecrit.html), 'un message écrit à la main ne le dit plus');
+    assert.match(ecrit.html, /Message écrit par École Pizza, vous pouvez y répondre\./);
+
+    /* ON NE PROMET RIEN QU'ON NE TIENNE : sans adresse d'organisme, la réponse n'irait nulle part
+       (l'expéditeur est la boîte technique, imposée par OVH). Alors AUCUNE mention — ni l'une ni
+       l'autre : inviter à répondre dans le vide est pire que se taire. */
+    const sansAdresse = modeles.messageGroupeEmail({ objet: 'Rappel', corps: 'Bonjour,', orgName: 'École Pizza' });
+    assert.ok(!/ne pas y répondre/.test(sansAdresse.html));
+    assert.ok(!/vous pouvez y répondre/.test(sansAdresse.html));
+
+    /* ET LA PHRASE EST TENUE PAR UN EN-TÊTE, pas seulement par du texte : `Reply-To` porte la
+       même adresse que la mention, si bien que « répondre » atteint vraiment l'école. */
+    const mailer = sansCommentaires(lire(path.join(API, 'lib/mailer.js')));
+    assert.match(mailer, /async function sendMail\(\{ to, bcc, replyTo, subject/);
+    assert.match(mailer, /\.\.\.\(replyTo \? \{ replyTo \} : \{\}\),/);
+    const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
+    assert.match(src, /orgName, images, repondreA: adresseEcole,/);
+    assert.match(src, /replyTo: adresseEcole/);
+    /* L'APERÇU MONTRE LE MÊME PIED que le courrier : une école qui relit son message doit voir la
+       phrase que le stagiaire lira, pas une autre. */
+    assert.match(src, /repondreA: orgContext\.orgInfo\(\)\.email \|\| null,/);
+    /* MÊME RÈGLE POUR UN ENVOI PROGRAMMÉ : il est déclenché par une date, mais son texte a été
+       écrit par quelqu'un — une relance « trois mois après la fin » appelle une réponse. */
+    assert.match(sansCommentaires(lire(path.join(API, 'server.js'))), /const repondreA = org\.orgInfo\(\)\.email \|\| null;/);
 });

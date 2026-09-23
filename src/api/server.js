@@ -281,11 +281,16 @@ app.listen(port, () => {
             const { chargerImages, piecesImages } = require('./controllers/mailing.controller.js');
             const images = await chargerImages(require('./config/database.js').promise(), orgId, corps)
                 .catch(() => []);
-            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null, images });
+            /* UN ENVOI PROGRAMMÉ EST DÉCLENCHÉ PAR UNE DATE, mais son texte a été écrit par
+               quelqu'un : il n'est pas « automatique » au sens du pied de page, et une relance
+               « trois mois après la fin » appelle justement une réponse. D'où la même adresse
+               qu'à l'écran « Écrire à un groupe », en `Reply-To` comme dans la mention. */
+            const repondreA = org.orgInfo().email || null;
+            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null, images, repondreA });
             /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une
                règle posée par l'école est SON envoi — elle l'arrête par son propre interrupteur
                « active », là où elle l'a écrite. */
-            return sendMail({ to, subject, html, attachments: piecesImages(images) });
+            return sendMail({ to, replyTo: repondreA, subject, html, attachments: piecesImages(images) });
         },
     }).then((r) => { if (r.envoyes || r.echecs) console.log(`[mailing] ${r.envoyes} envoyé(s), ${r.echecs} échec(s)`); })
         .catch((err) => console.error('Envois programmés :', err.message));
