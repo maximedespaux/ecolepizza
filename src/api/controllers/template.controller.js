@@ -342,7 +342,7 @@ function sampleForField(f, ident) {
        forme. Les colonnes sont en ANGLAIS (`objectives`, `objective_general`) alors que le motif
        ne testait que le français (`objectif`) : elles passaient à côté de leur propre règle.
        `objective_general` doit précéder `objectives`, sinon le motif général l'attrape le premier. */
-    if (/horaire/.test(c)) return '9h00 – 12h30 / 13h30 – 17h00';
+    if (/horaire/.test(c)) return '9h00 - 12h30 / 13h30 - 17h00';
     if (/duration_detail|duree_detail/.test(c)) return '35 h sur 5 jours';
     if (/prerequis|prerequisite/.test(c)) return 'Savoir lire et écrire le français. Aucun diplôme exigé.';
     if (/objectiv\w*_general|objectif\w*_general/.test(c)) return 'Devenir pizzaïolo autonome';

@@ -11,7 +11,7 @@ test('les cinq colonnes qui tombaient sur « Exemple » ont un vrai échantillon
        `objective_general`) alors que le motif ne testait que le français — elles passaient à côté
        de leur propre règle. */
     for (const [motif, attendu] of [
-        [/if \(\/horaire\/\.test\(c\)\) return '9h00 – 12h30 \/ 13h30 – 17h00';/, 'horaires'],
+        [/if \(\/horaire\/\.test\(c\)\) return '9h00 - 12h30 \/ 13h30 - 17h00';/, 'horaires'],
         [/if \(\/duration_detail\|duree_detail\/\.test\(c\)\) return '35 h sur 5 jours';/, 'duration_detail'],
         [/if \(\/prerequis\|prerequisite\/\.test\(c\)\) return 'Savoir lire/, 'prerequisites'],
         [/objectiv\\w\*_general\|objectif\\w\*_general/, 'objective_general'],
