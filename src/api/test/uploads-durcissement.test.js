@@ -111,3 +111,50 @@ test('un import d\'archives ne peut plus remplir la mémoire du serveur', () => 
        millier de pièces. */
     assert.match(R, /fileSize: 10 \* 1024 \* 1024, files: 3000/);
 });
+
+test('le sélecteur ne PROPOSE que ce que le serveur ACCEPTE', async () => {
+    /* LE DÉFAUT. L'entrée de la fiche stagiaire annonçait `.doc,.docx` pour une PIÈCE
+       justificative, que le serveur refuse en 415 — et son commentaire dit pourquoi : « une pièce
+       justificative se lit, elle ne s'édite pas, et accepter du .docx ouvrirait la porte aux
+       macros ». Le secrétariat choisissait donc un fichier que le navigateur lui présentait comme
+       valide, et se prenait un refus qui contredisait ce que l'écran venait d'offrir.
+
+       ⚠️ `accept` N'EST PAS UN CONTRÔLE : il filtre ce que la fenêtre MONTRE, rien de plus. Ce
+       test ne garde pas une frontière de sécurité — il garde une PROMESSE faite à l'écran. */
+    const { ACCEPT_PIECE, ACCEPT_DOCUMENT } = await import('../../app/ui/lib/formatsDepot.js');
+    const { MIMES_CONNUS } = require('../controllers/piece.controller.js');
+
+    /* CE QUE LE SERVEUR ACCEPTE POUR UNE PIÈCE, ni plus ni moins. */
+    for (const m of MIMES_CONNUS) {
+        assert.ok(ACCEPT_PIECE.includes(m), `« ${m} » est accepté par le serveur mais pas proposé`);
+    }
+    for (const bureautique of ['.doc', '.docx', 'msword', 'wordprocessingml']) {
+        assert.ok(!ACCEPT_PIECE.includes(bureautique),
+            `« ${bureautique} » est proposé pour une pièce alors que le serveur le refuse (415)`);
+    }
+    /* `image/*` NON PLUS : il laissait choisir un SVG ou un HEIC, que le serveur refuse aussi —
+       et le SVG est précisément ce qu'on ne veut pas voir arriver. */
+    assert.ok(!ACCEPT_PIECE.includes('image/*'));
+
+    /* LE DOCUMENT REÇU, LUI, ADMET LE TRAITEMENT DE TEXTE : une convention signée revient souvent
+       en .docx, et cet écran sert à la rattacher. Sa liste doit couvrir celle du contrôleur. */
+    const D = lire('controllers/document.controller.js');
+    const mimesImport = [...D.slice(D.indexOf('const MIMES_IMPORT'), D.indexOf('const MAX_IMPORT_OCTETS'))
+        .matchAll(/'([a-z]+\/[a-zA-Z0-9.+-]+)'/g)].map((m) => m[1]);
+    assert.ok(mimesImport.length >= 6, 'liste des types importables introuvable');
+    for (const m of new Set(mimesImport)) {
+        assert.ok(ACCEPT_DOCUMENT.includes(m), `« ${m} » est importable mais pas proposé`);
+    }
+
+    /* ET LES TROIS ÉCRANS LISENT LA MÊME SOURCE : trois chaînes recopiées auraient divergé au
+       premier ajout de format, et l'on n'aurait corrigé que celle qu'on avait sous les yeux. */
+    const UI = (f) => fs.readFileSync(path.join(API, '..', 'app', 'ui', f), 'utf8');
+    for (const f of ['pages/StagiaireDetail.jsx', 'pages/StudentFormationDetail.jsx', 'components/RemisesReview.jsx']) {
+        assert.match(UI(f), /from "\.\.\/lib\/formatsDepot\.js"/, `${f} doit lire la liste partagée`);
+        assert.ok(!/accept="[^"]*\.docx/.test(UI(f)), `${f} : plus de liste recopiée dans le JSX`);
+    }
+    /* LE SÉLECTEUR EST PARTAGÉ entre les deux gestes : `accept` suit donc l'étape visée, comme
+       `multiple` juste au-dessus de lui. Figé dans le JSX, il mentirait pour l'un des deux. */
+    assert.match(UI('pages/StagiaireDetail.jsx'),
+        /fichierRef\.current\.accept = step\.piece \? ACCEPT_PIECE : ACCEPT_DOCUMENT;/);
+});
