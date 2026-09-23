@@ -63,3 +63,27 @@ test('et surtout : elle peut être GÉNÉRÉE', () => {
        et l'erreur n'arrive qu'au clic. */
     assert.match(CO, /const \{ companyStepSlugs(?:, \w+)* \} = require\('\.\.\/lib\/parcours\.js'\);/);
 });
+
+test('et un document de GROUPE aussi : la liste de la fiche entreprise le propose', () => {
+    /* LA MOITIÉ MANQUANTE DU MÊME DÉFAUT, signalée le 2026-09-23 depuis la fiche entreprise :
+       « Ce document n'existe pas dans les formations sélectionnées », alors qu'il est bien dans
+       Formations → Parcours documentaire → À l'arrivée via une entreprise.
+
+       `generateGroupDocuments` avait reçu la garde ci-dessus ; `companyDocTemplates`, qui liste
+       les documents de GROUPE préparables, était restée sur `s.active` seul. Or l'écran n'active
+       RIEN quand on ajoute un document à la section (test « ajouter n'active rien »), et un
+       modèle créé depuis la 155 naît hors parcours : AUCUN document de groupe ajouté par l'écran
+       d'aujourd'hui ne pouvait donc être préparé. L'étape s'affichait pourtant dans le parcours
+       — cette liste-là ne filtre pas sur `active` — et son bouton « Préparer le document »
+       s'ouvrait normalement. Visible et impossible, une fois de plus. */
+    const t = CO.slice(CO.indexOf('const companyDocTemplates'), CO.indexOf('const listCompanyDocuments'));
+    assert.match(t, /const intake = new Set\(await companyStepSlugs\(conn, orgId, program\.id\)\);/);
+    assert.match(t, /\.filter\(\(s\) => s\.company_level && \(s\.active \|\| intake\.has\(s\.slug\)\)\)/,
+        'la liste accepte une étape de la section entreprise, active ou non');
+
+    /* C'EST CETTE LISTE QUI AUTORISE L'ENVOI, côté écran : le formulaire refuse AVANT d'appeler
+       le serveur, si bien que la garde du serveur ne pouvait même pas rattraper le coup. */
+    const page = readFileSync(path.join(__dirname, '../../app/ui/pages/EntrepriseDetail.jsx'), 'utf8');
+    assert.match(page, /if \(!\(groupTplsBySession\[sid\] \|\| \[\]\)\.some\(\(t\) => t\.slug === prep\.slug\)\) continue;/);
+    assert.match(page, /Ce document n'existe pas dans les formations sélectionnées\./);
+});
