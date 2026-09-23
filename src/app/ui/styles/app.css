@@ -5840,3 +5840,12 @@ label .requis {
 .parc-fin{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding:10px 13px;
   border-radius:10px;border:1px dashed var(--border);background:var(--surface2);font-size:13px;line-height:1.5}
 .parc-fin > span{flex:1;min-width:220px}
+/* La bibliothèque d'images du mailing : des vignettes qu'on clique pour insérer. */
+.mail-biblio{display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-top:6px;padding:8px;
+  border:1px dashed var(--border);border-radius:10px}
+.mail-biblio-vignette{position:relative;display:inline-flex}
+.mail-biblio-vignette > button:first-child{padding:0;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);overflow:hidden;line-height:0}
+.mail-biblio-vignette img{width:72px;height:54px;object-fit:cover;display:block}
+.mail-biblio-x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:99px;border:0;
+  background:var(--red);color:#fff;font-size:12px;line-height:1;display:grid;place-items:center}

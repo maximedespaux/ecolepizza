@@ -1,9 +1,17 @@
 const express = require('express');
+const multer = require('multer');
 const {
     getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
     getRegles, creerRegle, modifierRegle, supprimerRegle,
+    televerserImage, listerImages, servirImage, supprimerImage,
 } = require('../controllers/mailing.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
+
+/* `memoryStorage` : l'image part en base, jamais sur le disque du serveur — même règle que les
+   photos de la communauté et les pièces justificatives. La limite de multer est au-dessus de
+   celle du contrôleur (600 Ko) pour que ce dernier puisse répondre un 413 lisible plutôt qu'une
+   erreur brute. */
+const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 800 * 1024, files: 1 } });
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -31,5 +39,11 @@ router.get('/regles', authorizeRoles(...ADMIN_ROLES), getRegles);
 router.post('/regles', authorizeRoles(...ADMIN_ROLES), creerRegle);
 router.put('/regles/:id', authorizeRoles(...ADMIN_ROLES), modifierRegle);
 router.delete('/regles/:id', authorizeRoles(...ADMIN_ROLES), supprimerRegle);
+
+/* LES IMAGES DU MAILING (migration 180) — déposées une fois, citées dans les messages. */
+router.get('/images', authorizeRoles(...ADMIN_ROLES), listerImages);
+router.post('/images', authorizeRoles(...ADMIN_ROLES), imageUpload.single('image'), televerserImage);
+router.get('/images/:id', authorizeRoles(...ADMIN_ROLES), servirImage);
+router.delete('/images/:id', authorizeRoles(...ADMIN_ROLES), supprimerImage);
 
 module.exports = router;

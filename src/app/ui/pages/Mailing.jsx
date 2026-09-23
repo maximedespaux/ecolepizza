@@ -3,6 +3,7 @@ import {
   getOrganisation, updateOrganisation, getModelesMail, saveModeleMail, resetModeleMail,
   apercuMail, destinatairesMail, envoyerMailGroupe, getEnvoisMail, getSessions, getFormations,
   getReglesMail, creerRegleMail, modifierRegleMail, supprimerRegleMail,
+  televerserImageMail, getImagesMail, supprimerImageMail, API_BASE_URL,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -273,6 +274,102 @@ function Apercu({ rendu }) {
   );
 }
 
+/**
+ * LA BARRE D'INSERTION — jetons, lien nommé, image. Commune aux messages écrits par l'école.
+ *
+ * TOUT S'INSÈRE EN TEXTE, et c'est ce qui rend l'ensemble tenable : le message reste une chaîne
+ * qu'on relit et corrige à la main, pas un document HTML qu'un éditeur riche aurait produit et
+ * qu'aucun client mail ne rendrait pareil.
+ *
+ * LE LIEN DEMANDE DEUX CHOSES, dans cet ordre : les MOTS puis l'adresse. On écrit « cliquez
+ * ICI », on colle l'adresse, et le marqueur `[ICI](https://…)` part dans le texte — c'est lui
+ * qu'on relit, et il se corrige comme le reste.
+ */
+function BarreInsertion({ jetons, onInserer, onStatus }) {
+  const fichierRef = useRef(null);
+  const [envoi, setEnvoi] = useState(false);
+  /* LA BIBLIOTHÈQUE EST REPLIÉE PAR DÉFAUT, et c'est elle qui justifie la table : une école
+     réutilise son affiche ou son logo d'un message à l'autre. Sans elle, chaque envoi
+     redéposerait le même fichier, et la base grossirait d'autant de copies. */
+  const [biblio, setBiblio] = useState(null); // null = jamais ouverte
+  const voirBiblio = () => (biblio
+    ? setBiblio(null)
+    : getImagesMail().then((r) => setBiblio(r.data || [])).catch((e) => onStatus?.({ type: "error", message: e.message })));
+
+  async function retirer(img) {
+    if (!window.confirm(`Retirer « ${img.nom} » de la bibliothèque ? Les messages déjà envoyés la gardent.`)) return;
+    try {
+      await supprimerImageMail(img.id);
+      setBiblio((l) => (l || []).filter((x) => x.id !== img.id));
+      onStatus?.({ type: "success", message: "Image retirée." });
+    } catch (e) { onStatus?.({ type: "error", message: e.message }); }
+  }
+
+  function poserLien() {
+    const mots = window.prompt("Quels mots seront cliquables ?", "ICI");
+    if (!mots) return;
+    const url = window.prompt("Adresse du lien (https://…)", "https://");
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url.trim())) {
+      onStatus?.({ type: "error", message: "L'adresse doit commencer par http:// ou https://." });
+      return;
+    }
+    onInserer(`[${mots.trim()}](${url.trim()})`);
+  }
+
+  async function choisirImage(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setEnvoi(true);
+    onStatus?.(null);
+    try {
+      const r = await televerserImageMail(f);
+      onInserer(`![${r.data.nom || "image"}](image:${r.data.id})`);
+      onStatus?.({ type: "success", message: "Image ajoutée : elle partira avec le message." });
+    } catch (err) { onStatus?.({ type: "error", message: err.message }); }
+    finally { setEnvoi(false); }
+  }
+
+  return (
+    <div className="mail-jetons">
+      {jetons.map((j) => (
+        <button key={j} type="button" className="btn ghost sm" onClick={() => onInserer(`{${j}}`)}>{`{${j}}`}</button>
+      ))}
+      <button type="button" className="btn ghost sm" onClick={poserLien}>
+        <Icon name="link" size={13} /> Lien
+      </button>
+      <button type="button" className="btn ghost sm" onClick={() => fichierRef.current?.click()} disabled={envoi}>
+        <Icon name="image" size={13} /> {envoi ? "Envoi…" : "Image"}
+      </button>
+      <button type="button" className="btn ghost sm" onClick={voirBiblio}>
+        {biblio ? "Fermer la bibliothèque" : "Bibliothèque"}
+      </button>
+      <input ref={fichierRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={choisirImage} style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+      <span className="hint">Insérés à la fin du message.</span>
+      {biblio && (
+        <div className="mail-biblio">
+          {biblio.length === 0 ? (
+            <span className="hint">Aucune image déposée.</span>
+          ) : biblio.map((img) => (
+            <span key={img.id} className="mail-biblio-vignette">
+              {/* La vignette passe par l'API (authentifiée) ; l'aperçu de l'e-mail, lui, porte
+                  l'image en `data:` — son iframe en bac à sable ne peut rien aller chercher. */}
+              <button type="button" title={`Insérer « ${img.nom} »`}
+                onClick={() => onInserer(`![${img.nom}](image:${img.id})`)}>
+                <img src={`${API_BASE_URL}/mailing/images/${img.id}`} alt={img.nom} />
+              </button>
+              <button type="button" className="mail-biblio-x" onClick={() => retirer(img)}
+                aria-label={`Retirer ${img.nom}`}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── 3. Écrire à un groupe (migration 178) ─────────────────────────────────────────────────── */
 function Groupe({ onStatus }) {
   const [type, setType] = useState("session");
@@ -373,13 +470,8 @@ function Groupe({ onStatus }) {
           </p>
         )}
 
-        <div className="mail-jetons">
-          {["Prénom", "Nom", "Organisme"].map((j) => (
-            <button key={j} type="button" className="btn ghost sm"
-              onClick={() => setCorps((c) => `${c}{${j}}`)}>{`{${j}}`}</button>
-          ))}
-          <span className="hint">Insérés à la fin du message.</span>
-        </div>
+        <BarreInsertion jetons={["Prénom", "Nom", "Organisme"]} onStatus={onStatus}
+          onInserer={(txt) => setCorps((c) => `${c}${txt}`)} />
         <div className="field">
           <label htmlFor="mail-objet">Objet</label>
           <input id="mail-objet" className="inp" value={objet} onChange={(e) => setObjet(e.target.value)}
@@ -600,13 +692,8 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
           </select>
         </div>
       </div>
-      <div className="mail-jetons">
-        {cat.jetons.map((j) => (
-          <button key={j} type="button" className="btn ghost sm"
-            onClick={() => setV((p) => ({ ...p, corps: `${p.corps}{${j}}` }))}>{`{${j}}`}</button>
-        ))}
-        <span className="hint">Insérés à la fin du message.</span>
-      </div>
+      <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
+        onInserer={(txt) => setV((p) => ({ ...p, corps: `${p.corps}${txt}` }))} />
       <div className="field">
         <label htmlFor="regle-objet">Objet</label>
         <input id="regle-objet" className="inp" value={v.objet} onChange={maj("objet")}

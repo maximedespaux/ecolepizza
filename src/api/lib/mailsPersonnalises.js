@@ -110,20 +110,69 @@ function rendre(texte, valeurs = {}) {
 }
 
 /**
- * Le texte de l'école en HTML d'e-mail : paragraphes, retours à la ligne, liens cliquables.
+ * ADRESSE ACCEPTABLE DANS UN LIEN : http ou https, rien d'autre.
  *
- * L'ORDRE COMPTE : on échappe D'ABORD, on reconnaît les liens ENSUITE. L'inverse laisserait une
- * balise `<a>` se faire échapper, et le lien s'afficherait en clair avec ses chevrons.
+ * `javascript:` dans un e-mail ne fait rien (aucun client n'exécute de script), mais la même
+ * chaîne passe par l'APERÇU, rendu dans le navigateur. Et `mailto:` ou `tel:` n'ont pas été
+ * demandés : ce qui n'est pas prévu est refusé, plutôt que toléré au cas où.
  */
-function texteEnHtml(texte, style = 'margin:0 0 14px;font-size:15px;line-height:1.6') {
+const lienSur = (url) => /^https?:\/\/[^\s"<>]+$/i.test(String(url || '').trim());
+
+/**
+ * Le texte de l'école en HTML d'e-mail : paragraphes, retours à la ligne, liens, images.
+ *
+ * TROIS FORMES, ET PAS UNE DE PLUS (2026-09-23) :
+ *   · `https://…` écrit en clair devient cliquable ;
+ *   · `[voir le programme](https://…)` cache l'adresse derrière des mots — c'est ce que l'école
+ *     demandait pour écrire « cliquez ICI » sans montrer une URL de quarante caractères ;
+ *   · `![légende](image:<id>)` insère une image de la bibliothèque du mailing.
+ * La syntaxe est celle de Markdown pour la seule raison qui vaille : c'est celle que les gens
+ * connaissent déjà. Rien d'autre n'est interprété — ni gras, ni titre, ni tableau.
+ *
+ * L'ORDRE COMPTE : on échappe D'ABORD, on reconnaît les formes ENSUITE. L'inverse laisserait une
+ * balise `<a>` se faire échapper, et le lien s'afficherait en clair avec ses chevrons.
+ *
+ * `image(id)` DIT OÙ PRENDRE L'IMAGE, et c'est l'appelant qui le sait : `cid:` dans un e-mail
+ * (l'image voyage avec le message, donc elle s'affiche sans chargement distant, cf. mailer), une
+ * URL `data:` dans l'aperçu (l'iframe est en bac à sable, elle ne peut rien aller chercher).
+ * Sans fonction, ou pour une image inconnue, le marqueur DISPARAÎT : mieux vaut un blanc qu'un
+ * `![…](image:…)` imprimé tel quel chez un stagiaire.
+ */
+function texteEnHtml(texte, style = 'margin:0 0 14px;font-size:15px;line-height:1.6', { image } = {}) {
     const blocs = String(texte == null ? '' : texte).replace(/\r\n?/g, '\n').split(/\n{2,}/)
         .map((b) => b.trim()).filter(Boolean);
     return blocs.map((b) => {
         const html = esc(b)
-            .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#c0392b">$1</a>')
+            /* L'IMAGE D'ABORD : son motif contient celui du lien (`![x](y)` commence par `!`),
+               et le lien traité en premier laisserait un « ! » orphelin devant une balise. */
+            /* L'IDENTIFIANT N'EST PAS CONTRAINT À L'HEXADÉCIMAL : c'est un uuid aujourd'hui, ce
+               n'est pas une raison pour que le marqueur DISPARAISSE en silence le jour où la
+               forme change. C'est la recherche de l'image qui tranche, pas la forme de la clé —
+               constaté au banc le 2026-09-23, où un identifiant d'essai laissait « !Affiche »
+               imprimé en clair dans le message. */
+            .replace(/!\[([^\]]*)\]\(image:([\w-]{4,60})\)/gi, (_, legende, id) => {
+                const src = image ? image(id) : null;
+                if (!src) return '';
+                return `<img src="${src}" alt="${legende || ''}" style="max-width:100%;height:auto;`
+                    + 'border:0;border-radius:8px;display:block;margin:4px 0">';
+            })
+            /* ON ATTRAPE TOUTE FORME `[mots](adresse)`, pas seulement celles en http(s) : sinon
+               `[ICI](javascript:…)` ne serait pas reconnu du tout et s'imprimerait tel quel,
+               adresse comprise, dans le courrier d'un stagiaire. On décide ENSUITE. */
+            .replace(/\[([^\]]+)\]\(([^\s)]*)\)/g, (entier, mots, url) => (lienSur(url)
+                ? `<a href="${url}" style="color:#c0392b">${mots}</a>`
+                /* Une adresse refusée n'est pas silencieusement effacée : on garde les MOTS, sans
+                   lien. Le message reste lisible, et l'école voit à l'aperçu que le lien manque. */
+                : mots))
+            /* Les adresses écrites en clair, ensuite : la forme nommée est déjà consommée, donc
+               son URL ne peut plus être re-liée à l'intérieur de sa propre balise. */
+            .replace(/(^|[\s>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" style="color:#c0392b">$2</a>')
             .replace(/\n/g, '<br>');
-        return `<p style="${style}">${html}</p>`;
-    }).join('');
+        /* UN PARAGRAPHE VIDE NE S'ÉCRIT PAS. Il arrive quand un bloc ne contenait qu'une image
+           devenue introuvable : le `<p>` resterait, et laisserait un trou dans le message sans
+           que rien ne l'explique. */
+        return html ? `<p style="${style}">${html}</p>` : '';
+    }).filter(Boolean).join('');
 }
 
 /**
@@ -172,5 +221,5 @@ function lireEnvoiGroupe(b = {}) {
 
 module.exports = {
     MODELES_MAIL, CLES_MAIL, JETONS_GROUPE, MAX_OBJET, MAX_ZONE,
-    esc, jetonsDe, rendre, texteEnHtml, lireModeleMail, lireEnvoiGroupe,
+    esc, jetonsDe, rendre, texteEnHtml, lienSur, lireModeleMail, lireEnvoiGroupe,
 };

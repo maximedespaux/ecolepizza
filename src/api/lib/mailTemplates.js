@@ -13,6 +13,8 @@
  * Chaque fonction renvoie `{ subject, html }`. Le texte de repli est dérivé du HTML par `mailer`.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { LOGO_CID } = require('./mailer.js');
 const { orgInfo, modeleMail } = require('./orgContext.js');
 const { MODELES_MAIL, rendre, texteEnHtml } = require('./mailsPersonnalises.js');
@@ -206,8 +208,40 @@ function representativeEmail({ firstName, email, password, companyName, loginUrl
  * transformerait chaque annonce en invitation à se connecter. Les liens écrits dans le texte, eux,
  * deviennent cliquables (cf. `texteEnHtml`).
  */
-function messageGroupeEmail({ objet, corps, orgName }) {
-    return { subject: objet, html: coquille(objet, texteEnHtml(corps), { orgName }) };
+/**
+ * LE LOGO DANS UN APERÇU — `cid:` ne veut rien dire dans un navigateur.
+ *
+ * Il désigne une pièce jointe, que seul un client mail sait résoudre : dans l'iframe de l'aperçu,
+ * il ne restait qu'une icône d'image cassée en haut de chaque message. On y remet donc le fichier
+ * lui-même, en `data:`. Fichier absent (installation sans logo) : on laisse le `cid:`, et le texte
+ * de remplacement — le nom de l'école — s'affiche, ce qu'il faisait déjà.
+ */
+function logoPourApercu(html) {
+    try {
+        /* LE MÊME FICHIER QUE LA PIÈCE JOINTE (mailer.LOGO_PATH) : deux chemins finiraient
+           par désigner deux logos, et l'aperçu montrerait autre chose que le courrier. */
+        const chemin = path.join(__dirname, '..', 'assets', 'mail-logo.png');
+        if (!fs.existsSync(chemin)) return html;
+        const data = `data:image/png;base64,${fs.readFileSync(chemin).toString('base64')}`;
+        return html.replace(`cid:${LOGO_CID}`, data);
+    } catch { return html; }
 }
 
-module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail, representativeEmail, messageGroupeEmail };
+function messageGroupeEmail({ objet, corps, orgName, images = [], pourApercu = false }) {
+    /* CID DANS UN E-MAIL, `data:` DANS L'APERÇU. L'aperçu est rendu dans une iframe en bac à
+       sable : elle n'a ni cookie ni origine, donc aucune requête vers l'API ne peut aboutir —
+       l'image doit être DANS le HTML. Dans le courrier, au contraire, `cid:` désigne la pièce
+       jointe qui voyage avec lui. Deux transports, un seul texte. */
+    const parId = new Map(images.map((i) => [String(i.id), i]));
+    const image = (id) => {
+        const img = parId.get(String(id));
+        if (!img) return null;
+        return pourApercu
+            ? `data:${img.mime};base64,${Buffer.from(img.octets).toString('base64')}`
+            : `cid:img-${img.id}`;
+    };
+    const html = coquille(objet, texteEnHtml(corps, undefined, { image }), { orgName });
+    return { subject: objet, html: pourApercu ? logoPourApercu(html) : html };
+}
+
+module.exports = { logoPourApercu, credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail, representativeEmail, messageGroupeEmail };

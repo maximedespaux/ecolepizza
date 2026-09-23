@@ -60,7 +60,56 @@ test('le texte de l\'école est du TEXTE : échappé, en paragraphes, liens cliq
 
     /* L'ORDRE COMPTE : échapper APRÈS avoir posé le lien aurait affiché la balise en clair. */
     const src = lire(path.join(API, 'lib/mailsPersonnalises.js'));
-    assert.match(src, /esc\(b\)\s*\n?\s*\.replace\(\/\(https\?:/, 'on échappe d’abord, on lie ensuite');
+    assert.match(src, /const html = esc\(b\)/, 'on échappe d’abord, on met en forme ensuite');
+});
+
+test('un lien se cache derrière des mots, et une adresse refusée ne casse pas la phrase', async () => {
+    /* CE QUE L'ÉCOLE DEMANDAIT (2026-09-23) : écrire « cliquez ICI » au lieu d'étaler une URL de
+       quarante caractères. La syntaxe est celle de Markdown, pour la seule raison qui vaille :
+       c'est celle que les gens connaissent déjà. */
+    const html = lib.texteEnHtml('Cliquez [ICI](https://impastio.com/espace) pour accéder.');
+    assert.match(html, /<a href="https:\/\/impastio\.com\/espace"[^>]*>ICI<\/a>/);
+    assert.ok(!/impastio\.com\/espace<\/a>/.test(html), 'l’adresse ne s’affiche pas en plus des mots');
+
+    /* UNE ADRESSE ÉCRITE EN CLAIR RESTE CLIQUABLE, et n'est pas re-liée à l'intérieur du lien
+       nommé qu'on vient de poser — c'est tout l'objet de l'ordre des remplacements. */
+    const deux = lib.texteEnHtml('Voir [le programme](https://impastio.com/p) ou https://impastio.com');
+    assert.strictEqual((deux.match(/<a /g) || []).length, 2);
+
+    /* TOUT CE QUI N'EST PAS http(s) EST REFUSÉ : `javascript:` ne ferait rien dans un client
+       mail, mais la même chaîne passe par l'APERÇU, rendu dans le navigateur. On garde alors les
+       MOTS, sans lien : le message reste lisible et le manque se voit à l'aperçu. */
+    const sale = lib.texteEnHtml('Cliquez [ICI](javascript:alert(1)) maintenant');
+    assert.ok(!/<a /.test(sale), 'aucun lien');
+    assert.ok(!/javascript:/.test(sale), 'et rien de l’adresse ne survit');
+    assert.match(sale, /ICI/, 'mais les mots restent');
+    assert.strictEqual(lib.lienSur('https://x.fr'), true);
+    assert.strictEqual(lib.lienSur('javascript:alert(1)'), false);
+    assert.strictEqual(lib.lienSur('mailto:a@b.fr'), false, 'ce qui n’est pas prévu est refusé');
+});
+
+test('une image entre dans le texte, et voyage AVEC le message', async () => {
+    /* PAS D'IMAGE DISTANTE : les clients mail les bloquent par défaut (« afficher les images ? »)
+       et une image chargée depuis un serveur trace qui ouvre le courrier. Elle part donc en pièce
+       jointe, désignée par `cid:` — comme le logo, depuis toujours. */
+    const html = lib.texteEnHtml('![Affiche](image:abc123)', undefined, { image: (id) => `cid:img-${id}` });
+    assert.match(html, /<img src="cid:img-abc123" alt="Affiche"/);
+    assert.match(html, /max-width:100%/, 'une image large ne doit pas déborder du cadre');
+
+    /* IMAGE INCONNUE (supprimée depuis, ou migration 180 non jouée) : le marqueur DISPARAÎT.
+       Mieux vaut un blanc qu'un « ![Affiche](image:abc123) » imprimé chez un stagiaire. */
+    assert.strictEqual(lib.texteEnHtml('![Affiche](image:abc123)', undefined, { image: () => null }), '');
+    assert.strictEqual(lib.texteEnHtml('![Affiche](image:abc123)'), '');
+
+    /* LE MAILER JOINT CE QU'ON LUI DONNE, en plus du logo. */
+    const mailer = sansCommentaires(lire(path.join(API, 'lib/mailer.js')));
+    assert.match(mailer, /attachments: \[\.\.\.logoAttachment\(\), \.\.\.\(Array\.isArray\(attachments\) \? attachments : \[\]\)\]/);
+    const ctrl = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
+    assert.match(ctrl, /cid: `img-\$\{i\.id\}`, contentDisposition: 'inline'/);
+    /* L'APERÇU, LUI, NE PEUT PAS UTILISER `cid:` : son iframe est en bac à sable, sans origine ni
+       cookie — l'image doit être DANS le HTML. */
+    const tpl = sansCommentaires(lire(path.join(API, 'lib/mailTemplates.js')));
+    assert.match(tpl, /pourApercu\s*\n?\s*\? `data:\$\{img\.mime\};base64,/);
 });
 
 test('la charpente d\'un e-mail ne se réécrit pas', () => {
@@ -118,7 +167,7 @@ test('un envoi à un groupe est borné, tracé, et ne se fait pas passer pour un
     const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
     /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Couper un envoi
        décidé à l'instant au nom d'un réglage fait pour autre chose rendrait le bouton muet. */
-    assert.match(src, /await sendMail\(\{ to: l\.email, subject, html \}\);/);
+    assert.match(src, /await sendMail\(\{ to: l\.email, subject, html, attachments: piecesImages\(images\) \}\);/);
     /* SÉQUENTIEL : une rafale de trente connexions SMTP se traite comme du spam. */
     assert.match(src, /for \(const l of avec\) \{/);
     assert.match(src, /if \(avec\.length > MAX_DESTINATAIRES\)/);
@@ -171,45 +220,48 @@ test('les cinq types de l\'écran sont ceux du catalogue', () => {
     for (const cle of lib.CLES_MAIL) assert.match(org, new RegExp(`${cle}: 'mail_${cle}'`));
 });
 
-test('plusieurs destinataires partent en COPIE CACHÉE, et jamais en copie visible', () => {
-    /* CE QUE L'ÉCOLE A DEMANDÉ (2026-09-23) : quand plusieurs personnes reçoivent le même
-       message, elles doivent être en Cci — pas en Cc, qui donnerait l'adresse de chaque
-       stagiaire à tous les autres. Et une copie doit arriver dans la boîte de l'école.
-
-       LA LIMITE EST STRUCTURELLE, ET C'EST LE MESSAGE QUI TRANCHE : une copie cachée n'a qu'UN
-       corps pour tout le monde, donc aucun {Prénom} ne peut y être rempli. Un message
-       personnalisé part donc une fois par personne — sinon quinze stagiaires liraient
-       « Bonjour Camille ». */
+test('chacun reçoit SON message, et l\'école en garde UNE copie', () => {
+    /* UN ENVOI UNIQUE EN COPIE CACHÉE A ÉTÉ ESSAYÉ, puis retiré (2026-09-23) : il n'a qu'UN corps
+       pour tout le monde, donc aucun {Prénom} rempli. La boucle reste — chacun reçoit son
+       message, et personne ne partage d'enveloppe, donc personne ne voit l'adresse d'un autre. */
     const src = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
-    assert.match(src, /const personnalise = \/\\\{\(Prénom\|Nom\)\\\}\/\.test\(/,
-        'la présence d’un jeton personnel décide du mode');
-    assert.match(src, /const enCci = !personnalise && avec\.length > 1 && !!adresseEcole;/);
-    /* LE « À » EST L'ÉCOLE : un message sans destinataire visible part en indésirable. */
-    assert.match(src, /sendMail\(\{ to: adresseEcole, bcc: avec\.map\(\(l\) => l\.email\), subject, html \}\)/);
-    assert.ok(!/\bcc:/.test(src.replace(/bcc:/g, '')), 'aucune copie VISIBLE nulle part');
+    assert.match(src, /for \(const l of avec\) \{/);
+    assert.match(src, /await sendMail\(\{ to: l\.email, subject, html, attachments: piecesImages\(images\) \}\)/);
+    assert.ok(!/bcc:/.test(src), 'plus de copie cachée groupée');
 
-    /* UNE SEULE COPIE À L'ÉCOLE en mode individuel : la mettre en copie de chaque message lui en
-       ferait quinze dans sa boîte pour un seul envoi. Et elle est annoncée pour ce qu'elle est. */
+    /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : la mettre en copie de chaque
+       message lui en ferait quinze dans sa boîte pour un seul envoi. Elle est annoncée pour ce
+       qu'elle est, sans quoi elle se lirait comme un message qui lui est adressé. */
     assert.match(src, /if \(adresseEcole && envoyes > 0\)/);
     assert.match(src, /\[Copie\] \$\{subject\}/);
     assert.match(src, /Copie de l’envoi à \$\{envoyes\} destinataire/);
-
-    /* LE MAILER SAIT METTRE EN CCI, et seulement quand on lui en donne. */
-    const mailer = sansCommentaires(lire(path.join(API, 'lib/mailer.js')));
-    assert.match(mailer, /async function sendMail\(\{ to, bcc, subject, html, text, kind \}\)/);
-    assert.match(mailer, /\.\.\.\(bcc && bcc\.length \? \{ bcc: Array\.isArray\(bcc\) \? bcc\.join\(', '\) : bcc \} : \{\}\)/);
 });
 
-test('l\'écran annonce AVANT l\'envoi ce que les destinataires verront', () => {
-    /* La question « qui verra l’adresse de qui » se pose avant d’envoyer, jamais après. */
+test('l\'écran dit où part la copie, et propose lien et image', () => {
     const page = sansCommentaires(lire(path.join(UI, 'pages/Mailing.jsx')));
-    assert.match(page, /const enCci = !personnalise && nbDest > 1 && !!cibles\?\.copie_ecole;/);
-    assert.match(page, /copie cachée<\/b>&nbsp;: personne ne voit l'adresse des autres/);
-    assert.match(page, /il partira <b>une fois par personne<\/b>/);
-    /* Et la copie : dite quand elle part, dite aussi quand elle NE PART PAS — sans quoi l'école
+    /* La copie : dite quand elle part, dite aussi quand elle NE PART PAS — sans quoi l'école
        croirait garder une trace qu'elle n'a pas. */
     assert.match(page, /Aucune copie pour l'école&nbsp;: renseignez son adresse/);
-    /* LA MÊME RÈGLE DES DEUX CÔTÉS : l'écran ne doit pas annoncer un mode que le serveur ne
-       choisirait pas. */
-    assert.match(page, /const personnalise = \/\\\{\(Prénom\|Nom\)\\\}\/\.test\(/);
+    assert.match(page, /Une <b>copie<\/b> part à/);
+
+    /* LES DEUX GESTES DEMANDÉS, dans la même barre que les jetons — et la MÊME barre pour un
+       message de groupe et pour une règle programmée : deux copies auraient fini par diverger,
+       et un bouton présent d'un côté seulement se lit comme une panne. */
+    assert.match(page, /function BarreInsertion\(\{ jetons, onInserer, onStatus \}\)/);
+    assert.strictEqual((page.match(/<BarreInsertion /g) || []).length, 2);
+    assert.match(page, /onInserer\(`\[\$\{mots\.trim\(\)\}\]\(\$\{url\.trim\(\)\}\)`\)/, 'le lien s’insère en texte');
+    assert.match(page, /onInserer\(`!\[\$\{r\.data\.nom \|\| "image"\}\]\(image:\$\{r\.data\.id\}\)`\)/);
+    /* L'ADRESSE EST VÉRIFIÉE À LA SAISIE aussi : le serveur refuse déjà tout ce qui n'est pas
+       http(s), mais le dire tout de suite évite d'envoyer un message dont le lien a disparu. */
+    assert.match(page, /L'adresse doit commencer par http:\/\/ ou https:\/\//);
+});
+
+test('la 180 range les images en base, et son revert dit ce qu\'il détruit', () => {
+    const MIG = path.join(API, '..', '..', 'database', 'migrations');
+    const aller = lire(path.join(MIG, '180_mail_images.sql'));
+    assert.match(aller, /CREATE TABLE IF NOT EXISTS mail_image/);
+    assert.match(aller, /octets\s+longblob\s+NOT NULL/, 'le fichier part en base, jamais sur le disque');
+    assert.ok(!/--/.test(aller), 'commentaires en blocs');
+    assert.ok(!/\\/.test(aller), 'aucune barre oblique inverse');
+    assert.match(lire(path.join(MIG, '180_revert_mail_images.sql')), /CE QUI SE PERD/);
 });

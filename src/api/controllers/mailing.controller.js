@@ -33,6 +33,35 @@ const sansTable = (err) => err && (err.code === 'ER_NO_SUCH_TABLE' || err.code =
    que cet écran promet (ni ce que le SMTP de l'école encaisse d'un coup). */
 const MAX_DESTINATAIRES = 200;
 
+/* ── LES IMAGES D'UN MESSAGE (migration 180) ────────────────────────────────────────────────
+   Le texte porte des marqueurs `![légende](image:<id>)` ; on charge les images citées, et elles
+   partent EN PIÈCE JOINTE avec le message (cid:), jamais par une URL que le client mail irait
+   chercher — il les bloquerait, et une image distante trace qui ouvre le courrier. */
+const MAX_IMAGES = 5;
+const idsImages = (texte) => [...new Set(
+    [...String(texte || '').matchAll(/!\[[^\]]*\]\(image:([\w-]{4,60})\)/gi)].map((m) => m[1].toLowerCase()),
+)].slice(0, MAX_IMAGES);
+
+/** Les images citées par ce texte, pour cet organisme. Table absente → aucune, sans erreur. */
+async function chargerImages(conn, orgId, texte) {
+    const ids = idsImages(texte);
+    if (!ids.length) return [];
+    try {
+        const [rows] = await conn.query(
+            'SELECT id, nom, mime, octets FROM mail_image WHERE organization_id = ? AND id IN (?)',
+            [orgId, ids]);
+        return rows;
+    } catch (err) {
+        if (sansTable(err)) return [];
+        throw err;
+    }
+}
+
+/** Les mêmes images, en pièces jointes « inline » pour nodemailer. */
+const piecesImages = (images) => images.map((i) => ({
+    filename: i.nom || 'image', content: i.octets, cid: `img-${i.id}`, contentDisposition: 'inline',
+}));
+
 /** GET /api/mailing/modeles — le catalogue, avec le texte de l'école là où elle en a écrit un. */
 const getModeles = async (req, res) => {
     const orgId = req.user.organization_id;
@@ -130,10 +159,13 @@ const apercu = async (req, res) => {
     const lu = lireEnvoiGroupe(b);
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
     const valeurs = { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza' };
+    /* `pourApercu` : les images entrent dans le HTML en `data:`. L'aperçu vit dans une iframe en
+       bac à sable — sans origine ni cookie, elle ne peut rien aller chercher à l'API. */
+    const images = await chargerImages(db.promise(), req.user.organization_id, lu.valeurs.corps);
     res.json({ data: modeles.messageGroupeEmail({
         objet: rendre(lu.valeurs.objet, valeurs),
         corps: rendre(lu.valeurs.corps, valeurs),
-        orgName,
+        orgName, images, pourApercu: true,
     }) });
 };
 
@@ -254,64 +286,48 @@ const envoyerGroupe = async (req, res) => {
         const o = orgContext.orgInfo();
         const orgName = o.short_name || o.legal_name || null;
         const adresseEcole = o.email || null;
+        /* CHARGÉES UNE FOIS pour tout l'envoi : quinze destinataires, une seule lecture — et les
+           mêmes octets réutilisés pour chaque message. */
+        const images = await chargerImages(conn, orgId, lu.valeurs.corps);
         let envoyes = 0;
         let echecs = 0;
 
-        /* ── CCI OU UN MESSAGE PAR PERSONNE : c'est LE MESSAGE qui décide ────────────────────
-           Une copie cachée envoie UN SEUL corps à tout le monde : personne ne voit l'adresse des
-           autres, mais plus rien ne peut être personnalisé. Un message qui porte {Prénom} ou
-           {Nom} doit donc partir une fois par personne — sinon quinze stagiaires recevraient
-           « Bonjour Camille ».
-           C'est la seule règle qui tienne sans demander à l'utilisateur de comprendre le
-           mécanisme : il écrit, et l'envoi s'adapte. L'écran annonce lequel des deux s'appliquera,
-           pour qu'il n'ait pas à le deviner. */
-        const personnalise = /\{(Prénom|Nom)\}/.test(`${lu.valeurs.objet} ${lu.valeurs.corps}`);
-        const enCci = !personnalise && avec.length > 1 && !!adresseEcole;
-
-        if (enCci) {
-            const valeurs = { 'Prénom': '', Nom: '', Organisme: orgName || 'École Pizza' };
+        /* UN MESSAGE PAR PERSONNE, ET C'EST LE SEUL MODE (revenu au 2026-09-23 après essai).
+           Un envoi unique en copie cachée avait été écrit : il interdit toute personnalisation —
+           un seul corps pour tout le monde, donc aucun {Prénom} rempli. L'école a tranché pour la
+           boucle : chacun reçoit SON message. Personne ne voit l'adresse d'un autre, puisque
+           personne ne partage d'enveloppe. */
+        for (const l of avec) {
+            const valeurs = {
+                'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
+            };
             const { subject, html } = modeles.messageGroupeEmail({
                 objet: rendre(lu.valeurs.objet, valeurs),
                 corps: rendre(lu.valeurs.corps, valeurs),
-                orgName,
+                orgName, images,
             });
-            /* LE « À » EST L'ÉCOLE, les stagiaires sont en Cci : un message sans destinataire
-               visible part en indésirable chez la plupart des fournisseurs. L'école a du même
-               coup sa copie, sans envoi supplémentaire. */
-            const r = await sendMail({ to: adresseEcole, bcc: avec.map((l) => l.email), subject, html });
-            if (r.sent) envoyes = avec.length; else echecs = avec.length;
-        } else {
-            for (const l of avec) {
-                const valeurs = {
-                    'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
-                };
-                const { subject, html } = modeles.messageGroupeEmail({
-                    objet: rendre(lu.valeurs.objet, valeurs),
-                    corps: rendre(lu.valeurs.corps, valeurs),
-                    orgName,
-                });
-                /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Celui-ci
-                   est un geste délibéré, déclenché à l'instant — le couper au nom d'un réglage fait
-                   pour les envois automatiques rendrait le bouton muet sans rien expliquer. */
-                const r = await sendMail({ to: l.email, subject, html });
-                if (r.sent) envoyes += 1; else echecs += 1;
-            }
-            /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : mettre l'école en copie de
-               chaque message lui en ferait quinze dans sa boîte pour un seul envoi. Elle reçoit
-               donc UN exemplaire, annoncé pour ce qu'il est — sans quoi il se lirait comme un
-               message adressé à elle. */
-            if (adresseEcole && envoyes > 0) {
-                const valeurs = { 'Prénom': avec[0].first_name || '', Nom: avec[0].last_name || '', Organisme: orgName || 'École Pizza' };
-                const entete = `<p style="margin:0 0 14px;padding:10px 12px;background:#f7f8fb;border:1px solid #e6e8ee;`
-                    + `border-radius:8px;font-size:13px;color:#5e5e68">Copie de l’envoi à ${envoyes} destinataire`
-                    + `${envoyes > 1 ? 's' : ''} — ${cible || 'groupe'}. Chacun a reçu ce message avec ses propres informations.</p>`;
-                const { subject, html } = modeles.messageGroupeEmail({
-                    objet: rendre(lu.valeurs.objet, valeurs),
-                    corps: rendre(lu.valeurs.corps, valeurs),
-                    orgName,
-                });
-                await sendMail({ to: adresseEcole, subject: `[Copie] ${subject}`, html: html.replace('<h1', `${entete}<h1`) });
-            }
+            /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Celui-ci
+               est un geste délibéré, déclenché à l'instant — le couper au nom d'un réglage fait
+               pour les envois automatiques rendrait le bouton muet sans rien expliquer. */
+            const r = await sendMail({ to: l.email, subject, html, attachments: piecesImages(images) });
+            if (r.sent) envoyes += 1; else echecs += 1;
+        }
+        /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : la mettre en copie de chaque
+           message lui en ferait quinze dans sa boîte pour un seul envoi. Elle reçoit donc UN
+           exemplaire, annoncé pour ce qu'il est — sans quoi il se lirait comme un message qui lui
+           est adressé. */
+        if (adresseEcole && envoyes > 0) {
+            const valeurs = { 'Prénom': avec[0].first_name || '', Nom: avec[0].last_name || '', Organisme: orgName || 'École Pizza' };
+            const entete = '<p style="margin:0 0 14px;padding:10px 12px;background:#f7f8fb;border:1px solid #e6e8ee;'
+                + `border-radius:8px;font-size:13px;color:#5e5e68">Copie de l’envoi à ${envoyes} destinataire`
+                + `${envoyes > 1 ? 's' : ''} — ${cible || 'groupe'}. Chacun a reçu ce message avec ses propres informations.</p>`;
+            const { subject, html } = modeles.messageGroupeEmail({
+                objet: rendre(lu.valeurs.objet, valeurs),
+                corps: rendre(lu.valeurs.corps, valeurs),
+                orgName, images,
+            });
+            await sendMail({ to: adresseEcole, subject: `[Copie] ${subject}`,
+                html: html.replace('<h1', `${entete}<h1`), attachments: piecesImages(images) });
         }
 
         /* LA TRACE, MÊME PARTIELLE : ce qui est parti est parti. Une table absente ne doit pas
@@ -329,8 +345,7 @@ const envoyerGroupe = async (req, res) => {
             journalise = false;
         }
         logAudit(req, 'mail.envoi', 'MailEnvoi', null);
-        res.json({ data: { envoyes, echecs, cible, journalise, mode: enCci ? 'cci' : 'individuel',
-            copie: !!adresseEcole } });
+        res.json({ data: { envoyes, echecs, cible, journalise, copie: !!adresseEcole } });
     } catch (err) {
         console.error('Erreur envoi groupe :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -351,6 +366,95 @@ const getEnvois = async (req, res) => {
     } catch (err) {
         if (sansTable(err)) return res.json({ data: [], message: MIGRATION });
         console.error('Erreur historique mailing :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/mailing/images — déposer une image dans la bibliothèque du mailing.
+ *
+ * ELLE EST REDIMENSIONNÉE PAR LE NAVIGATEUR avant l'envoi, comme les photos de la communauté :
+ * une photo de téléphone fait quatre mégaoctets, et quatre mégaoctets en pièce jointe d'un
+ * courrier partent en indésirable. Le serveur borne quand même — on ne fait jamais confiance au
+ * client sur une taille.
+ */
+const MAX_IMAGE_OCTETS = 600 * 1024;
+const MIMES_IMAGE = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+const televerserImage = async (req, res) => {
+    const f = req.file;
+    if (!f) return res.status(422).json({ message: 'Aucun fichier reçu.' });
+    if (!MIMES_IMAGE.includes(f.mimetype)) {
+        return res.status(422).json({ message: 'Format accepté : PNG, JPEG, WebP ou GIF.' });
+    }
+    if (f.size > MAX_IMAGE_OCTETS) {
+        return res.status(413).json({ message: `Image trop lourde (${Math.round(f.size / 1024)} Ko) : ${Math.round(MAX_IMAGE_OCTETS / 1024)} Ko au plus.` });
+    }
+    try {
+        const id = crypto.randomUUID();
+        await db.promise().query(
+            'INSERT INTO mail_image (id, organization_id, nom, mime, octets, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, req.user.organization_id, String(f.originalname || 'image').slice(0, 160), f.mimetype, f.buffer, req.user.id]);
+        logAudit(req, 'mail.image', 'MailImage', id);
+        res.status(201).json({ data: { id, nom: f.originalname || 'image', mime: f.mimetype, octets: f.size } });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: 'Migration 180 non jouée : les images ne sont pas encore disponibles.' });
+        console.error('Erreur dépôt image mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** GET /api/mailing/images — la bibliothèque, sans les octets (on ne charge pas ce qu'on liste). */
+const listerImages = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT id, nom, mime, LENGTH(octets) AS octets, DATE_FORMAT(created_at, '%Y-%m-%d') AS quand
+               FROM mail_image WHERE organization_id = ? ORDER BY created_at DESC LIMIT 60`,
+            [req.user.organization_id]);
+        res.json({ data: rows });
+    } catch (err) {
+        if (sansTable(err)) return res.json({ data: [], message: 'Migration 180 non jouée.' });
+        console.error('Erreur liste images mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/mailing/images/:id — l'image elle-même, pour la bibliothèque à l'écran.
+ *
+ * L'APERÇU, LUI, NE PASSE PAS PAR ICI : son iframe est en bac à sable, sans cookie ni origine.
+ * Cette route sert la vignette de la bibliothèque, dans la page elle-même.
+ */
+const servirImage = async (req, res) => {
+    try {
+        const [[img]] = await db.promise().query(
+            'SELECT mime, octets FROM mail_image WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!img) return res.status(404).json({ message: 'Image introuvable.' });
+        /* `no-store` COMME TOUT LE RESTE : l'invariant de cette application est que rien de servi
+           par l'API ne se garde sur le disque du navigateur, et une vignette de bibliothèque ne
+           vaut pas qu'on rouvre la porte (cf. cache-documents.test.js). */
+        res.set('Content-Type', img.mime).set('Cache-Control', 'no-store').send(img.octets);
+    } catch (err) {
+        if (sansTable(err)) return res.status(404).json({ message: 'Image introuvable.' });
+        console.error('Erreur lecture image mail :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** DELETE /api/mailing/images/:id — retirer une image de la bibliothèque. */
+const supprimerImage = async (req, res) => {
+    try {
+        const [r] = await db.promise().query('DELETE FROM mail_image WHERE id = ? AND organization_id = ?',
+            [req.params.id, req.user.organization_id]);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Image introuvable.' });
+        logAudit(req, 'mail.image.suppression', 'MailImage', req.params.id);
+        /* LES MESSAGES DÉJÀ ENVOYÉS NE CHANGENT PAS : leur image est partie avec eux. Un texte
+           programmé qui la citait encore la perdra — le marqueur s'efface au rendu. */
+        res.json({ data: { id: req.params.id } });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: 'Migration 180 non jouée.' });
+        console.error('Erreur suppression image mail :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -471,4 +575,5 @@ const supprimerRegle = async (req, res) => {
 
 module.exports = { getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
     getRegles, creerRegle, modifierRegle, supprimerRegle,
+    televerserImage, listerImages, servirImage, supprimerImage, chargerImages, piecesImages,
     MAX_DESTINATAIRES, MIGRATION, JETONS_GROUPE };

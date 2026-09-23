@@ -95,7 +95,7 @@ function envoiPossible(kind) {
  * pas de {Prénom}. C'est l'appelant qui tranche (cf. mailing.controller), parce que lui seul sait
  * ce que le message contient.
  */
-async function sendMail({ to, bcc, subject, html, text, kind }) {
+async function sendMail({ to, bcc, subject, html, text, kind, attachments = [] }) {
     if (!to) return { sent: false, reason: 'destinataire absent' };
     /* Interrupteur par organisme (réglages « Mailing », migration 138). `kind` est OPTIONNEL :
        un envoi sans type n'est jamais filtré. `require` local exprès — évite tout problème
@@ -113,7 +113,10 @@ async function sendMail({ to, bcc, subject, html, text, kind }) {
             subject,
             html,
             text: text || htmlToText(html),
-            attachments: logoAttachment(),
+            /* LE LOGO D'ABORD, LES IMAGES DU MESSAGE ENSUITE : elles voyagent avec le
+               courrier (cid:) au lieu d'être chargées depuis un serveur — les clients mail
+               bloquent les images distantes par défaut, et une image distante trace qui ouvre. */
+            attachments: [...logoAttachment(), ...(Array.isArray(attachments) ? attachments : [])],
         });
         return { sent: true };
     } catch (e) {
