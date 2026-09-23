@@ -159,6 +159,28 @@ const CHAMPS_TRANSMISSIBLES = {
  * phrase ». Si la réponse demande une explication, c'est non.
  */
 
+/**
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * L'IDENTITÉ N'EST PLUS SOUMISE AU CONSENTEMENT — décidé par l'école le 2026-09-23.
+ *
+ * CE QUI SE PASSAIT. Un refus retirait la personne de la liste ENTIÈREMENT : le partenaire ne
+ * savait même pas qu'elle avait été formée. L'école, elle, a besoin de dire QUI elle a formé —
+ * c'est le sens de sa relation avec ses partenaires — et le stagiaire, lui, refuse d'être
+ * DÉMARCHÉ. Les deux tiennent ensemble : le nom part, les coordonnées non.
+ *
+ * CE QUE ÇA CHANGE POUR LA PHRASE. Le nom et le prénom sortent du « j'accepte » : la phrase
+ * ANNONCE qu'ils sont transmis, puis demande l'accord pour le reste. Un consentement porte sur
+ * ce qu'on peut refuser — annoncer le nom dans un « j'accepte » qui ne le conditionne plus
+ * serait faux, et c'est exactement le genre d'écart que ce fichier existe pour empêcher.
+ *
+ * ⚠️ LA RÈGLE VAUT AUSSI POUR LES REFUS DÉJÀ ENREGISTRÉS, à la demande de l'école : leur phrase
+ * annonçait « mon nom, mon prénom, mon adresse e-mail… », et ces personnes verront désormais
+ * leur nom partir. C'est un choix assumé, pas un oubli — le registre garde leur phrase d'origine,
+ * si bien que l'écart reste lisible ligne par ligne.
+ */
+const CHAMPS_IDENTITE = ['nom', 'prenom'];
+const estIdentite = (c) => CHAMPS_IDENTITE.includes(c);
+
 /** Ne garde que des clés connues, sans doublon, dans l'ordre d'annonce. */
 function champsValides(liste) {
     const demandes = new Set((Array.isArray(liste) ? liste : String(liste || '').split(','))
@@ -192,17 +214,31 @@ function listeAnnoncee(champs) {
  * c'est exactement ce qui permet de savoir à quoi chacun a dit oui.
  */
 function formulationPour(champs) {
-    /* AUCUN CHAMP COCHÉ : la phrase ne doit pas devenir « J'accepte que l'école communique à ses
-       partenaires », qui ne veut rien dire. On l'énonce, plutôt que de produire un texte bancal
-       qu'on ferait ensuite signer. */
-    const quoi = listeAnnoncee(champs);
+    const retenus = champsValides(champs);
+    const identite = listeAnnoncee(retenus.filter(estIdentite));
+    const quoi = listeAnnoncee(retenus.filter((c) => !estIdentite(c)));
+
+    /* CE QUI PART DE TOUTE FAÇON SE DIT EN PREMIER, et se dit comme tel. La personne doit savoir
+       avant de répondre que refuser ne retire pas son nom : un « je peux revenir sur ce choix »
+       qui laisserait croire le contraire vaudrait mieux ne pas être écrit. */
+    const annonce = identite
+        ? `L'école communique ${identite} à ses partenaires, afin qu'ils sachent qui elle a formé. `
+            + 'Cela ne dépend pas de ma réponse ci-dessous. '
+        : '';
+
+    /* AUCUN CHAMP À CONSENTIR : la phrase ne doit pas devenir « J'accepte que l'école communique
+       à ses partenaires », qui ne veut rien dire. On l'énonce, plutôt que de produire un texte
+       bancal qu'on ferait ensuite signer. */
     if (!quoi) {
-        return 'Aucune information n\'est actuellement transmise aux partenaires de l\'école.';
+        return annonce
+            ? `${annonce}Aucune autre information n'est transmise, et il n'y a donc rien à accepter ici.`
+            : 'Aucune information n\'est actuellement transmise aux partenaires de l\'école.';
     }
-    return `J'accepte que l'école communique ${quoi} à ses partenaires, afin qu'ils puissent me `
+    return `${annonce}J'accepte que l'école y ajoute ${quoi}, afin que ces partenaires puissent me `
         + 'proposer leurs offres et me contacter directement. Je peux revenir sur ce choix à tout '
-        + 'moment depuis mon profil. Refuser n\'a aucune conséquence sur ma formation, mon '
-        + 'inscription ou mon accès aux services de l\'école.';
+        + `moment depuis mon profil${identite ? ` ; ${identite} continueront d'être transmis` : ''}. `
+        + 'Refuser n\'a aucune conséquence sur ma formation, mon inscription ou mon accès aux '
+        + 'services de l\'école.';
 }
 
 /**
@@ -649,6 +685,10 @@ const JETONS_CONSENTEMENT = {
     'Case partenaires non': 'partenaires',
     'Choix partenaires': 'partenaires',
     'Données partenaires': 'partenaires',
+    /* L'IDENTITÉ NE DÉPEND PLUS DE LA RÉPONSE, mais le jeton reste rattaché à la finalité
+       « partenaires » : c'est elle qui décide de la liste des champs, donc de ce qu'il écrit. Un
+       document qui le porte pose quand même la question — il dit ce qui part quoi qu'on réponde. */
+    'Identité partenaires': 'partenaires',
 };
 
 /**
@@ -717,6 +757,9 @@ const CASE_VIDE = '☐';
  * {Données partenaires} dit la liste ANNONCÉE à la personne quand elle a répondu — celle de sa
  * question, pas celle du jour, qui a pu s'élargir depuis.
  */
+/* La liste ANNONCÉE à cette personne-là, ou celle du jour si elle n'a jamais répondu. */
+const champsRetenus = (etat, part) => champsValides(part ? part.champs : ((etat && etat.champsDuJour) || []));
+
 function valeursJetons(etat) {
     const rep = (etat && etat.reponses) || {};
     const photos = rep.droit_image;
@@ -730,14 +773,20 @@ function valeursJetons(etat) {
         'Case partenaires oui': coche(part, true),
         'Case partenaires non': coche(part, false),
         'Choix partenaires': choix(part),
-        'Données partenaires': listeAnnoncee(part ? part.champs : ((etat && etat.champsDuJour) || [])),
+        /* CE QUE LA CASE GOUVERNE, ET RIEN DE PLUS (2026-09-23). Le document dit « ☐ Autorise
+           ☐ N'autorise pas … à transmettre {Données partenaires} » : y laisser le nom et le
+           prénom ferait signer que cocher « n'autorise pas » les retient, ce qui est faux depuis
+           que l'identité est transmise dans tous les cas. Elle a son propre jeton, et sa propre
+           phrase dans le modèle. */
+        'Données partenaires': listeAnnoncee(champsRetenus(etat, part).filter((c) => !estIdentite(c))),
+        'Identité partenaires': listeAnnoncee(champsRetenus(etat, part).filter(estIdentite)),
     };
 }
 
 module.exports = {
     FINALITES, FINALITES_CONNUES, SOURCES, GROUPES,
     aReponduLuiMeme, ontReponduEuxMemes,
-    CHAMPS_TRANSMISSIBLES, champsValides, formulationPour, listeAnnoncee, champsOrganisme,
+    CHAMPS_TRANSMISSIBLES, CHAMPS_IDENTITE, estIdentite, champsValides, formulationPour, listeAnnoncee, champsOrganisme,
     destinatairesPartenaires, partenairesDestinataires, aDesDestinataires, manquantsParSession,
     etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
     JETONS_CONSENTEMENT, finalitesDesJetons, reponsesDuDocument, valeursJetons,

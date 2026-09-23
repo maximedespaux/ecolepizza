@@ -311,7 +311,9 @@ test("il n'existe qu'UN SEUL chemin d'export, et il applique l'intersection", ()
         "L'export par session doit avoir disparu du contrôleur, pas seulement de l'écran.");
     assert.strictEqual((src.match(/async function composerLignes\(/g) || []).length, 1);
     assert.strictEqual((src.match(/async function partenaireRecevable\(/g) || []).length, 1);
-    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\)\)/,
+    /* L'INTERSECTION RESTE LA RÈGLE pour ce qui est soumis à l'accord ; l'identité y échappe
+       depuis le 2026-09-23 (elle est annoncée, plus consentie — cf. `CHAMPS_IDENTITE`). */
+    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\) \|\| consentements\.estIdentite\(c\)\)/,
         "L'intersection reste la règle : ce que l'école transmet ∩ ce qui a été annoncé à chacun.");
 
     /* ON DÉPOUILLE LES COMMENTAIRES : le fichier de routes EXPLIQUE que la transmission a quitté

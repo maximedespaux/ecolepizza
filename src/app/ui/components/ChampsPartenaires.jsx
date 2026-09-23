@@ -83,8 +83,9 @@ function ChampsPartenaires() {
     <Card title={<span className="card-ttl"><Icon name="handshake" size={16} /> Informations transmises aux partenaires</span>}
       style={{ marginBottom: 16 }}>
       <p className="hint" style={{ marginTop: 0 }}>
-        Ce que l'école communique aux partenaires pour les stagiaires qui l'ont accepté. Chaque
-        case cochée apparaît dans la phrase soumise au stagiaire, et dans la liste exportée.
+        Ce que l'école communique aux partenaires. Chaque case cochée apparaît dans la phrase
+        soumise au stagiaire, et dans la liste exportée. <b>Le nom et le prénom sont transmis même
+        en cas de refus</b> — la phrase l'annonce ; tout le reste dépend de l'accord du stagiaire.
       </p>
 
       <StatusMessage status={status} />
@@ -179,18 +180,30 @@ function libelles(data, cles) {
  * Il retombe sur la phrase du serveur dès que la sélection correspond à l'enregistré : c'est elle
  * qui fait foi, et la comparer permettrait de repérer une divergence entre les deux rédactions.
  */
+/* L'IDENTITÉ N'EST PLUS SOUMISE À L'ACCORD (2026-09-23) : la phrase l'ANNONCE, puis demande
+   l'accord pour le reste. La même règle qu'au serveur (`CHAMPS_IDENTITE`), tenue par un test. */
+const IDENTITE = ["nom", "prenom"];
+const enumerer = (mots) => (mots.length === 0 ? ""
+  : mots.length === 1 ? mots[0]
+    : `${mots.slice(0, -1).join(", ")} et ${mots[mots.length - 1]}`);
+
 function apercuLocal(data, choisis) {
   const memes = choisis.length === data.choisis.length && choisis.every((c) => data.choisis.includes(c));
   if (memes) return data.apercu;
   const ordre = data.catalogue.map((c) => c.cle).filter((c) => choisis.includes(c));
+  const identite = enumerer(ordre.filter((c) => IDENTITE.includes(c)).map((c) => ANNONCES[c] || c));
+  const quoi = enumerer(ordre.filter((c) => !IDENTITE.includes(c)).map((c) => ANNONCES[c] || c));
   if (!ordre.length) return "Aucune information ne sera transmise aux partenaires de l'école.";
-  const mots = ordre.map((c) => ANNONCES[c] || c);
-  const quoi = mots.length === 1 ? mots[0]
-    : `${mots.slice(0, -1).join(", ")} et ${mots[mots.length - 1]}`;
-  return `J'accepte que l'école communique ${quoi} à ses partenaires, afin qu'ils puissent me `
+  const annonce = identite
+    ? `L'école communique ${identite} à ses partenaires, afin qu'ils sachent qui elle a formé. `
+      + "Cela ne dépend pas de ma réponse ci-dessous. "
+    : "";
+  if (!quoi) return `${annonce}Aucune autre information n'est transmise, et il n'y a donc rien à accepter ici.`;
+  return `${annonce}J'accepte que l'école y ajoute ${quoi}, afin que ces partenaires puissent me `
     + "proposer leurs offres et me contacter directement. Je peux revenir sur ce choix à tout "
-    + "moment depuis mon profil. Refuser n'a aucune conséquence sur ma formation, mon inscription "
-    + "ou mon accès aux services de l'école.";
+    + `moment depuis mon profil${identite ? ` ; ${identite} continueront d'être transmis` : ""}. `
+    + "Refuser n'a aucune conséquence sur ma formation, mon inscription ou mon accès aux services "
+    + "de l'école.";
 }
 
 /* LES MÊMES MOTS QUE LE SERVEUR (`CHAMPS_TRANSMISSIBLES`). La duplication est inévitable — la

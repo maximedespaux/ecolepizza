@@ -358,12 +358,21 @@ const setConsentPourStagiaire = async (req, res) => {
    fiche incomplète et la liste des stagiaires. L'AVANCEMENT du projet n'y figure pas, délibérément :
    le stagiaire consent à transmettre « la nature de mon projet », pas son financement ni sa date
    d'ouverture (cf. l'en-tête de lib/projet.js). */
-async function composerLignes(conn, orgId, retenus, etats) {
+async function composerLignes(conn, orgId, retenus, etats, refuses = []) {
     const choisis = await consentements.champsOrganisme(conn, orgId);
+    /* L'IDENTITÉ NE DÉPEND PLUS DE LA RÉPONSE (2026-09-23) : qui a refusé garde son nom et son
+       prénom dans la liste, et RIEN d'autre. L'école dit qui elle a formé ; le stagiaire refuse
+       d'être démarché. Les champs d'identité restent bornés par ce que l'école a choisi de
+       transmettre : décocher « Nom » dans ses réglages vaut pour tout le monde. */
+    const identite = choisis.filter((c) => consentements.estIdentite(c));
     const champsParStagiaire = new Map(retenus.map((l) => {
         const annonces = etats.get(l.id)?.champsAnnonces || [];
-        return [l.id, choisis.filter((c) => annonces.includes(c))];
+        /* LES CHAMPS D'IDENTITÉ SONT AJOUTÉS MÊME S'ILS N'ÉTAIENT PAS ANNONCÉS le jour de la
+           réponse : ils ne sont plus soumis à l'accord, donc les faire dépendre d'une phrase
+           ancienne ferait deux régimes sans raison lisible. */
+        return [l.id, choisis.filter((c) => annonces.includes(c) || consentements.estIdentite(c))];
     }));
+    for (const l of refuses) champsParStagiaire.set(l.id, identite);
     /* La colonne de l'export est l'UNION de ce qui part réellement : une colonne présente pour un
        seul stagiaire doit exister dans le tableau, vide pour les autres. La cacher masquerait le
        fait que la donnée est bel et bien partie pour celui-là. */
@@ -389,8 +398,14 @@ async function composerLignes(conn, orgId, retenus, etats) {
         entreprise_ville: l.company_town || '',
     });
 
-    const lignes = retenus.map((l) => {
-        const permis = champsParStagiaire.get(l.id);
+    /* UNE SEULE LISTE, DANS L'ORDRE ALPHABÉTIQUE : séparer les refus en deuxième moitié
+       désignerait à un tiers qui a refusé, ce qui est exactement l'information qu'il n'a pas à
+       recevoir. Leurs colonnes de coordonnées sont vides, comme celles d'un accord partiel. */
+    const tous = [...retenus, ...refuses].sort((a, b) => (
+        `${a.last_name || ''} ${a.first_name || ''}`.localeCompare(`${b.last_name || ''} ${b.first_name || ''}`, 'fr')));
+
+    const lignes = tous.map((l) => {
+        const permis = champsParStagiaire.get(l.id) || [];
         const v = valeurs(l);
         /* Un champ non couvert pour CE stagiaire sort VIDE, pas absent : le tableau garde la même
            forme d'une ligne à l'autre, et un CSV dont les colonnes changent de sens d'une ligne à
@@ -514,26 +529,43 @@ const produireTransmissionPartenaire = async (req, res) => {
         const etats = await consentements.etatParStagiaire(
             conn, req.user.organization_id, uniques.map((l) => l.id), FINALITE);
         const retenus = uniques.filter((l) => etats.get(l.id)?.accorde === true);
-        if (!retenus.length) {
+        /* UN REFUS NE RETIRE PLUS LA PERSONNE DE LA LISTE (2026-09-23) : il retire ses
+           COORDONNÉES. Le partenaire apprend qu'elle a été formée, et rien de plus.
+           « JAMAIS SOLLICITÉ » RESTE HORS DE LA LISTE, et c'est la différence qui compte : cette
+           personne n'a jamais lu la phrase, personne ne peut transmettre en son nom. */
+        const refuses = uniques.filter((l) => etats.get(l.id)?.accorde === false);
+        if (!retenus.length && !refuses.length) {
             return res.json({ data: {
                 partenaire: partenaire.name, lignes: [], champs: [], journalise: false,
-                message: 'Aucun stagiaire de cette période n\'a consenti à la transmission.',
+                message: 'Aucun stagiaire de cette période n\'a été sollicité pour la transmission.',
             } });
         }
 
-        const { champs, lignes } = await composerLignes(conn, req.user.organization_id, retenus, etats);
+        const { champs, lignes } = await composerLignes(
+            conn, req.user.organization_id, retenus, etats, refuses);
 
+        /* LE JOURNAL PORTE LES DEUX GROUPES : ce qui est parti, c'est cette liste-là, refus
+           compris. N'y inscrire que les accords ferait mentir la trace sur ce qui a été envoyé —
+           et cette trace est la seule preuve dont l'école dispose. */
+        const envoyes = [...retenus, ...refuses];
+        const mention = refuses.length
+            ? `${champs.join(', ')} · ${refuses.length} refus (nom, prénom seuls)`
+            : champs.join(', ');
         await conn.query(
             `INSERT INTO partner_disclosure
                (id, organization_id, partner_id, session_id, learner_ids, learners_count,
                 champs_envoyes, envoye_par)
              VALUES (?, ?, ?, NULL, ?, ?, ?, ?)`,
             [crypto.randomUUID(), req.user.organization_id, partenaire.id,
-             retenus.map((l) => l.id).join(','), retenus.length,
-             champs.join(', ').slice(0, 255), req.user.id]);
+             envoyes.map((l) => l.id).join(','), envoyes.length,
+             mention.slice(0, 255), req.user.id]);
         logAudit(req, 'partner_disclosure.create', 'Partner', partenaire.id);
 
+        /* L'ÉCRAN DOIT POUVOIR LE DIRE : « douze ont accepté, trois n'ont donné que leur nom ».
+           Sans ces deux nombres, une colonne e-mail à moitié vide se lirait comme une fiche
+           incomplète, et non comme un refus respecté. */
         res.json({ data: { partenaire: partenaire.name, lignes, champs, journalise: true,
+            acceptes: retenus.length, refus: refuses.length,
             periode: { depuis, jusqu_a: jusqua } } });
     } catch (err) {
         if (isMissingSchema(err)) return refusLecture(res, err, 'transmission par partenaire');
