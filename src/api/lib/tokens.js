@@ -10,6 +10,7 @@
 // rétro-compatibles ({Personne}, {Niveau suggérer}, {Nom entreprise}…).
 
 const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
+const { montantFr, pourcentFr } = require('./montants.js');
 const { parseDaySchedules, fmtHM } = require('./emargement.js');
 /* Le barème RETRADUIT la mesure pour le tableau de détail : « 100 » seul ne dirait pas s'il
    s'agit de secondes, de points ou d'un index de niveau. Même source que la saisie. */
@@ -271,12 +272,13 @@ const TOKEN_CATALOG = [
     },
     {
         group: 'Facture',
-        /* ⚠️ LES MONTANTS DE FACTURE S'ÉCRIVENT AVEC UN POINT ET DEUX DÉCIMALES — « 17.82 € ».
-           C'est ce que produit le code (`toFixed(2)`, ici comme dans invoice.controller), et les
-           exemples le disaient en virgule : la palette promettait une typographie française que
-           le document n'imprime pas. Les exemples disent désormais la vérité. Passer à la
-           virgule est une correction À PART : elle touche le rendu de toutes les factures, y
-           compris celles déjà émises si on les réimprime. */
+        /* LES MONTANTS DE FACTURE S'ÉCRIVENT EN VIRGULE ET DEUX DÉCIMALES — « 17,82 € »
+           (2026-09-23). Ils sortaient avec un POINT, ce que produit `toFixed(2)`, pendant que les
+           exemples d'ici promettaient déjà la virgule : la palette annonçait une typographie
+           française que le document n'imprimait pas. Le format vit maintenant en un seul endroit
+           (`lib/montants.js`) et les exemples le recopient — ⚠️ le XML Factur-X, lui, garde le
+           point, la norme l'exige. Une facture déjà émise et réimprimée sort donc en virgule :
+           les montants sont les mêmes, seule leur écriture change. */
         tokens: [
             { key: 'Numéro facture', label: 'Numéro', sample: 'F-2026-0012' },
             { key: 'Type facture', label: 'Type de pièce', sample: 'Facture' },
@@ -288,16 +290,16 @@ const TOKEN_CATALOG = [
             { key: 'Acheteur', label: 'Nom de l’acheteur', sample: 'M. Jean DUPONT' },
             { key: 'Adresse acheteur', label: 'Adresse de l’acheteur', sample: '12 rue des Fours, 33000 BORDEAUX' },
             { key: 'Siret acheteur', label: 'SIRET de l’acheteur', sample: '123 456 789 00012' },
-            { key: 'Total HT', label: 'Total hors taxes', sample: '17.82 €' },
-            { key: 'Total TVA', label: 'Total TVA', sample: '3.56 €' },
-            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21.38 €' },
-            { key: 'Total remise', label: 'Total des remises', sample: '4.20 €',
+            { key: 'Total HT', label: 'Total hors taxes', sample: '17,82 €' },
+            { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
+            { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
+            { key: 'Total remise', label: 'Total des remises', sample: '4,20 €',
               desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0.00 € » '
                   + 'quand il n’y a aucune remise. Vaut 0 sur les factures émises avant que la '
                   + 'remise ne soit enregistrée (migration 122).' },
-            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20.00 % sur 17.82 € : 3.56 €' },
+            { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
             { key: 'Règlement', label: 'Moyen(s) de paiement', sample: 'Espèces + CB' },
-            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300.00 € · CB : 700.00 €' },
+            { key: 'Détail règlement', label: 'Moyens et montants réglés', sample: 'Espèces : 300,00 € · CB : 700,00 €' },
             { key: 'Règlements', label: 'Tableau des règlements', sample: '(tableau moyen / montant)' },
             { key: 'Articles', label: 'Tableau des articles', sample: '(tableau désignation / qté / prix / total)' },
         ],
@@ -511,7 +513,7 @@ function articlesTable(list) {
  */
 function totalRow(cellules, mixte, remise) {
     const nombre = (s) => Number(String(s || '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-    const eur = (n) => `${n.toFixed(2)} €`;
+    const eur = (n) => montantFr(n);
 
     const qtes = cellules.map((c) => c['Quantité']).filter((q) => q !== '');
     const totalQte = qtes.length ? String(qtes.reduce((s, q) => s + nombre(q), 0)) : '';
@@ -869,7 +871,7 @@ function remiseTotale(list) {
 }
 
 function articleRowTokens(l, i) {
-    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    const eur = (n) => (n == null || n === '' ? '' : montantFr(n));
     const qte = Number(l.qty || 0) || null;
     const pu = l.unit_price_ht != null ? Number(l.unit_price_ht) : (qte ? Number(l.amount) / qte : null);
     const taux = Number(l.taxRate ?? 20);
@@ -882,7 +884,7 @@ function articleRowTokens(l, i) {
         'Prix unitaire HT': eur(pu),
         'Montant HT': eur(ht),
         'Remise': remiseTaux(l),
-        'Taux TVA': `${taux.toFixed(2)} %`,
+        'Taux TVA': pourcentFr(taux),
         'Montant TVA': eur(Math.round(ht * taux) / 100),
         'Montant TTC': eur(ht + Math.round(ht * taux) / 100),
     };
@@ -1220,7 +1222,7 @@ function invoiceTokens(inv = {}) {
         // (deux décimales, toujours) et NON avec euro(), qui rend une chaîne VIDE sur zéro et
         // laisse tomber les décimales d'un montant rond : un modèle qui réserve une ligne
         // « Remise » doit afficher « 0.00 € », pas un trou, et s'aligner sur Total HT / Total TTC.
-        'Total remise': `${remiseTotale(inv.articles).toFixed(2)} €`,
+        'Total remise': montantFr(remiseTotale(inv.articles)),
         'Détail TVA': inv.detailTva || '',
         // Règlement : le moyen (résumé) et le détail moyen+montant. {Règlements} en fait un tableau.
         'Règlement': inv.reglement || '',
@@ -1237,7 +1239,7 @@ function invoiceTokens(inv = {}) {
  * Le montant réglé par ce moyen, plus banque et numéro pour un chèque.
  */
 function paiementRowTokens(p, i) {
-    const eur = (n) => (n == null || n === '' ? '' : `${Number(n).toFixed(2)} €`);
+    const eur = (n) => (n == null || n === '' ? '' : montantFr(n));
     return {
         'N°': String(i + 1),
         'Moyen': p.method || '',

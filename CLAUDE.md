@@ -92,6 +92,16 @@ plus. `npm run lint` doit sortir en **0 erreur** : c'est ça, le contrat.
 coupée avant d'être triée, ni qu'un accusé de réception ne doit pas être signé par l'école.
 Après toute suppression de variable / refactor : **relire**, et **ouvrir le navigateur**.
 
+⚠️ **Une page rendue HORS de l'application n'a PAS ses couleurs** (banc d'essai, capture, page de
+test qui charge `app.css` à la main). Toutes les variables de thème — `--border`, `--surface`,
+`--muted`… — sont déclarées sous `[data-theme="light"]` / `[data-theme="dark"]`, posé sur `<html>`
+par `index.html` puis par `ThemeContext`. Sans cet attribut, `var(--border)` vaut **vide**, et une
+déclaration qui l'emploie est invalidée EN ENTIER : `border-left:2px solid var(--border)` ne
+dessine alors aucun trait, en silence. Une marge posée dans la même règle, elle, s'applique — d'où
+une mise en page qui *paraît* juste, sans ses filets ni ses fonds. **Toute page de vérification
+doit donc porter `<html data-theme="light">`.** Relevé le 2026-09-23 : trois filets successifs ont
+été « vérifiés » sur un banc sans thème, où aucun n'existait.
+
 Compile-check d'un fichier JSX :
 ```bash
 esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
@@ -101,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1881 tests — 1874 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1886 tests — 1879 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des

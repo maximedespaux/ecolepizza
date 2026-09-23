@@ -23,8 +23,8 @@ const ORG = { legal_name: 'ECOLE PIZZAIOLO', siret: '87995513600012',
     address: '101 rue Alsace Lorraine', zip_code: '65300', town: 'Lannemezan' };
 const FACTURE = { number: 'F-2026-0013', typeLabel: 'Facture', dateFr: '21/07/2026',
     buyerName: 'Guillaume DESPAUX', buyerAddress: '12 rue des Fours, 33000 Bordeaux',
-    totalHt: '29.82 €', totalTva: '4.22 €', totalTtc: '34.04 €',
-    detailTva: '5.50 % sur 12.00 € : 0.66 € · 20.00 % sur 17.82 € : 3.56 €' };
+    totalHt: '29,82 €', totalTva: '4,22 €', totalTtc: '34,04 €',
+    detailTva: '5,50 % sur 12,00 € : 0,66 € · 20,00 % sur 17,82 € : 3,56 €' };
 const ARTICLES = [
     { name: 'Biberon valve 455 ml', qty: 2, unit_price_ht: 8.91, amount: 17.82, taxRate: 20 },
     { name: 'Farine T45', qty: 3, unit_price_ht: 4, amount: 12, taxRate: 5.5 },
@@ -46,8 +46,8 @@ test('les jetons propres à la facture se remplissent', () => {
     const v = resolveTokens(ctx());
     assert.strictEqual(v['Numéro facture'], 'F-2026-0013');
     assert.strictEqual(v['Acheteur'], 'Guillaume DESPAUX');
-    assert.strictEqual(v['Total TTC'], '34.04 €');
-    assert.match(v['Détail TVA'], /5\.50 %/);
+    assert.strictEqual(v['Total TTC'], '34,04 €');
+    assert.match(v['Détail TVA'], /5,50 %/);
 });
 
 test('un modèle rendu ne laisse aucun jeton vide', () => {
@@ -55,7 +55,7 @@ test('un modèle rendu ne laisse aucun jeton vide', () => {
         + '<p>{Acheteur} — {Adresse acheteur}</p><p>{Total HT} / {Total TVA} / {Total TTC}</p>';
     const t = texte(renderTemplateHtml(modele, ctx(), { title: 'Facture' }));
     for (const attendu of ['Facture F-2026-0013', 'ECOLE PIZZAIOLO', '87995513600012',
-        'Guillaume DESPAUX', '34.04 €']) {
+        'Guillaume DESPAUX', '34,04 €']) {
         assert.ok(t.includes(attendu), `« ${attendu} » manquant dans : ${t.slice(0, 200)}`);
     }
 });
@@ -67,19 +67,19 @@ test('le bloc {#Articles} produit une ligne par article', () => {
     assert.ok(t.includes('Biberon valve 455 ml'), 'premier article absent');
     assert.ok(t.includes('Farine T45'), 'second article absent');
     // Quantité, prix unitaire et TTC par ligne — ce que la facture doit montrer.
-    assert.ok(t.includes('8.91 €'), 'prix unitaire absent');
-    assert.ok(t.includes('21.38 €'), 'TTC de la ligne à 20 % absent');
-    assert.ok(t.includes('12.66 €'), 'TTC de la ligne à 5,5 % absent');
+    assert.ok(t.includes('8,91 €'), 'prix unitaire absent');
+    assert.ok(t.includes('21,38 €'), 'TTC de la ligne à 20 % absent');
+    assert.ok(t.includes('12,66 €'), 'TTC de la ligne à 5,5 % absent');
 });
 
 test('chaque ligne porte SON taux, pas celui de la facture', () => {
     // Un panier mixte est le cas où une erreur de taux coûte de l'argent.
     const a = articleRowTokens(ARTICLES[0], 0);
     const b = articleRowTokens(ARTICLES[1], 1);
-    assert.strictEqual(a['Taux TVA'], '20.00 %');
-    assert.strictEqual(b['Taux TVA'], '5.50 %');
-    assert.strictEqual(a['Montant TTC'], '21.38 €');
-    assert.strictEqual(b['Montant TTC'], '12.66 €');
+    assert.strictEqual(a['Taux TVA'], '20,00 %');
+    assert.strictEqual(b['Taux TVA'], '5,50 %');
+    assert.strictEqual(a['Montant TTC'], '21,38 €');
+    assert.strictEqual(b['Montant TTC'], '12,66 €');
 });
 
 test('une quantité absente laisse une cellule vide, pas un chiffre inventé', () => {
@@ -88,7 +88,7 @@ test('une quantité absente laisse une cellule vide, pas un chiffre inventé', (
     const r = articleRowTokens({ name: 'Formation NIV2', amount: 850, taxRate: 0 }, 0);
     assert.strictEqual(r['Quantité'], '');
     assert.strictEqual(r['Prix unitaire HT'], '');
-    assert.strictEqual(r['Montant HT'], '850.00 €');
+    assert.strictEqual(r['Montant HT'], '850,00 €');
 });
 
 test('un bloc sans article ne laisse pas le gabarit en clair', () => {
@@ -149,7 +149,7 @@ test('le bloc survit à la grammaire de l\'éditeur (marqueurs dans des cellules
     assert.strictEqual((out.match(/<tr/g) || []).length, 3, 'une ligne d\'en-tête + une par article');
     assert.doesNotMatch(out, /\{[#/]Articles\}/, 'les marqueurs doivent disparaître du rendu');
     assert.ok(out.includes('Biberon') && out.includes('Farine'), 'les deux articles doivent sortir');
-    assert.ok(out.includes('21.38 €') && out.includes('25.32 €'), 'chaque ligne garde SON taux');
+    assert.ok(out.includes('21,38 €') && out.includes('25,32 €'), 'chaque ligne garde SON taux');
 });
 
 test('les jetons de ligne fonctionnent AUSSI en PUCE (et non plus seulement en {Clé} brut)', () => {
@@ -352,7 +352,7 @@ test('le tableau des articles se termine par une ligne de totaux', () => {
     // unitaires ne produirait aucune grandeur ayant un sens.
     assert.strictEqual(c[i + 1], '5', '2 + 3 articles');
     assert.strictEqual(c[i + 2], '', 'les prix unitaires ne s\'additionnent pas');
-    assert.strictEqual(c[i + 3], '29.82 €');
+    assert.strictEqual(c[i + 3], '29,82 €');
 });
 
 test('LE TOTAL EST LA SOMME DE CE QUI EST IMPRIMÉ, pas des valeurs brutes', () => {
@@ -371,12 +371,12 @@ test('LE TOTAL EST LA SOMME DE CE QUI EST IMPRIMÉ, pas des valeurs brutes', () 
     const c = cellules(t);
     const i = c.lastIndexOf('Total');
     const ht = c.slice(0, i).filter((_, k) => k >= 6).filter((v) => /€$/.test(v));
-    assert.ok(c.includes('55.00 €') && c.includes('64.91 €'), 'colonne HT attendue');
-    assert.strictEqual(c[i + 3], '119.91 €', 'le total doit suivre la colonne, pas les valeurs brutes');
-    assert.notStrictEqual(c[i + 3], '119.90 €', 'somme des valeurs brutes : ne correspondrait pas à l\'affichage');
+    assert.ok(c.includes('55,00 €') && c.includes('64,91 €'), 'colonne HT attendue');
+    assert.strictEqual(c[i + 3], '119,91 €', 'le total doit suivre la colonne, pas les valeurs brutes');
+    assert.notStrictEqual(c[i + 3], '119,90 €', 'somme des valeurs brutes : ne correspondrait pas à l\'affichage');
     void ht;
     // Même exigence sur le TTC : 58,02 + 77,89.
-    assert.strictEqual(c[i + 5], '135.91 €');
+    assert.strictEqual(c[i + 5], '135,91 €');
 });
 
 test('la colonne TVA reste vide dans les totaux', () => {
@@ -396,7 +396,7 @@ test('sans quantités, la case des quantités totales reste vide', () => {
     ]));
     const i = c.lastIndexOf('Total');
     assert.strictEqual(c[i + 1], '');
-    assert.strictEqual(c[i + 3], '1800.00 €', 'le HT reste totalisé');
+    assert.strictEqual(c[i + 3], '1800,00 €', 'le HT reste totalisé');
 });
 
 test('la ligne de totaux a autant de cellules que l\'en-tête', () => {

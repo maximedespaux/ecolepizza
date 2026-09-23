@@ -58,7 +58,7 @@ test('un taux entier s\'écrit sans décimales, un taux fractionnaire les garde'
 test('le total des remises est la SOUSTRACTION brut − net', () => {
     // 9,90 − 8,91 = 0,99 € par unité, × 2 = 1,98 €.
     const t = invoiceTokens({ number: 'F-1', articles: [remisee()] });
-    assert.strictEqual(t['Total remise'], '1.98 €');
+    assert.strictEqual(t['Total remise'], '1,98 €');
 });
 
 test('… et PAS un calcul depuis le taux, qui dérive d\'un centime', () => {
@@ -78,7 +78,7 @@ test('… et PAS un calcul depuis le taux, qui dérive d\'un centime', () => {
         number: 'F-1',
         articles: [ligne({ qty: 9, unit_price_ht: 8.99, discount_pct: 10, unit_price_gross_ht: 9.99 })],
     });
-    assert.strictEqual(t['Total remise'], '9.00 €');
+    assert.strictEqual(t['Total remise'], '9,00 €');
 });
 
 test('le total additionne toutes les lignes remisées', () => {
@@ -86,18 +86,18 @@ test('le total additionne toutes les lignes remisées', () => {
         number: 'F-1',
         articles: [remisee(), remisee({ qty: 1 }), ligne()], // 1,98 + 0,99 + 0 (non remisée)
     });
-    assert.strictEqual(t['Total remise'], '2.97 €');
+    assert.strictEqual(t['Total remise'], '2,97 €');
 });
 
 test('sans aucune remise, le total vaut 0 € — et non une chaîne vide', () => {
     // Un modèle qui réserve une ligne « Remise » doit afficher un montant, pas un trou.
     const t = invoiceTokens({ number: 'F-1', articles: [ligne(), ligne()] });
-    assert.strictEqual(t['Total remise'], '0.00 €');
+    assert.strictEqual(t['Total remise'], '0,00 €');
 });
 
 test('une facture d\'avant la 122 ne fabrique pas de remise', () => {
     const t = invoiceTokens({ number: 'F-1', articles: [ligne(), ligne()] });
-    assert.strictEqual(t['Total remise'], '0.00 €');
+    assert.strictEqual(t['Total remise'], '0,00 €');
 });
 
 test('le tableau {Articles} montre la colonne Remise SEULEMENT si elle a du contenu', () => {

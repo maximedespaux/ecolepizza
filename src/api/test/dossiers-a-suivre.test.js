@@ -375,3 +375,33 @@ test('suivi : l\'en-tête d\'une entreprise mène AUSSI à sa fiche, sans casser
     assert.match(lireUi('styles/app.css'),
         /\.suivi-groupe-fiche\{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center\}/);
 });
+
+test('session : les inscrits d\'une entreprise sont EN RETRAIT sous elle, qui mène à sa fiche', () => {
+    /* TROISIÈME ÉCRAN, MÊME RÈGLE (2026-09-23). La liste des inscrits groupait déjà par
+       entreprise, mais à plat : l'intitulé se lisait comme un séparateur, rien ne disait où le
+       groupe s'arrête, et le premier individuel qui suivait paraissait encore en faire partie.
+       L'entreprise, elle, n'était cliquable nulle part. */
+    const SD = lireUi('pages/SessionDetail.jsx');
+    /* LE REGROUPEMENT EST LE MÊME QU'AILLEURS : la boucle écrite ici rangeait les mêmes dossiers
+       selon sa propre idée du lien entre un stagiaire et son employeur. */
+    assert.match(SD, /grouperParEntreprise\(enrollments\)/);
+    assert.ok(!/companies\.set\(e\.company_id/.test(SD), 'plus de regroupement écrit sur place');
+    /* L'ORDRE, LUI, APPARTIENT À CET ÉCRAN : la liste est alphabétique, et intercaler les
+       entreprises entre deux individuels donnerait une feuille de présence en escalier. Les
+       groupes passent donc en tête, les individuels ensuite, sous leur propre intitulé. */
+    assert.match(SD, /const companies = groupes\.filter\(\(g\) => g\.type === "company"\)/);
+    assert.match(SD, /const solo = groupes\.filter\(\(g\) => g\.type === "solo"\)\.map\(\(g\) => g\.d\)/);
+    assert.match(SD, /\{solo\.length > 0 && companies\.length > 0 &&/, 'l’intitulé « Individuels » ne paraît que s’il y a des groupes');
+
+    assert.match(SD, /<Link to=\{`\/entreprises\/\$\{g\.company_id\}`\} className="sess-comp-hd sess-comp-lien"/);
+    assert.match(SD, /const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen\(user, ENTREE_ENTREPRISES\)/);
+    assert.match(SD, /<div className="sess-comp-membres">\{g\.members\.map\(enrollRow\)\}<\/div>/,
+        'les membres vivent dans leur propre bloc, sans quoi le filet n’a rien à border');
+
+    /* LE FILET EST CE QUI REND L'APPARTENANCE VISIBLE. `var(--border)` et non `--border-soft` :
+       sur un fond de carte, le second ne se voit pas. */
+    const CSS = lireUi('styles/app.css');
+    assert.match(CSS, /\.sess-comp-membres\{margin-left:9px;padding-left:13px;border-left:2px solid var\(--border\)\}/);
+    assert.match(CSS, /\.sess-comp-membres > div:last-child\{border-bottom:none\}/,
+        'deux traits à deux pixels d’écart se lisent comme une erreur');
+});

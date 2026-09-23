@@ -151,7 +151,7 @@ test('les jetons {Règlement} et {Détail règlement} résument le paiement', ()
 test('une ligne de règlement porte moyen, montant, et infos chèque', () => {
     const c = paiementRowTokens({ method: 'Chèque', amount: 150, bank: 'BNP', cheque_number: '42' }, 0);
     assert.strictEqual(c['Moyen'], 'Chèque');
-    assert.strictEqual(c['Montant réglé'], '150.00 €');
+    assert.strictEqual(c['Montant réglé'], '150,00 €');
     assert.strictEqual(c['Banque'], 'BNP');
     assert.strictEqual(c['N° chèque'], '42');
 });
@@ -161,8 +161,8 @@ test('le bloc {#Paiements} produit une ligne par moyen, avec montant', () => {
     const modele = '<h1>x</h1><table>{#Paiements}<tr><td>{Moyen}</td><td>{Montant réglé}</td></tr>{/Paiements}</table>';
     const ctx = { org: {}, payments: [{ method: 'Espèces', amount: 300 }, { method: 'CB', amount: 700 }], invoice: { number: 'F1' } };
     const out = renderTemplateHtml(modele, ctx, { title: 'F', letterhead: false }).replace(/<[^>]+>/g, ' ');
-    assert.match(out, /Espèces\s+300\.00 €/, 'premier moyen + montant absent');
-    assert.match(out, /CB\s+700\.00 €/, 'second moyen + montant absent');
+    assert.match(out, /Espèces\s+300,00 €/, 'premier moyen + montant absent');
+    assert.match(out, /CB\s+700,00 €/, 'second moyen + montant absent');
 });
 
 test('la vente en caisse stocke l\'échéance de règlement', () => {

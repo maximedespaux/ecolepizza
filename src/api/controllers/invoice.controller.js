@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
+const { montantFr, pourcentFr } = require('../lib/montants.js');
 const { logAudit } = require('../lib/audit.js');
 const { buildCII, attacherFacturX, ventilerTva, manquantsFacturX } = require('../lib/facturx.js');
 const { getTemplateContent, loadOrgSteps } = require('./template.controller.js');
@@ -605,7 +606,7 @@ async function buildInvoicePdf(conn, orgId, data, xml) {
  */
 function invoiceCtx(org, data) {
     const v = ventilerTva(data);
-    const eur = (n) => `${Number(n || 0).toFixed(2)} €`;
+    const eur = (n) => montantFr(n || 0);
     const jour = (ymd) => (ymd ? `${ymd.slice(6, 8)}/${ymd.slice(4, 6)}/${ymd.slice(0, 4)}` : '');
     const a = data.buyer.address || {};
     const adresse = [a.line, [a.zip, a.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -672,7 +673,7 @@ function invoiceCtx(org, data) {
             totalHt: eur(v.base),
             totalTva: eur(v.taxe),
             totalTtc: eur(v.grand),
-            detailTva: v.groupes.map((g) => `${g.taux.toFixed(2)} % sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
+            detailTva: v.groupes.map((g) => `${pourcentFr(g.taux)} sur ${eur(g.base)} : ${eur(g.taxe)}`).join(' · '),
             reglement,           // {Règlement} : les moyens, ex. « Espèces + CB »
             detailReglement,     // {Détail règlement} : moyens + montants, ex. « Espèces : 300 € · CB : 700 € »
             // Le jeton {Articles} en fait un tableau complet (cf. articlesTable).

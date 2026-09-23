@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { peutEcrire } from "../lib/nav.js";
+import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -21,6 +21,11 @@ import NotesModal from "../components/NotesModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { lienDossier } from "../lib/lienDossier.js";
+import { grouperParEntreprise } from "../lib/dossiersASuivre.js";
+
+/* L'entrée « Entreprises » du menu : lire le nom d'un employeur n'ouvre pas sa fiche pour autant.
+   Même décision que le tableau de bord et le suivi (`canOpen`), qui est celle de la garde de route. */
+const ENTREE_ENTREPRISES = NAV.flatMap((g) => g.items).find((it) => it.to === "/entreprises");
 
 function SessionDetail() {
   const { id } = useParams();
@@ -33,6 +38,9 @@ function SessionDetail() {
   /* Modifier la session — ce que le serveur accepte sur /sessions, pas une liste de rôles : un
      formateur à qui l'organisme a accordé Sessions en modification y écrit (cf. peutEcrire). */
   const peutModifier = peutEcrire(user, "/sessions");
+  /* La fiche d'une entreprise n'est un lien que si le menu l'offre — la décision même de
+     la garde de route, comme au tableau de bord et au suivi. */
+  const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen(user, ENTREE_ENTREPRISES);
   const [session, setSession] = useState(null);
   const [allLearners, setAllLearners] = useState([]);
   const [team, setTeam] = useState([]);
@@ -427,23 +435,43 @@ function SessionDetail() {
                 <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
               </div>
             );
-            const companies = new Map();
-            const solo = [];
-            for (const e of enrollments) {
-              if (e.company_id) {
-                if (!companies.has(e.company_id)) companies.set(e.company_id, { name: e.company_name, list: [] });
-                companies.get(e.company_id).list.push(e);
-              } else solo.push(e);
-            }
+            /* QUI VIENT DE QUI : la MÊME règle qu'au tableau de bord et au suivi
+               (lib/dossiersASuivre.js). L'ORDRE, lui, appartient à cet écran : ici la liste est
+               alphabétique, et intercaler les entreprises entre deux individuels donnerait une
+               feuille de présence en escalier. Les groupes passent donc en tête, les individuels
+               ensuite, sous leur propre intitulé. */
+            const groupes = grouperParEntreprise(enrollments);
+            const companies = groupes.filter((g) => g.type === "company");
+            const solo = groupes.filter((g) => g.type === "solo").map((g) => g.d);
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {[...companies.entries()].map(([cid, g]) => (
-                  <div key={cid} className="sess-comp">
-                    <div className="sess-comp-hd"><Icon name="building" size={14} /> {g.name || "Entreprise"} <span className="arch-count">{g.list.length}</span></div>
-                    {g.list.map(enrollRow)}
+                {companies.map((g) => (
+                  <div key={g.company_id} className="sess-comp">
+                    {/* L'INTITULÉ MÈNE À LA FICHE DE L'ENTREPRISE (2026-09-23, comme au tableau de
+                        bord et au suivi) : c'est là que se signent SES documents — convention,
+                        accord de prise en charge —, qui ne sont sur la fiche d'aucun stagiaire de
+                        la liste. Lien seulement si le rôle peut l'ouvrir : sa page est réservée à
+                        l'administration, et un formateur y serait renvoyé à l'accueil sans un mot. */}
+                    {entrepriseOuvrable ? (
+                      <Link to={`/entreprises/${g.company_id}`} className="sess-comp-hd sess-comp-lien"
+                        title={`Ouvrir la fiche de ${g.company_name}`}>
+                        <Icon name="building" size={14} /> {g.company_name}
+                        <span className="arch-count">{g.members.length}</span>
+                        <Icon name="chevron-right" size={14} aria-hidden="true" />
+                      </Link>
+                    ) : (
+                      <div className="sess-comp-hd">
+                        <Icon name="building" size={14} /> {g.company_name}
+                        <span className="arch-count">{g.members.length}</span>
+                      </div>
+                    )}
+                    {/* LES MEMBRES EN RETRAIT, derrière un filet : sans lui, l'intitulé se lisait
+                        comme un séparateur et rien ne disait où le groupe s'arrête — le premier
+                        individuel qui suivait paraissait encore appartenir à l'entreprise. */}
+                    <div className="sess-comp-membres">{g.members.map(enrollRow)}</div>
                   </div>
                 ))}
-                {solo.length > 0 && companies.size > 0 && (
+                {solo.length > 0 && companies.length > 0 && (
                   <div className="sess-comp-hd" style={{ marginTop: 4 }}><Icon name="user" size={14} /> Individuels <span className="arch-count">{solo.length}</span></div>
                 )}
                 {solo.map(enrollRow)}
