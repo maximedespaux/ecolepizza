@@ -57,9 +57,10 @@ const etatDe = (s) => (s.accorde === null ? ETATS.jamais : s.accorde ? ETATS.oui
 const QUESTIONS = {
   partenaires: {
     titre: "Transmission aux partenaires", icone: "handshake",
-    annonce: "Les coordonnées d'un stagiaire ne partent chez un partenaire qu'avec son accord. Cette "
-      + "liste est composée par le serveur : elle écarte d'elle-même les refus et les personnes "
-      + "jamais sollicitées.",
+    annonce: "Les COORDONNÉES d'un stagiaire ne partent chez un partenaire qu'avec son accord. Son "
+      + "nom et son prénom, eux, sont transmis dans tous les cas\u00a0: un refus retire les "
+      + "coordonnées, pas la personne. Une personne jamais sollicitée, en revanche, ne figure nulle "
+      + "part — elle n'a jamais lu la question.",
   },
   droit_image: {
     titre: "Droit à l'image", icone: "camera",

@@ -74,6 +74,13 @@ const DROIT_IMAGE = {
         P(`${jeton('Organisme')} à transmettre ${jeton('Données partenaires')} à ses partenaires, dans le cadre de&nbsp;:`, JUSTIF),
         liste(['la communication d’exclusivités sur leurs produits ou services&nbsp;;',
             'l’envoi d’informations commerciales et promotionnelles liées à leurs activités.']),
+        /* CE QUE LA CASE NE GOUVERNE PAS, DIT SOUS LA CASE (2026-09-23). Depuis que l'identité
+           est transmise dans tous les cas, un document qui n'en parlerait pas ferait signer que
+           « n'autorise pas » retient tout — et le papier signé dirait le contraire de ce que
+           l'école fait. La phrase se tait d'elle-même si l'école ne transmet pas le nom : le
+           jeton sort vide, et `lignesVides` ne laisse pas de trou. */
+        P(`${jeton('Identité partenaires')} sont transmis dans tous les cas, afin que ces partenaires `
+            + 'sachent qui l’école a formé.', JUSTIF),
         P('<br>'),
         P(`Fait à ${jeton('Ville organisme')}, le ${jeton('Jour1')}`),
         P('Signature&nbsp;:'),

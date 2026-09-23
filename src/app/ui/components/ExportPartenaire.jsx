@@ -117,14 +117,16 @@ function ExportPartenaire({ partenaires, onErreur }) {
   if (!ouvert) {
     return (
       <button type="button" className="btn ghost" onClick={() => setOuvert(true)}>
-        <Icon name="table" size={15} /> Exporter les consentants
+        {/* « LES CONSENTANTS » N'EST PLUS VRAI depuis que le refus laisse passer le nom
+            (2026-09-23) : le bouton nommait une partie de la liste qu'il produit. */}
+        <Icon name="table" size={15} /> Produire la liste pour un partenaire
       </button>
     );
   }
 
   return (
     <div className="export-part">
-      <b><Icon name="download" size={13} /> Stagiaires consentants à transmettre</b>
+      <b><Icon name="download" size={13} /> Stagiaires à transmettre</b>
       {/* CE QUE L'APPLICATION NE FAIT PAS, dit avant qu'on le découvre. « Produire » à côté d'une
           icône de téléchargement pourrait laisser croire à un envoi automatique — le pire
           malentendu possible sur un écran qui manipule des coordonnées. */}
@@ -165,6 +167,14 @@ function ExportPartenaire({ partenaires, onErreur }) {
       <span className="hint">
         Sessions <b>terminées</b> dans cette période. Un stagiaire inscrit à plusieurs sessions
         n'apparaît qu'une fois.
+      </span>
+      {/* CE QUE CONTIENT LA LISTE, DIT AVANT DE LA PRODUIRE. Une colonne e-mail à moitié vide se
+          lirait autrement comme une fiche incomplète — et c'est un refus respecté. */}
+      <span className="hint">
+        Qui a <b>accepté</b> y figure avec les informations choisies dans vos réglages. Qui a
+        <b> refusé</b> n'y laisse que son nom et son prénom&nbsp;: le partenaire sait qui vous avez
+        formé, et n'a aucun moyen de le contacter. Qui n'a <b>jamais été sollicité</b> n'y figure
+        pas du tout.
       </span>
       {/* CE QUE LE CHOIX DU PARTENAIRE CHANGE — et surtout ce qu'il NE change PAS.
           La question est légitime : le consentement du stagiaire porte sur « les partenaires de
@@ -224,6 +234,13 @@ function ExportPartenaire({ partenaires, onErreur }) {
             <div className="export-part-tt">
               <b>{resultat.lignes.length} stagiaire{resultat.lignes.length > 1 ? "s" : ""}</b>
               <span className="hint">{resultat.champs.length} colonnes</span>
+              {/* LE DÉTAIL DES DEUX GROUPES : sans lui, on ne saurait pas lire les lignes dont
+                  les colonnes de coordonnées sont vides. */}
+              {resultat.refus > 0 && (
+                <span className="hint">
+                  · {resultat.acceptes} ont accepté, {resultat.refus} n'ont donné que leur nom
+                </span>
+              )}
               <span style={{ flex: 1 }} />
               <button className="btn sm" onClick={copier}><Icon name="copy" size={12} /> Copier</button>
               <button className="btn sm" onClick={telecharger}><Icon name="download" size={12} /> CSV</button>

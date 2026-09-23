@@ -162,8 +162,18 @@ test('{Données partenaires} dit ce qui a été ANNONCÉ à la personne, pas la 
        celle que l'application annonçait : deux textes pour un même accord. Le jeton lit la liste
        figée avec la réponse — celle du jour seulement si la personne n'a pas encore répondu. */
     const v = lib.valeursJetons({ reponses: { partenaires: { accorde: true, champs: ['nom', 'email'] } }, champsDuJour: ['nom', 'email', 'telephone'] });
-    assert.strictEqual(v['Données partenaires'], 'mon nom et mon adresse e-mail');
-    assert.strictEqual(lib.valeursJetons({ reponses: {}, champsDuJour: ['nom', 'telephone'] })['Données partenaires'], 'mon nom et mon téléphone');
+    /* ET L'IDENTITÉ N'Y EST PLUS (2026-09-23) : le document écrit « ☐ Autorise ☐ N'autorise pas …
+       à transmettre {Données partenaires} ». Y laisser le nom ferait signer que refuser le
+       retient, alors qu'il part dans tous les cas depuis que l'école l'a décidé. Il a son propre
+       jeton, et sa propre phrase sous la case. */
+    assert.strictEqual(v['Données partenaires'], 'mon adresse e-mail');
+    assert.strictEqual(v['Identité partenaires'], 'mon nom');
+    const jamais = lib.valeursJetons({ reponses: {}, champsDuJour: ['nom', 'prenom', 'telephone'] });
+    assert.strictEqual(jamais['Données partenaires'], 'mon téléphone');
+    assert.strictEqual(jamais['Identité partenaires'], 'mon nom et mon prénom');
+    /* L'ÉCOLE PEUT DÉCIDER DE NE PAS TRANSMETTRE LE NOM : le jeton sort alors vide, et la phrase
+       du modèle disparaît avec lui plutôt que d'annoncer une transmission qui n'a pas lieu. */
+    assert.strictEqual(lib.valeursJetons({ reponses: {}, champsDuJour: ['email'] })['Identité partenaires'], '');
 });
 
 test('un document signé garde la réponse du jour de sa signature', async () => {

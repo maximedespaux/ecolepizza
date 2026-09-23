@@ -160,9 +160,12 @@ test("l'export n'envoie que les champs annoncés au stagiaire", () => {
        pas — elle produit un export qui envoie un champ de trop, sans erreur ni alerte. */
     assert.match(src, /const choisis = await consentements\.champsOrganisme\(conn, orgId\);/,
         "L'export doit lire les champs que l'école a choisis…");
-    assert.match(src, /async function composerLignes\(conn, orgId, retenus, etats\)/,
+    assert.match(src, /async function composerLignes\(conn, orgId, retenus, etats, refuses = \[\]\)/,
         '…dans une fonction unique, partagée par les deux exports.');
-    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\)\)/,
+    /* L'INTERSECTION TIENT TOUJOURS pour ce qui est soumis à l'accord. Seule l'IDENTITÉ y
+       échappe depuis le 2026-09-23 : elle n'est plus consentie, elle est annoncée (cf.
+       `CHAMPS_IDENTITE`), et un refus ne retire donc plus le nom de la liste. */
+    assert.match(src, /choisis\.filter\(\(c\) => annonces\.includes\(c\) \|\| consentements\.estIdentite\(c\)\)/,
         "…et les croiser avec ce qui avait été annoncé à CHAQUE stagiaire.");
     assert.doesNotMatch(src, /champs = choisis;/,
         'Envoyer tout ce que l\'école a coché ignorerait ce à quoi chacun a dit oui.');

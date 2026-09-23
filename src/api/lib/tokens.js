@@ -125,7 +125,11 @@ const TOKEN_CATALOG = [
             { key: 'Case partenaires oui', label: 'Partenaires\u00a0: case «\u00a0Autorise\u00a0»', sample: '☒' },
             { key: 'Case partenaires non', label: 'Partenaires\u00a0: case «\u00a0N’autorise pas\u00a0»', sample: '☐' },
             { key: 'Choix partenaires', label: 'Partenaires\u00a0: «\u00a0autorise\u00a0» ou «\u00a0n’autorise pas\u00a0»', sample: 'autorise' },
-            { key: 'Données partenaires', label: 'Partenaires\u00a0: informations transmises', sample: 'mon nom, mon prénom, mon adresse e-mail et mon téléphone' },
+            { key: 'Données partenaires', label: 'Partenaires\u00a0: ce que la case autorise', sample: 'mon adresse e-mail et mon téléphone' },
+            /* L'IDENTITÉ EST TRANSMISE DANS TOUS LES CAS (2026-09-23) : elle a son jeton à part,
+               pour que le document puisse le DIRE au lieu de la ranger sous une case qui ne la
+               gouverne plus. */
+            { key: 'Identité partenaires', label: 'Partenaires\u00a0: ce qui part dans tous les cas', sample: 'mon nom et mon prénom' },
         ],
     },
     {
@@ -1098,6 +1102,7 @@ const OPTIONAL_TOKENS = new Set([
        celui-là même où la question lui est posée. */
     'Case photos oui', 'Case photos non', 'Choix photos',
     'Case partenaires oui', 'Case partenaires non', 'Choix partenaires', 'Données partenaires',
+    'Identité partenaires',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
