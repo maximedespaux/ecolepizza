@@ -784,6 +784,21 @@ export function getEnvoisMail() {
 /* ENVOIS PROGRAMMÉS (migration 179) : « 3 mois après la fin de la session ». La réponse porte
    aussi le VOCABULAIRE (déclencheurs, unités, jetons) — l'écran ne tient pas une seconde liste
    qui finirait par diverger de celle du serveur. */
+/* LES IMAGES DU MAILING (migration 180) : déposées une fois, citées dans les messages par un
+   marqueur `![nom](image:<id>)`. Elles partent en pièce jointe avec le courrier — jamais par une
+   URL que le client mail irait chercher (il la bloquerait, et elle tracerait qui ouvre). */
+export function televerserImageMail(fichier) {
+  const form = new FormData();
+  form.append("image", fichier);
+  return request("/mailing/images", { method: "POST", body: form });
+}
+export function getImagesMail() {
+  return request("/mailing/images");
+}
+export function supprimerImageMail(id) {
+  return request(`/mailing/images/${id}`, { method: "DELETE" });
+}
+
 export function getReglesMail() {
   return request("/mailing/regles");
 }

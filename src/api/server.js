@@ -274,12 +274,18 @@ app.listen(port, () => {
     const passerMails = () => passerLesReglesMail({
         conn: require('./config/database.js').promise(),
         orgName: org.orgInfo().short_name || org.orgInfo().legal_name || null,
-        envoyer: ({ to, objet, corps }) => {
-            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null });
+        envoyer: async ({ to, objet, corps, orgId }) => {
+            /* LES IMAGES DU MESSAGE voyagent aussi dans un envoi programmé : le même chargement
+               que « Écrire à un groupe », par la même fonction — deux copies finiraient par
+               diverger, et une règle enverrait des images que l'autre chemin attache. */
+            const { chargerImages, piecesImages } = require('./controllers/mailing.controller.js');
+            const images = await chargerImages(require('./config/database.js').promise(), orgId, corps)
+                .catch(() => []);
+            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null, images });
             /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une
                règle posée par l'école est SON envoi — elle l'arrête par son propre interrupteur
                « active », là où elle l'a écrite. */
-            return sendMail({ to, subject, html });
+            return sendMail({ to, subject, html, attachments: piecesImages(images) });
         },
     }).then((r) => { if (r.envoyes || r.echecs) console.log(`[mailing] ${r.envoyes} envoyé(s), ${r.echecs} échec(s)`); })
         .catch((err) => console.error('Envois programmés :', err.message));

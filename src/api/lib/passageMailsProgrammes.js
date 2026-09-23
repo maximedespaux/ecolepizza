@@ -111,6 +111,9 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
                 to: ligne.email,
                 objet: rendre(r.objet, valeurs),
                 corps: rendre(r.corps, valeurs),
+                /* L'ORGANISME VOYAGE AVEC LE MESSAGE : l'appelant en a besoin pour charger les
+                   images citées, et les chercher sans lui les prendrait chez n'importe qui. */
+                orgId: r.organization_id,
             });
             const statut = r2 && r2.sent ? 'envoye' : 'echec';
             if (statut === 'envoye') envoyes += 1; else echecs += 1;

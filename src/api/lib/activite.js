@@ -53,7 +53,7 @@ const SECTION_PAR_ENTITE = {
     /* LE MAILING EST UN RÉGLAGE D'ORGANISME : réécrire un e-mail automatique ou envoyer un
        message à un groupe se fait depuis Paramètres → Mailing, et c'est là que la cloche doit
        ramener (migration 178). */
-    MailModele: '/mailing', MailEnvoi: '/mailing', MailRegle: '/mailing',
+    MailModele: '/mailing', MailEnvoi: '/mailing', MailRegle: '/mailing', MailImage: '/mailing',
     CommunityPost: '/communaute', CommunityAnswer: '/communaute', Recipe: '/communaute',
     AccessProfile: '/roles', User: '/equipe',
     quest_category: '/pizza-quest-admin', quest_chapter: '/pizza-quest-admin',
@@ -103,7 +103,7 @@ const ENTITES_REGLAGE = new Set([
        groupe n'appelle aucun geste d'un collègue — c'est fait, et ça se retrouve au journal.
        Une cloche qui sonne chez tout le personnel à chaque message envoyé aux stagiaires
        apprendrait à ne plus être lue. */
-    'MailModele', 'MailEnvoi', 'MailRegle',
+    'MailModele', 'MailEnvoi', 'MailRegle', 'MailImage',
     // Administration de Pizza Quest.
     'quest_category', 'quest_chapter', 'quest_difficulty', 'quest_prerequisite', 'quest_question',
 ]);
