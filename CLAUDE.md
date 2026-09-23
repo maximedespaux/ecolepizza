@@ -101,7 +101,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1844 tests — 1837 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**1853 tests — 1846 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -154,7 +154,26 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **trois à jouer : 176, 177 et 178 ; la 175 jouée, à constater (relevé le 2026-09-23)**
+## 4. Migrations — **quatre à jouer : 176, 177, 178 et 179 ; la 175 jouée, à constater (relevé le 2026-09-23)**
+
+**179 est À JOUER** (`179_mails_programmes.sql`, les envois programmés : « 3 mois après la fin de la
+session », demandé le 2026-09-23 — à jouer APRÈS la 178, dont elle prolonge l'écran). Deux tables.
+`mail_regle` : un nom, un déclencheur (`fin_session`, `debut_session`, `inscription`), un sens
+(avant/après), un nombre et une unité (jour/mois/année), un filtre de formation facultatif, l'objet et le
+message. `mail_regle_envoi` : ce qui est déjà parti, une ligne par règle et par dossier — c'est cette clé
+primaire (regle_id, enrollment_id) qui empêche le deuxième envoi, même si deux passages se chevauchaient.
+UNE RÈGLE NE RATTRAPE JAMAIS LE PASSÉ : la colonne `depuis` porte la date de création, et le passage ne
+regarde jamais une date cible antérieure. Sans ce garde-fou, une règle « trois mois après la fin » créée un
+matin écrirait d'un coup à trois ans d'anciens stagiaires. LE CALCUL DE DATE VIT DANS `lib/mailsProgrammes.js`,
+pas dans une requête : les mois s'y comptent en mois (le 31 janvier plus un mois est le 28 février), et il
+s'éprouve sans base. Le passage (`lib/passageMailsProgrammes.js`) tourne toutes les 30 minutes depuis
+`server.js` et rattrape les jours manqués — un serveur arrêté une nuit ne perd aucun envoi.
+Sans elle, rien ne casse : l'onglet « Envois programmés » dit « pas encore disponible » et le passage
+s'arrête sans rien écrire. **Elle se vérifie par l'API, sans SQL** : créer une règle, puis `GET
+/api/mailing/regles` rend la liste (et non `disponible: false`). Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name IN ('mail_regle','mail_regle_envoi');`
+⚠️ Son revert SUPPRIME les deux tables — dont la MÉMOIRE de ce qui est parti : une règle recréée ensuite
+réécrirait à des stagiaires déjà touchés (bornée toutefois par le nouveau `depuis`).
 
 **178 est À JOUER** (`178_mails_personnalises.sql`, les e-mails de l'école écrits par l'école, demandé le
 2026-09-23). Deux tables. `mail_modele` : le texte d'un e-mail AUTOMATIQUE quand l'école l'a réécrit — une
