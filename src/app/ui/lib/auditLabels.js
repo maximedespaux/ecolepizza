@@ -157,6 +157,7 @@ const ACTION_LABEL = {
     /* Évaluation pratique (migration 148). La GRILLE est un réglage — on y fixe le barème ;
        la NOTE est un résultat d'examen, qui appartient à un stagiaire. */
     'evaluation.grille': ['Grille d\'évaluation enregistrée', A],
+    'evaluation.grille.retrait': ['Grille d\'évaluation retirée', A],
     'evaluation.note': ['Note d\'évaluation saisie', B],
     'evaluation.verdict': ['Avis du jury enregistré', B],
     'evaluation.cloture': ['Évaluation du jury clôturée', B],

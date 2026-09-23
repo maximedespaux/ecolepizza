@@ -156,6 +156,11 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
   const [parcoursKind, setParcoursKind] = useState("stagiaire"); // parcours : "stagiaire" | "entreprise"
   const [evalRole, setEvalRole] = useState("FORMATEUR"); // grille affichée : formateur ou jury
+  /* PLUSIEURS GRILLES CÔTÉ FORMATEUR (2026-09-23) : « Évaluation pratique — pâte », « — four ».
+     La liste vient de l'enfant, qui la reçoit avec la grille qu'il charge ; `grilleId` vaut
+     `null` (la première), un identifiant, ou « nouvelle » tant qu'elle n'est pas enregistrée. */
+  const [grilles, setGrilles] = useState([]);
+  const [grilleId, setGrilleId] = useState(null);
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }));
   const setChk = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.checked ? 1 : 0 }));
   // Couleur effective du badge + valeur hexadécimale pour le sélecteur natif.
@@ -479,13 +484,46 @@ function FormationModal({ program, onClose, onSaved, onError }) {
                   jury évalue le jour de l'examen, sur d'autres critères et avec d'autres
                   règles. Une formation a besoin des deux en même temps. */}
               <div className="seg" style={{ marginBottom: 12 }}>
-                <button type="button" className={"seg-btn" + (evalRole === "FORMATEUR" ? " on" : "")} onClick={() => setEvalRole("FORMATEUR")}>Notation du formateur</button>
+                <button type="button" className={"seg-btn" + (evalRole === "FORMATEUR" ? " on" : "")} onClick={() => { setEvalRole("FORMATEUR"); setGrilleId(null); }}>Notation du formateur</button>
                 <button type="button" className={"seg-btn" + (evalRole === "JURY" ? " on" : "")} onClick={() => setEvalRole("JURY")}>Grille du jury</button>
               </div>
+              {/* UNE FORMATION PEUT AVOIR PLUSIEURS GRILLES DE FORMATEUR, et c'est ce qu'on
+                  choisit ici. On ne note pas le travail de la pâte comme la conduite du four :
+                  deux grilles, deux séries d'exercices, deux seuils, deux résultats.
+                  LE JURY N'EN A QU'UNE : il délibère une fois, sur un procès-verbal. */}
+              {/* SUR SA PROPRE LIGNE : `.seg` est en `inline-flex`, si bien que les deux sélecteurs
+                  se suivaient sur une seule ligne et se lisaient comme UN choix de quatre —
+                  « Notation du formateur | Grille du jury | — pâte | — four ». Ce sont deux
+                  questions différentes : de QUI est la grille, puis LAQUELLE. */}
+              {evalRole === "FORMATEUR" && (grilles.length > 1 || grilleId === "nouvelle") && (
+                <div className="seg" style={{ display: "flex", width: "fit-content", maxWidth: "100%", marginBottom: 12, flexWrap: "wrap" }}>
+                  {grilles.map((g) => (
+                    <button type="button" key={g.id}
+                      className={"seg-btn" + ((grilleId ? g.id === grilleId : g.id === grilles[0]?.id) ? " on" : "")}
+                      onClick={() => setGrilleId(g.id)}>{g.label || "Sans titre"}</button>
+                  ))}
+                  {grilleId === "nouvelle" && <button type="button" className="seg-btn on">Nouvelle grille</button>}
+                </div>
+              )}
+              {evalRole === "FORMATEUR" && grilleId !== "nouvelle" && (
+                <p className="hint" style={{ margin: "-4px 0 12px" }}>
+                  <button type="button" className="btn ghost sm" onClick={() => setGrilleId("nouvelle")}>
+                    <Icon name="plus" size={14} /> Ajouter une grille
+                  </button>
+                  {grilles.length > 1 && <> · Cette formation en a <b>{grilles.length}</b>, chacune avec son intitulé et son seuil.</>}
+                </p>
+              )}
               {/* `key` : changer de rôle doit REMONTER le composant, sinon l'état de la grille
                   précédente (compétences, exercices) resterait affiché le temps du chargement —
                   et un « Enregistrer » à ce moment-là écrirait la mauvaise grille. */}
-              <GrilleEvaluation key={evalRole} programId={program.id} programTitle={form.title} role={evalRole} />
+              <GrilleEvaluation key={`${evalRole}-${grilleId || "premiere"}`} programId={program.id}
+                programTitle={form.title} role={evalRole} grilleId={evalRole === "FORMATEUR" ? grilleId : null}
+                onGrilles={(liste, id) => {
+                  setGrilles(liste);
+                  /* La grille tout juste créée cesse d'être « nouvelle » : on la désigne par son
+                     identifiant, sinon « Enregistrer » une seconde fois en créerait une autre. */
+                  setGrilleId((v) => (v === "nouvelle" && id ? id : (v && liste.some((g) => g.id === v) ? v : null)));
+                }} />
             </>
           )}
         </div>

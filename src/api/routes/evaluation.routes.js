@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getGrille, saveGrille, getNotesSession, saveNote,
+    getGrille, saveGrille, retirerGrille, getNotesSession, saveNote,
 } = require('../controllers/evaluation.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -13,6 +13,9 @@ router.use(authenticateToken);
    que l'émargement : le bureau prépare la feuille, le formateur la remplit. */
 router.get('/formation/:programId', authorizeRoles(...STAFF_ROLES), getGrille);
 router.put('/formation/:programId', authorizeRoles(...ADMIN_ROLES), saveGrille);
+/* RETIRER UNE GRILLE est du même ordre que la configurer — c'est décider qu'on ne note plus
+   là-dessus. Elle est désactivée, jamais supprimée : les notes déjà saisies restent lisibles. */
+router.delete('/grille/:id', authorizeRoles(...ADMIN_ROLES), retirerGrille);
 
 router.get('/session/:id', authorizeRoles(...STAFF_ROLES), getNotesSession);
 /* LE BUREAU ÉCRIT LA GRILLE DU FORMATEUR, et elle seule : les critères du jury se cochent

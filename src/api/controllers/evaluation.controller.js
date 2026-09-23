@@ -58,20 +58,59 @@ function paliersPropres(bareme, brut) {
  * formateur — demander celle du jury rend `null`, et les écrans affichent « aucune grille »
  * au lieu de tomber.
  */
-async function grilleDeLaFormation(conn, orgId, programId, role = 'FORMATEUR') {
+/**
+ * TOUTES LES GRILLES D'UNE FORMATION POUR UN RÔLE — `[{ id, label, pass_score… }]`, la plus
+ * ancienne d'abord.
+ *
+ * UNE FORMATION PEUT EN AVOIR PLUSIEURS (demandé le 2026-09-23) : « Évaluation pratique — pâte »
+ * et « — four » ne se notent pas le même jour, n'ont ni les mêmes exercices ni le même seuil, et
+ * chacune rend son propre résultat. La table le permettait déjà (aucune migration) : c'est le
+ * code qui n'en lisait qu'une, par un `LIMIT 1` SANS `ORDER BY` — laquelle, la base seule le
+ * savait, et elle pouvait changer d'avis d'une requête à l'autre.
+ * LE JURY RESTE À UNE SEULE GRILLE : il délibère une fois, sur un procès-verbal.
+ */
+async function grillesDeLaFormation(conn, orgId, programId, role = 'FORMATEUR') {
+    const r = roleValide(role);
+    const avecRole = await supporteJury(conn);
+    if (!avecRole && r === 'JURY') return [];
+    const [gs] = avecRole
+        ? await conn.query(
+            `SELECT id, label, pass_score, template_slug FROM evaluation_grille
+              WHERE organization_id = ? AND program_id = ? AND role = ? AND active = 1
+              ORDER BY created_at, label`, [orgId, programId, r])
+        : await conn.query(
+            `SELECT id, label, pass_score FROM evaluation_grille
+              WHERE organization_id = ? AND program_id = ? AND active = 1
+              ORDER BY created_at, label`, [orgId, programId]);
+    return gs;
+}
+
+async function grilleDeLaFormation(conn, orgId, programId, role = 'FORMATEUR', grilleId = null) {
     const r = roleValide(role);
     const avecRole = await supporteJury(conn);
     if (!avecRole && r === 'JURY') return null;
 
-    const [[g]] = avecRole
+    /* UNE GRILLE DEMANDÉE PAR SON IDENTIFIANT EST VÉRIFIÉE, pas crue : l'organisme, la formation
+       ET le rôle. Sans cela, un identifiant glissé dans l'URL ferait noter sur la grille d'une
+       autre formation — ou lire au formateur celle du jury. */
+    const [[g]] = grilleId
         ? await conn.query(
-            `SELECT id, program_id, role, label, pass_score, template_slug, active FROM evaluation_grille
-              WHERE organization_id = ? AND program_id = ? AND role = ? AND active = 1 LIMIT 1`,
-            [orgId, programId, r])
-        : await conn.query(
-            `SELECT id, program_id, label, pass_score, active FROM evaluation_grille
-              WHERE organization_id = ? AND program_id = ? AND active = 1 LIMIT 1`,
-            [orgId, programId]);
+            `SELECT id, program_id, ${avecRole ? 'role, ' : ''}label, pass_score,
+                    ${avecRole ? 'template_slug, ' : ''}active FROM evaluation_grille
+              WHERE id = ? AND organization_id = ? AND program_id = ?
+                    ${avecRole ? 'AND role = ?' : ''} AND active = 1`,
+            avecRole ? [grilleId, orgId, programId, r] : [grilleId, orgId, programId])
+        : avecRole
+            ? await conn.query(
+                `SELECT id, program_id, role, label, pass_score, template_slug, active FROM evaluation_grille
+                  WHERE organization_id = ? AND program_id = ? AND role = ? AND active = 1
+                  ORDER BY created_at, label LIMIT 1`,
+                [orgId, programId, r])
+            : await conn.query(
+                `SELECT id, program_id, label, pass_score, active FROM evaluation_grille
+                  WHERE organization_id = ? AND program_id = ? AND active = 1
+                  ORDER BY created_at, label LIMIT 1`,
+                [orgId, programId]);
     if (!g) return null;
 
     const cols = avecRole ? `${COLS_EX}, ${COLS_EX_149}` : COLS_EX;
@@ -95,13 +134,21 @@ async function grilleDeLaFormation(conn, orgId, programId, role = 'FORMATEUR') {
     return { ...g, role: g.role || 'FORMATEUR', exercices, competences };
 }
 
-/** GET /api/evaluations/formation/:programId — la grille, pour la configurer ou la lire. */
+/**
+ * GET /api/evaluations/formation/:programId — une grille, pour la configurer ou la lire.
+ *
+ * `?grille=<id>` désigne laquelle ; sans lui, la première. La RÉPONSE PORTE AUSSI LA LISTE des
+ * grilles de ce rôle : l'écran doit pouvoir proposer le choix sans un second aller-retour, et
+ * c'est le même aller-retour qui dit s'il y en a plusieurs.
+ */
 const getGrille = async (req, res) => {
     try {
         const conn = db.promise();
-        const g = await grilleDeLaFormation(conn, req.user.organization_id, req.params.programId,
-            req.query.role);
-        res.json({ data: g });
+        const orgId = req.user.organization_id;
+        const g = await grilleDeLaFormation(conn, orgId, req.params.programId,
+            req.query.role, req.query.grille || null);
+        const grilles = await grillesDeLaFormation(conn, orgId, req.params.programId, req.query.role);
+        res.json({ data: g, grilles });
     } catch (err) {
         if (err && err.code === 'ER_NO_SUCH_TABLE') {
             return res.status(409).json({ error: 'Migration 148 non jouée : évaluation indisponible.' });
@@ -136,13 +183,31 @@ const saveGrille = async (req, res) => {
         if (!avecRole && role === 'JURY') {
             return res.status(409).json({ error: 'Migration 149 non jouée : grille de jury indisponible.' });
         }
-        let [[g]] = avecRole
+        /* QUELLE GRILLE ON ÉCRIT, maintenant qu'une formation peut en avoir plusieurs :
+             · un `id` → celle-là, et elle doit être à cet organisme, à cette formation, à ce rôle ;
+             · `nouvelle: true` → une de plus, avec son propre intitulé ;
+             · rien → la première, ou une création s'il n'y en a aucune.
+           LE TROISIÈME CAS EXISTE POUR L'ANCIEN ÉCRAN : pendant un déploiement, une page déjà
+           ouverte enregistre sans identifiant. Créer d'office ferait alors une grille en double
+           à chaque « Enregistrer » — un doublon silencieux que personne ne relie à la mise à
+           jour. Le jury, lui, n'en a jamais qu'une : sa branche ne change pas. */
+        const vise = role !== 'JURY' && b.id ? String(b.id) : null;
+        const nouvelle = role !== 'JURY' && b.nouvelle === true;
+        let [[g]] = vise
             ? await conn.query(
-                'SELECT id FROM evaluation_grille WHERE organization_id = ? AND program_id = ? AND role = ? LIMIT 1',
-                [orgId, programId, role])
-            : await conn.query(
-                'SELECT id FROM evaluation_grille WHERE organization_id = ? AND program_id = ? LIMIT 1',
-                [orgId, programId]);
+                `SELECT id FROM evaluation_grille WHERE id = ? AND organization_id = ? AND program_id = ?
+                        ${avecRole ? 'AND role = ?' : ''} AND active = 1`,
+                avecRole ? [vise, orgId, programId, role] : [vise, orgId, programId])
+            : nouvelle
+                ? [[null]]
+                : avecRole
+                    ? await conn.query(
+                        `SELECT id FROM evaluation_grille WHERE organization_id = ? AND program_id = ? AND role = ?
+                          ORDER BY created_at, label LIMIT 1`, [orgId, programId, role])
+                    : await conn.query(
+                        `SELECT id FROM evaluation_grille WHERE organization_id = ? AND program_id = ?
+                          ORDER BY created_at, label LIMIT 1`, [orgId, programId]);
+        if (vise && !g) return res.status(404).json({ error: 'Grille introuvable.' });
         const label = String(b.label || 'Évaluation pratique').slice(0, 160);
         /* Seuil en POURCENTAGE, borné : au-delà de cent, aucune grille ne serait franchissable. */
         const seuil = b.pass_score === null || b.pass_score === undefined || b.pass_score === ''
@@ -288,7 +353,13 @@ const saveGrille = async (req, res) => {
         }
 
         logAudit(req, 'evaluation.grille', 'EvaluationGrille', g.id);
-        res.json({ data: await grilleDeLaFormation(conn, orgId, programId, role) });
+        /* ON RELIT CELLE QU'ON VIENT D'ÉCRIRE, par son identifiant : relire « la première »
+           renverrait une AUTRE grille dès qu'il y en a deux, et l'écran reprendrait ses
+           exercices — donc les identifiants d'une autre grille. */
+        res.json({
+            data: await grilleDeLaFormation(conn, orgId, programId, role, g.id),
+            grilles: await grillesDeLaFormation(conn, orgId, programId, role),
+        });
     } catch (err) {
         if (err && err.code === 'ER_NO_SUCH_TABLE') {
             return res.status(409).json({ error: 'Migration 148 non jouée : évaluation indisponible.' });
@@ -322,8 +393,13 @@ const getNotesSession = async (req, res, roleImpose) => {
            FORMATEUR` traversait intact. Un membre externe du jury lisait donc la grille du
            formateur en ajoutant un paramètre d'URL. */
         const role = roleImpose ? roleValide(roleImpose) : roleValide(req.query && req.query.role);
-        const grille = await grilleDeLaFormation(conn, orgId, s.program_id, role);
-        if (!grille) return res.json({ data: { session: s, grille: null, stagiaires: [] } });
+        /* `?grille=` CHOISIT LAQUELLE quand la formation en a plusieurs. Le choix est vérifié en
+           base comme le reste (organisme, formation, rôle) : une grille demandée qui n'est pas
+           de cette session répond « aucune grille », jamais celle d'à côté. */
+        const grilles = await grillesDeLaFormation(conn, orgId, s.program_id, role);
+        const voulue = (req.query && req.query.grille) || null;
+        const grille = await grilleDeLaFormation(conn, orgId, s.program_id, role, voulue);
+        if (!grille) return res.json({ data: { session: s, grille: null, grilles, stagiaires: [] } });
 
         const [enr] = await conn.query(
             `SELECT e.id AS enrollment_id, l.first_name, l.last_name
@@ -386,7 +462,7 @@ const getNotesSession = async (req, res, roleImpose) => {
                 verdict: verdicts.get(e.enrollment_id) || null,
             };
         });
-        res.json({ data: { session: s, grille, stagiaires } });
+        res.json({ data: { session: s, grille, grilles, stagiaires } });
     } catch (err) {
         if (err && err.code === 'ER_NO_SUCH_TABLE') {
             return res.status(409).json({ error: 'Migration 148 non jouée : évaluation indisponible.' });
@@ -480,6 +556,41 @@ const saveNote = async (req, res, roleAttendu) => {
 };
 
 /**
+ * DELETE /api/evaluations/grille/:id — retirer une grille d'une formation.
+ *
+ * ELLE EST DÉSACTIVÉE, JAMAIS SUPPRIMÉE, et c'est la même règle que pour un exercice : les notes
+ * déjà saisies restent lisibles sur les dossiers évalués, et la grille cesse simplement d'être
+ * proposée. La supprimer entraînerait ses exercices en cascade, et les notes avec — un résultat
+ * annoncé à un stagiaire disparaîtrait de son dossier.
+ *
+ * LE JURY N'EST PAS CONCERNÉ : il n'a qu'une grille, et la retirer ne ferait que la recréer vide
+ * au prochain enregistrement.
+ */
+const retirerGrille = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        const avecRole = await supporteJury(conn);
+        const [[g]] = await conn.query(
+            `SELECT id${avecRole ? ', role' : ''} FROM evaluation_grille WHERE id = ? AND organization_id = ?`,
+            [req.params.id, orgId]);
+        if (!g) return res.status(404).json({ error: 'Grille introuvable.' });
+        if (avecRole && g.role === 'JURY') {
+            return res.status(422).json({ error: 'La grille du jury ne se retire pas : une formation n’en a qu’une.' });
+        }
+        await conn.query('UPDATE evaluation_grille SET active = 0 WHERE id = ?', [g.id]);
+        logAudit(req, 'evaluation.grille.retrait', 'EvaluationGrille', g.id);
+        res.json({ data: { id: g.id } });
+    } catch (err) {
+        if (err && err.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(409).json({ error: 'Migration 148 non jouée : évaluation indisponible.' });
+        }
+        console.error('Erreur retrait grille :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * La grille est-elle CLÔTURÉE pour ce dossier ? Tolère la 149 non jouée (rien n'est clôturé).
  */
 async function estCloture(conn, grilleId, enrollmentId) {
@@ -547,15 +658,28 @@ const saveVerdict = async (req, res) => {
     }
 };
 
-/** Résultat d'un dossier — lu par les jetons de document et la condition de parcours. */
-async function resultatDossier(conn, orgId, enrollmentId) {
+/**
+ * Résultat d'un dossier — lu par les jetons de document et la condition de parcours.
+ *
+ * QUELLE GRILLE, quand la formation en a plusieurs : celle que le document DÉSIGNE. Chaque grille
+ * peut porter le modèle qui l'imprime (`template_slug`) ; le document rendu cherche donc la
+ * grille dont c'est le modèle, et retombe sur la première si aucune ne le revendique. Sans cette
+ * règle, l'attestation « four » imprimerait les points de la grille « pâte » — deux totaux qui
+ * n'ont ni le même maximum ni le même sens, et rien à l'écran pour le signaler.
+ */
+async function resultatDossier(conn, orgId, enrollmentId, options = {}) {
     try {
         const [[e]] = await conn.query(
             `SELECT e.id, s.program_id FROM enrollment e
                JOIN training_session s ON s.id = e.session_id
               WHERE e.id = ? AND e.organization_id = ?`, [enrollmentId, orgId]);
         if (!e || !e.program_id) return null;
-        const grille = await grilleDeLaFormation(conn, orgId, e.program_id);
+        let choisie = null;
+        if (options && options.slug) {
+            const liste = await grillesDeLaFormation(conn, orgId, e.program_id, 'FORMATEUR');
+            choisie = (liste.find((x) => x.template_slug === options.slug) || {}).id || null;
+        }
+        const grille = await grilleDeLaFormation(conn, orgId, e.program_id, 'FORMATEUR', choisie);
         if (!grille) return null;
         const actifs = grille.exercices.filter((x) => x.active);
         const [notes] = await conn.query(
@@ -683,6 +807,7 @@ async function cloturerCandidat(conn, orgId, userId, enrollmentId) {
 }
 
 module.exports = {
-    getGrille, saveGrille, getNotesSession, saveNote, saveVerdict,
-    grilleDeLaFormation, resultatDossier, resultatJuryDossier, cloturerCandidat, estCloture, roleValide,
+    getGrille, saveGrille, retirerGrille, getNotesSession, saveNote, saveVerdict,
+    grilleDeLaFormation, grillesDeLaFormation, resultatDossier, resultatJuryDossier,
+    cloturerCandidat, estCloture, roleValide,
 };

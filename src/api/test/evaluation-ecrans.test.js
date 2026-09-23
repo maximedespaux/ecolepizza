@@ -84,7 +84,7 @@ test('LES TOTAUX SONT RELUS DU SERVEUR après chaque note, pas recalculés à l\
 test('la relecture ne fait pas clignoter la barre de chargement', () => {
     /* Le formateur saisit en rafale : une barre de chargement par note transformerait l'écran
        en stroboscope. `silent` existe déjà pour les relectures de fond. */
-    assert.match(lire('api/apiClient.js'), /getEvaluationSession\(sessionId, silent, role\)/);
+    assert.match(lire('api/apiClient.js'), /getEvaluationSession\(sessionId, silent, role, grilleId\)/);
     assert.match(SAISIE, /charger\(true\)/);
 });
 
@@ -136,8 +136,11 @@ test('la grille se configure DANS LA FORMATION, et seulement sur une formation e
     assert.match(FORMATIONS, /<GrilleEvaluation [^>]*programId=\{program\.id\}/);
     /* CHANGER DE RÔLE DOIT REMONTER LE COMPOSANT. Sans `key`, l'état de la grille précédente
        (compétences, exercices) resterait affiché le temps du chargement — et un « Enregistrer »
-       à cet instant écrirait la mauvaise grille sur le mauvais rôle. */
-    assert.match(FORMATIONS, /<GrilleEvaluation key=\{evalRole\}/);
+       à cet instant écrirait la mauvaise grille sur le mauvais rôle.
+       LA MÊME RAISON VAUT DEPUIS QU'IL Y A PLUSIEURS GRILLES DE FORMATEUR (2026-09-23) : passer
+       de « — pâte » à « — four » doit remonter le composant, sinon ce sont les exercices de la
+       pâte qu'on enregistrerait sur le four. La clé porte donc les deux. */
+    assert.match(FORMATIONS, /<GrilleEvaluation key=\{`\$\{evalRole\}-\$\{grilleId/);
 });
 
 test('la rangée d\'onglets défile DANS SON CADRE, pas en poussant la page', () => {
