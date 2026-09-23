@@ -3,7 +3,7 @@ import { Icon } from "./Icon.jsx";
 import HelpDot from "./HelpDot.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { Squelette } from "./Squelette.jsx";
-import { getGrilleEvaluation, saveGrilleEvaluation, getTemplates, poserModelesJury } from "../api/apiClient.js";
+import { getGrilleEvaluation, saveGrilleEvaluation, retirerGrilleEvaluation, getTemplates, poserModelesJury } from "../api/apiClient.js";
 import { grilleDepart } from "../lib/grilleRS7404.js";
 import { secondesEnMinSec, minSecEnSecondes } from "../lib/format.js";
 
@@ -43,8 +43,17 @@ function maximumExercice(ex) {
 
 const vide = () => ({ id: null, label: "", consigne: "", bareme: "POINTS", max_points: 20, paliers: [] });
 
-function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
+/**
+ * PLUSIEURS GRILLES POUR UNE MÊME FORMATION, côté formateur (2026-09-23). `grilleId` dit laquelle
+ * on configure : un identifiant, `"nouvelle"` pour une grille encore vierge, ou rien pour la
+ * première. `onGrilles` remonte la liste au parent, qui affiche le choix — c'est le MÊME appel
+ * qui charge la grille et donne la liste, donc rien à recharger pour savoir s'il y en a deux.
+ */
+function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR", grilleId = null, onGrilles }) {
   const jury = role === "JURY";
+  const neuve = grilleId === "nouvelle";
+  const [idCourant, setIdCourant] = useState(neuve ? null : grilleId);
+  const [grilles, setGrilles] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [status, setStatus] = useState(null);
   const [label, setLabel] = useState("Évaluation pratique");
@@ -57,10 +66,20 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
 
   useEffect(() => {
     let vivant = true;
+    /* UNE GRILLE ENCORE VIERGE NE SE CHARGE PAS : elle n'existe qu'à l'enregistrement. On part
+       d'un écran vide, avec l'intitulé à écrire — c'est lui qui la distinguera des autres. */
+    if (neuve) {
+      setLabel(""); setSeuil(""); setSlug("");
+      setExercices([]); setCompetences([]); setIdCourant(null); setChargement(false);
+      return () => { vivant = false; };
+    }
     setChargement(true);
-    getGrilleEvaluation(programId, role).then((r) => {
+    getGrilleEvaluation(programId, role, grilleId).then((r) => {
       if (!vivant) return;
       const g = r.data;
+      setGrilles(r.grilles || []);
+      if (onGrilles) onGrilles(r.grilles || [], g ? g.id : null);
+      setIdCourant(g ? g.id : null);
       if (g) {
         setLabel(g.label || "Évaluation pratique");
         setSeuil(g.pass_score == null ? "" : String(g.pass_score));
@@ -90,14 +109,20 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
       setChargement(false);
     });
     return () => { vivant = false; };
-  }, [programId, role]);
+    /* `onGrilles` N'EST PAS DANS LES DÉPENDANCES, et c'est voulu : c'est une fonction du parent,
+       recréée à chaque rendu. La suivre relancerait le chargement à chaque rendu du parent —
+       donc en boucle, puisque ce chargement appelle `onGrilles`, qui fait rendre le parent.
+       `neuve` n'est qu'une lecture de `grilleId`, déjà dans la liste. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programId, role, grilleId]);
 
-  /* Les modèles de document ne servent qu'à la grille de jury (le document de clôture) : on ne
-     les charge pas pour le formateur, qui n'en produit pas. */
+  /* Les modèles ne servent qu'à DEUX cas : la grille de jury (son document de clôture) et une
+     formation à plusieurs grilles, où il faut dire quel document imprime laquelle. Ailleurs, on
+     ne charge rien — un formateur à grille unique n'a aucun choix à faire. */
   useEffect(() => {
-    if (!jury) return;
+    if (!jury && grilles.length < 2) return;
     getTemplates().then((r) => setModeles(r.data || [])).catch(() => {});
-  }, [jury]);
+  }, [jury, grilles.length]);
 
   const maj = (i, patch) => setExercices((xs) => xs.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const majPalier = (i, j, patch) => setExercices((xs) => xs.map((x, k) => (k === i
@@ -168,9 +193,14 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
     try {
       const r = await saveGrilleEvaluation(programId, {
         role,
+        /* L'IDENTIFIANT DIT QUELLE GRILLE ON ÉCRIT, et `nouvelle` en demande une de plus. Sans
+           l'un ni l'autre, le serveur reprend la première — ce qu'il faisait déjà, et ce qui
+           reste juste pour le jury, qui n'en a qu'une. */
+        id: neuve ? undefined : (idCourant || undefined),
+        nouvelle: neuve ? true : undefined,
         label,
         pass_score: seuil === "" ? null : Number(seuil),
-        template_slug: jury ? (slug || null) : undefined,
+        template_slug: jury || grilles.length > 1 ? (slug || null) : undefined,
         competences: jury ? competences.map((c) => ({
           id: c.id, code: c.code, label: c.label, min_valides: c.min_valides,
           criteres: (c.criteres || []).map((x) => ({ id: x.id, label: x.label, obligatoire: x.obligatoire ? 1 : 0 })),
@@ -183,7 +213,12 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
       /* On REPREND les identifiants renvoyés : sans cela, un deuxième enregistrement
          recréerait les exercices tout juste créés au lieu de les mettre à jour. */
       const g = r.data;
+      setGrilles(r.grilles || []);
+      if (onGrilles) onGrilles(r.grilles || [], g ? g.id : null);
       if (g) {
+        /* ON REPREND AUSSI L'IDENTIFIANT DE LA GRILLE : une grille tout juste créée n'en avait
+           pas, et un second « Enregistrer » en créerait une deuxième, identique. */
+        setIdCourant(g.id);
         setExercices((g.exercices || []).filter((e) => e.active && !e.competence_id).map((e) => ({
           ...e, consigne: e.consigne || "",
           paliers: (() => { try { return typeof e.paliers === "string" ? JSON.parse(e.paliers) || [] : (e.paliers || []); } catch { return []; } })(),
@@ -196,6 +231,21 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
     } catch (e) {
       setStatus({ type: "error", message: e.message });
     }
+  }
+
+  /* RETIRER N'EST OFFERT QUE S'IL EN RESTE UNE : une formation sans grille ne note plus rien, et
+     ce serait un effacement déguisé. La grille est désactivée, ses notes restent lisibles. */
+  const peutRetirer = !jury && !neuve && !!idCourant && grilles.length > 1;
+  async function retirerLaGrille() {
+    const nom = label || "cette grille";
+    if (!window.confirm(`Retirer « ${nom} » de cette formation ?\n\nLes notes déjà saisies restent lisibles sur les dossiers évalués ; la grille cesse d'être proposée.`)) return;
+    setStatus(null);
+    try {
+      await retirerGrilleEvaluation(idCourant);
+      const r = await getGrilleEvaluation(programId, role);
+      setGrilles(r.grilles || []);
+      if (onGrilles) onGrilles(r.grilles || [], r.data ? r.data.id : null);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   if (chargement) return <Squelette lignes={3} h={64} />;
@@ -220,7 +270,22 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
           <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)}
             placeholder={jury ? "Grille d'évaluation — jury" : "Évaluation pratique"} />
         </div>
-        {jury ? (
+        {!jury && grilles.length > 1 ? (
+          /* QUAND UNE FORMATION A PLUSIEURS GRILLES, un document qui porte {NoteTotale} doit
+             savoir LAQUELLE il imprime : deux grilles n'ont ni le même maximum ni le même sens,
+             et rien sur le papier ne dirait que c'est l'autre. Le modèle désigné ici reçoit les
+             résultats de cette grille ; les autres documents retombent sur la première. */
+          <div className="field">
+            <label>
+              Document qui imprime cette grille
+              <HelpDot text={"Cette formation a plusieurs grilles. Un document porteur des jetons {NoteTotale}, {NoteDétail}… imprime par défaut la PREMIÈRE.\n\nDésignez ici le modèle qui doit imprimer celle-ci : il recevra alors ses exercices, ses points et son seuil.\n\nLaisser vide : cette grille ne s'imprime sur aucun document particulier."} />
+            </label>
+            <select className="inp" value={slug} onChange={(e) => setSlug(e.target.value)}>
+              <option value="">Aucun document</option>
+              {modeles.map((m) => <option key={m.slug} value={m.slug}>{m.label || m.title || m.slug}</option>)}
+            </select>
+          </div>
+        ) : jury ? (
           <div className="field">
             <label>
               Document produit à la clôture
@@ -333,7 +398,14 @@ function GrilleEvaluation({ programId, programTitle, role = "FORMATEUR" }) {
           )}
         </span>
         <span style={{ flex: 1 }} />
-        <button type="button" className="btn primary" onClick={enregistrer}>Enregistrer la grille</button>
+        {peutRetirer && (
+          <button type="button" className="btn ghost" onClick={retirerLaGrille}>
+            <Icon name="trash" size={14} /> Retirer cette grille
+          </button>
+        )}
+        <button type="button" className="btn primary" onClick={enregistrer}>
+          {neuve ? "Créer la grille" : "Enregistrer la grille"}
+        </button>
       </div>
       <p className="hint" style={{ marginBottom: 0 }}>
         {jury

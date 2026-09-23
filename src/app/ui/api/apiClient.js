@@ -1436,10 +1436,20 @@ export async function ouvrirPvJury(sessionId) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-export function getGrilleEvaluation(programId, role) {
-  /* Une formation porte DEUX grilles : celle du formateur (notation continue) et celle du jury
-     (examen). Le rôle dit laquelle on demande. */
-  return request(`/evaluations/formation/${programId}${role ? `?role=${encodeURIComponent(role)}` : ""}`);
+/* Une formation porte au moins DEUX grilles : celle du formateur (notation continue) et celle du
+   jury (examen). Le rôle dit laquelle on demande — et côté formateur, `grilleId` dit LAQUELLE,
+   puisqu'il peut y en avoir plusieurs (« — pâte », « — four »). Sans lui, la première.
+   La réponse porte aussi la LISTE (`grilles`) : l'écran propose le choix sans second appel. */
+export function getGrilleEvaluation(programId, role, grilleId) {
+  const q = new URLSearchParams();
+  if (role) q.set("role", role);
+  if (grilleId) q.set("grille", grilleId);
+  const s = q.toString();
+  return request(`/evaluations/formation/${programId}${s ? `?${s}` : ""}`);
+}
+/* Retirer une grille la DÉSACTIVE : ses notes restent lisibles sur les dossiers déjà évalués. */
+export function retirerGrilleEvaluation(grilleId) {
+  return request(`/evaluations/grille/${grilleId}`, { method: "DELETE" });
 }
 export function saveGrilleEvaluation(programId, payload) {
   return request(`/evaluations/formation/${programId}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -1458,10 +1468,14 @@ export function verdictJury(payload) {
 export function cloturerJury(payload) {
   return request("/intervenant/evaluation/cloturer", { method: "POST", body: JSON.stringify(payload) });
 }
-export function getEvaluationSession(sessionId, silent, role) {
+export function getEvaluationSession(sessionId, silent, role, grilleId) {
   /* `silent` : la relecture qui suit CHAQUE note ne doit pas faire clignoter la barre de
      chargement — le formateur saisit en rafale, et l'écran passerait son temps à scintiller. */
-  return request(`/evaluations/session/${sessionId}${role ? `?role=${encodeURIComponent(role)}` : ""}`, { silent });
+  const q = new URLSearchParams();
+  if (role) q.set("role", role);
+  if (grilleId) q.set("grille", grilleId);
+  const s = q.toString();
+  return request(`/evaluations/session/${sessionId}${s ? `?${s}` : ""}`, { silent });
 }
 export function saveNoteEvaluation(payload) {
   return request("/evaluations/note", { method: "PUT", body: JSON.stringify(payload) });

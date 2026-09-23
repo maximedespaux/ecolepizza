@@ -139,10 +139,14 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     if (org) org.signature_image = decrypt(org.signature_image); // signature organisme chiffrée au repos
     /* La signature de l'organisme n'apparaît qu'une fois APPOSÉE sur ce document — il signe en
        dernier. D'ici là, un cadre vide, comme celui du stagiaire (cf. signatureOrganismeAffichee). */
+    /* LE MODÈLE DE CE DOCUMENT, retenu pour plus bas : une formation peut avoir plusieurs grilles
+       d'évaluation, et c'est le modèle qui dit laquelle ce document imprime (cf. resultatDossier). */
+    let slugDuDocument = null;
     if (org && documentId) {
         try {
             const [[gd]] = await conn.query('SELECT org_signature_data, template_slug, type FROM generated_document WHERE id = ?', [documentId]);
             if (gd) {
+                slugDuDocument = gd.template_slug || null;
                 const signataire = orgSignsDoc(await loadOrgSteps(organizationId), gd);
                 org.signature_image = signatureOrganismeAffichee(
                     org.signature_image, gd.org_signature_data ? decrypt(gd.org_signature_data) : null, signataire);
@@ -307,7 +311,8 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             const [[dfEval]] = await conn.query(
                 'SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
             if (dfEval && dfEval.enrollment_id) {
-                evaluation = await resultatDossier(conn, organizationId, dfEval.enrollment_id);
+                evaluation = await resultatDossier(conn, organizationId, dfEval.enrollment_id,
+                    { slug: slugDuDocument });
                 jury = await resultatJuryDossier(conn, organizationId, dfEval.enrollment_id);
             }
         } catch (e) { /* évaluation indisponible : jetons vides */ }

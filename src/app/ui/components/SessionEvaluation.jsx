@@ -44,15 +44,25 @@ function SessionEvaluation({ sessionId }) {
   const [choisi, setChoisi] = useState(null);   // exercice ou dossier mis en avant
   const [brouillon, setBrouillon] = useState({}); // saisies en cours, clé `${eid}|${exid}`
   const [enCours, setEnCours] = useState(null);   // clé en cours d'enregistrement
+  /* UNE FORMATION PEUT AVOIR PLUSIEURS GRILLES (2026-09-23) : « — pâte », « — four ». On note sur
+     l'une puis sur l'autre, souvent à des jours différents. `null` = la première. */
+  const [grilleId, setGrilleId] = useState(null);
 
-  async function charger(silencieux) {
+  async function charger(silencieux, quelle = grilleId) {
     try {
-      const r = await getEvaluationSession(sessionId, silencieux);
+      const r = await getEvaluationSession(sessionId, silencieux, undefined, quelle || undefined);
       setData(r.data);
       setErreur(null);
     } catch (e) { setErreur(e.message); }
   }
-  useEffect(() => { charger(); }, [sessionId]);
+  useEffect(() => { charger(false, grilleId); }, [sessionId, grilleId]);
+
+  /* LES SAISIES EN COURS NE SUIVENT PAS D'UNE GRILLE À L'AUTRE : un chrono tapé sur « pâte » et
+     pas encore enregistré n'a rien à faire dans un champ de « four », où il s'écrirait sur un
+     autre exercice. */
+  function changerDeGrille(id) {
+    setBrouillon({}); setChoisi(null); setStatus(null); setGrilleId(id);
+  }
 
   const exercices = useMemo(
     () => (data?.grille?.exercices || []).filter((e) => e.active),
@@ -101,9 +111,22 @@ function SessionEvaluation({ sessionId }) {
       </Card>
     );
   }
+  /* LE CHOIX DE LA GRILLE S'AFFICHE AUSSI SUR LES CARTES VIDES : si la grille ouverte n'a pas
+     encore d'exercice, il faut pouvoir passer à l'autre sans quitter la page. */
+  const choixGrille = (data.grilles || []).length > 1 ? (
+    <div className="seg" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+      {data.grilles.map((g) => (
+        <button type="button" key={g.id}
+          className={"seg-btn" + (g.id === data.grille?.id ? " on" : "")}
+          onClick={() => changerDeGrille(g.id)}>{g.label || "Sans titre"}</button>
+      ))}
+    </div>
+  ) : null;
+
   if (!exercices.length) {
     return (
       <Card title={data.grille.label || "Évaluation pratique"}>
+        {choixGrille}
         <p className="hint" style={{ margin: 0 }}>
           La grille ne contient aucun exercice.
           {peutConfigurer && <> <Link to="/formations" className="card-more">La compléter dans Formations →</Link></>}
@@ -114,6 +137,7 @@ function SessionEvaluation({ sessionId }) {
   if (!stagiaires.length) {
     return (
       <Card title={data.grille.label || "Évaluation pratique"}>
+        {choixGrille}
         <p className="hint" style={{ margin: 0 }}>Aucun stagiaire inscrit à évaluer.</p>
       </Card>
     );
@@ -139,6 +163,7 @@ function SessionEvaluation({ sessionId }) {
         {seuil != null && <> · réussite à {seuil} %</>}
       </span>}>
       <StatusMessage status={status} />
+      {choixGrille}
 
       <div className="seg" style={{ marginBottom: 12 }}>
         <button type="button" className={"seg-btn" + (sens === "exercice" ? " on" : "")} onClick={() => setSens("exercice")}>Par exercice</button>
