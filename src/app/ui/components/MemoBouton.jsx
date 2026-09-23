@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMemosCompte, marquerMemosVus } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
+import { compteurPastille } from "../lib/format.js";
 import { onMemosChange } from "../lib/events.js";
 import { ROLES_MEMO } from "../lib/memos.js";
 import { Icon } from "./Icon.jsx";
@@ -103,8 +104,8 @@ export default function MemoBouton() {
         aria-expanded={ouvert}
       >
         <Icon name="list-checks" size={18} />
-        {echus > 0 && <span className="notif-dot">{echus > 9 ? "9+" : echus}</span>}
-        {nouveaux > 0 && <span className="memo-dot-neuf">{nouveaux > 9 ? "9+" : nouveaux}</span>}
+        {echus > 0 && <span className="notif-dot">{compteurPastille(echus)}</span>}
+        {nouveaux > 0 && <span className="memo-dot-neuf">{compteurPastille(nouveaux)}</span>}
       </button>
 
       {ouvert && pos && createPortal(

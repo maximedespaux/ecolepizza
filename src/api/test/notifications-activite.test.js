@@ -253,11 +253,23 @@ test('la cloche sépare ce qui appelle un geste de ce qui s\'est passé', () => 
        tout le haut. Seize notifications adressées tombaient déjà hors de la coupe.
 
        Les deux listes voyagent donc séparément, chacune avec sa limite. */
-    assert.match(NOTIF, /res\.json\(\{ data: notifs[^}]*activite: activite/,
+    assert.match(NOTIF, /res\.json\(\{\s*data: notifs[\s\S]{0,120}activite: activite/,
         'le serveur renvoie deux listes, pas une liste mêlée');
     assert.ok(!/tout\.slice\(0, 40\)/.test(NOTIF), 'plus de coupe commune aux deux natures');
-    /* Le compte des non-lus reste sur l'ENSEMBLE : la pastille de la cloche annonce un total. */
-    assert.match(NOTIF, /const unread = \[\.\.\.notifs, \.\.\.activite\]\.filter/);
+    /* LE COMPTE NE SE PREND PLUS DANS LES LISTES, ET C'EST LE DÉFAUT SUIVANT (2026-09-23) :
+       elles sont coupées à 40 et 30, donc la pastille plafonnait là sans jamais le dire — un
+       chiffre précis, donc crédible, et faux dès qu'on avait plus à lire que la page n'en
+       montre. Deux comptes pris EN BASE, un par nature, puisque les écrans les distinguent
+       désormais par la couleur ; `unread` reste leur somme. */
+    assert.match(NOTIF, /SELECT COUNT\(\*\) AS n FROM notification/, 'les alertes se comptent en base');
+    assert.match(NOTIF, /SELECT COUNT\(\*\) AS n FROM audit_log a/, 'l\'activité aussi');
+    assert.match(NOTIF, /unread: nonLuesAlertes \+ nonLuesActivite/);
+    assert.match(NOTIF, /non_lues: \{ alertes: nonLuesAlertes, activite: nonLuesActivite \}/);
+    /* LE MÊME FILTRE POUR LA LISTE ET POUR LE COMPTE : deux copies finiraient par diverger, et
+       la pastille annoncerait des lignes introuvables. */
+    assert.match(NOTIF, /function entitesDeLActivite\(/);
+    assert.strictEqual((NOTIF.match(/= entitesDeLActivite\(\{ role, navAccess \}\)/g) || []).length, 2,
+        'la liste et le compte posent le MÊME filtre d\'entités');
     assert.match(PAGE, /rows\.alertes/, 'l\'écran a un bloc pour les alertes…');
     assert.match(PAGE, /rows\.activite/, '…et un pour l\'activité');
 });

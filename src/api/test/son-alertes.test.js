@@ -74,9 +74,13 @@ test('le Topbar ne sonne QUE pour une alerte, jamais pour l\'activité', () => {
     assert.match(abonnement, /document\.visibilityState === "hidden"\) loadNotifs\(\)/,
         'il ne fait que RECHARGER, et seulement un onglet masqué');
 
-    /* ON COMPTE LES ALERTES (`data`), PAS LE TOTAL (`unread`), qui inclut l'activité des collègues :
-       comparer le total aurait fait sonner chaque ligne d'activité au sondage suivant. */
-    assert.match(top, /const alertes = \(r\.data \|\| \[\]\)\.filter\(\(x\) => !x\.is_read\)\.length;/);
+    /* ON COMPTE LES ALERTES SEULES, JAMAIS LE TOTAL, qui inclut l'activité des collègues :
+       comparer le total ferait sonner chaque ligne d'activité au sondage suivant.
+       Le nombre vient désormais du serveur (`non_lues.alertes`), le compte dans la liste servant
+       de repli — les listes sont coupées à 40 lignes, et un compte qui plafonne ne peut plus
+       monter, donc ne sonnerait plus une fois le plafond atteint. */
+    assert.match(top, /const alertes = n\.alertes !== undefined \? n\.alertes : \(r\.data \|\| \[\]\)\.filter\(\(x\) => !x\.is_read\)\.length;/);
+    assert.ok(!/const alertes = \(r\.unread/.test(top), 'jamais le total');
     assert.match(top, /alertes > prevAlertes\.current && msDepuisMutationLocale\(\) > \d+\)/,
         'une hausse d\'alertes, hors écho de mon propre geste');
     assert.ok(!/prevUnread/.test(top), 'plus de comparaison sur le total');

@@ -279,7 +279,14 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;color:var(--muted);transition:.15s var(--ease);font-size:16px}
 .icon-btn:hover{color:var(--text);border-color:var(--ember1)}
 .icon-btn[aria-pressed="true"]{color:var(--dim)}
-.notif-dot{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--grad-ember);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1;box-shadow:0 2px 6px -1px rgba(220,62,55,.5)}
+.notif-dot{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--grad-ember);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1;box-shadow:0 2px 6px -1px rgba(220,62,55,.5);font-variant-numeric:tabular-nums}
+/* L'ACTIVITÉ DE L'ÉQUIPE, EN BLEU — deux nombres qui ne disent pas la même chose ne doivent pas
+   se ressembler : rouge pour ce qui appelle un geste, bleu pour ce qui s'est passé.
+   EN BAS À GAUCHE, ET NON EN HAUT : les deux pastilles d'un même bouton sont ancrées par des
+   bords opposés, et celle de gauche grandit donc VERS la droite. À trois chiffres, elle passait
+   par-dessus la rouge — « 999+ » recouvrait « 999+ », mesuré au banc le 2026-09-23. Séparées en
+   hauteur, elles ne peuvent plus se rencontrer, quelle que soit la largeur du nombre. */
+.notif-dot.ton-equipe{top:auto;bottom:-5px;right:auto;left:-5px;background:var(--blue);box-shadow:0 2px 6px -1px color-mix(in srgb,var(--blue) 50%,transparent)}
 .icon-btn.bell.ring svg{transform-origin:top center;animation:bellShake .82s var(--ease)}
 @keyframes bellShake{0%,100%{transform:rotate(0)}12%{transform:rotate(-15deg)}24%{transform:rotate(12deg)}38%{transform:rotate(-9deg)}52%{transform:rotate(6deg)}66%{transform:rotate(-3deg)}}
 .content{padding:26px 32px 70px;max-width:1240px;width:100%;margin:0 auto}
@@ -4967,9 +4974,11 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
 .memo-neuf{display:inline-flex;align-items:center;padding:1px 7px;border-radius:99px;font-weight:700;
   background:color-mix(in srgb,var(--blue) 16%,transparent);color:var(--blue)}
 .memo-ligne.neuf{box-shadow:inset 3px 0 0 var(--blue)}
-/* La seconde pastille du bouton, à GAUCHE et d'une autre couleur que celle des échéances : deux
-   chiffres qui ne disent pas la même chose ne doivent pas se ressembler. */
-.memo-dot-neuf{position:absolute;top:-5px;left:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;
+/* La seconde pastille du bouton, EN BAS À GAUCHE et d'une autre couleur que celle des échéances :
+   deux chiffres qui ne disent pas la même chose ne doivent pas se ressembler. En haut à gauche,
+   elle recouvrait la rouge dès que l'un des deux nombres passait à trois chiffres — les deux
+   pastilles sont ancrées par des bords opposés et grandissent l'une vers l'autre. */
+.memo-dot-neuf{position:absolute;bottom:-5px;left:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;font-variant-numeric:tabular-nums;
   background:var(--blue);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;line-height:1;
   box-shadow:0 2px 6px -1px color-mix(in srgb,var(--blue) 50%,transparent)}
 .memo-vide{margin:6px 0 0}

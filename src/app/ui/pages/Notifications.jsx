@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from "../api/apiClient.js";
+import { compteurPastille } from "../lib/format.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -55,10 +56,23 @@ function ligneLisible(n) {
  */
 /** « (3) » tant qu'il reste des non-lues dans cette liste — rien du tout sinon. Sur l'onglet
  *  fermé, c'est la seule chose qui dit qu'il s'y passe quelque chose. */
-function compte(liste) {
-  const n = (liste || []).filter((l) => !l.is_read).length;
-  return n ? ` (${n})` : "";
+/**
+ * LE COMPTE D'UN ONGLET, EN PASTILLE DE COULEUR.
+ *
+ * C'ÉTAIT « (3) » EN TEXTE GRIS, collé au libellé, et les deux onglets se ressemblaient donc
+ * exactement. Or ils ne disent pas la même chose : une ALERTE appelle un geste, l'ACTIVITÉ
+ * informe. Le rouge et le bleu sont ceux du bouton des mémos et des pastilles de la cloche —
+ * mêmes couleurs, mêmes significations, d'un bout à l'autre de l'application.
+ *
+ * LE NOMBRE VIENT DU SERVEUR quand il le donne : les listes sont coupées à 40 et 30 lignes, si
+ * bien que compter dedans faisait plafonner l'onglet à ce que la page affiche. Le repli sur la
+ * liste garde l'écran juste face à un serveur pas encore déployé.
+ */
+function Compte({ n, ton }) {
+  if (!n) return null;
+  return <span className={`badge ${ton}`} style={{ marginLeft: 7 }}>{compteurPastille(n)}</span>;
 }
+const nonLues = (liste) => (liste || []).filter((l) => !l.is_read).length;
 
 function Liste({ lignes, onOuvrir, onSupprimer, peutSupprimer }) {
   return (
@@ -129,7 +143,10 @@ function Notifications() {
   const [status, setStatus] = useState(null);
 
   async function load() {
-    try { const r = await getNotifications(); setRows({ alertes: r.data || [], activite: r.activite || [] }); }
+    try {
+      const r = await getNotifications();
+      setRows({ alertes: r.data || [], activite: r.activite || [], comptes: r.non_lues || null });
+    }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   useEffect(() => { load(); }, []);
@@ -206,12 +223,12 @@ function Notifications() {
         <button type="button" role="tab" aria-selected={onglet === "alertes"}
           className={"tab" + (onglet === "alertes" ? " on" : "")}
           onClick={() => setOnglet("alertes")}>
-          Alertes{compte(rows?.alertes)}
+          Alertes<Compte n={rows?.comptes?.alertes ?? nonLues(rows?.alertes)} ton="r" />
         </button>
         <button type="button" role="tab" aria-selected={onglet === "activite"}
           className={"tab" + (onglet === "activite" ? " on" : "")}
           onClick={() => setOnglet("activite")}>
-          Activité de l'équipe{compte(rows?.activite)}
+          Activité de l'équipe<Compte n={rows?.comptes?.activite ?? nonLues(rows?.activite)} ton="b" />
         </button>
       </div>
 
