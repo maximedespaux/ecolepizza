@@ -5,6 +5,7 @@ import { getEmargementTemplates, updateEmargementTemplate, getOrganisation, upda
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
+import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
 export const EMARG_DEFAULTS = {
   orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
@@ -60,15 +61,18 @@ export default function EmargementEditor() {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSaving(false); }
   }
-  function onLogo(e) {
-    const f = e.target.files?.[0]; if (!f) return;
-    if (f.size > 1.5 * 1024 * 1024) { setStatus({ type: "error", message: "Logo trop lourd (max 1,5 Mo)." }); return; }
-    const rd = new FileReader();
-    rd.onload = async () => {
-      try { await updateOrganisation({ logo_image: rd.result }); setOrg((p) => ({ ...p, logo_image: rd.result })); setStatus({ type: "success", message: "Logo enregistré." }); }
-      catch (err) { setStatus({ type: "error", message: err.message }); }
-    };
-    rd.readAsDataURL(f);
+  async function onLogo(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    /* RÉDUIT, PLUS REFUSÉ. Profil `marque` : la TRANSPARENCE est gardée — un logo aplati sur du
+       blanc traîne un rectangle visible sur le papier à en-tête comme sur le thème sombre. */
+    try {
+      const logo = await reduireEnDataUrl(f, PROFILS.marque);
+      await updateOrganisation({ logo_image: logo });
+      setOrg((p) => ({ ...p, logo_image: logo }));
+      setStatus({ type: "success", message: "Logo enregistré." });
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   async function removeLogo() {
     try { await updateOrganisation({ logo_image: "" }); setOrg((p) => ({ ...p, logo_image: null })); }

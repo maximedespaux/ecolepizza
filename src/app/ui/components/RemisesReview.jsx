@@ -4,6 +4,7 @@ import { getDossierRemises, deposerRemise, remiseFichierUrl, supprimerRemiseFich
 import Badge from "./Badge.jsx";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 /**
  * DOCUMENTS REMIS AU STAGIAIRE — côté PERSONNEL, pour un dossier (enrollment) donné.
@@ -42,7 +43,10 @@ export default function RemisesReview({ enrollmentId, refresh }) {
   async function envoyer(remiseTypeId, file) {
     if (!file) return;
     setOccupe(remiseTypeId); setErreur(null);
-    try { await deposerRemise(enrollmentId, remiseTypeId, file); load(); }
+    /* MÊME TRI QU'AILLEURS : un PDF part intact, un scan photographié est réduit. Le plafond
+       du serveur est ici de 10 Mo, mais rien ne sert d'y loger 8 Mo de photo pour un document
+       qui sera lu à l'écran. */
+    try { await deposerRemise(enrollmentId, remiseTypeId, await reduireSiImage(file, PROFILS.piece)); load(); }
     catch (e) { setErreur(e.message); }
     finally { setOccupe(null); }
   }
