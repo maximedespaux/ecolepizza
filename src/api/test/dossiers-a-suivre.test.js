@@ -349,3 +349,29 @@ test('tableau de bord : les stagiaires d\'une entreprise se rangent sous elle, e
     assert.match(CTRL, /c\.name AS company_name,/);
     assert.match(CTRL, /LEFT JOIN company c ON c\.id = e\.company_id/);
 });
+
+test('suivi : l\'en-tête d\'une entreprise mène AUSSI à sa fiche, sans casser le dépli', () => {
+    /* MÊME DEMANDE QU'AU TABLEAU DE BORD, un cran plus loin (2026-09-23) : ici l'en-tête n'était
+       QU'une bascule. On dépliait le groupe, on lisait ses stagiaires, et l'entreprise — dont la
+       convention et l'accord de prise en charge se signent sur SA fiche — restait hors d'atteinte
+       depuis l'écran qui, justement, dit qu'il lui manque des documents. */
+    const SUIVI = lireUi('pages/Suivi.jsx');
+    const tete = SUIVI.slice(SUIVI.indexOf('<div className="suivi-groupe-tete">'),
+        SUIVI.indexOf('suivi-groupe-membres'));
+    assert.match(tete, /<Link to=\{`\/entreprises\/\$\{g\.company_id\}`\}/);
+    /* LE LIEN EST LE FRÈRE DU BOUTON, PAS SON ENFANT. Un `<a>` dans un `<button>` n'est pas du
+       HTML valide — le navigateur défait l'imbrication à l'analyse — et le clic déclencherait les
+       deux gestes : on partirait sur la fiche en ayant déplié le groupe qu'on quitte. */
+    assert.ok(tete.indexOf('</button>') < tete.indexOf('suivi-groupe-fiche'),
+        'le bouton doit être refermé AVANT le lien');
+    assert.match(tete, /aria-label=\{`Ouvrir la fiche de \$\{g\.company_name\}`\}/,
+        'sur téléphone le libellé disparaît : sans aria-label, il ne resterait qu’un chevron muet');
+    /* LA MÊME GARDE DE RÔLE QU'AU TABLEAU DE BORD : la fiche d'une entreprise est réservée à
+       l'administration, et un auditeur suivi d'un lien serait renvoyé à l'accueil sans un mot. */
+    assert.match(SUIVI, /const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen\(user, ENTREE_ENTREPRISES\)/);
+    assert.match(SUIVI, /\{entrepriseOuvrable && \(/);
+    /* 44 PX AU POUCE. Sans libellé, le lien tombait à 30 px de côté : on le manquait, et on
+       dépliait le groupe à la place — l'inverse de ce qu'on voulait faire. */
+    assert.match(lireUi('styles/app.css'),
+        /\.suivi-groupe-fiche\{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center\}/);
+});

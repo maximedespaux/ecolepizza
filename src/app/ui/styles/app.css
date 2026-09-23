@@ -5795,6 +5795,20 @@ label .requis {
 .suivi-ligne{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left}
 .suivi-ligne-texte{flex:1;min-width:0}
 .suivi-ligne-etat{display:flex;align-items:center;gap:12px;flex-shrink:0}
+/* L'EN-TÊTE D'UN GROUPE D'ENTREPRISE porte DEUX gestes : déplier (le bouton, qui prend toute la
+   place restante) et ouvrir la fiche de l'entreprise (le lien, à droite). Ils sont côte à côte et
+   non imbriqués : un lien dans un bouton n'est pas du HTML valide, et le clic ferait les deux.
+   SUR TÉLÉPHONE, le lien perd son libellé — « Sa fiche » lui coûtait 70 px des 375, pris au nom
+   de l'entreprise, qui est ce qu'on lit d'abord. Le chevron reste, et l'intitulé avec lui
+   (title + aria-label), donc rien ne se perd pour qui l'écoute ou le survole. */
+.suivi-groupe-tete{display:flex;align-items:center}
+.suivi-groupe-fiche{flex:0 0 auto;padding:8px 14px 8px 4px;white-space:nowrap}
+@media (max-width:640px){
+  /* 44 px DE CÔTÉ, pas la taille du chevron : sans libellé, le lien ne faisait plus que 30 px —
+     on le manquait au pouce, et on dépliait le groupe à la place. */
+  .suivi-groupe-fiche{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center}
+  .suivi-groupe-fiche svg{font-size:13px}
+}
 .suivi-detail{padding:12px 16px 14px 40px;border-top:1px solid var(--border-soft)}
 .suivi-groupe-membres{padding:10px 14px 14px 34px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px}
 @media (max-width:640px){
