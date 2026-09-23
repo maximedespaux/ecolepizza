@@ -754,6 +754,34 @@ export function saveArchiveTree(id, tree, company_tree) {
 }
 
 // --- Sessions ---
+/* ── MAILING (migration 178) — les e-mails que l'école réécrit, et ceux qu'elle écrit ─────── */
+export function getModelesMail() {
+  return request("/mailing/modeles");
+}
+export function saveModeleMail(cle, payload) {
+  return request(`/mailing/modeles/${encodeURIComponent(cle)}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function resetModeleMail(cle) {
+  return request(`/mailing/modeles/${encodeURIComponent(cle)}`, { method: "DELETE" });
+}
+/* L'APERÇU PASSE PAR LE SERVEUR, et c'est le but : il rend avec les VRAIS gabarits (coquille,
+   pied de page, bouton). Un aperçu reconstruit côté écran montrerait un e-mail que personne ne
+   recevra jamais. */
+export function apercuMail(payload) {
+  return request("/mailing/apercu", { method: "POST", body: JSON.stringify(payload) });
+}
+/* `POST` pour une lecture : les identifiants des stagiaires n'ont rien à faire dans une URL —
+   ils finiraient dans les journaux du serveur et l'historique du navigateur. */
+export function destinatairesMail(payload) {
+  return request("/mailing/destinataires", { method: "POST", body: JSON.stringify(payload) });
+}
+export function envoyerMailGroupe(payload) {
+  return request("/mailing/envoi", { method: "POST", body: JSON.stringify(payload) });
+}
+export function getEnvoisMail() {
+  return request("/mailing/envois");
+}
+
 export function getSessions() {
   return request("/sessions");
 }

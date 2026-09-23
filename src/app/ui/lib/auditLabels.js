@@ -201,6 +201,9 @@ const ACTION_LABEL = {
 
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],
+    'mail.modele': ['Texte d\'un e-mail automatique modifié', A],
+    'mail.modele.defaut': ['E-mail automatique revenu au texte d\'origine', A],
+    'mail.envoi': ['E-mail envoyé à un groupe', A],
     'organization.locations': ['Lieux de formation modifiés', A],
     'accessprofile.create': ['Profil d\'accès créé', G],
     'accessprofile.system': ['Profil d\'accès système modifié', A],
@@ -305,6 +308,8 @@ const ENTITY_LABEL = {
     partner_category: ['Catégorie de partenaire', 'f'],
     Opco: ['OPCO', 'm'],
     Organization: ['Organisme', 'm'],
+    MailModele: ['Modèle d\'e-mail', 'm'],
+    MailEnvoi: ['Envoi groupé', 'm'],
     AccessProfile: ['Profil d\'accès', 'm'],
     BillingProfile: ['Entité émettrice', 'f'],
     Archive: ['Archive', 'f'],

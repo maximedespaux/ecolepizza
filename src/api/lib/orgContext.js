@@ -21,6 +21,7 @@ const db = require('../config/database.js');
 
 let cache = null;
 let mailCache = null; // réglages « Mailing » de l'organisme (migration 138), en cache
+let modelesCache = null; // textes d'e-mail réécrits par l'école (migration 178), en cache
 
 /** Recharge les coordonnées depuis la base. À n'appeler qu'au runtime (jamais dans un test). */
 async function charger() {
@@ -46,6 +47,43 @@ async function charger() {
         if (e.code !== 'ER_BAD_FIELD_ERROR' && e.code !== 'ER_NO_SUCH_TABLE') console.error('[orgContext] mailing:', e.message);
         // colonnes absentes (migration non jouée) → on laisse mailCache tel quel : par défaut, tout part.
     }
+    /* LES TEXTES RÉÉCRITS PAR L'ÉCOLE (migration 178) — troisième requête, isolée pour la même
+       raison que la précédente : la table peut ne pas exister encore, et son absence ne doit pas
+       emporter le pied de page. Absente ou vide → `modelesCache` reste vide, et les gabarits
+       gardent le texte livré avec l'application. */
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT cle, objet, titre, intro, pied FROM mail_modele
+              WHERE organization_id = (SELECT id FROM organization ORDER BY created_at LIMIT 1)`);
+        modelesCache = Object.fromEntries(rows.map((r) => [r.cle, r]));
+    } catch (e) {
+        if (e.code !== 'ER_NO_SUCH_TABLE' && e.code !== 'ER_BAD_FIELD_ERROR') console.error('[orgContext] modèles mail:', e.message);
+    }
+}
+
+/**
+ * Le texte que l'école a écrit pour ce type d'e-mail, ou `null` — lecture SYNCHRONE, sans I/O,
+ * comme `orgInfo` et pour la même raison : les gabarits construisent une chaîne, ils n'attendent
+ * rien. Le cache est rafraîchi au démarrage, toutes les dix minutes, ET à chaque enregistrement
+ * (cf. mailing.controller) : sans ce dernier rappel, l'école attendrait dix minutes pour voir sa
+ * propre correction partir.
+ */
+function modeleMail(cle) {
+    return (modelesCache && modelesCache[cle]) || null;
+}
+
+/**
+ * Rend quelque chose EN FAISANT COMME SI ce texte était enregistré — pour l'aperçu.
+ *
+ * L'ÉCOLE REGARDE CE QU'ELLE VIENT DE TAPER, avant d'enregistrer : l'aperçu doit donc passer par
+ * les VRAIS gabarits, avec un texte qui n'est pas encore en base. On pose le modèle, on rend, on
+ * le retire — dans un `finally`, sans quoi un gabarit qui échoue laisserait ce texte servir aux
+ * e-mails réels jusqu'au prochain chargement du cache.
+ */
+function avecModeleTemporaire(cle, valeurs, rendu) {
+    const avant = modelesCache;
+    modelesCache = { ...(modelesCache || {}), [cle]: valeurs };
+    try { return rendu(); } finally { modelesCache = avant; }
 }
 
 /** Lecture SYNCHRONE pour les gabarits. Renvoie {} si rien n'est encore chargé (aucune I/O). */
@@ -72,4 +110,4 @@ function mailActif(kind) {
     return Number(mailCache[col]) !== 0;
 }
 
-module.exports = { orgInfo, charger, mailActif };
+module.exports = { orgInfo, charger, mailActif, modeleMail, avecModeleTemporaire };

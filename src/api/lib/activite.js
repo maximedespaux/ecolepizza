@@ -50,6 +50,10 @@ const SECTION_PAR_ENTITE = {
     Partner: '/partenaires', PartnerContribution: '/partenaires', PartnerProduct: '/partenaires',
     partner_category: '/partenaires',
     Opco: '/opcos', Organization: '/reglages', Archive: '/suivi',
+    /* LE MAILING EST UN RÉGLAGE D'ORGANISME : réécrire un e-mail automatique ou envoyer un
+       message à un groupe se fait depuis Paramètres → Mailing, et c'est là que la cloche doit
+       ramener (migration 178). */
+    MailModele: '/mailing', MailEnvoi: '/mailing',
     CommunityPost: '/communaute', CommunityAnswer: '/communaute', Recipe: '/communaute',
     AccessProfile: '/roles', User: '/equipe',
     quest_category: '/pizza-quest-admin', quest_chapter: '/pizza-quest-admin',
@@ -95,6 +99,11 @@ const ENTITES_REGLAGE = new Set([
     'partner_category',
     // Paramétrage de la maison : facturation, comptabilité, rôles, équipe, financeurs.
     'BillingProfile', 'AccountingSettings', 'Opco', 'Organization', 'AccessProfile', 'User',
+    /* LE MAILING, LES DEUX : réécrire un e-mail automatique est un réglage, et un envoi à un
+       groupe n'appelle aucun geste d'un collègue — c'est fait, et ça se retrouve au journal.
+       Une cloche qui sonne chez tout le personnel à chaque message envoyé aux stagiaires
+       apprendrait à ne plus être lue. */
+    'MailModele', 'MailEnvoi',
     // Administration de Pizza Quest.
     'quest_category', 'quest_chapter', 'quest_difficulty', 'quest_prerequisite', 'quest_question',
 ]);

@@ -14,7 +14,8 @@
  */
 
 const { LOGO_CID } = require('./mailer.js');
-const { orgInfo } = require('./orgContext.js');
+const { orgInfo, modeleMail } = require('./orgContext.js');
+const { MODELES_MAIL, rendre, texteEnHtml } = require('./mailsPersonnalises.js');
 
 const MARQUE = 'École Pizza';       // repli texte ; surchargée par l'organisme quand on le connaît
 const ENCRE = '#c0392b';            // le rouge « ember » de l'application
@@ -71,93 +72,100 @@ function esc(s) {
     return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+/**
+ * LES QUATRE ZONES D'UN E-MAIL, écrites par l'école ou livrées avec l'application (migration 178).
+ *
+ * Le texte de l'école GAGNE quand il existe, et le défaut sert sinon — il n'y a donc jamais d'état
+ * « e-mail vide » : ne pas avoir écrit est le cas normal, pas une configuration manquante.
+ * Les jetons sont remplacés ici, une fois, pour les quatre zones : un jeton oublié dans le titre
+ * s'imprimerait en accolades dans la première ligne que lit le destinataire.
+ */
+function zones(cle, valeurs) {
+    const defaut = MODELES_MAIL[cle] || {};
+    const ecrit = modeleMail(cle) || {};
+    const pris = (champ) => {
+        const v = ecrit[champ];
+        return v === undefined || v === null || v === '' ? (defaut[champ] || '') : v;
+    };
+    /* `intro` et `pied` peuvent être VIDES VOLONTAIREMENT quand l'école a enregistré ce type :
+       on ne retombe alors pas sur le défaut, sinon un pied supprimé réapparaîtrait à l'envoi. */
+    const zoneEcrite = (champ) => (modeleMail(cle) ? (ecrit[champ] || '') : (defaut[champ] || ''));
+    return {
+        objet: rendre(pris('objet'), valeurs),
+        titre: rendre(pris('titre'), valeurs),
+        intro: texteEnHtml(rendre(zoneEcrite('intro'), valeurs)),
+        pied: texteEnHtml(rendre(zoneEcrite('pied'), valeurs), 'margin:14px 0 0;font-size:13px;line-height:1.6;color:#8a90a0'),
+    };
+}
+
+/** L'encadré gris des identifiants — charpente, jamais modifiable. */
+function encadre(lignes) {
+    return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f7f8fb;border:1px solid #e6e8ee;border-radius:10px;margin:6px 0 16px">
+        <tr><td style="padding:14px 18px;font-size:14px;line-height:1.9">${lignes.join('<br>')}</td></tr>
+      </table>`;
+}
+const ligneEncadre = (etiquette, valeur, mono) => `<span style="color:#8a90a0">${esc(etiquette)}&nbsp;:</span> `
+    + `<b${mono ? ' style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace"' : ''}>${esc(valeur)}</b>`;
+
 /* ─── 1. Identifiants à la création du compte ─────────────────────────────────────────────── */
 function credentialsEmail({ firstName, email, password, loginUrl, orgName }) {
-    const titre = 'Votre accès à l’espace de formation';
-    const contenu = `
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
-        Un espace personnel a été créé pour vous. Vous pouvez dès à présent vous connecter pour
-        consulter vos documents, signer vos émargements et suivre votre formation.
-      </p>
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f7f8fb;border:1px solid #e6e8ee;border-radius:10px;margin:6px 0 16px">
-        <tr><td style="padding:14px 18px;font-size:14px;line-height:1.9">
-          <span style="color:#8a90a0">Identifiant&nbsp;:</span> <b>${esc(email)}</b><br>
-          <span style="color:#8a90a0">Mot de passe&nbsp;:</span> <b style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(password)}</b>
-        </td></tr>
-      </table>
+    const z = zones('credentials', { 'Prénom': firstName || '', Identifiant: email || '', Organisme: orgName || MARQUE });
+    const contenu = `${z.intro}
+      ${encadre([ligneEncadre('Identifiant', email), ligneEncadre('Mot de passe', password, true)])}
       ${bouton(loginUrl, 'Me connecter')}
-      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
-        Par sécurité, pensez à changer ce mot de passe après votre première connexion.
-      </p>`;
-    return { subject: `Vos identifiants de connexion — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+      ${z.pied}`;
+    return { subject: z.objet, html: coquille(z.titre, contenu, { orgName }) };
 }
 
 /* ─── 2. Réinitialisation du mot de passe ─────────────────────────────────────────────────── */
 function resetEmail({ firstName, password, loginUrl, orgName }) {
-    const titre = 'Votre mot de passe a été réinitialisé';
-    const contenu = `
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
-        Un nouveau mot de passe vient d’être défini pour votre espace. Voici vos identifiants&nbsp;:
-      </p>
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f7f8fb;border:1px solid #e6e8ee;border-radius:10px;margin:6px 0 16px">
-        <tr><td style="padding:14px 18px;font-size:14px;line-height:1.9">
-          <span style="color:#8a90a0">Nouveau mot de passe&nbsp;:</span> <b style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(password)}</b>
-        </td></tr>
-      </table>
+    const z = zones('reset', { 'Prénom': firstName || '', Organisme: orgName || MARQUE });
+    const contenu = `${z.intro}
+      ${encadre([ligneEncadre('Nouveau mot de passe', password, true)])}
       ${bouton(loginUrl, 'Me connecter')}
-      <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
-        Si vous n’êtes pas à l’origine de cette demande, contactez votre organisme de formation.
-      </p>`;
-    return { subject: `Nouveau mot de passe — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+      ${z.pied}`;
+    return { subject: z.objet, html: coquille(z.titre, contenu, { orgName }) };
 }
 
 /* ─── 3. Miroir d'une notification de l'application ───────────────────────────────────────── */
 function notificationEmail({ firstName, title, body, link, orgName }) {
-    const contenu = `
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
-      ${body ? `<p style="margin:0 0 16px;font-size:15px;line-height:1.6">${esc(body)}</p>` : ''}
-      ${link ? bouton(link, 'Voir dans mon espace') : bouton((process.env.APP_URL || 'https://impastio.com').replace(/\/+$/, ''), 'Ouvrir mon espace')}`;
-    return { subject: `${title} — ${orgName || MARQUE}`, html: coquille(title, contenu, { orgName }) };
+    const z = zones('notifications', {
+        'Prénom': firstName || '', Titre: title || '', Message: body || '', Organisme: orgName || MARQUE,
+    });
+    const contenu = `${z.intro}
+      ${link ? bouton(link, 'Voir dans mon espace') : bouton((process.env.APP_URL || 'https://impastio.com').replace(/\/+$/, ''), 'Ouvrir mon espace')}
+      ${z.pied}`;
+    return { subject: z.objet, html: coquille(z.titre, contenu, { orgName }) };
 }
 
 /* ─── Lien de réinitialisation (demande « mot de passe oublié ») ─────────────────────────── */
 function resetLinkEmail({ firstName, resetUrl, orgName }) {
-    const titre = 'Réinitialisation de votre mot de passe';
-    const contenu = `
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
-      <p style="margin:0 0 16px;font-size:15px;line-height:1.6">
-        Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous
-        pour en choisir un nouveau. Ce lien est valable <b>une heure</b> et ne sert qu’une fois.
-      </p>
+    const z = zones('forgot', { 'Prénom': firstName || '', Organisme: orgName || MARQUE });
+    const contenu = `${z.intro}
       ${bouton(resetUrl, 'Choisir un nouveau mot de passe')}
-      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
-        Vous n’êtes pas à l’origine de cette demande&nbsp;? Ignorez cet e-mail : votre mot de passe
-        actuel reste valable, rien n’a changé.
-      </p>`;
-    return { subject: `Réinitialisation de mot de passe — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+      ${z.pied}`;
+    return { subject: z.objet, html: coquille(z.titre, contenu, { orgName }) };
 }
 
 /* ─── Alerte de sécurité : un identifiant (mot de passe ou e-mail) vient d'être modifié ──────── */
 function securityAlertEmail({ firstName, kind, detail, cancelUrl, orgName }) {
     const quoi = kind === 'email' ? 'adresse e-mail de connexion' : 'mot de passe';
-    const titre = `Votre ${quoi} a été modifié`;
-    const contenu = `
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">Bonjour ${esc(firstName || '')},</p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
-        Votre <b>${esc(quoi)}</b> vient d'être modifié${kind === 'email' ? 'e' : ''}.${detail ? ' ' + esc(detail) : ''}
-      </p>
+    const z = zones('security', { 'Prénom': firstName || '', Quoi: quoi, Organisme: orgName || MARQUE });
+    /* CES TROIS BLOCS NE SE RÉÉCRIVENT PAS. Ils sont le garde-fou d'une prise de compte : une
+       alerte sans son « ce n'était pas moi » n'alerte plus personne, et l'école ne s'en
+       apercevrait qu'à la plainte. Le reste du texte, lui, lui appartient. */
+    const garde = `
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6">
         <b>Si c'est bien vous</b>, aucune action n'est nécessaire.
       </p>
       <p style="margin:0 0 6px;font-size:15px;line-height:1.6"><b>Si ce n'est PAS vous</b>, annulez
         immédiatement : nous rétablirons l'ancienne valeur et déconnecterons toutes les sessions.</p>
-      ${bouton(cancelUrl, "Ce n'était pas moi — annuler")}
-      <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#8a90a0">
-        Ce lien est valable 24 heures. Pensez ensuite à changer votre mot de passe.
-      </p>`;
-    return { subject: `Sécurité : ${quoi} modifié — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
+      ${bouton(cancelUrl, "Ce n'était pas moi — annuler")}`;
+    const contenu = `${z.intro}
+      ${detail ? `<p style="margin:0 0 14px;font-size:15px;line-height:1.6">${esc(detail)}</p>` : ''}
+      ${garde}
+      ${z.pied}`;
+    return { subject: z.objet, html: coquille(z.titre, contenu, { orgName }) };
 }
 
 /* ─── Compte représentant d'entreprise : accès pour signer les documents de l'entreprise ─────── */
@@ -189,4 +197,17 @@ function representativeEmail({ firstName, email, password, companyName, loginUrl
     return { subject: `Documents à signer — ${orgName || MARQUE}`, html: coquille(titre, contenu, { orgName }) };
 }
 
-module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail, representativeEmail };
+/* ─── Message écrit par l'école à un groupe de stagiaires (migration 178) ─────────────────── */
+/**
+ * LA MÊME COQUILLE QUE LES AUTRES, et c'est voulu : le stagiaire reconnaît l'e-mail de son école,
+ * avec son logo et son pied de page. Ce qui change, c'est que le texte vient d'elle.
+ *
+ * AUCUN BOUTON AJOUTÉ D'OFFICE. Un « Ouvrir mon espace » au bas d'un message qui n'y renvoie pas
+ * transformerait chaque annonce en invitation à se connecter. Les liens écrits dans le texte, eux,
+ * deviennent cliquables (cf. `texteEnHtml`).
+ */
+function messageGroupeEmail({ objet, corps, orgName }) {
+    return { subject: objet, html: coquille(objet, texteEnHtml(corps), { orgName }) };
+}
+
+module.exports = { credentialsEmail, resetEmail, resetLinkEmail, notificationEmail, securityAlertEmail, representativeEmail, messageGroupeEmail };
