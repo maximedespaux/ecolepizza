@@ -143,7 +143,7 @@ const AUTRE = "__autre__";
  *     page sache quels documents les étapes montrent déjà.
  * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -164,9 +164,14 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         if (!active) return;
         setData(r.data);
         setError(null);
-        // Ne réinitialise la sélection que si aucune étape n'est encore choisie
-        // (sinon un rafraîchissement automatique ferait « sauter » la sélection).
-        setSel((cur) => cur || r.data.currentKey || r.data.steps[0]?.key || null);
+        /* Ne réinitialise la sélection que si aucune étape n'est encore choisie (sinon un
+           rafraîchissement automatique ferait « sauter » la sélection).
+           PARCOURS TERMINÉ : ON OUVRE LA DERNIÈRE ÉTAPE, pas la première. Sans `currentKey` —
+           c'est-à-dire quand il n'y a plus rien à faire — le repli tombait sur l'étape 1, et la
+           fiche affichait « Étape 1 sur 16 » juste sous « 100 % · 0 à faire ». Signalé sur un
+           dossier complet le 2026-09-23 : on croyait le parcours au début alors qu'il était fini. */
+        const derniere = r.data.steps[r.data.steps.length - 1]?.key || null;
+        setSel((cur) => cur || r.data.currentKey || derniere);
         onCharge?.(r.data);
       })
       .catch((e) => { if (active) { setError(e.message); onCharge?.(null); } });
@@ -260,6 +265,11 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         <span><i className="a-faire" />{pluriel(n.A_FAIRE, "à faire", "à faire")}</span>
         {n.SANS_OBJET > 0 && <span><i className="sans-objet" />{pluriel(n.SANS_OBJET, "sans objet", "sans objet")}</span>}
       </div>
+      {/* CE QUI RESTE À FAIRE QUAND IL NE RESTE PLUS RIEN À FAIRE. Le parcours fini, la fiche ne
+          disait nulle part que la FORMATION, elle, pouvait être marquée terminée — la case vit
+          dans un repli de la fenêtre de modification, et personne ne l'ouvre pour ça. Le parent
+          décide s'il y a quelque chose à proposer ; ici, on lui donne la place. */}
+      {!data.currentKey && renderFin?.()}
 
       {/* L'ÉTAPE SÉLECTIONNÉE, juste sous l'avancement et sur toute la largeur : ce qu'elle
           attend à gauche, les gestes à droite (dessous quand la place manque). */}
@@ -279,7 +289,13 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
         <div className="parc-detail-info">
           <div className="parc-surtitre">
-            Étape {data.steps.indexOf(step) + 1} sur {total}{step.key === data.currentKey ? " · prochaine étape" : ""}
+            Étape {data.steps.indexOf(step) + 1} sur {total}
+            {/* LE RANG NE DIT PAS OÙ L'ON EN EST, il dit quelle étape est ouverte — d'où la
+                mention qui suit. « Parcours terminé » quand il n'y a plus de prochaine étape :
+                sans elle, un rang seul se lit comme un avancement, et « Étape 1 sur 16 » sous
+                un « 100 % » se contredisent à quinze pixels d'écart. */}
+            {!data.currentKey ? " · parcours terminé"
+              : step.key === data.currentKey ? " · prochaine étape" : ""}
           </div>
           <div className="parc-detail-titre">
             <h3>{step.label}</h3>

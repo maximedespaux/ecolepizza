@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, updateStagiaire} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -257,6 +257,41 @@ function StagiaireDetail() {
   /* Dossier dont on affiche le parcours : l'onglet choisi, sinon celui que désigne le lien, sinon
      le premier — et jamais un dossier qui n'est pas à ce stagiaire (lib/lienDossier.js). */
   const curEnrId = dossierAffiche(enrollments, parcoursEnr || parametres.get("dossier"));
+
+  /* ── « MARQUER LA FORMATION COMME TERMINÉE » ────────────────────────────────────────────────
+     LE DÉFAUT SIGNALÉ (2026-09-23) : un dossier à 100 %, toutes les étapes validées, et la fiche
+     continuait d'annoncer « 0 terminée ». Les deux n'ont rien à voir — le parcours est CALCULÉ,
+     la formation terminée est DÉCLARÉE (`learner.completed_levels`) — mais rien ne le disait, et
+     la case vit dans un repli de la fenêtre de modification que personne n'ouvre pour ça.
+     ON PROPOSE, ON NE COCHE PAS. Une session peut s'achever sans que la formation soit acquise :
+     c'est l'école qui le dit, pas un calcul. Le bandeau n'apparaît donc que lorsque les deux
+     conditions objectives sont réunies — session passée ET parcours complet — et il faut cliquer. */
+  const curEnr = enrollments.find((e) => e.id === curEnrId) || null;
+  const terminees = String(l.completed_levels || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const sessionPassee = !!(curEnr?.end_date && curEnr.end_date < new Date().toISOString().slice(0, 10));
+  const aMarquer = !!(curEnr?.program_code && sessionPassee && !terminees.includes(curEnr.program_code));
+
+  async function marquerTerminee() {
+    if (!curEnr?.program_code) return;
+    setStatus(null);
+    try {
+      await updateStagiaire(id, { completed_levels: [...terminees, curEnr.program_code].join(",") });
+      await loadLearner();
+      setStatus({ type: "success", message: `Formation ${curEnr.program_code} marquée comme terminée.` });
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
+
+  const bandeauFinFormation = () => (aMarquer ? (
+    <div className="parc-fin">
+      <span>
+        <b>Parcours complet.</b> La formation <b>{curEnr.program_code}</b> n'est pas encore marquée
+        comme terminée dans la fiche — c'est elle qui compte les formations acquises du stagiaire.
+      </span>
+      <button type="button" className="btn sm primary" onClick={marquerTerminee}>
+        <Icon name="check" size={13} /> Marquer comme terminée
+      </button>
+    </div>
+  ) : null);
   /* IMPORTER UN DOCUMENT REÇU (courriel, scan) SUR UNE ÉTAPE.
      Le sélecteur de fichier est un `<input>` caché déclenché par le bouton de l'étape : une
      fenêtre de plus pour choisir un fichier n'apporterait rien, le navigateur en ouvre déjà une.
@@ -613,6 +648,7 @@ function StagiaireDetail() {
               renderPreparation={formulairePreparation}
               /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout. */
               onCharge={(d) => setDocsEtapes(new Set((d?.steps || []).map((x) => x.docId).filter(Boolean)))}
+              renderFin={bandeauFinFormation}
             />
             <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" aria-hidden="true" tabIndex={-1} />
