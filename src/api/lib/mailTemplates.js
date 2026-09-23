@@ -22,8 +22,19 @@ const { MODELES_MAIL, rendre, texteEnHtml } = require('./mailsPersonnalises.js')
 const MARQUE = 'École Pizza';       // repli texte ; surchargée par l'organisme quand on le connaît
 const ENCRE = '#c0392b';            // le rouge « ember » de l'application
 
+/**
+ * LA MENTION DU BAS N'EST PAS LA MÊME POUR TOUS LES E-MAILS (2026-09-23).
+ *
+ * Elle disait « Message automatique » partout, y compris au bas d'un message qu'une personne de
+ * l'école venait d'écrire à la main. Le stagiaire y lisait « ne répondez pas » : celui qui ne
+ * peut pas venir à la session n'a alors plus qu'à téléphoner, ou à ne rien dire. Un envoi
+ * automatique part bien d'une boîte que personne ne relève ; un message écrit attend une réponse.
+ * Chaque gabarit dit donc lequel il est, et le défaut reste l'automatique — c'est le cas des cinq.
+ */
+const MENTION_AUTO = 'Message automatique — merci de ne pas y répondre.';
+
 /** Coquille commune : en-tête sobre, carte centrée, pied discret. `contenu` = HTML du corps. */
-function coquille(titre, contenu, { orgName } = {}) {
+function coquille(titre, contenu, { orgName, mention = MENTION_AUTO } = {}) {
     /* Coordonnées tirées de l'organisme en base (cf. orgContext) : le pied de page se remplit
        tout seul — nom, dirigeant, e-mail, téléphone, adresse. Repli sur les valeurs par défaut si
        rien n'est encore chargé (tests, ou tout premier envoi après un démarrage). */
@@ -52,9 +63,9 @@ function coquille(titre, contenu, { orgName } = {}) {
         <tr><td style="padding:22px 28px 16px;border-top:1px solid #eef0f4;background:#f9fafb;text-align:center;color:#5e5e68;font-size:13px;line-height:1.75">
           ${lignesContact}
         </td></tr>
-        <tr><td style="padding:0 28px 20px;background:#f9fafb;text-align:center;color:#a8adba;font-size:11px;line-height:1.5">
-          Message automatique — merci de ne pas y répondre.
-        </td></tr>
+        ${mention ? `<tr><td style="padding:0 28px 20px;background:#f9fafb;text-align:center;color:#a8adba;font-size:11px;line-height:1.5">
+          ${esc(mention)}
+        </td></tr>` : ''}
       </table>
     </td></tr>
   </table>
@@ -227,7 +238,7 @@ function logoPourApercu(html) {
     } catch { return html; }
 }
 
-function messageGroupeEmail({ objet, corps, orgName, images = [], pourApercu = false }) {
+function messageGroupeEmail({ objet, corps, orgName, images = [], pourApercu = false, repondreA = null }) {
     /* CID DANS UN E-MAIL, `data:` DANS L'APERÇU. L'aperçu est rendu dans une iframe en bac à
        sable : elle n'a ni cookie ni origine, donc aucune requête vers l'API ne peut aboutir —
        l'image doit être DANS le HTML. Dans le courrier, au contraire, `cid:` désigne la pièce
@@ -240,7 +251,14 @@ function messageGroupeEmail({ objet, corps, orgName, images = [], pourApercu = f
             ? `data:${img.mime};base64,${Buffer.from(img.octets).toString('base64')}`
             : `cid:img-${img.id}`;
     };
-    const html = coquille(objet, texteEnHtml(corps, undefined, { image }), { orgName });
+    /* CE MESSAGE N'EST PAS AUTOMATIQUE, et son pied ne le prétend plus : quelqu'un vient de
+       l'écrire, et attend peut-être une réponse. On ne la promet toutefois QUE si elle arrive
+       quelque part — `repondreA` est l'adresse que l'appelant pose aussi en `Reply-To`, si bien
+       que la phrase et l'en-tête disent la même chose. Sans adresse connue, pas de mention du
+       tout : mieux vaut se taire que d'inviter à écrire dans le vide. */
+    const marque = orgName || orgInfo().short_name || orgInfo().legal_name || MARQUE;
+    const mention = repondreA ? `Message écrit par ${marque}, vous pouvez y répondre.` : '';
+    const html = coquille(objet, texteEnHtml(corps, undefined, { image }), { orgName, mention });
     return { subject: objet, html: pourApercu ? logoPourApercu(html) : html };
 }
 

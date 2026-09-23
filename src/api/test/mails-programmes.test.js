@@ -159,7 +159,7 @@ test('le serveur repasse, et la règle ne se fait pas couper par les interrupteu
     assert.match(srv, /setTimeout\(passerMails, 2 \* 60 \* 1000\)/, 'et un passage peu après le démarrage');
     /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une règle
        posée par l'école s'arrête par SON interrupteur, là où elle a été écrite. */
-    assert.match(srv, /return sendMail\(\{ to, subject, html, attachments: piecesImages\(images\) \}\);/);
+    assert.match(srv, /return sendMail\(\{ to, replyTo: repondreA, subject, html, attachments: piecesImages\(images\) \}\);/);
 });
 
 test('l\'écran dit qu\'une règle ne rattrape pas le passé, et montre ce qu\'elle a fait', () => {

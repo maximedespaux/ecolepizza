@@ -95,7 +95,15 @@ function envoiPossible(kind) {
  * pas de {Prénom}. C'est l'appelant qui tranche (cf. mailing.controller), parce que lui seul sait
  * ce que le message contient.
  */
-async function sendMail({ to, bcc, subject, html, text, kind, attachments = [] }) {
+/**
+ * `replyTo` — OÙ VA LA RÉPONSE, ajouté le 2026-09-23.
+ *
+ * L'EXPÉDITEUR N'EST PAS CHOISI : OVH exige que `from` soit la boîte authentifiée, et personne ne
+ * la relève. C'est pour ça que les e-mails automatiques portent « merci de ne pas y répondre ».
+ * Un message ÉCRIT PAR L'ÉCOLE, lui, attend une réponse : on la dirige vers l'adresse de
+ * l'organisme, et son pied de page peut alors inviter à répondre sans mentir.
+ */
+async function sendMail({ to, bcc, replyTo, subject, html, text, kind, attachments = [] }) {
     if (!to) return { sent: false, reason: 'destinataire absent' };
     /* Interrupteur par organisme (réglages « Mailing », migration 138). `kind` est OPTIONNEL :
        un envoi sans type n'est jamais filtré. `require` local exprès — évite tout problème
@@ -110,6 +118,7 @@ async function sendMail({ to, bcc, subject, html, text, kind, attachments = [] }
             from: from(),
             to,
             ...(bcc && bcc.length ? { bcc: Array.isArray(bcc) ? bcc.join(', ') : bcc } : {}),
+            ...(replyTo ? { replyTo } : {}),
             subject,
             html,
             text: text || htmlToText(html),

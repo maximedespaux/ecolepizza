@@ -165,7 +165,9 @@ const apercu = async (req, res) => {
     res.json({ data: modeles.messageGroupeEmail({
         objet: rendre(lu.valeurs.objet, valeurs),
         corps: rendre(lu.valeurs.corps, valeurs),
-        orgName, images, pourApercu: true,
+        /* L'ADRESSE DE RÉPONSE AUSSI DANS L'APERÇU : elle décide du pied de page, et une école qui
+           relit son message doit voir la phrase que le stagiaire lira. */
+        orgName, images, pourApercu: true, repondreA: orgContext.orgInfo().email || null,
     }) });
 };
 
@@ -326,12 +328,15 @@ const envoyerGroupe = async (req, res) => {
             const { subject, html } = modeles.messageGroupeEmail({
                 objet: rendre(lu.valeurs.objet, valeurs),
                 corps: rendre(lu.valeurs.corps, valeurs),
-                orgName, images,
+                orgName, images, repondreA: adresseEcole,
             });
             /* PAS DE `kind` : les cinq interrupteurs coupent des e-mails AUTOMATIQUES. Celui-ci
                est un geste délibéré, déclenché à l'instant — le couper au nom d'un réglage fait
                pour les envois automatiques rendrait le bouton muet sans rien expliquer. */
-            const r = await sendMail({ to: l.email, subject, html, attachments: piecesImages(images) });
+            /* `replyTo` ET `repondreA` PORTENT LA MÊME ADRESSE, exprès : le pied de page dit
+               « vous pouvez y répondre » exactement quand la réponse a où aller. L'expéditeur,
+               lui, reste la boîte technique — OVH n'en accepte pas d'autre. */
+            const r = await sendMail({ to: l.email, replyTo: adresseEcole, subject, html, attachments: piecesImages(images) });
             if (r.sent) envoyes += 1; else echecs += 1;
         }
         /* UNE SEULE COPIE À L'ÉCOLE, et non une par destinataire : la mettre en copie de chaque
@@ -346,7 +351,7 @@ const envoyerGroupe = async (req, res) => {
             const { subject, html } = modeles.messageGroupeEmail({
                 objet: rendre(lu.valeurs.objet, valeurs),
                 corps: rendre(lu.valeurs.corps, valeurs),
-                orgName, images,
+                orgName, images, repondreA: adresseEcole,
             });
             await sendMail({ to: adresseEcole, subject: `[Copie] ${subject}`,
                 html: html.replace('<h1', `${entete}<h1`), attachments: piecesImages(images) });
