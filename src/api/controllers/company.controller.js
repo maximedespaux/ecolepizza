@@ -509,8 +509,18 @@ const companyDocTemplates = async (req, res) => {
         if (program) {
             // Respecte l'ordre + l'inclusion du parcours (documents de groupe) de la formation.
             const steps = await formationSteps(conn, orgId, program);
+            /* UN DOCUMENT « ENTREPRISE SEULEMENT » N'EST PAS ACTIF, et c'est tout son intérêt —
+               la MÊME garde que `generateGroupDocuments`, qui l'avait reçue en premier. Celle-ci
+               était restée sur `s.active` seul, et le défaut était complet : la section
+               « À l'arrivée via une entreprise » n'ACTIVE rien quand on y ajoute un document de
+               groupe (c'est voulu : l'activer le donnerait aussi aux arrivées individuelles).
+               L'étape s'affichait donc dans le parcours de la fiche entreprise — cette liste-là
+               ne filtre pas sur `active` —, son bouton « Préparer le document » s'ouvrait, et
+               l'envoi répondait « Ce document n'existe pas dans les formations sélectionnées ».
+               Aucun document de groupe ajouté par l'écran d'aujourd'hui ne pouvait être préparé. */
+            const intake = new Set(await companyStepSlugs(conn, orgId, program.id));
             out = steps
-                .filter((s) => s.active && s.company_level)
+                .filter((s) => s.company_level && (s.active || intake.has(s.slug)))
                 .map((s) => ({ slug: s.slug, label: s.label, doc_type: s.doc_type }));
         } else {
             // Sans session : tous les modèles entreprise de l'organisme.
