@@ -74,7 +74,7 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
     setSaving(true);
     try {
       const r = await saveArborescenceCommune(tree, companyTree);
-      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [] }));
+      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [], ajustements: [] }));
       setStatus({ type: "success", message: r?.message || "Arborescence enregistrée pour toutes les formations." });
       onSaved?.();
     } catch (e) {
@@ -99,6 +99,24 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
                 <div className="arbo-avis attente">
                   <b>Migration 182 non jouée</b> : l'arborescence commune ne peut pas encore être enregistrée.
                   D'ici là, l'archive ZIP suit l'arborescence de chaque formation, telle qu'elle est.
+                </div>
+              )}
+              {/* UN « OU » SUPPRIMÉ (Modèles → Équivalences) s'affichait encore ici. Le serveur le déplie à
+                  la lecture — ses documents, un par un, à sa place — et l'écran le dit : rien n'est gardé
+                  tant que l'école n'enregistre pas. */}
+              {etat.ajustements?.length > 0 && (
+                <div className="arbo-avis attente">
+                  <b>Choix « OU » supprimés</b> dans Modèles → Équivalences : leurs documents sont maintenant rangés un par un,
+                  à la même place. <b>Enregistrez</b> pour garder ce rangement.
+                  <ul>{etat.ajustements.map((a, i) => (
+                    <li key={i}>
+                      « {a.label} » ({a.arbre}, {a.dossier.replace(/[{}]/g, "").split(" / ").join(" › ")})
+                      {a.documents.length > 0 ? <> → {a.documents.join(", ")}</> : null}
+                      {a.perdus.length > 0 ? <> ; {a.perdus.map((x) => `« ${x} »`).join(", ")} n'existe{a.perdus.length > 1 ? "nt" : ""} plus</> : null}
+                      {/* L'HOMONYME est dit : c'est un autre modèle (un slug dupliqué) qui prend la place de l'ancien. */}
+                      {a.remplaces?.length > 0 ? <> ({a.remplaces.map((r) => `« ${r.nom} » : son ancien modèle n'existe plus, c'est le modèle actuel de ce nom qui est rangé`).join(" ; ")})</> : null}
+                    </li>
+                  ))}</ul>
                 </div>
               )}
               {etat.propose && (

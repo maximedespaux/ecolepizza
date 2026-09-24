@@ -227,8 +227,12 @@ const nouvelId = () => `f${Date.now().toString(36)}${(compteur++).toString(36)}`
  * @param existe      (item) => l'item désigne-t-il encore un document de l'organisme ?
  * @param groupes     les « OU » d'aujourd'hui (clé → { members, label }) : un « OU » de la
  *                    proposition porte ses membres et son libellé ACTUELS
+ * @param libelleDe   (modèle) => son libellé actuel : un « OU » qui n'existe plus se DÉPLIE en ses
+ *                    modèles, un par un, à sa place (cf. actualiserLesOu)
+ * @param homonymeDe  (nom) => le seul modèle actuel de ce nom : il remplace un membre disparu
  */
-function fusionnerArbres(entrees, { titreDuQcm = () => null, existe = () => true, groupes = null } = {}) {
+function fusionnerArbres(entrees, { titreDuQcm = () => null, existe = () => true, groupes = null, libelleDe = () => null,
+    homonymeDe = () => null } = {}) {
     const racine = { children: [] };
     const parCle = new Map();   // clé d'item → { node, chemin }
     const parSlug = new Map();  // modèle → { node, item, chemin } (pour qu'un « OU » absorbe ses membres)
@@ -236,17 +240,21 @@ function fusionnerArbres(entrees, { titreDuQcm = () => null, existe = () => true
     const retires = [];
     /* UN ANCIEN QCM, DÉSIGNÉ PAR SON IDENTIFIANT, PASSE PAR SON TITRE ACTUEL — pas par le libellé
        enregistré avec lui, qui a pu vieillir (NIV1 disait encore « … du Mardi - NIVEAU I »). */
+    /* Un item enregistré, lu AUJOURD'HUI — une liste, car un « OU » supprimé en rend plusieurs. */
     const traduire = (it) => {
         if (it && !it.group && typeof it.ref === 'string' && it.ref.startsWith('quiz:')) {
             const titre = titreDuQcm(it.ref.slice(5));
-            return titre ? { type: 'quiz', titre, label: titre } : null;
+            return titre ? [{ type: 'quiz', titre, label: titre }] : [null];
         }
         if (it && it.group && groupes) {
             const actuel = groupes.get(it.group);
-            if (!actuel) return null; // le groupe n'existe plus : retiré, et nommé
-            return { type: 'model', group: it.group, members: [...actuel.members], label: actuel.label || it.label };
+            if (actuel) return [{ type: 'model', group: it.group, members: [...actuel.members], label: actuel.label || it.label }];
+            // Le groupe n'existe plus : ses modèles, un par un, à sa place (et ceux qui n'existent plus, retirés).
+            const depli = membresDuOu(it, libelleDe, homonymeDe)
+                .map((m) => (m.slug ? { type: 'model', ref: m.slug, label: m.label } : { type: 'model', ref: m.nom, label: m.nom }));
+            return depli.length ? depli : [null];
         }
-        return it;
+        return [it];
     };
     const placer = (node, it, chemin, code) => {
         const cle = cleItem(it);
@@ -282,18 +290,100 @@ function fusionnerArbres(entrees, { titreDuQcm = () => null, existe = () => true
             } else if (d.per_learner) node.per_learner = true;
             const ici = [...cheminNoms, node.name];
             for (const brut of d.items || []) {
-                const it = traduire(brut);
-                if (!it || !cleItem(it) || !existe(it)) {
-                    retires.push({ label: (brut && (brut.label || brut.ref || brut.group)) || '?', code });
-                    continue;
+                for (const it of traduire(brut)) {
+                    if (!it || !cleItem(it) || !existe(it)) {
+                        retires.push({ label: (it && it.ref && it.label) || (brut && (brut.label || brut.ref || brut.group)) || '?', code });
+                        continue;
+                    }
+                    placer(node, it, ici, code);
                 }
-                placer(node, it, ici, code);
             }
             fusionner(node, d.children, ici, code);
         }
     };
     for (const { code, tree } of entrees || []) fusionner(racine, tree && tree.folders, [], code);
     return { tree: { folders: racine.children }, conflits, retires };
+}
+
+/**
+ * Les modèles d'un « OU » qui n'existe plus, lus aujourd'hui : chacun avec son libellé actuel ; s'il
+ * n'existe plus, son homonyme actuel (le nom se lit dans le libellé du « OU », dans l'ordre des
+ * membres) ; sinon rien, et son nom pour le dire.
+ * @returns Array<{ slug, label, remplace? } | { slug: null, nom }>
+ */
+function membresDuOu(it, libelleDe, homonymeDe) {
+    const membres = Array.isArray(it.members) ? it.members : [];
+    const noms = String(it.label || '').split(' / ').map((x) => x.trim());
+    const nomDe = (i) => (noms.length === membres.length && noms[i] ? noms[i] : null);
+    return membres.map((slug, i) => {
+        const label = libelleDe(slug);
+        if (label) return { slug, label };
+        const nom = nomDe(i);
+        const homo = nom ? homonymeDe(nom) : null;
+        if (homo && homo.slug !== slug) return { slug: homo.slug, label: homo.label, remplace: slug };
+        return { slug: null, nom: nom || slug };
+    });
+}
+
+/**
+ * UNE ARBORESCENCE ENREGISTRÉE, LUE AVEC LES « OU » D'AUJOURD'HUI (2026-09-25).
+ *
+ * Un choix « OU » y est enregistré tel qu'il était le jour où l'école l'a placé : sa clé, ses membres,
+ * son libellé. Relevé en production le jour même : l'école avait supprimé ses équivalences (Modèles →
+ * Équivalences), et l'arborescence affichait encore « Devis particulier / Devis professionnel (OU) »
+ * et « Contrat / Convention (OU) » — des choix qui n'existaient plus.
+ *
+ *   · le « OU » existe toujours → il prend ses membres et son libellé ACTUELS ;
+ *   · il n'existe plus → il se DÉPLIE : ses modèles, un par un, À SA PLACE — l'école a supprimé un
+ *     choix, pas les documents ni le rangement qu'elle leur avait donné. Un modèle déjà rangé ailleurs
+ *     y reste (une place par document) ; un modèle qui n'existe plus est nommé, pas inventé.
+ *   · SAUF S'IL A UN HOMONYME : relevé le même jour, le « OU » enregistré désignait « devis-professionnel »,
+ *     qui n'existe plus — le devis professionnel d'aujourd'hui est « devis-professionnel-copie », même
+ *     nom à l'écran (un slug ne se renomme plus : on duplique). Annoncer « Devis professionnel n'existe
+ *     plus » aurait été FAUX pour qui le voit dans ses modèles. Le nom d'un membre se lit dans le libellé
+ *     du « OU », fait de leurs noms dans l'ordre (« Devis particulier / Devis professionnel ») ; un
+ *     modèle actuel de ce nom EXACT, et un seul, prend sa place — et c'est dit (`remplaces`).
+ *
+ * L'archive, elle, rangeait déjà juste en attendant : un « OU » disparu y retombe sur les membres
+ * enregistrés avec lui (slugsDe), donc au même dossier. C'est l'ÉCRAN qui mentait.
+ *
+ * @param groupes    clé → { members, label } — les « OU » d'aujourd'hui
+ * @param libelleDe  (modèle) => son libellé actuel, ou null s'il n'existe plus
+ * @param homonymeDe (nom) => { slug, label } du SEUL modèle actuel de ce nom, sinon null
+ * @returns {{ tree, ajustements: Array<{ label, dossier, documents: string[], perdus: string[],
+ *            remplaces: Array<{ nom, ancien, nouveau }> }> }}
+ */
+function actualiserLesOu(tree, groupes, libelleDe, homonymeDe = () => null) {
+    const ajustements = [];
+    if (!tree || !Array.isArray(tree.folders)) return { tree, ajustements };
+    const ranges = new Set();
+    const relever = (fs) => (fs || []).forEach((f) => {
+        for (const it of f.items || []) if (it && !it.group) { const k = cleItem(it); if (k) ranges.add(k); }
+        relever(f.children);
+    });
+    relever(tree.folders);
+    const refaire = (fs, chemin) => (fs || []).map((f) => {
+        const ici = [...chemin, f.name];
+        const items = [];
+        for (const it of f.items || []) {
+            if (!it || !it.group) { items.push(it); continue; }
+            const actuel = groupes && groupes.get(it.group);
+            if (actuel) { items.push({ ...it, members: [...actuel.members], label: actuel.label || it.label }); continue; }
+            const documents = []; const perdus = []; const remplaces = [];
+            for (const m of membresDuOu(it, libelleDe, homonymeDe)) {
+                if (!m.slug) { perdus.push(m.nom); continue; }
+                if (m.remplace) remplaces.push({ nom: m.label, ancien: m.remplace, nouveau: m.slug });
+                const cle = `ref:${m.slug}`;
+                if (ranges.has(cle)) continue; // déjà rangé ailleurs, seul : il y reste
+                ranges.add(cle);
+                items.push({ type: 'model', ref: m.slug, label: m.label });
+                documents.push(m.label);
+            }
+            ajustements.push({ label: it.label || it.group, dossier: ici.join(' / '), documents, perdus, remplaces });
+        }
+        return { ...f, items, children: refaire(f.children, ici) };
+    });
+    return { tree: { ...tree, folders: refaire(tree.folders, []) }, ajustements };
 }
 
 /** Une arborescence enregistrée (chaîne JSON en base, ou déjà objet), ou null si illisible. */
@@ -345,5 +435,5 @@ function validerArbre(tree) {
 
 module.exports = {
     normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placeDansLArchive, arbrePour, contexteDu,
-    resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, STANDARD, STANDARD_ENTREPRISE,
+    resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, actualiserLesOu, STANDARD, STANDARD_ENTREPRISE,
 };
