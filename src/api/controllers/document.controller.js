@@ -46,7 +46,7 @@ const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
-const { getEnabledFields, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
+const { getEnabledFields, champsDesConditions, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
 const { matchStep } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
 const { resultatDossier, resultatJuryDossier } = require('./evaluation.controller.js');
@@ -812,7 +812,7 @@ const checkDocumentConditions = async (req, res) => {
             [orgId, enrollment_ids]
         );
         if (!enrs.length) return passthrough();
-        const catalog = await getEnabledFields(conn, orgId, 'condition');
+        const catalog = await champsDesConditions(conn, orgId);
         const factsMap = await loadDossierFactsMap(conn, orgId, enrs.map((e) => e.id), catalog);
 
         const failed = new Map(); // clé -> intitulé (dédupliqué entre dossiers)

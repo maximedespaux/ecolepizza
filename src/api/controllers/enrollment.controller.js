@@ -2,7 +2,7 @@ const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
-const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
+const { champsDesConditions, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
 const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
@@ -138,7 +138,7 @@ const getParcours = async (req, res) => {
         if (e.program_id) {
             const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
             const [fieldCatalog, condById] = await Promise.all([
-                getEnabledFields(conn, orgId, 'condition'),
+                champsDesConditions(conn, orgId),
                 loadConditionMap(conn, orgId),
             ]);
             const factsMap = await loadDossierFactsMap(conn, orgId, [e.id], fieldCatalog);

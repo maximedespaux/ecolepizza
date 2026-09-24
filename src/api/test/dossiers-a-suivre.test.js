@@ -163,7 +163,7 @@ const remplacer = (rel, exports) => {
     require.cache[p] = { id: p, filename: p, loaded: true, exports };
 };
 remplacer('../lib/conditions.js', {
-    getEnabledFields: async () => [], loadDossierFactsMap: async () => new Map(), loadConditionMap: async () => new Map(),
+    champsDesConditions: async () => [], loadDossierFactsMap: async () => new Map(), loadConditionMap: async () => new Map(),
 });
 remplacer('../lib/equivalence.js', { loadEquivalences: async () => [], equivalenceMap: () => new Map() });
 remplacer('../controllers/formationProgram.controller.js', {
