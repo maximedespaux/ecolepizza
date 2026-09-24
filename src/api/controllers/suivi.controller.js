@@ -7,6 +7,9 @@ const { enrollmentSteps, formationSteps } = require('./formationProgram.controll
 const { logAudit } = require('../lib/audit.js');
 const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // coffre chiffré AU REPOS
 const { colonneExiste } = require('../lib/colonnes.js');
+const { decryptBytes } = require('../lib/crypto.js');
+const { ecrivainZip } = require('../lib/zip.js');
+const { placeDansLArchive, lireArbre, normaliserTitre } = require('../lib/arborescenceArchive.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -85,6 +88,209 @@ const getSuivi = async (req, res) => {
 };
 
 /**
+ * CE QUE CONTIENT LE COFFRE — une seule définition, pour deux lecteurs : la liste de l'écran
+ * (GET /archives) et l'archive ZIP (GET /archives/zip). Deux jeux de requêtes écrits côte à côte
+ * auraient fini par ne plus compter les mêmes documents, et l'archive remise à un contrôle aurait
+ * oublié ce que l'écran montrait.
+ *
+ * Chaque ligne porte aussi ce qu'il faut pour la RANGER (2026-09-24) : le modèle (`slug`), le titre
+ * du QCM, le type de pièce, le dossier et son entreprise, la session et ses dates. L'écran les
+ * ignore ; l'archive s'en sert pour suivre l'arborescence (lib/arborescenceArchive.js).
+ */
+async function lignesDuCoffre(conn, orgId) {
+    // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
+    const [gen] = await conn.query(
+        `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'LEARNER' AS scope,
+                NULL AS company_id, NULL AS company_name,
+                DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                s.year, s.week,
+                p.code AS program_code, p.title AS program_title,
+                l.id AS learner_id, l.first_name, l.last_name, 'gen' AS source,
+                NULL AS dossier,
+                gd.template_slug AS slug, qz.title AS quiz_title, e.id AS enrollment_id,
+                e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
+                DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+         FROM generated_document gd
+         JOIN learner l ON l.id = gd.learner_id
+         LEFT JOIN document_formation df ON df.document_id = gd.id
+         LEFT JOIN enrollment e ON e.id = df.enrollment_id
+         LEFT JOIN training_session s ON s.id = e.session_id
+         LEFT JOIN training_program p ON p.id = s.program_id
+         LEFT JOIN quiz qz ON qz.id = gd.quiz_id
+         LEFT JOIN company dc ON dc.id = e.company_id
+         WHERE gd.organization_id = ? AND gd.status IN (?)`,
+        [orgId, SHARED]
+    );
+    // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
+    // rangés par entreprise. Ignoré si la migration 077 (scope) n'est pas jouée.
+    let comp = [];
+    try {
+        [comp] = await conn.query(
+            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'COMPANY' AS scope,
+                    gd.company_id, c.name AS company_name,
+                    DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    s.year, s.week,
+                    p.code AS program_code, p.title AS program_title,
+                    NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source,
+                    NULL AS dossier,
+                    gd.template_slug AS slug, NULL AS quiz_title, NULL AS enrollment_id,
+                    gd.company_id AS enr_company_id, c.name AS enr_company_name, s.id AS session_id,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+             FROM generated_document gd
+             JOIN company c ON c.id = gd.company_id
+             LEFT JOIN training_session s ON s.id = gd.session_id
+             LEFT JOIN training_program p ON p.id = s.program_id
+             WHERE gd.organization_id = ? AND gd.scope = 'COMPANY' AND gd.status IN (?)`,
+            [orgId, SHARED]
+        );
+    } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+    /* DOCUMENTS DE LA SESSION (migration 157) — contrat d'hygiène signé par un intervenant
+       externe, et ce qui suivra. Ils n'appartiennent NI à un stagiaire NI à une entreprise :
+       c'est le troisième cas, et sans cette requête ils n'existaient nulle part dans le
+       coffre. Un document qu'on ne retrouve pas six mois plus tard ne sert à rien le jour
+       d'un contrôle — c'est même toute la raison d'être de cet écran.
+
+       JOINTURE INTERNE SUR LA SESSION, et c'est voulu : un document de session sans session
+       n'a ni année, ni semaine, ni formation. Il n'aurait aucune branche où se poser, et
+       remonterait dans un « - / Sans session » que personne n'irait ouvrir. */
+    let sess = [];
+    try {
+        [sess] = await conn.query(
+            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'SESSION' AS scope,
+                    NULL AS company_id, NULL AS company_name,
+                    DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    s.year, s.week,
+                    p.code AS program_code, p.title AS program_title,
+                    NULL AS learner_id, '' AS first_name, '' AS last_name, 'gen' AS source,
+                    NULL AS dossier,
+                    gd.template_slug AS slug, NULL AS quiz_title, NULL AS enrollment_id,
+                    NULL AS enr_company_id, NULL AS enr_company_name, s.id AS session_id,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+               FROM generated_document gd
+               JOIN training_session s ON s.id = gd.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE gd.organization_id = ? AND gd.scope = 'SESSION' AND gd.status IN (?)`,
+            [orgId, SHARED]);
+    } catch (e) {
+        /* La 157 n'est pas jouée : l'énumération ignore 'SESSION'. Le coffre doit rester
+           lisible — il l'était avant cette fonctionnalité, il le reste sans elle. */
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'
+            || e.code === 'WARN_DATA_TRUNCATED' || e.code === 'ER_DATA_TRUNCATED'))) throw e;
+    }
+
+    // Documents archivés (PDF importés + feuilles d'émargement générées).
+    // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
+    // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
+    // autres documents (regroupement par learner_id côté client) et non dans un
+    // dossier « Nom Prénom » séparé.
+    /* Sondée AVANT la requête : la 154 peut ne pas être jouée, et l'écran doit alors
+       fonctionner exactement comme avant — sans classeur, pas avec une erreur SQL. */
+    const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
+    const [arch] = await conn.query(
+        `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
+                NULL AS company_id, NULL AS company_name,
+                NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
+                ad.year, ad.week,
+                COALESCE(p.code, ad.formation_label) AS program_code,
+                COALESCE(p.title, ad.formation_label) AS program_title,
+                l.id AS learner_id,
+                COALESCE(l.first_name, '') AS first_name,
+                COALESCE(l.last_name, ad.learner_name) AS last_name,
+                'archive' AS source,
+                ${colDossier ? 'ad.dossier' : 'NULL AS dossier'},
+                ad.ref, e.id AS enrollment_id,
+                e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
+                DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+         FROM archive_document ad
+         LEFT JOIN enrollment e ON ad.ref LIKE 'emarg:%'
+              AND e.id = SUBSTRING_INDEX(SUBSTRING(ad.ref, 7), ':', 1)
+         LEFT JOIN learner l ON l.id = e.learner_id
+         LEFT JOIN training_session s ON s.id = e.session_id
+         LEFT JOIN training_program p ON p.id = s.program_id
+         LEFT JOIN company dc ON dc.id = e.company_id
+         WHERE ad.organization_id = ?`,
+        [orgId]
+    );
+    /* UNE FEUILLE D'ÉMARGEMENT ARCHIVÉE porte son modèle dans sa référence
+       (« emarg:<dossier>:<modèle> ») : c'est lui qui la range, comme le modèle d'un document. */
+    for (const a of arch) {
+        const m = /^emarg:[^:]+:(.+)$/.exec(a.ref || '');
+        a.slug = m ? m[1] : null;
+        delete a.ref;
+    }
+    /* PIÈCES JUSTIFICATIVES — la quatrième source, qui manquait. Le coffre réunissait les
+       documents que l'école PRODUIT et les PDF importés à la main ; les pièces déposées par
+       le stagiaire (identité, justificatif de domicile) n'y figuraient nulle part. Elles
+       font pourtant partie du dossier au même titre, et c'est dans ce coffre qu'on va les
+       chercher un an plus tard.
+
+       UNE LIGNE PAR FICHIER, pas par dépôt : un justificatif peut en compter six, et n'en
+       montrer qu'un rendrait les autres introuvables — le défaut qu'on vient de corriger
+       dans la fiche du dossier.
+
+       Les octets ne sortent pas d'ici : la liste ne porte que de quoi nommer et ouvrir. */
+    let pieces = [];
+    try {
+        const [pf] = await conn.query(
+            `SELECT pf.id AS doc_id, pf.nom AS fichier_nom, pf.sort_order,
+                    pt.label AS piece_label, d.id AS depot_id, d.statut,
+                    DATE_FORMAT(d.depose_le, '%Y-%m-%d %H:%i') AS depose_le,
+                    s.year, s.week,
+                    p.code AS program_code, p.title AS program_title,
+                    l.id AS learner_id, l.first_name, l.last_name,
+                    d.piece_type_id, e.id AS enrollment_id,
+                    e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+               FROM piece_fichier pf
+               JOIN piece_depot d ON d.id = pf.depot_id
+               JOIN piece_type pt ON pt.id = d.piece_type_id
+               JOIN enrollment e ON e.id = d.enrollment_id
+               JOIN learner l ON l.id = e.learner_id
+               LEFT JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+               LEFT JOIN company dc ON dc.id = e.company_id
+              WHERE d.organization_id = ?
+              ORDER BY pf.depot_id, pf.sort_order, pf.created_at`,
+            [orgId]);
+        /* Le rang « 2/6 » se calcule ICI plutôt qu'en SQL : une fonction de fenêtrage
+           obligerait à une version minimale de MariaDB pour un simple numéro d'ordre, et
+           la liste est déjà triée par dépôt. Un dépôt d'un seul fichier ne porte AUCUN
+           rang — « (1/1) » n'apprend rien et alourdit chaque ligne. */
+        const parDepot = new Map();
+        for (const f of pf) parDepot.set(f.depot_id, (parDepot.get(f.depot_id) || 0) + 1);
+        const vus = new Map();
+        pieces = pf.map((f) => {
+            const total = parDepot.get(f.depot_id);
+            const rang = (vus.get(f.depot_id) || 0) + 1;
+            vus.set(f.depot_id, rang);
+            return {
+                doc_id: f.doc_id,
+                title: total > 1 ? `${f.piece_label} (${rang}/${total})` : f.piece_label,
+                type: 'PIECE', status: f.statut, quiz_id: null, scope: 'LEARNER',
+                company_id: null, company_name: null,
+                sent_at: f.depose_le, signed_at: null,
+                year: f.year, week: f.week,
+                program_code: f.program_code, program_title: f.program_title,
+                learner_id: f.learner_id, first_name: f.first_name, last_name: f.last_name,
+                dossier: null,
+                source: 'piece',
+                fichier_nom: f.fichier_nom, piece_type_id: f.piece_type_id, enrollment_id: f.enrollment_id,
+                enr_company_id: f.enr_company_id, enr_company_name: f.enr_company_name,
+                session_id: f.session_id, debut: f.debut, fin: f.fin,
+            };
+        });
+    } catch (e) {
+        // Migration 127 non jouée : le coffre reste lisible sans les pièces.
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+
+    return { gen, comp, sess, arch, pieces };
+}
+
+/**
  * GET /api/suivi/archives — coffre documentaire : tous les documents partagés/
  * signés avec les stagiaires, à plat, avec session (année/semaine), formation et
  * stagiaire. Le regroupement (année → semaine → formation → stagiaire) est fait
@@ -93,166 +299,7 @@ const getSuivi = async (req, res) => {
 const getArchive = async (req, res) => {
     try {
         const conn = db.promise();
-        // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
-        const [gen] = await conn.query(
-            `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'LEARNER' AS scope,
-                    NULL AS company_id, NULL AS company_name,
-                    DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
-                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
-                    s.year, s.week,
-                    p.code AS program_code, p.title AS program_title,
-                    l.id AS learner_id, l.first_name, l.last_name, 'gen' AS source,
-                    NULL AS dossier
-             FROM generated_document gd
-             JOIN learner l ON l.id = gd.learner_id
-             LEFT JOIN document_formation df ON df.document_id = gd.id
-             LEFT JOIN enrollment e ON e.id = df.enrollment_id
-             LEFT JOIN training_session s ON s.id = e.session_id
-             LEFT JOIN training_program p ON p.id = s.program_id
-             WHERE gd.organization_id = ? AND gd.status IN (?)`,
-            [req.user.organization_id, SHARED]
-        );
-        // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
-        // rangés par entreprise. Ignoré si la migration 077 (scope) n'est pas jouée.
-        let comp = [];
-        try {
-            [comp] = await conn.query(
-                `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'COMPANY' AS scope,
-                        gd.company_id, c.name AS company_name,
-                        DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
-                        DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
-                        s.year, s.week,
-                        p.code AS program_code, p.title AS program_title,
-                        NULL AS learner_id, '' AS first_name, c.name AS last_name, 'gen' AS source,
-                        NULL AS dossier
-                 FROM generated_document gd
-                 JOIN company c ON c.id = gd.company_id
-                 LEFT JOIN training_session s ON s.id = gd.session_id
-                 LEFT JOIN training_program p ON p.id = s.program_id
-                 WHERE gd.organization_id = ? AND gd.scope = 'COMPANY' AND gd.status IN (?)`,
-                [req.user.organization_id, SHARED]
-            );
-        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
-        /* DOCUMENTS DE LA SESSION (migration 157) — contrat d'hygiène signé par un intervenant
-           externe, et ce qui suivra. Ils n'appartiennent NI à un stagiaire NI à une entreprise :
-           c'est le troisième cas, et sans cette requête ils n'existaient nulle part dans le
-           coffre. Un document qu'on ne retrouve pas six mois plus tard ne sert à rien le jour
-           d'un contrôle — c'est même toute la raison d'être de cet écran.
-
-           JOINTURE INTERNE SUR LA SESSION, et c'est voulu : un document de session sans session
-           n'a ni année, ni semaine, ni formation. Il n'aurait aucune branche où se poser, et
-           remonterait dans un « - / Sans session » que personne n'irait ouvrir. */
-        let sess = [];
-        try {
-            [sess] = await conn.query(
-                `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'SESSION' AS scope,
-                        NULL AS company_id, NULL AS company_name,
-                        DATE_FORMAT(gd.sent_at,   '%Y-%m-%d %H:%i') AS sent_at,
-                        DATE_FORMAT(gd.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
-                        s.year, s.week,
-                        p.code AS program_code, p.title AS program_title,
-                        NULL AS learner_id, '' AS first_name, '' AS last_name, 'gen' AS source,
-                        NULL AS dossier
-                   FROM generated_document gd
-                   JOIN training_session s ON s.id = gd.session_id
-                   LEFT JOIN training_program p ON p.id = s.program_id
-                  WHERE gd.organization_id = ? AND gd.scope = 'SESSION' AND gd.status IN (?)`,
-                [req.user.organization_id, SHARED]);
-        } catch (e) {
-            /* La 157 n'est pas jouée : l'énumération ignore 'SESSION'. Le coffre doit rester
-               lisible — il l'était avant cette fonctionnalité, il le reste sans elle. */
-            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'
-                || e.code === 'WARN_DATA_TRUNCATED' || e.code === 'ER_DATA_TRUNCATED'))) throw e;
-        }
-
-        // Documents archivés (PDF importés + feuilles d'émargement générées).
-        // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
-        // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
-        // autres documents (regroupement par learner_id côté client) et non dans un
-        // dossier « Nom Prénom » séparé.
-        /* Sondée AVANT la requête : la 154 peut ne pas être jouée, et l'écran doit alors
-           fonctionner exactement comme avant — sans classeur, pas avec une erreur SQL. */
-        const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
-        const [arch] = await conn.query(
-            `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
-                    NULL AS company_id, NULL AS company_name,
-                    NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
-                    ad.year, ad.week,
-                    COALESCE(p.code, ad.formation_label) AS program_code,
-                    COALESCE(p.title, ad.formation_label) AS program_title,
-                    l.id AS learner_id,
-                    COALESCE(l.first_name, '') AS first_name,
-                    COALESCE(l.last_name, ad.learner_name) AS last_name,
-                    'archive' AS source,
-                    ${colDossier ? 'ad.dossier' : 'NULL AS dossier'}
-             FROM archive_document ad
-             LEFT JOIN enrollment e ON ad.ref LIKE 'emarg:%'
-                  AND e.id = SUBSTRING_INDEX(SUBSTRING(ad.ref, 7), ':', 1)
-             LEFT JOIN learner l ON l.id = e.learner_id
-             LEFT JOIN training_session s ON s.id = e.session_id
-             LEFT JOIN training_program p ON p.id = s.program_id
-             WHERE ad.organization_id = ?`,
-            [req.user.organization_id]
-        );
-        /* PIÈCES JUSTIFICATIVES — la quatrième source, qui manquait. Le coffre réunissait les
-           documents que l'école PRODUIT et les PDF importés à la main ; les pièces déposées par
-           le stagiaire (identité, justificatif de domicile) n'y figuraient nulle part. Elles
-           font pourtant partie du dossier au même titre, et c'est dans ce coffre qu'on va les
-           chercher un an plus tard.
-
-           UNE LIGNE PAR FICHIER, pas par dépôt : un justificatif peut en compter six, et n'en
-           montrer qu'un rendrait les autres introuvables — le défaut qu'on vient de corriger
-           dans la fiche du dossier.
-
-           Les octets ne sortent pas d'ici : la liste ne porte que de quoi nommer et ouvrir. */
-        let pieces = [];
-        try {
-            const [pf] = await conn.query(
-                `SELECT pf.id AS doc_id, pf.nom AS fichier_nom, pf.sort_order,
-                        pt.label AS piece_label, d.id AS depot_id, d.statut,
-                        DATE_FORMAT(d.depose_le, '%Y-%m-%d %H:%i') AS depose_le,
-                        s.year, s.week,
-                        p.code AS program_code, p.title AS program_title,
-                        l.id AS learner_id, l.first_name, l.last_name
-                   FROM piece_fichier pf
-                   JOIN piece_depot d ON d.id = pf.depot_id
-                   JOIN piece_type pt ON pt.id = d.piece_type_id
-                   JOIN enrollment e ON e.id = d.enrollment_id
-                   JOIN learner l ON l.id = e.learner_id
-                   LEFT JOIN training_session s ON s.id = e.session_id
-                   LEFT JOIN training_program p ON p.id = s.program_id
-                  WHERE d.organization_id = ?
-                  ORDER BY pf.depot_id, pf.sort_order, pf.created_at`,
-                [req.user.organization_id]);
-            /* Le rang « 2/6 » se calcule ICI plutôt qu'en SQL : une fonction de fenêtrage
-               obligerait à une version minimale de MariaDB pour un simple numéro d'ordre, et
-               la liste est déjà triée par dépôt. Un dépôt d'un seul fichier ne porte AUCUN
-               rang — « (1/1) » n'apprend rien et alourdit chaque ligne. */
-            const parDepot = new Map();
-            for (const f of pf) parDepot.set(f.depot_id, (parDepot.get(f.depot_id) || 0) + 1);
-            const vus = new Map();
-            pieces = pf.map((f) => {
-                const total = parDepot.get(f.depot_id);
-                const rang = (vus.get(f.depot_id) || 0) + 1;
-                vus.set(f.depot_id, rang);
-                return {
-                    doc_id: f.doc_id,
-                    title: total > 1 ? `${f.piece_label} (${rang}/${total})` : f.piece_label,
-                    type: 'PIECE', status: f.statut, quiz_id: null, scope: 'LEARNER',
-                    company_id: null, company_name: null,
-                    sent_at: f.depose_le, signed_at: null,
-                    year: f.year, week: f.week,
-                    program_code: f.program_code, program_title: f.program_title,
-                    learner_id: f.learner_id, first_name: f.first_name, last_name: f.last_name,
-                    dossier: null,
-                    source: 'piece',
-                };
-            });
-        } catch (e) {
-            // Migration 127 non jouée : le coffre reste lisible sans les pièces.
-            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
-        }
-
+        const { gen, comp, sess, arch, pieces } = await lignesDuCoffre(conn, req.user.organization_id);
         res.json({ data: [...gen, ...comp, ...sess, ...arch, ...pieces] });
     } catch (err) {
         console.error('Erreur archives documents :', err);
@@ -601,5 +648,242 @@ const getArchiveStockage = async (req, res) => {
     }
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   L'ARCHIVE ZIP DU COFFRE (2026-09-24) — rangée selon l'arborescence d'archivage.
+
+   L'arborescence existait depuis juillet (« étape 1 ») sans que rien ne la lise : l'export qu'elle
+   devait ranger n'avait jamais été écrit. Le voici, derrière UNE route et une seule règle d'accès —
+   celle du coffre (AUDIT_ROLES). La page session, la fiche du stagiaire et le coffre l'appellent
+   tous trois : un formateur qui ne peut pas ouvrir le coffre ne reçoit pas davantage une archive
+   qui contient les pièces d'identité.
+
+   TROIS PORTÉES, une seule liste : `lignesDuCoffre`, celle de l'écran. L'archive ne contient donc
+   jamais ni plus ni moins que ce que le coffre montre pour la même sélection.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+const cleCoffre = (v) => (v == null ? '-' : String(v));
+const deux = (n) => String(n == null ? '' : n).padStart(2, '0');
+const motsDuNom = (s) => normaliserTitre(s).split(' ').filter(Boolean).sort().join(' ');
+
+/**
+ * Ce qu'une demande d'archive couvre. Les clés du coffre (année, semaine, formation) sont CELLES DE
+ * L'ÉCRAN — « - » pour une valeur absente, comme ses nœuds —, pour qu'une ligne du coffre et son
+ * archive désignent exactement les mêmes documents.
+ * @returns {Promise<null | { garde: (ligne) => boolean, nom: string, libelle: string }>}
+ */
+async function porteeDeLArchive(conn, orgId, q) {
+    if (q.session) {
+        const [[s]] = await conn.query(
+            `SELECT s.id, s.year, s.week, p.code FROM training_session s
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE s.id = ? AND s.organization_id = ?`, [String(q.session), orgId]);
+        if (!s) return null;
+        return {
+            /* Les documents rattachés à la session par leur dossier ; les PDF importés, qui n'ont
+               pas de dossier, par la semaine et la formation — comme le coffre les range. */
+            garde: (l) => (l.session_id ? l.session_id === s.id
+                : l.source === 'archive' && cleCoffre(l.year) === cleCoffre(s.year) && cleCoffre(l.week) === cleCoffre(s.week)
+                    && (l.program_code || '-') === (s.code || '-')),
+            nom: `archive ${s.code || 'formation'} ${s.year} S${deux(s.week)}`,
+            libelle: `Session ${s.code || ''} — semaine ${s.week} de ${s.year}`,
+        };
+    }
+    if (q.dossier) {
+        const [[e]] = await conn.query(
+            `SELECT e.id, e.company_id, e.session_id, l.first_name, l.last_name, s.year, s.week, p.code
+               FROM enrollment e
+               JOIN learner l ON l.id = e.learner_id
+               LEFT JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE e.id = ? AND e.organization_id = ?`, [String(q.dossier), orgId]);
+        if (!e) return null;
+        const personne = motsDuNom(`${e.last_name} ${e.first_name}`);
+        return {
+            garde: (l) => {
+                if (l.enrollment_id) return l.enrollment_id === e.id;
+                // Les documents de SON entreprise pour SA session (convention, accord de prise en charge).
+                if (l.scope === 'COMPANY') return !!e.company_id && l.company_id === e.company_id && !!l.session_id && l.session_id === e.session_id;
+                /* Un PDF importé n'a que le nom lu dans son chemin : on le reconnaît à ce nom, dans la
+                   même semaine et la même formation. */
+                if (l.source === 'archive' && !l.learner_id) {
+                    return cleCoffre(l.year) === cleCoffre(e.year) && cleCoffre(l.week) === cleCoffre(e.week)
+                        && (l.program_code || '-') === (e.code || '-') && motsDuNom(`${l.last_name || ''} ${l.first_name || ''}`) === personne;
+                }
+                return false;
+            },
+            nom: `archive ${e.last_name || ''} ${e.first_name || ''} ${e.code || ''}`.replace(/\s+/g, ' ').trim(),
+            libelle: `Dossier de ${e.last_name || ''} ${e.first_name || ''}${e.code ? ` — ${e.code}` : ''}`.trim(),
+        };
+    }
+    if (q.annee == null || q.annee === '') return null;
+    const annee = String(q.annee);
+    const semaine = q.semaine == null || q.semaine === '' ? null : String(q.semaine);
+    const formation = q.formation == null || q.formation === '' ? null : String(q.formation);
+    return {
+        garde: (l) => cleCoffre(l.year) === annee && (semaine == null || cleCoffre(l.week) === semaine)
+            && (formation == null || (l.program_code || '-') === formation),
+        nom: `archive ${annee}${semaine ? ` S${deux(semaine)}` : ''}${formation ? ` ${formation}` : ''}`,
+        libelle: `${annee === '-' ? 'Sans année' : annee}${semaine ? ` — semaine ${semaine}` : ''}${formation ? ` — ${formation}` : ''}`,
+    };
+}
+
+/**
+ * Les arborescences qui rangent l'archive : la COMMUNE (migration 182) dès que l'école l'a
+ * enregistrée ; sinon celle de chaque formation (053, 083), telle qu'elle est ; sinon la structure
+ * standard (lib/arborescenceArchive.js). Sans la 182, l'export marche donc déjà.
+ * @returns {Promise<{ source: string, pour: (code) => ({ stagiaire, entreprise }) }>}
+ */
+async function arborescencesDeLArchive(conn, orgId) {
+    try {
+        const [[o]] = await conn.query('SELECT archive_tree, company_archive_tree FROM organization WHERE id = ?', [orgId]);
+        if (o && (o.archive_tree != null || o.company_archive_tree != null)) {
+            const commune = { stagiaire: lireArbre(o.archive_tree), entreprise: lireArbre(o.company_archive_tree) };
+            return { source: "l'arborescence commune (Formations → Arborescence d'archivage)", pour: () => commune };
+        }
+    } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+    let rows = [];
+    try {
+        [rows] = await conn.query('SELECT code, archive_tree, company_archive_tree FROM training_program WHERE organization_id = ?', [orgId]);
+    } catch (e) {
+        if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+        try { [rows] = await conn.query('SELECT code, archive_tree FROM training_program WHERE organization_id = ?', [orgId]); }
+        catch (e2) { if (!(e2 && e2.code === 'ER_BAD_FIELD_ERROR')) throw e2; }
+    }
+    const parCode = new Map(rows.map((r) => [r.code, { stagiaire: lireArbre(r.archive_tree), entreprise: lireArbre(r.company_archive_tree) }]));
+    return { source: "l'arborescence de chaque formation (l'arborescence commune n'est pas encore enregistrée)", pour: (code) => parCode.get(code) || {} };
+}
+
+const EXTENSIONS = {
+    'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/heic': '.heic',
+    'image/webp': '.webp', 'image/gif': '.gif', 'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+};
+function extensionDe(f) {
+    const m = /\.([A-Za-z0-9]{1,6})$/.exec((f && f.nom) || '');
+    if (m) return `.${m[1].toLowerCase()}`;
+    return EXTENSIONS[String((f && f.mime) || '').toLowerCase()] || '.pdf';
+}
+
+/** Le fichier d'une ligne du coffre, déchiffré — ou une erreur `NON_RENDU` qui dit pourquoi il manque. */
+async function fichierDuCoffre(conn, user, l) {
+    if (l.source === 'archive') {
+        const [[a]] = await conn.query('SELECT mime, file FROM archive_document WHERE id = ? AND organization_id = ?',
+            [l.doc_id, user.organization_id]);
+        const clair = a && a.file ? aServir(a.file) : null;
+        return clair ? { buffer: clair, mime: a.mime || 'application/pdf' } : null;
+    }
+    if (l.source === 'piece') {
+        const [[p]] = await conn.query(
+            `SELECT pf.mime, pf.bytes, pf.nom FROM piece_fichier pf JOIN piece_depot d ON d.id = pf.depot_id
+              WHERE pf.id = ? AND d.organization_id = ?`, [l.doc_id, user.organization_id]);
+        const clair = p && p.bytes ? decryptBytes(p.bytes) : null;
+        return clair ? { buffer: clair, mime: p.mime || 'application/octet-stream', nom: p.nom } : null;
+    }
+    /* UN QCM ENVOYÉ MAIS PAS REMPLI n'a pas de contenu : le rendre produirait un questionnaire vide,
+       qui aurait l'air d'une pièce du dossier. Il est nommé au sommaire, pas inventé. */
+    if (l.quiz_id && l.status !== 'SIGNE') { const e = new Error('QCM envoyé, pas encore rempli'); e.code = 'NON_RENDU'; throw e; }
+    const { fichierPourArchive } = require('./document.controller.js');
+    return fichierPourArchive(conn, user, l.doc_id);
+}
+
+const STATUT_LU = { SIGNE: 'signé', ENVOYE: 'envoyé', CONSULTE: 'consulté', GENERE: 'généré', ARCHIVE: 'importé',
+    VALIDEE: 'pièce validée', DEPOSEE: 'pièce à vérifier', REFUSEE: 'pièce refusée' };
+const dateFr = (d) => d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
+
+/** Le sommaire de l'archive : ce qu'elle contient, ce qu'elle range hors de l'arborescence, ce qui manque. */
+function sommaireDeLArchive(portee, source, inclus, absents, quand) {
+    const lignes = [
+        `Archive Impastio — ${portee.libelle}`,
+        `Exportée le ${dateFr(quand)}. Rangée selon ${source}.`,
+        '',
+        `${inclus.length} document(s) inclus :`,
+        ...inclus.map((d) => `  ${d.chemin}  [${STATUT_LU[d.statut] || String(d.statut || '').toLowerCase() || '—'}]`),
+    ];
+    const horsArbre = inclus.filter((d) => d.place === 'defaut');
+    if (horsArbre.length) {
+        lignes.push('', `${horsArbre.length} document(s) que l'arborescence ne nomme pas — rangés dans le dossier du stagiaire, de l'entreprise ou de la formation :`,
+            ...horsArbre.map((d) => `  ${d.chemin}`));
+    }
+    if (absents.length) {
+        lignes.push('', `${absents.length} document(s) du coffre NON inclus :`,
+            ...absents.map((d) => `  ${d.titre}${d.qui ? ` — ${d.qui}` : ''} : ${d.raison}`));
+    }
+    return `${lignes.join('\r\n')}\r\n`;
+}
+
+/**
+ * GET /api/suivi/archives/zip — ?session=<id> | ?dossier=<inscription> | ?annee=&semaine=&formation=
+ *
+ * DEUX TEMPS. Tout ce qui peut échouer proprement échoue AVANT le premier octet : la portée, la
+ * liste, la place de chaque document (calculée sans rien lire) — on peut encore répondre une erreur
+ * lisible. Ensuite l'archive part au fil de l'eau (lib/zip.js), triée dossier par dossier. Un
+ * document qui ne se rend pas n'interrompt rien : il est NOMMÉ dans `_sommaire.txt`, avec la raison.
+ * Une panne en cours de route, elle, COUPE la connexion : un ZIP tronqué ne doit pas passer pour
+ * complet auprès de celui qui le remettra à un contrôleur.
+ */
+const exporterArchive = async (req, res) => {
+    const conn = db.promise();
+    const orgId = req.user.organization_id;
+    let portee; let arbres; let aEcrire;
+    try {
+        portee = await porteeDeLArchive(conn, orgId, req.query || {});
+        if (!portee) return res.status(404).json({ message: 'Sélection introuvable : rien à archiver.' });
+        const c = await lignesDuCoffre(conn, orgId);
+        /* Les CLASSEURS (assurance, agrément) n'appartiennent à aucune session : l'écran les tient à
+           part de l'arbre des sessions, l'archive aussi. */
+        const lignes = [...c.gen, ...c.comp, ...c.sess, ...c.arch, ...c.pieces].filter((l) => !l.dossier && portee.garde(l));
+        if (!lignes.length) return res.status(404).json({ message: 'Aucun document dans le coffre pour cette sélection.' });
+        arbres = await arborescencesDeLArchive(conn, orgId);
+        const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
+        aEcrire = lignes.map((l) => ({ l, place: placeDansLArchive(arbres.pour(l.program_code), l, groupes) }))
+            .sort((a, b) => [...a.place.dossiers, a.place.fichier].join('/').localeCompare([...b.place.dossiers, b.place.fichier].join('/'), 'fr'));
+    } catch (err) {
+        console.error('Erreur préparation archive :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    const nom = `${portee.nom.replace(/[\\/:*?"<>|]/g, '-')}.zip`;
+    /* `?compter=1` : ce que l'archive contiendrait, sans l'écrire. L'écran demande d'abord, pour
+       répondre un vrai message à une sélection vide au lieu d'un téléchargement raté. */
+    if (req.query && req.query.compter) return res.json({ data: { documents: aEcrire.length, nom } });
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename="${nom.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(nom)}`);
+    res.set('Cache-Control', 'no-store');
+    const zip = ecrivainZip(res);
+    const pris = new Set();
+    const inclus = []; const absents = [];
+    try {
+        for (const { l, place } of aEcrire) {
+            const qui = l.scope === 'LEARNER' ? `${l.last_name || ''} ${l.first_name || ''}`.trim() : (l.company_name || '');
+            let f;
+            try {
+                f = await fichierDuCoffre(conn, req.user, l);
+            } catch (e) {
+                if (!(e && e.code === 'NON_RENDU')) throw e;
+                absents.push({ titre: l.title, qui, raison: e.message });
+                continue;
+            }
+            if (!f || !f.buffer || !f.buffer.length) { absents.push({ titre: l.title, qui, raison: 'fichier illisible ou vide' }); continue; }
+            /* DEUX DOCUMENTS DE MÊME NOM AU MÊME ENDROIT gardent tous les deux leur place : le second
+               prend « (2) ». Un ZIP accepte les doublons, mais l'extraction écraserait le premier. */
+            const ext = extensionDe(f);
+            let chemin = [...place.dossiers, `${place.fichier}${ext}`].join('/');
+            for (let n = 2; pris.has(chemin.toLowerCase()); n++) chemin = [...place.dossiers, `${place.fichier} (${n})${ext}`].join('/');
+            pris.add(chemin.toLowerCase());
+            const quand = l.signed_at || l.sent_at;
+            await zip.ajouter(chemin, f.buffer, quand ? new Date(String(quand).replace(' ', 'T')) : new Date());
+            inclus.push({ chemin, statut: l.status, place: place.place });
+        }
+        const maintenant = new Date();
+        await zip.ajouter('_sommaire.txt', sommaireDeLArchive(portee, arbres.source, inclus, absents, maintenant), maintenant);
+        await zip.terminer();
+        res.end();
+        logAudit(req, 'archive.export', 'Archive', null);
+    } catch (err) {
+        if (!(err && err.code === 'ZIP_ABANDON')) console.error('Erreur export archive :', err);
+        res.destroy(err);
+    }
+};
+
 module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive,
-    getArchiveStockage };
+    getArchiveStockage, exporterArchive, lignesDuCoffre, porteeDeLArchive, sommaireDeLArchive };

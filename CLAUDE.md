@@ -110,8 +110,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-22** :
-**1900 tests — 1893 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-25** :
+**2001 tests — 1994 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -164,7 +164,28 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **six à jouer : 176 à 181 ; la 175 jouée, à constater (relevé le 2026-09-23)**
+## 4. Migrations — **sept à jouer : 176 à 182 ; la 175 jouée, à constater (relevé le 2026-09-25)**
+
+**182 est À JOUER** (`182_arborescence_commune.sql`, l'arborescence d'archivage UNE fois pour toutes les
+formations — demandée le 2026-09-24). Deux colonnes sur `organization` : `archive_tree` et `company_archive_tree`
+(longtext, NULL par défaut). L'arborescence se réglait formation par formation, à la main, et NE SERVAIT À RIEN :
+l'export ZIP qu'elle devait ranger (« étape 2 » du 2026-07-10) n'avait jamais été écrit. Il existe désormais :
+`GET /api/suivi/archives/zip` (?session= | ?dossier= | ?annee=&semaine=&formation=), sous la garde du coffre
+(AUDIT_ROLES), appelé par trois boutons (session, fiche stagiaire, lignes du coffre). Un document qu'une formation
+n'a pas est sauté ; un QCM se désigne par son TITRE (chaque formation a le sien) ; un « OU » se lit dans ses
+membres D'AUJOURD'HUI ; ce que l'arborescence ne nomme pas va dans le dossier du stagiaire, et `_sommaire.txt`
+nomme ce qui manque (QCM pas rempli, document qui ne se rend plus). Règles : `lib/arborescenceArchive.js` (serveur)
+et `lib/arborescence.js` (écran), tenues d'accord par un test.
+Sans la migration, rien ne casse : l'éditeur commun (Formations → Arborescence d'archivage) le dit et ne propose
+pas d'enregistrer, et l'archive suit l'arborescence de chaque formation (053, 083), telle qu'elle est. Tant que
+rien n'est enregistré, l'éditeur s'ouvre sur la PROPOSITION : les arborescences de RS7404, NIV1, NIV1H (et le
+squelette de NIV2) fusionnées, conflits et retraits nommés — relire, puis ENREGISTRER. **Elle se vérifie par l'API,
+sans SQL** : enregistrer l'arborescence commune, puis `GET /api/formations/arborescence` rend `disponible: true`
+et `propose: false`. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='organization' AND column_name IN ('archive_tree','company_archive_tree');`
+⚠️ Son revert efface l'arborescence commune, et elle seule : l'archive se remet à suivre celle de chaque formation.
+⚠️ L'ancien `PUT /formations/:id/archive-tree` est RETIRÉ (plus rien ne l'appelait) ; les colonnes des formations
+restent, lues en repli.
 
 **181 est À JOUER** (`181_intervenant_horaires.sql`, les heures d'un intervenant externe,
 demi-journée par demi-journée — demandé le 2026-09-23). Deux colonnes `time` sur

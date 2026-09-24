@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, updateStagiaire} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, updateStagiaire, telechargerArchive} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -11,6 +11,8 @@ import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dossierAffiche } from "../lib/lienDossier.js";
+import { UserContext } from "../context/UserContext.jsx";
+import { canOpen, NAV } from "../lib/nav.js";
 import FicheIncomplete from "../components/FicheIncomplete.jsx";
 import { lignesProjet } from "../lib/projet.js";
 import { referentAvecCivilite } from "../lib/referent.js";
@@ -54,9 +56,15 @@ const T = (icon, text) => (
   <span className="card-ttl"><Icon name={icon} size={16} /> {text}</span>
 );
 
+/* L'ARCHIVE ZIP DU DOSSIER (2026-09-24) ne s'offre qu'à qui peut ouvrir le coffre (« Suivi
+   Qualiopi ») : c'est la garde du serveur, et l'archive contient les pièces d'identité. */
+const ENTREE_SUIVI = NAV.flatMap((g) => g.items).find((it) => it.to === "/suivi");
+
 function StagiaireDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
+  const archiveOuvrable = !!ENTREE_SUIVI && canOpen(user, ENTREE_SUIVI);
   // Le dossier désigné par le lien qui a ouvert la fiche (`?dossier=`, depuis le tableau de bord).
   const [parametres] = useSearchParams();
   const [l, setL] = useState(null);
@@ -640,7 +648,13 @@ function StagiaireDetail() {
         )}
       </div>
 
-      <Card title={T("file-text", "Parcours & documents")} className="fade">
+      <Card title={T("file-text", "Parcours & documents")} className="fade"
+        more={archiveOuvrable && enrollments.length > 0 && curEnrId ? (
+          <button type="button" className="btn sm ghost" title="Les documents de ce dossier, rangés selon l'arborescence d'archivage"
+            onClick={() => telechargerArchive({ dossier: curEnrId }).catch((e) => setStatus({ type: "error", message: e.message }))}>
+            <Icon name="download" size={14} /> Archive du dossier (ZIP)
+          </button>
+        ) : null}>
         {enrollments.length > 0 && (
           <>
             {enrollments.length > 1 && (

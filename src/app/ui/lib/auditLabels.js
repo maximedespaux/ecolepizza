@@ -222,6 +222,10 @@ const ACTION_LABEL = {
 
     // Archives
     'archive.bulk_delete': ['Archives supprimées en lot', R],
+    /* Bleu, pas vert : rien n'est créé ni modifié, mais des copies — pièces d'identité comprises —
+       sortent du coffre. La ligne doit se remarquer dans le journal sans passer pour une alerte. */
+    'archive.export': ['Archive ZIP téléchargée', B],
+    'archivetree.save': ["Arborescence d'archivage enregistrée", A],
 };
 
 /**

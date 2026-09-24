@@ -1264,6 +1264,64 @@ const downloadPdf = async (req, res) => {
 };
 
 /**
+ * LE FICHIER D'UN DOCUMENT POUR L'ARCHIVE ZIP DU COFFRE (2026-09-24) — celui qu'on télécharge, dans
+ * le MÊME ordre que `downloadPdf` : le fichier reçu, sinon le PDF signé figé, sinon le rendu du jour,
+ * scellé. Ce qui fait foi ne se régénère pas ; seul ce qui n'a jamais été figé passe par LibreOffice.
+ *
+ * Deux écarts avec le téléchargement, voulus. Le fichier reçu part QUEL QUE SOIT son format (une
+ * photo, un .docx) : l'archive n'a pas d'en-tête « application/pdf » à tenir, et un document reçu
+ * doit y figurer tel qu'on l'a reçu. Et un échec n'est pas une réponse HTTP mais une erreur
+ * (`code: 'NON_RENDU'`) qui dit POURQUOI : l'archive l'écrit dans son sommaire et continue, au lieu
+ * de s'interrompre pour un document dont il manquerait l'adresse.
+ *
+ * Les droits sont ceux du téléchargement : `fillForRequest` reçoit le vrai utilisateur.
+ *
+ * @returns {Promise<{ buffer: Buffer, mime: string, nom?: string }>}
+ */
+async function fichierPourArchive(conn, user, docId) {
+    try {
+        if (await colonneExiste(conn, 'document_fichier', 'document_id')) {
+            const [[fi]] = await conn.query('SELECT nom, mime, bytes FROM document_fichier WHERE document_id = ?', [docId]);
+            const clair = fi ? decryptBytes(fi.bytes) : null;
+            if (clair) return { buffer: clair, mime: fi.mime || 'application/octet-stream', nom: fi.nom || null };
+        }
+    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+    const signe = await loadSignedPdf(conn, docId);
+    if (signe) return { buffer: signe, mime: 'application/pdf' };
+
+    let refus = null;
+    const reponse = { status: (code) => ({ json: (corps) => { refus = { code, corps }; } }) };
+    const r = await fillForRequest({ params: { id: docId }, user, query: {} }, reponse);
+    if (!r) {
+        const e = new Error((refus && refus.corps && (refus.corps.message || refus.corps.error)) || 'Document non rendu.');
+        e.code = 'NON_RENDU';
+        throw e;
+    }
+    let pdf;
+    try {
+        pdf = await composeDocPdf(conn, r);
+    } catch (e) {
+        const raison = e.code === 'EMARG_NOT_READY' ? "feuilles de présence pas encore générées"
+            : e.code === 'NO_SOFFICE' ? 'LibreOffice absent du serveur' : null;
+        if (!raison) throw e;
+        const n = new Error(raison); n.code = 'NON_RENDU'; throw n;
+    }
+    try {
+        const { sealPdf } = require('../lib/pdfseal.js');
+        const org = r.ctx.org || {};
+        const p12 = await getOrgSigner(conn, r.doc.organization_id, org.legal_name || org.short_name);
+        pdf = await sealPdf(pdf, p12, {
+            orgName: org.legal_name || org.short_name || 'Organisme',
+            reason: `Document ${r.doc.type} scellé électroniquement`,
+            contact: org.email || '', location: org.town || '',
+        });
+    } catch (e) {
+        console.error('Scellement PAdES ignoré (archive) :', e.message); // même repli que le téléchargement
+    }
+    return { buffer: pdf, mime: 'application/pdf' };
+}
+
+/**
  * GET /api/documents/:id/preview — aperçu HTML fidèle (même rendu que le PDF),
  * affichable en ligne sans dépendre du lecteur PDF du navigateur.
  */
@@ -1666,4 +1724,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, loadSignedPdf };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, loadSignedPdf, fichierPourArchive };

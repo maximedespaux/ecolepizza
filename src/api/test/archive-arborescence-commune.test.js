@@ -1,0 +1,371 @@
+/**
+ * L'ARBORESCENCE D'ARCHIVAGE COMMUNE ET L'ARCHIVE ZIP DU COFFRE (demandées le 2026-09-24).
+ *
+ * LE CONSTAT. L'arborescence d'archivage se réglait formation par formation — à la main, dix fois —
+ * et NE SERVAIT À RIEN : l'export ZIP qu'elle devait ranger (« étape 2 », prévue le 2026-07-10)
+ * n'avait jamais été écrit. Aucune ligne de code ne la lisait, hors l'éditeur qui l'enregistrait.
+ *
+ * CE QUI EST FIGÉ ICI :
+ *   · une arborescence pour toutes les formations ; un document qu'une formation n'a pas est
+ *     simplement sauté ; un QCM s'y désigne par son TITRE (chaque formation a le sien) ;
+ *   · la proposition de départ = les arborescences déjà réglées, FUSIONNÉES, conflits nommés ;
+ *   · l'archive ZIP : la liste même du coffre, rangée selon l'arborescence, rien de perdu.
+ *
+ * Les jeux d'essai reprennent les arborescences RÉELLES de production relevées le 2026-09-24
+ * (RS7404, NIV1, NIV1H) — y compris leurs défauts : un « OU » enregistré avec des membres qui ont
+ * changé depuis, des QCM au libellé périmé (« … - NIVEAU I »), une étape qui n'existe plus
+ * (« sys:emargement »).
+ */
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const { PassThrough } = require('stream');
+const Arbo = require('../lib/arborescenceArchive.js');
+const { ecrivainZip } = require('../lib/zip.js');
+
+const API = path.join(__dirname, '..');
+const lire = (f) => fs.readFileSync(path.join(API, f), 'utf8');
+
+/* ─── Les arborescences de production (2026-09-24), réduites à ce qui compte ────────────────── */
+const d = (name, items = [], children = [], per = false) => ({ name, per_learner: per, items, children });
+const ref = (r, label = r) => ({ type: 'model', ref: r, label });
+const qcm = (id, label) => ({ type: 'quiz', ref: `quiz:${id}`, label });
+const ou = (group, members, label) => ({ type: 'model', group, members, label });
+const squelette = (stagiaire) => ({ folders: [d('{Année}', [], [d('{Semaine}', [], [d('{Code}', [], [stagiaire])])])] });
+const DEVIS = 'org-6498819d'; const CONTRAT = 'org-7a8d54bc';
+
+const RS7404 = squelette(d('{Stagiaire}', [ref('piece:72e9', "Pièce d'identité"), ref('contrat', 'Contrat de formation'), ref('invitation'),
+    ref('devis-rs7404', 'Devis RS7404'), ref('droit-image', "Droit à l'image"), qcm('94be', 'Test de positionnement'), ref('esheet-nouvelle-feuillehjb', "Feuille d'émargement")],
+[d('Évaluations', [qcm('b85d', 'Évaluation Formative du Mardi'), qcm('7af3', 'Évaluation de satisfaction')])], true));
+const NIV1H = squelette(d('{Stagiaire}', [ou(DEVIS, ['devis-particulier', 'devis-professionnel'], 'Devis particulier / Devis professionnel'),
+    ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention de formation'), ref('invitation'), qcm('5c35', 'Test de positionnement'),
+    ref('attestation-hygiene', 'Attestation Hygiène')],
+[d('Évaluations', [qcm('b804', 'Évaluation Formative du Mardi'), qcm('8e66', 'Évaluation formative Hygiène')])], true));
+const NIV1 = squelette(d('{Stagiaire}', [ou(CONTRAT, ['contrat', 'convention'], 'Contrat de formation / Convention de formation'),
+    ref('sys:emargement', "Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))"), ou(DEVIS, ['devis-particulier', 'devis-entreprise'], 'Devis particulier / Devis entreprise')],
+[d('Évaluations', [qcm('f214', 'Évaluation Formative du Mardi - NIVEAU I')])], true));
+
+const TITRES = new Map([['94be', 'Test de positionnement'], ['b85d', 'Évaluation Formative du Mardi'], ['7af3', 'Évaluation de satisfaction'],
+    ['5c35', 'Test de positionnement'], ['b804', 'Évaluation Formative du Mardi'], ['8e66', 'Évaluation formative Hygiène'],
+    ['f214', 'Évaluation Formative du Mardi']]); // renommé depuis : le « - NIVEAU I » a disparu
+const GROUPES = new Map([[DEVIS, { members: ['devis-particulier', 'devis-professionnel-copie'], label: 'Devis particulier / Devis professionnel entreprise' }],
+    [CONTRAT, { members: ['contrat', 'convention'], label: 'Contrat / Convention' }]]);
+const SLUGS = new Set(['piece:72e9', 'contrat', 'convention', 'invitation', 'devis-rs7404', 'droit-image', 'esheet-nouvelle-feuillehjb',
+    'attestation-hygiene', 'devis-particulier', 'devis-professionnel-copie']);
+const OPTS = {
+    titreDuQcm: (id) => TITRES.get(id) || null,
+    existe: (it) => (it.type === 'quiz' && it.titre ? true : it.group ? Arbo.slugsDe(it, GROUPES).some((s) => SLUGS.has(s)) : SLUGS.has(it.ref)),
+    groupes: GROUPES,
+};
+const dossierNomme = (tree, ...noms) => noms.reduce((n, nom) => n && (n.children || n.folders).find((x) => x.name === nom), tree);
+
+/* ─── La proposition : les arborescences des formations, fusionnées ──────────────────────────── */
+
+test('la proposition fusionne les trois arborescences en UNE, au même squelette', () => {
+    const { tree, conflits, retires } = Arbo.fusionnerArbres(
+        [{ code: 'RS7404', tree: RS7404 }, { code: 'NIV1H', tree: NIV1H }, { code: 'NIV1', tree: NIV1 }], OPTS);
+    assert.strictEqual(tree.folders.length, 1, 'un seul {Année} : deux dossiers de même nom n\'en font qu\'un');
+    const stag = dossierNomme(tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}');
+    assert.ok(stag && stag.per_learner, '« un par stagiaire » gardé');
+    const cles = (n) => n.items.map(Arbo.cleItem);
+    /* UN QCM PAR SON TITRE — une seule entrée pour les trois « Test de positionnement », et pour les
+       trois « Mardi », dont celui de NIV1 sous son titre d'AUJOURD'HUI, pas son libellé périmé. */
+    assert.strictEqual(cles(stag).filter((c) => c === 'qcm:test de positionnement').length, 1);
+    const evals = dossierNomme(stag, 'Évaluations');
+    assert.deepStrictEqual(evals.items.map((i) => i.titre),
+        ['Évaluation Formative du Mardi', 'Évaluation de satisfaction', 'Évaluation formative Hygiène']);
+    assert.ok(!JSON.stringify(tree).includes('NIVEAU I'), 'plus de libellé périmé');
+    /* LE « OU » ABSORBE LE MODÈLE SEUL QU'IL CONTIENT, au même endroit : RS7404 plaçait « contrat »,
+       NIV1H « Contrat / Convention » — il n'en reste qu'un, le « OU ». */
+    assert.ok(!cles(stag).includes('ref:contrat'));
+    assert.ok(cles(stag).includes(`ou:${CONTRAT}`));
+    // Un « OU » porte ses membres et son libellé d'AUJOURD'HUI.
+    const devis = stag.items.find((i) => i.group === DEVIS);
+    assert.deepStrictEqual(devis.members, ['devis-particulier', 'devis-professionnel-copie']);
+    assert.strictEqual(devis.label, 'Devis particulier / Devis professionnel entreprise');
+    // Ce qui ne désigne plus rien est RETIRÉ, et nommé.
+    assert.deepStrictEqual(retires.map((r) => `${r.code}:${r.label}`), ["NIV1:Feuille d'émargement (stagiaire + formateur(s) + intervenant(s))"]);
+    assert.deepStrictEqual(conflits, [], 'les trois formations rangeaient leurs documents aux mêmes places');
+});
+
+test('un document placé à deux endroits par deux formations est un CONFLIT, nommé — la première l\'emporte', () => {
+    const A = squelette(d('{Stagiaire}', [ref('droit-image')], [], true));
+    const B = { folders: [d('{Année}', [], [d('{Semaine}', [], [d('{Code}', [], [d('{Stagiaire}', [], [d('Autorisations', [ref('droit-image')])], true)])])])] };
+    const { tree, conflits } = Arbo.fusionnerArbres([{ code: 'A', tree: A }, { code: 'B', tree: B }], OPTS);
+    assert.deepStrictEqual(conflits.map((c) => [c.code, c.garde, c.ecarte]),
+        [['B', '{Année} / {Semaine} / {Code} / {Stagiaire}', '{Année} / {Semaine} / {Code} / {Stagiaire} / Autorisations']]);
+    const stag = dossierNomme(tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}');
+    assert.deepStrictEqual(stag.items.map(Arbo.cleItem), ['ref:droit-image']);
+    assert.deepStrictEqual(dossierNomme(stag, 'Autorisations').items, [], 'le dossier reste, vide : c\'est à l\'école de trancher');
+});
+
+/* ─── La place d'un document dans l'archive ─────────────────────────────────────────────────── */
+
+const COMMUNE = { stagiaire: Arbo.fusionnerArbres([{ code: 'RS7404', tree: RS7404 }, { code: 'NIV1H', tree: NIV1H }], OPTS).tree };
+const doc = (extra) => ({ scope: 'LEARNER', year: 2026, week: 38, program_code: 'RS7404', program_title: 'Fabriquer des pizzas',
+    last_name: 'BEYNEY', first_name: 'David', title: 'Document', ...extra });
+const chemin = (arbres, x, groupes = GROUPES) => { const p = Arbo.placeDansLArchive(arbres, x, groupes); return [...p.dossiers, p.fichier].join('/'); };
+
+test('chaque formation range SON QCM à la place de son titre', () => {
+    const mardi = doc({ quiz_id: 'autre-id', quiz_title: 'Évaluation Formative du Mardi', title: 'Évaluation Formative du Mardi' });
+    assert.strictEqual(chemin(COMMUNE, mardi), '2026/S38/RS7404/BEYNEY David/Évaluations/Évaluation Formative du Mardi');
+    const niv1 = doc({ program_code: 'NIV1', quiz_id: 'f214', quiz_title: 'Évaluation Formative du Mardi', title: 'Mardi' });
+    assert.strictEqual(chemin(COMMUNE, niv1), '2026/S38/NIV1/BEYNEY David/Évaluations/Mardi', 'NIV1 prend la même place avec SON QCM');
+});
+
+test('un document que l\'arborescence ne nomme pas n\'est pas perdu : il va dans le dossier du stagiaire', () => {
+    const p = Arbo.placeDansLArchive(COMMUNE, doc({ slug: 'livret-accueil', title: "Livret d'accueil" }), GROUPES);
+    assert.strictEqual(p.place, 'defaut');
+    assert.strictEqual([...p.dossiers, p.fichier].join('/'), "2026/S38/RS7404/BEYNEY David/Livret d'accueil");
+    // Une pièce déposée, désignée par son type.
+    assert.strictEqual(Arbo.placeDansLArchive(COMMUNE, doc({ piece_type_id: '72e9', title: "Pièce d'identité" }), GROUPES).place, 'arbre');
+});
+
+test('un « OU » se lit dans ses membres D\'AUJOURD\'HUI, pas dans l\'instantané enregistré', () => {
+    /* Le devis des dossiers d'entreprise est « devis-professionnel-copie » : absent de tous les
+       instantanés de production, présent dans le groupe actuel. */
+    const devis = doc({ slug: 'devis-professionnel-copie', title: 'Devis professionnel entreprise' });
+    assert.strictEqual(Arbo.placeDansLArchive(COMMUNE, devis, GROUPES).place, 'arbre');
+    const instantane = squelette(d('{Stagiaire}', [ou(DEVIS, ['devis-particulier', 'devis-professionnel'], 'Devis')], [], true));
+    assert.strictEqual(Arbo.placeDansLArchive({ stagiaire: instantane }, devis, GROUPES).place, 'arbre');
+    assert.strictEqual(Arbo.placeDansLArchive({ stagiaire: instantane }, devis, null).place, 'defaut', 'sans les groupes actuels, il ne trouvait pas sa place');
+});
+
+test('dossier d\'entreprise : l\'arborescence entreprise, et le nom du stagiaire quand son document est rangé au-dessus de lui', () => {
+    const entreprise = { folders: [d('{Année}', [], [d('{Semaine}', [], [d('{Code}', [], [d('{Entreprise}', [ref('droit-image'), ref('convention')],
+        [d('{Stagiaire}', [], [d('Évaluations', [{ type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Mardi' }])], true)])])])])] };
+    const arbres = { stagiaire: COMMUNE.stagiaire, entreprise };
+    const membre = { enr_company_id: 'c1', enr_company_name: 'BOULANGERIE LES ARCADES', program_code: 'NIV1H' };
+    assert.strictEqual(chemin(arbres, doc({ ...membre, slug: 'droit-image', title: "Droit à l'image" })),
+        "2026/S38/NIV1H/BOULANGERIE LES ARCADES/Droit à l'image — BEYNEY David",
+        'sinon les droits à l\'image de toute l\'entreprise s\'écraseraient');
+    assert.strictEqual(chemin(arbres, doc({ ...membre, quiz_title: 'Évaluation Formative du Mardi', title: 'Mardi' })),
+        '2026/S38/NIV1H/BOULANGERIE LES ARCADES/BEYNEY David/Évaluations/Mardi');
+    // Le document de l'ENTREPRISE elle-même (convention de groupe) : dans son dossier, sans nom de stagiaire.
+    assert.strictEqual(chemin(arbres, { scope: 'COMPANY', year: 2026, week: 38, program_code: 'NIV1H', company_name: 'BOULANGERIE LES ARCADES',
+        last_name: 'BOULANGERIE LES ARCADES', slug: 'convention', title: 'Convention de formation' }),
+    '2026/S38/NIV1H/BOULANGERIE LES ARCADES/Convention de formation');
+    // Sans arborescence entreprise : celle des stagiaires, et l'entreprise à côté de ses stagiaires.
+    assert.strictEqual(chemin({ stagiaire: COMMUNE.stagiaire }, { scope: 'COMPANY', year: 2026, week: 38, program_code: 'NIV1H',
+        company_name: 'LES ARCADES', title: 'Convention' }), '2026/S38/NIV1H/LES ARCADES/Convention');
+});
+
+test('un document de session se range au niveau de la formation, jamais dans un dossier de stagiaire', () => {
+    const sess = { scope: 'SESSION', year: 2026, week: 38, program_code: 'NIV1H', slug: 'droit-image', title: "Contrat d'hygiène" };
+    // Même quand l'arborescence place son modèle dans le dossier du stagiaire : il n'a pas de stagiaire.
+    assert.strictEqual(chemin(COMMUNE, sess), "2026/S38/NIV1H/Contrat d'hygiène");
+});
+
+test('les champs se remplissent en noms de dossier que tous les systèmes acceptent', () => {
+    const t = { folders: [d('{Année} {Formation}', [], [d('{Semaine} ({Dates})', [], [d('Stagiaires', [], [], true)])])] };
+    const x = doc({ week: 2, program_title: 'Pizza / Four : bases', debut: '2026-01-05', fin: '2026-01-09', title: 'A/B: "c"' });
+    assert.strictEqual(chemin({ stagiaire: t }, x), '2026 Pizza - Four - bases/S02 (05-01→09-01)/Stagiaires BEYNEY David/A-B- -c-',
+        '« / » ferait un sous-dossier ; un dossier « un par stagiaire » sans {Stagiaire} reçoit le nom, pour que chacun garde le sien');
+    assert.strictEqual(chemin({}, doc({ year: null, week: null, program_code: null, title: 'X' })), 'Sans année/Sans semaine/Sans formation/BEYNEY David/X',
+        'sans rien de réglé : la structure standard');
+});
+
+/* ─── Ce qu'on accepte d'enregistrer ───────────────────────────────────────────────────────── */
+
+test('l\'arborescence enregistrée est nettoyée, et refusée si un dossier n\'a pas de nom', () => {
+    const propre = Arbo.validerArbre({ folders: [{ name: ' {Année} ', intrus: 1, items: [{ type: 'quiz', titre: 'Mardi', label: 'Mardi', x: 2 }], children: [] }] });
+    assert.deepStrictEqual(Object.keys(propre.folders[0]).sort(), ['children', 'id', 'items', 'name', 'per_learner']);
+    assert.strictEqual(propre.folders[0].name, '{Année}');
+    assert.deepStrictEqual(propre.folders[0].items, [{ type: 'quiz', titre: 'Mardi', label: 'Mardi' }]);
+    assert.throws(() => Arbo.validerArbre({ folders: [{ name: '  ', items: [], children: [] }] }), /Nommez tous les dossiers/);
+    assert.throws(() => Arbo.validerArbre({ folders: [{ name: 'A', items: [{ label: 'rien' }] }] }), /ne désigne rien/);
+    assert.throws(() => Arbo.validerArbre({ dossiers: [] }), /illisible/);
+});
+
+/* ─── L'archive ZIP ────────────────────────────────────────────────────────────────────────── */
+
+test('le ZIP écrit au fil de l\'eau se relit — noms accentués, contenus et CRC', async () => {
+    const PizZip = require('pizzip');
+    const flux = new PassThrough(); const morceaux = []; flux.on('data', (c) => morceaux.push(c));
+    const zip = ecrivainZip(flux);
+    await zip.ajouter('2026/S38/RS7404/BEYNEY David/Évaluations/Mardi.pdf', Buffer.from('%PDF-1.4 a'));
+    await zip.ajouter("2026/S38/RS7404/BEYNEY David/Droit à l'image.pdf", Buffer.alloc(70000, 3));
+    await zip.terminer(); flux.end();
+    const z = new PizZip(Buffer.concat(morceaux), { checkCRC32: true });
+    assert.deepStrictEqual(Object.keys(z.files), ['2026/S38/RS7404/BEYNEY David/Évaluations/Mardi.pdf', "2026/S38/RS7404/BEYNEY David/Droit à l'image.pdf"]);
+    assert.strictEqual(z.file('2026/S38/RS7404/BEYNEY David/Évaluations/Mardi.pdf').asText(), '%PDF-1.4 a');
+    assert.strictEqual(zip.nombre, 2);
+});
+
+test('un téléchargement interrompu arrête l\'écriture au lieu de la poursuivre dans le vide', { timeout: 2000 }, async () => {
+    /* LE CAS QUI COMPTE : la connexion est DÉJÀ fermée (« close » est passé) quand on écrit. Sans la
+       garde, l'écrivain attendrait un « drain » ou un « close » qui ne viendront plus — la requête
+       resterait pendue sur le serveur. Le délai de deux secondes fait échouer ce test au lieu de
+       bloquer toute la suite. */
+    const flux = new PassThrough();
+    const zip = ecrivainZip(flux);
+    const ferme = new Promise((ok) => flux.once('close', ok));
+    flux.destroy();
+    await ferme;
+    await assert.rejects(() => zip.ajouter('a.pdf', Buffer.alloc(70000)), (e) => e.code === 'ZIP_ABANDON');
+});
+
+/* ─── La route, la portée, le sommaire ─────────────────────────────────────────────────────── */
+
+const SUIVI = lire('controllers/suivi.controller.js');
+const ROUTES_SUIVI = lire('routes/suivi.routes.js');
+
+test('l\'archive a UNE route, sous la garde du coffre, et la liste même de l\'écran', () => {
+    assert.match(ROUTES_SUIVI, /router\.use\(authenticateToken, authorizeRoles\(\.\.\.AUDIT_ROLES\)\);[\s\S]*router\.get\('\/archives\/zip', exporterArchive\);/,
+        'qui ne peut pas ouvrir le coffre n\'en reçoit pas une copie — pièces d\'identité comprises');
+    assert.match(SUIVI, /const \{ gen, comp, sess, arch, pieces \} = await lignesDuCoffre\(conn, req\.user\.organization_id\);/, 'l\'écran');
+    assert.match(SUIVI, /const c = await lignesDuCoffre\(conn, orgId\);/, 'l\'archive');
+    assert.match(SUIVI, /\.filter\(\(l\) => !l\.dossier && portee\.garde\(l\)\)/, 'les classeurs restent à part, comme à l\'écran');
+    // Au fil de l'eau, et une panne en route coupe la connexion plutôt que de livrer un ZIP tronqué.
+    assert.match(SUIVI, /const zip = ecrivainZip\(res\);/);
+    assert.match(SUIVI, /res\.destroy\(err\);/);
+    assert.match(SUIVI, /logAudit\(req, 'archive\.export', 'Archive', null\);/);
+    // Un QCM envoyé mais pas rempli n'est pas rendu en questionnaire vide.
+    assert.match(SUIVI, /if \(l\.quiz_id && l\.status !== 'SIGNE'\) \{ const e = new Error\('QCM envoyé, pas encore rempli'\)/);
+});
+
+test('le fichier d\'un document : le reçu, sinon le signé figé, sinon le rendu du jour — comme au téléchargement', () => {
+    const DOC = lire('controllers/document.controller.js');
+    const f = DOC.slice(DOC.indexOf('async function fichierPourArchive'), DOC.indexOf('/**', DOC.indexOf('async function fichierPourArchive')));
+    const iRecu = f.indexOf('FROM document_fichier'); const iSigne = f.indexOf('loadSignedPdf(conn, docId)'); const iRendu = f.indexOf('fillForRequest(');
+    assert.ok(iRecu > 0 && iSigne > iRecu && iRendu > iSigne, 'ce qui fait foi ne se régénère pas');
+    assert.match(f, /fillForRequest\(\{ params: \{ id: docId \}, user, query: \{\} \}/, 'avec les droits du VRAI utilisateur');
+    assert.match(f, /e\.code = 'NON_RENDU';/);
+});
+
+test('la portée : les clés mêmes du coffre, et le dossier reconnu jusque dans les PDF importés', async () => {
+    const { porteeDeLArchive } = require('../controllers/suivi.controller.js');
+    const conn = (row) => ({ query: async () => [[row]] });
+    const session = await porteeDeLArchive(conn({ id: 's1', year: 2026, week: 38, code: 'RS7404' }), 'org', { session: 's1' });
+    assert.ok(session.garde({ session_id: 's1' }));
+    assert.ok(!session.garde({ session_id: 's2' }));
+    assert.ok(session.garde({ source: 'archive', year: 2026, week: 38, program_code: 'RS7404' }), 'un PDF importé, par sa semaine et sa formation');
+    assert.ok(!session.garde({ source: 'archive', year: 2026, week: 37, program_code: 'RS7404' }));
+
+    const dossier = await porteeDeLArchive(conn({ id: 'e1', company_id: 'c1', session_id: 's1', first_name: 'Jean', last_name: 'DUPONT',
+        year: 2025, week: 12, code: 'NIV1' }), 'org', { dossier: 'e1' });
+    assert.ok(dossier.garde({ enrollment_id: 'e1' }));
+    assert.ok(!dossier.garde({ enrollment_id: 'e2' }));
+    assert.ok(dossier.garde({ scope: 'COMPANY', company_id: 'c1', session_id: 's1' }), 'la convention de son entreprise, pour sa session');
+    assert.ok(!dossier.garde({ scope: 'COMPANY', company_id: 'c1', session_id: 's9' }));
+    assert.ok(dossier.garde({ source: 'archive', learner_id: null, year: 2025, week: 12, program_code: 'NIV1', last_name: 'Dupont Jean', first_name: '' }),
+        'un PDF importé dont le chemin disait « Dupont Jean »');
+    assert.ok(!dossier.garde({ source: 'archive', learner_id: null, year: 2025, week: 12, program_code: 'NIV1', last_name: 'Durand Jean', first_name: '' }));
+
+    const semaine = await porteeDeLArchive(conn(null), 'org', { annee: '2026', semaine: '38' });
+    assert.ok(semaine.garde({ year: 2026, week: 38, program_code: 'X' }));
+    assert.ok(!semaine.garde({ year: 2026, week: 39 }));
+    const sansAnnee = await porteeDeLArchive(conn(null), 'org', { annee: '-' });
+    assert.ok(sansAnnee.garde({ year: null }), '« - » : la branche « Sans session » du coffre');
+    assert.strictEqual(await porteeDeLArchive(conn(null), 'org', {}), null);
+    assert.strictEqual(await porteeDeLArchive(conn(undefined), 'org', { session: 'inconnue' }), null);
+});
+
+test('le sommaire nomme ce qui est rangé hors de l\'arborescence et ce qui manque, avec la raison', () => {
+    const { sommaireDeLArchive } = require('../controllers/suivi.controller.js');
+    const txt = sommaireDeLArchive({ libelle: 'Session RS7404' }, "l'arborescence commune",
+        [{ chemin: 'a/Contrat.pdf', statut: 'SIGNE', place: 'arbre' }, { chemin: 'a/Livret.pdf', statut: 'ENVOYE', place: 'defaut' }],
+        [{ titre: 'Évaluation Formative du Jeudi', qui: 'BEYNEY David', raison: 'QCM envoyé, pas encore rempli' }], new Date(2026, 8, 25, 10, 0));
+    assert.match(txt, /2 document\(s\) inclus/);
+    assert.match(txt, /a\/Contrat\.pdf {2}\[signé\]/);
+    assert.match(txt, /a\/Livret\.pdf {2}\[envoyé\]/, 'le statut dit ce qui n\'est pas signé');
+    assert.match(txt, /1 document\(s\) que l'arborescence ne nomme pas[\s\S]*a\/Livret\.pdf/);
+    assert.match(txt, /1 document\(s\) du coffre NON inclus :\r\n {2}Évaluation Formative du Jeudi — BEYNEY David : QCM envoyé, pas encore rempli/);
+});
+
+/* ─── L'arborescence commune : l'API, et la migration ──────────────────────────────────────── */
+
+test('l\'arborescence commune se lit avant `/:id`, s\'écrit par le bureau, et attend la migration 182 sans casser', () => {
+    const R = lire('routes/formationProgram.routes.js');
+    assert.ok(R.indexOf("router.get('/arborescence', getArborescence)") < R.indexOf("router.get('/:id', getProgram)"),
+        'sinon « arborescence » serait pris pour l\'identifiant d\'une formation');
+    assert.match(R, /router\.put\('\/arborescence', authorizeRoles\(\.\.\.ADMIN_ROLES\), saveArborescence\);/);
+    const C = lire('controllers/formationProgram.controller.js');
+    assert.match(C, /tree = Arbo\.validerArbre\(\(req\.body \|\| \{\}\)\.tree\)/);
+    assert.match(C, /return res\.status\(503\)\.json\(\{ error: "Migration 182 non jouée/);
+    // Tant que rien n'est enregistré : la proposition, pas une page vide.
+    assert.match(C, /const st = Arbo\.fusionnerArbres\(entrees\('archive_tree'\), opts\);/);
+    assert.match(C, /const opts = \{ titreDuQcm: \(id\) => titres\.get\(id\) \|\| null, existe, groupes \};/);
+    // L'archive suit la commune dès qu'elle existe, sinon celles des formations : elle marche avant la 182.
+    assert.match(SUIVI, /SELECT archive_tree, company_archive_tree FROM organization WHERE id = \?/);
+    assert.match(SUIVI, /SELECT code, archive_tree, company_archive_tree FROM training_program WHERE organization_id = \?/);
+});
+
+test('la migration 182 et son revert se rejouent sans risque, et ne touchent pas les arborescences des formations', () => {
+    const M = path.join(API, '..', '..', 'database', 'migrations');
+    const aller = fs.readFileSync(path.join(M, '182_arborescence_commune.sql'), 'utf8');
+    const retour = fs.readFileSync(path.join(M, '182_revert_arborescence_commune.sql'), 'utf8');
+    assert.match(aller, /ALTER TABLE organization\s+ADD COLUMN IF NOT EXISTS archive_tree\s+longtext DEFAULT NULL,\s+ADD COLUMN IF NOT EXISTS company_archive_tree longtext DEFAULT NULL;/);
+    assert.match(retour, /ALTER TABLE organization\s+DROP COLUMN IF EXISTS archive_tree,\s+DROP COLUMN IF EXISTS company_archive_tree;/);
+    for (const sql of [aller, retour]) {
+        assert.doesNotMatch(sql, /^\s*--/m, 'commentaires en blocs, jamais --');
+        assert.ok(!/training_program/i.test(sql.replace(/\/\*[\s\S]*?\*\//g, '')),
+            'hors commentaires, la 182 ne touche pas aux arborescences des formations');
+    }
+});
+
+/* ─── L'écran ───────────────────────────────────────────────────────────────────────────────── */
+
+const UI = path.join(API, '..', 'app', 'ui');
+const lireUi = (f) => fs.readFileSync(path.join(UI, f), 'utf8');
+
+test('l\'écran et le serveur désignent un document de la MÊME façon', async () => {
+    /* Deux copies d'une règle d'identité finissent par diverger ; ici, elles sont confrontées sur
+       les mêmes cas. Si l'écran grisait « sauté » un document que l'archive range, ou l'inverse,
+       l'aperçu mentirait sur l'archive qu'on remettra à un contrôleur. */
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    const cas = [
+        { type: 'quiz', titre: '  Évaluation   Formative du MARDI ' }, { type: 'quiz', ref: 'quiz:94be', label: 'x' },
+        { type: 'model', ref: 'droit-image' }, { type: 'model', ref: 'piece:72e9' }, ou(DEVIS, ['a', 'b'], 'Devis'), {}, null,
+    ];
+    for (const it of cas) assert.strictEqual(ecran.cleItem(it), Arbo.cleItem(it), JSON.stringify(it));
+    assert.strictEqual(ecran.normaliserTitre('Évaluation formative Hygiène'), Arbo.normaliserTitre('Évaluation formative Hygiène'));
+    // Un « OU » couvre les membres D'AUJOURD'HUI, des deux côtés.
+    const groupes = new Map([[DEVIS, ['devis-particulier', 'devis-professionnel-copie']]]);
+    assert.deepStrictEqual(ecran.clesCouvertes(ou(DEVIS, ['devis-professionnel'], 'Devis'), groupes),
+        ['ref:devis-particulier', 'ref:devis-professionnel-copie']);
+    // L'aperçu d'une formation : ce qu'elle saute, ce que l'arborescence ne nomme pas.
+    const t = squelette(d('{Stagiaire}', [ref('devis-rs7404'), { type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Mardi' }], [], true));
+    const ap = ecran.apercuFormation(t, ['qcm:evaluation formative du mardi', 'ref:livret-accueil'], groupes);
+    assert.strictEqual(ap.concerne(ref('devis-rs7404')), false, 'NIV1H n\'a pas de devis RS7404 : sauté');
+    assert.strictEqual(ap.concerne({ type: 'quiz', titre: 'Évaluation Formative du Mardi' }), true);
+    assert.deepStrictEqual(ap.nonPlaces, ['ref:livret-accueil']);
+});
+
+test('l\'arborescence se règle UNE fois, depuis la liste des formations — plus dans chaque formation', () => {
+    const PAGE = lireUi('pages/Formations.jsx');
+    assert.match(PAGE, /<button className="btn ghost" onClick=\{\(\) => setArborescence\(true\)\}>Arborescence d'archivage<\/button>/);
+    assert.match(PAGE, /<ArborescenceCommune onClose=\{\(\) => setArborescence\(false\)\}/);
+    // La formation ne l'enregistre plus : ni état propre, ni appel à l'ancienne route.
+    assert.doesNotMatch(PAGE, /saveArchiveTree|archiveTree|treeHasEmptyName/);
+    // Son onglet la LIT pour elle, et mène à l'éditeur commun.
+    assert.match(PAGE, /<ApercuArborescence program=\{program\}/);
+    assert.match(PAGE, /onOuvrirArborescence=\{\(\) => \{ setEditing\(null\); setArborescence\(true\); \}\}/);
+    const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
+    assert.match(EDITEUR, /await saveArborescenceCommune\(tree, companyTree\)/);
+    assert.match(EDITEUR, /disabled=\{saving \|\| !etat \|\| !etat\.disponible\}/, 'sans la 182, on ne fait pas semblant d\'enregistrer');
+    const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
+    assert.match(OUTIL, /: o\.type === "quiz" \? \{ type: "quiz", titre: o\.titre, label: o\.label \}/, 'un QCM se place par son TITRE');
+});
+
+test('les trois boutons d\'archive : même garde que le coffre, et un comptage avant de télécharger', () => {
+    const CLIENT = lireUi('api/apiClient.js');
+    const f = CLIENT.slice(CLIENT.indexOf('export async function telechargerArchive'));
+    assert.match(f, /await request\(`\/suivi\/archives\/zip\?\$\{qs\}&compter=1`\)/,
+        'une sélection vide répond un message, pas un fichier d\'erreur au nom de .zip');
+    assert.match(f, /a\.href = `\$\{API_BASE_URL\}\/suivi\/archives\/zip\?\$\{qs\}`;/, 'puis le navigateur télécharge, au fil de l\'eau');
+    assert.match(SUIVI, /if \(req\.query && req\.query\.compter\) return res\.json\(\{ data: \{ documents: aEcrire\.length, nom \} \}\);/);
+    for (const [page, appel] of [['pages/SessionDetail.jsx', /telechargerArchive\(\{ session: id \}\)/],
+        ['pages/StagiaireDetail.jsx', /telechargerArchive\(\{ dossier: curEnrId \}\)/]]) {
+        const src = lireUi(page);
+        assert.match(src, appel);
+        assert.match(src, /const ENTREE_SUIVI = NAV\.flatMap\(\(g\) => g\.items\)\.find\(\(it\) => it\.to === "\/suivi"\);/);
+        assert.match(src, /const archiveOuvrable = !!ENTREE_SUIVI && canOpen\(user, ENTREE_SUIVI\);/,
+            `${page} : le bouton ne s'offre qu'à qui peut ouvrir le coffre`);
+    }
+    const COFFRE = lireUi('pages/Suivi.jsx');
+    assert.match(COFFRE, /<ZipBtn params=\{\{ annee: Y\.label \}\}/);
+    assert.match(COFFRE, /<ZipBtn params=\{\{ annee: Y\.label, semaine: W\.week \? String\(W\.week\) : "-" \}\}/, 'les clés mêmes de l\'arbre du coffre');
+    assert.match(COFFRE, /<ZipBtn params=\{\{ annee: Y\.label, semaine: W\.week \? String\(W\.week\) : "-", formation: F\.code \}\}/);
+});

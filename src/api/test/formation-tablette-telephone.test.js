@@ -75,6 +75,10 @@ test('5 — les onglets de la fenêtre défilent, sans s\'écraser', () => {
 });
 
 test('l\'aperçu de l\'arborescence passe sous l\'éditeur sur écran étroit', () => {
-    assert.match(PAGE, /<div className="fm-archives">/);
+    /* L'éditeur vit depuis le 2026-09-24 dans la fenêtre de l'arborescence COMMUNE (une pour toutes
+       les formations) ; l'onglet de la formation n'en montre plus que l'aperçu. La mise en page, elle,
+       n'a pas changé de règle. */
+    const COMMUNE = fs.readFileSync(path.join(UI, 'components/ArborescenceCommune.jsx'), 'utf8');
+    assert.match(COMMUNE, /<div className="fm-archives">/);
     assert.match(bloc('@media (max-width:640px){\n  .fm-archives'), /\.fm-archives\{grid-template-columns:minmax\(0,1fr\)\}/);
 });

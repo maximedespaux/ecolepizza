@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const { normaliserGroupesPieces } = require('../lib/groupesPieces.js');
-const { colonneOuNull, tableExiste } = require('../lib/colonnes.js');
+const { colonneOuNull, tableExiste, colonneExiste } = require('../lib/colonnes.js');
+const { logAudit } = require('../lib/audit.js');
+const Arbo = require('../lib/arborescenceArchive.js');
 const { rattacherSiOrphelin, detacherFormation } = require('../lib/qcmFormations.js');
 const db = require('../config/database.js');
 const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js');
@@ -579,38 +581,135 @@ const getFormationSteps = async (req, res) => {
     }
 };
 
-/** PUT /api/formations/:id/archive-tree — enregistre l'arborescence d'archivage. Corps : { tree }. */
-const saveArchiveTree = async (req, res) => {
+/* L'ARBORESCENCE PAR FORMATION ne s'enregistre plus (2026-09-24) : PUT /formations/:id/archive-tree
+   est parti avec l'onglet qui l'appelait. Ses colonnes (053, 083) restent lues par l'archive ZIP tant
+   que l'arborescence COMMUNE n'est pas enregistrée — c'est ce qui la fait marcher avant la 182 — et
+   servent de point de départ à la proposition. */
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   L'ARBORESCENCE D'ARCHIVAGE COMMUNE (migration 182, 2026-09-24) — une fois pour toutes les
+   formations, au lieu d'une par formation (cf. lib/arborescenceArchive.js pour le pourquoi).
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* LA CLÉ D'UNE ÉTAPE, la même que celle d'un item de l'arborescence (lib/arborescenceArchive.js) :
+   un QCM par son TITRE, tout le reste par son identifiant. C'est elle qui dit, pour l'aperçu d'une
+   formation, quels documents l'arborescence range et lesquels elle ne nomme pas. */
+const cleEtape = (s) => (s.quiz_id ? `qcm:${Arbo.normaliserTitre(s.label)}` : `ref:${s.slug}`);
+
+/**
+ * GET /api/formations/arborescence — l'arborescence commune, la palette des documents de TOUTES les
+ * formations, et ce que chacune a dans son parcours (pour l'aperçu formation par formation).
+ *
+ * TANT QUE RIEN N'EST ENREGISTRÉ, la réponse PROPOSE la fusion des arborescences déjà réglées sur
+ * les formations (`propose: true`), avec ses conflits et ce qu'elle a retiré : l'école part de ce
+ * qu'elle a déjà fait, et le relit une fois. Rien n'est écrit avant qu'elle enregistre.
+ */
+const getArborescence = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[program]] = await conn.query(
-            'SELECT id FROM training_program WHERE id = ? AND organization_id = ?',
-            [req.params.id, req.user.organization_id]);
-        if (!program) return res.status(404).json({ message: 'Formation introuvable' });
-        const b = req.body || {};
-        if (Object.prototype.hasOwnProperty.call(b, 'tree')) {
-            const json = b.tree == null ? null : JSON.stringify(b.tree);
-            try {
-                await conn.query('UPDATE training_program SET archive_tree = ? WHERE id = ? AND organization_id = ?',
-                    [json, req.params.id, req.user.organization_id]);
-            } catch (e) {
-                if (e && e.code === 'ER_BAD_FIELD_ERROR') {
-                    return res.status(422).json({ error: "Migration requise (archive_tree) : appliquez 053_program_archive_tree.sql." });
-                }
-                throw e;
+        const orgId = req.user.organization_id;
+        const disponible = await colonneExiste(conn, 'organization', 'archive_tree');
+        let enregistree = null;
+        if (disponible) {
+            const [[o]] = await conn.query('SELECT archive_tree, company_archive_tree FROM organization WHERE id = ?', [orgId]);
+            if (o && (o.archive_tree != null || o.company_archive_tree != null)) {
+                enregistree = { tree: Arbo.lireArbre(o.archive_tree) || { folders: [] }, company_tree: Arbo.lireArbre(o.company_archive_tree) || { folders: [] } };
             }
         }
-        // Arborescence ENTREPRISE (migration 083) — tolère l'absence de colonne.
-        if (Object.prototype.hasOwnProperty.call(b, 'company_tree')) {
-            const cjson = b.company_tree == null ? null : JSON.stringify(b.company_tree);
-            try {
-                await conn.query('UPDATE training_program SET company_archive_tree = ? WHERE id = ? AND organization_id = ?',
-                    [cjson, req.params.id, req.user.organization_id]);
-            } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; }
+        const [programmes] = await conn.query('SELECT * FROM training_program WHERE organization_id = ? ORDER BY sort_order, code', [orgId]);
+
+        /* LA PALETTE : chaque document présent dans le parcours d'au moins une formation, UNE fois —
+           un QCM par titre (« Évaluation Formative du Mardi » existe dans cinq formations : c'est une
+           seule entrée, que chacune remplit avec le sien) —, avec la liste des formations qui l'ont. */
+        const palette = new Map();
+        const formations = [];
+        const tousLesSlugs = new Set();
+        for (const p of programmes) {
+            const etapes = await formationSteps(conn, orgId, p);
+            for (const s of etapes) tousLesSlugs.add(s.slug);
+            const actives = etapes.filter((s) => s.active);
+            formations.push({ id: p.id, code: p.code, title: p.title, documents: [...new Set(actives.map(cleEtape))] });
+            for (const s of actives) {
+                const cle = cleEtape(s);
+                if (!palette.has(cle)) {
+                    palette.set(cle, s.quiz_id
+                        ? { cle, titre_qcm: s.label, label: s.label, company_level: false, formations: [] }
+                        : { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [] });
+                }
+                palette.get(cle).formations.push(p.code);
+            }
         }
-        res.json({ success: true, message: 'Arborescence enregistrée.' });
+
+        let proposition = null;
+        if (!enregistree) {
+            const [qcms] = await conn.query('SELECT id, title, active FROM quiz WHERE organization_id = ?', [orgId]);
+            const titres = new Map(qcms.map((q) => [q.id, q.title]));
+            const titresActifs = new Set(qcms.filter((q) => q.active).map((q) => Arbo.normaliserTitre(q.title)));
+            const existe = (it) => (it.type === 'quiz' && it.titre ? titresActifs.has(Arbo.normaliserTitre(it.titre))
+                : it.group ? Arbo.slugsDe(it).some((x) => tousLesSlugs.has(x)) : tousLesSlugs.has(it.ref));
+            /* La formation la plus FOURNIE d'abord : c'est elle qui l'emporte en cas de conflit, et son
+               squelette sert de base. */
+            const compte = (t) => { let n = 0; const w = (fs) => (fs || []).forEach((f) => { n += (f.items || []).length; w(f.children); }); w(t && t.folders); return n; };
+            const entrees = (col) => programmes
+                .map((p) => ({ code: p.code, tree: Arbo.lireArbre(p[col]) }))
+                .filter((e) => compte(e.tree) > 0 || Arbo.aDesDossiers(e.tree))
+                .sort((a, b) => compte(b.tree) - compte(a.tree));
+            const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
+            const opts = { titreDuQcm: (id) => titres.get(id) || null, existe, groupes };
+            const st = Arbo.fusionnerArbres(entrees('archive_tree'), opts);
+            const en = Arbo.fusionnerArbres(entrees('company_archive_tree'), opts);
+            proposition = {
+                tree: st.tree, company_tree: en.tree,
+                // Les formations dont la proposition part, pour le dire à l'écran.
+                sources: [...new Set([...entrees('archive_tree'), ...entrees('company_archive_tree')].map((e) => e.code))],
+                conflits: [...st.conflits.map((c) => ({ ...c, arbre: 'stagiaire' })), ...en.conflits.map((c) => ({ ...c, arbre: 'entreprise' }))],
+                retires: [...st.retires.map((c) => ({ ...c, arbre: 'stagiaire' })), ...en.retires.map((c) => ({ ...c, arbre: 'entreprise' }))],
+            };
+        }
+        res.json({
+            data: {
+                disponible,
+                propose: !enregistree,
+                tree: enregistree ? enregistree.tree : proposition.tree,
+                company_tree: enregistree ? enregistree.company_tree : proposition.company_tree,
+                sources: proposition ? proposition.sources : [],
+                conflits: proposition ? proposition.conflits : [],
+                retires: proposition ? proposition.retires : [],
+                documents: [...palette.values()],
+                formations,
+            },
+        });
     } catch (err) {
-        console.error('Erreur enregistrement arborescence :', err);
+        console.error('Erreur arborescence commune :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/formations/arborescence — enregistre l'arborescence commune. Corps : { tree, company_tree }. */
+const saveArborescence = async (req, res) => {
+    let tree; let companyTree;
+    try {
+        tree = Arbo.validerArbre((req.body || {}).tree) || { folders: [] };
+        companyTree = Arbo.validerArbre((req.body || {}).company_tree) || { folders: [] };
+    } catch (e) {
+        if (e && e.code === 'ARBRE_INVALIDE') return res.status(422).json({ error: e.message });
+        throw e;
+    }
+    try {
+        const conn = db.promise();
+        try {
+            await conn.query('UPDATE organization SET archive_tree = ?, company_archive_tree = ? WHERE id = ?',
+                [JSON.stringify(tree), JSON.stringify(companyTree), req.user.organization_id]);
+        } catch (e) {
+            if (e && e.code === 'ER_BAD_FIELD_ERROR') {
+                return res.status(503).json({ error: "Migration 182 non jouée : l'arborescence commune ne peut pas encore être enregistrée." });
+            }
+            throw e;
+        }
+        logAudit(req, 'archivetree.save', 'Organization', req.user.organization_id);
+        res.json({ success: true, message: "Arborescence d'archivage enregistrée pour toutes les formations." });
+    } catch (err) {
+        console.error('Erreur enregistrement arborescence commune :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -734,5 +833,6 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, saveArchiveTree, formationSteps, enrollmentSteps, resoudreVariantes, deleteProgram,
+    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, resoudreVariantes, deleteProgram,
+    getArborescence, saveArborescence,
 };

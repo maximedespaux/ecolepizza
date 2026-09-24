@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires } from "../api/apiClient.js";
+import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires , telechargerArchive } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
@@ -27,6 +27,9 @@ import { grouperParEntreprise } from "../lib/dossiersASuivre.js";
 /* L'entrée « Entreprises » du menu : lire le nom d'un employeur n'ouvre pas sa fiche pour autant.
    Même décision que le tableau de bord et le suivi (`canOpen`), qui est celle de la garde de route. */
 const ENTREE_ENTREPRISES = NAV.flatMap((g) => g.items).find((it) => it.to === "/entreprises");
+/* L'ARCHIVE ZIP DE LA SESSION (2026-09-24) ne s'offre qu'à qui peut ouvrir le coffre (« Suivi
+   Qualiopi ») : c'est la garde du serveur, et l'archive contient les pièces d'identité. */
+const ENTREE_SUIVI = NAV.flatMap((g) => g.items).find((it) => it.to === "/suivi");
 
 function SessionDetail() {
   const { id } = useParams();
@@ -42,6 +45,7 @@ function SessionDetail() {
   /* La fiche d'une entreprise n'est un lien que si le menu l'offre — la décision même de
      la garde de route, comme au tableau de bord et au suivi. */
   const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen(user, ENTREE_ENTREPRISES);
+  const archiveOuvrable = !!ENTREE_SUIVI && canOpen(user, ENTREE_SUIVI);
   const [session, setSession] = useState(null);
   const [allLearners, setAllLearners] = useState([]);
   const [team, setTeam] = useState([]);
@@ -270,6 +274,12 @@ function SessionDetail() {
             <span className="badge n" style={{ background: colorOf(session.program_code), color: "#fff", borderColor: "transparent" }}>
               {session.program_code}
             </span>
+            {archiveOuvrable && (
+              <button className="btn ghost" title="Tous les documents de la session, rangés selon l'arborescence d'archivage"
+                onClick={() => telechargerArchive({ session: id }).catch((e) => setStatus({ type: "error", message: e.message }))}>
+                <Icon name="download" size={15} /> Archive (ZIP)
+              </button>
+            )}
             <button className="btn danger" onClick={removeSession}>Supprimer la session</button>
           </>
         }

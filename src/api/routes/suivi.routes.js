@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive,
-    getArchiveStockage } = require('../controllers/suivi.controller.js');
+    getArchiveStockage, exporterArchive } = require('../controllers/suivi.controller.js');
 const { authenticateToken, authorizeRoles, AUDIT_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 /* PDF en mémoire (stockés ensuite en base). Import par lots : un dossier entier peut porter des
@@ -38,6 +38,9 @@ router.use(authenticateToken, authorizeRoles(...AUDIT_ROLES));
 
 router.get('/', getSuivi);
 router.get('/archives', getArchive);
+/* L'ARCHIVE ZIP, sous la garde même du coffre : qui ne peut pas ouvrir le coffre n'en reçoit pas
+   davantage une copie. Deux segments, comme `/archives/stockage` : aucun conflit avec `/archives/:id/file`. */
+router.get('/archives/zip', exporterArchive);
 /* AVANT `/archives/:id/file` ? Non : deux segments contre trois, aucun conflit. Mais ADMIN
  * uniquement, et pour une raison de coût autant que de droit — la requête lit les 681 Mo de
  * blobs pour en calculer les empreintes. Ce n'est pas une consultation, c'est un inventaire. */
