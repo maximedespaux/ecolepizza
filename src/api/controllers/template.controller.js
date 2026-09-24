@@ -573,6 +573,15 @@ const getTokens = async (req, res) => {
         let stagiaire = groups.find((g) => g.group === 'Stagiaire');
         if (!stagiaire) { stagiaire = { group: 'Stagiaire', tokens: [] }; groups.push(stagiaire); }
         stagiaire.tokens.push(...catalogGroup('Stagiaire').tokens.filter((t) => STAGIAIRE_NOMMES.includes(t.key)));
+        /* LA DATE DE SIGNATURE DE L'ENTREPRISE — un jeton NOMMÉ, résolu depuis le cadre
+           `representant` (document_signature), PAS une colonne de la fiche : les Champs documents,
+           d'où vient le groupe « Entreprise », ne savent pas l'offrir. Comme {D_Naissance} ci-dessus,
+           il rejoint donc À LA MAIN le groupe où l'on cherche une donnée de l'entreprise — sans quoi
+           il se résout si on le TAPE et reste INTROUVABLE dans la palette (le défaut que ce fichier
+           paie en boucle : évaluation, examen, {Nombre stagiaires}…). */
+        let entreprise = groups.find((g) => g.group === 'Entreprise');
+        if (!entreprise) { entreprise = { group: 'Entreprise', tokens: [] }; groups.push(entreprise); }
+        entreprise.tokens.push(...catalogGroup('Entreprise').tokens.filter((t) => t.key === 'Date signature entreprise'));
         // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
         groups.push(computedGroup());
