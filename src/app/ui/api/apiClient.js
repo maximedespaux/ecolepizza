@@ -949,8 +949,14 @@ export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function deleteEnrollment(id) {
-  return request(`/enrollments/${id}`, { method: "DELETE" });
+/* Retirer un stagiaire : `effacer` supprime AUSSI ses documents non signés et ses réponses QCM
+   (jamais un document signé, un émargement, une facture). Le plan se lit d'abord : getRetraitDossier. */
+export function deleteEnrollment(id, { effacer = false } = {}) {
+  return request(`/enrollments/${id}${effacer ? "?effacer=1" : ""}`, { method: "DELETE" });
+}
+
+export function getRetraitDossier(id) {
+  return request(`/enrollments/${id}/retrait`);
 }
 
 // --- Espace stagiaire ---

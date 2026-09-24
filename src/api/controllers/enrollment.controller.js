@@ -7,6 +7,8 @@ const { enrollmentSteps, formationSteps } = require('./formationProgram.controll
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { avancementDossiers } = require('../lib/avancement.js');
+const { logAudit } = require('../lib/audit.js');
+const { planRetrait, executerRetrait } = require('../lib/retraitDossier.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -302,26 +304,50 @@ const createEnrollment = async (req, res) => {
 /**
  * DELETE /api/enrollments/:id — retire un stagiaire d'une session.
  */
-const deleteEnrollment = async (req, res) => {
+/**
+ * GET /api/enrollments/:id/retrait — ce que le retrait emporterait. La fenêtre de retrait le montre
+ * AVANT d'agir ; le tri est celui-là même qu'appliquera le retrait (lib/retraitDossier.js).
+ */
+const getRetrait = async (req, res) => {
     try {
         const conn = db.promise();
         const [[e]] = await conn.query(
             'SELECT id, session_id, learner_id FROM enrollment WHERE id = ? AND organization_id = ?',
-            [req.params.id, req.user.organization_id]
-        );
-        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
-        // Retire les présences en cours du stagiaire pour cette session (grille éditable).
-        await conn.query(
-            `DELETE ar FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
-             WHERE s.session_id = ? AND ar.learner_id = ?`,
-            [e.session_id, e.learner_id]
-        );
-        // NB : on CONSERVE la/les feuille(s) d'émargement archivée(s) (archive_document
-        // ref emarg:<id>[:<slug>]) — preuve Qualiopi conservée même après retrait du dossier.
-        // Elles restent visibles dans le suivi (rattachées par le nom du stagiaire).
-        await conn.query('DELETE FROM enrollment WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
-        res.status(200).json({ success: true, message: 'Stagiaire retiré' });
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+        res.json({ data: await planRetrait(conn, req.user.organization_id, e) });
+    } catch (err) {
+        console.error('Erreur plan de retrait :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * DELETE /api/enrollments/:id[?effacer=1] — retire le stagiaire de la session.
+ *
+ * DEUX GESTES (lib/retraitDossier.js) : retirer seulement, ou retirer ET effacer ses documents NON signés
+ * et ses réponses QCM. Jamais effacés : un document signé, un émargement, une facture, un document de
+ * l'entreprise ou de la session. La feuille d'émargement ARCHIVÉE reste (preuve Qualiopi), même après
+ * retrait du dossier. Le tout en une transaction ; le journal APRÈS la validation, pour ne dire
+ * « supprimé » que de ce qui l'est. Le retrait n'était pas journalisé du tout.
+ */
+const deleteEnrollment = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[e]] = await conn.query(
+            'SELECT id, session_id, learner_id FROM enrollment WHERE id = ? AND organization_id = ?',
+            [req.params.id, orgId]);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+        const effacer = req.query.effacer === '1';
+        const effaces = await executerRetrait(conn, orgId, e, { effacer });
+        for (const id of effaces.documents) logAudit(req, 'document.delete', 'GeneratedDocument', id);
+        for (const id of effaces.reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id);
+        logAudit(req, 'enrollment.delete', 'Learner', e.learner_id);
+        res.status(200).json({
+            success: true, message: 'Stagiaire retiré',
+            effaces: { documents: effaces.documents.length, reponses: effaces.reponses.length },
+        });
     } catch (err) {
         console.error('Erreur suppression dossier :', err);
         res.status(400).json({ message: 'Erreur suppression' });
@@ -359,4 +385,4 @@ const updateEnrollment = (req, res) => {
     );
 };
 
-module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment };
+module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment, getRetrait };

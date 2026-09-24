@@ -18,6 +18,7 @@ import SessionConsentements from "../components/SessionConsentements.jsx";
 import CommissionJury from "../components/CommissionJury.jsx";
 import DocumentsExternes from "../components/DocumentsExternes.jsx";
 import NotesModal from "../components/NotesModal.jsx";
+import RetraitStagiaireModal from "../components/RetraitStagiaireModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { lienDossier } from "../lib/lienDossier.js";
@@ -48,6 +49,7 @@ function SessionDetail() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
+  const [retraitDe, setRetraitDe] = useState(null); // { id, name } : la fenêtre de retrait ouverte
   // Inscription : « individuel » (recherche nominative) ou « entreprise » (on choisit
   // l'entreprise, puis les stagiaires parmi les SIENS). Deux façons de peupler la même session.
   const [mode, setMode] = useState("individuel");
@@ -210,12 +212,21 @@ function SessionDetail() {
     }
   }
 
-  async function removeStagiaire(enrollmentId) {
+  /* RETIRER, APRÈS AVOIR VU CE QUI PART. La corbeille supprimait le dossier d'un clic, sans rien dire de
+     ce qu'il emportait. Elle ouvre désormais RetraitStagiaireModal, qui montre le plan et laisse choisir
+     « Retirer seulement » ou « Retirer et effacer » (lib/retraitDossier.js côté serveur). */
+  async function removeStagiaire(enrollmentId, effacer) {
     setStatus(null);
     try {
-      await deleteEnrollment(enrollmentId);
+      const r = await deleteEnrollment(enrollmentId, { effacer });
+      setRetraitDe(null);
+      if (effacer) {
+        const n = r?.effaces || {};
+        setStatus({ type: "success", message: `Stagiaire retiré. Effacés : ${n.documents || 0} document(s) non signé(s), ${n.reponses || 0} réponse(s) QCM.` });
+      }
       load();
     } catch (err) {
+      setRetraitDe(null);
       setStatus({ type: "error", message: err.message });
     }
   }
@@ -432,7 +443,7 @@ function SessionDetail() {
                     recalculé, il affichait « ROUGE » pour tout le monde. */}
                 <ProgressPct percent={e.percent} score={e.score} width={78} />
                 <button className="iconbtn" title="Notes de suivi" onClick={() => setNotesFor({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="pencil" size={15} /></button>
-                <button className="iconbtn del" title="Retirer de la session" onClick={() => removeStagiaire(e.id)}><Icon name="trash" size={15} /></button>
+                <button className="iconbtn del" title="Retirer de la session" onClick={() => setRetraitDe({ id: e.id, name: `${e.last_name} ${e.first_name}` })}><Icon name="trash" size={15} /></button>
               </div>
             );
             /* QUI VIENT DE QUI : la MÊME règle qu'au tableau de bord et au suivi
@@ -571,6 +582,10 @@ function SessionDetail() {
         <Emargement sessionId={id} feuilleVisee={params.get("emargement")} />
       </div>
 
+      {retraitDe && (
+        <RetraitStagiaireModal enrollmentId={retraitDe.id} name={retraitDe.name}
+          onClose={() => setRetraitDe(null)} onConfirm={(effacer) => removeStagiaire(retraitDe.id, effacer)} />
+      )}
       {notesFor && (
         <NotesModal enrollmentId={notesFor.id} name={notesFor.name} onClose={() => setNotesFor(null)} />
       )}
