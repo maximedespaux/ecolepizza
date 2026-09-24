@@ -1,9 +1,15 @@
 const express = require('express');
 const { getOrganization, updateOrganization, getLocations, saveLocations,
-    getPartnerFields } = require('../controllers/organization.controller.js');
+    getPartnerFields, getOrgCoordonnees } = require('../controllers/organization.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
+
+/* PUBLIC, AVANT la garde ci-dessous. La page « Confidentialité » est lisible sans être connecté,
+   et doit y nommer le responsable de traitement (RGPD art. 13). Le contrôleur ne renvoie qu'un lot
+   de champs de contact, en liste blanche. */
+router.get('/coordonnees', getOrgCoordonnees);
+
 router.use(authenticateToken, authorizeRoles(...STAFF_ROLES));
 
 const ADMIN = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'];

@@ -4931,6 +4931,11 @@ button.av-wrap:active{transform:scale(.94)}
 /* Ce qui reste à remplir par l'organisme — visible, pour ne pas être mis en ligne tel quel. */
 .legale-atraiter{background:color-mix(in srgb,var(--gold) 14%,transparent);
   border-left:3px solid var(--gold);border-radius:8px;padding:10px 13px;font-size:13.5px}
+/* Le responsable de traitement, une fois renseigné : un encadré sobre (pas d'alerte dorée — ce
+   n'est plus « à compléter », c'est une information tenue). */
+.legale-responsable{background:var(--surface2);border-left:3px solid var(--border);
+  border-radius:8px;padding:10px 13px;font-size:13.5px;line-height:1.6}
+.legale-responsable a{color:var(--ember1)}
 .login-legal{margin:18px 0 0;text-align:center;font-size:12.5px}
 .login-legal a{color:var(--muted)}
 
