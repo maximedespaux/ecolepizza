@@ -124,10 +124,14 @@ export default function Confidentialite() {
                     toute façon — et lui indique où reprendre la main. */}
                 {t.surConsentement && (
                   <span className="legale-consent-note">
-                    <b>Uniquement avec votre accord.</b> Cette transmission n'a lieu que si vous
-                    l'avez explicitement acceptée. Refuser n'a aucune conséquence sur votre
-                    formation, et vous pouvez revenir sur votre réponse à tout moment depuis
-                    <b> Mon profil → Confidentialité</b>. Votre réponse est conservée avec sa date.
+                    <b>Vos coordonnées, uniquement avec votre accord.</b> Ce sont vos coordonnées
+                    (adresse e-mail, téléphone) qui reposent sur votre consentement : elles ne
+                    partent que si vous l'avez explicitement accepté. Refuser les retire — mais
+                    votre nom et votre prénom restent transmis aux partenaires de l'école ; seule
+                    une personne jamais sollicitée ne figure nulle part. Refuser n'a aucune
+                    conséquence sur votre formation, et vous pouvez revenir sur votre réponse à tout
+                    moment depuis<b> Mon profil → Confidentialité</b>. Votre réponse est conservée
+                    avec sa date.
                   </span>
                 )}
               </li>
