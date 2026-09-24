@@ -176,14 +176,17 @@ function ApercuArborescence({ program, form, eqMap, kind, setKind, onModifier })
           <button type="button" className="btn sm" onClick={onModifier}>Modifier l'arborescence commune</button>
         </div>
       </div>
-      <div className="seg" style={{ marginBottom: 12 }}>
-        <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setKind("stagiaire")}>Archivage stagiaire</button>
-        <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setKind("entreprise")}>Archivage entreprise</button>
+      <div className="arbo-barre">
+        <div className="seg">
+          <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setKind("stagiaire")}>Archivage stagiaire</button>
+          <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setKind("entreprise")}>Archivage entreprise</button>
+        </div>
       </div>
-      <div className="fm-archives-apercu">
-        <ArchiveTreePreview tree={isEnt ? etat.company_tree : etat.tree} formation={formation}
-          palette={new Map(documents.map((d) => [d.cle, d.label]))} groupes={groupes} />
-      </div>
+      {/* LE MÊME DESSIN que l'éditeur commun, en lecture : ce qu'on lit ici est ce qu'on y modifie. */}
+      <ArchiveTreePreview tree={isEnt ? etat.company_tree : etat.tree} formation={formation}
+        docs={isEnt ? documents : documents.filter((d) => !d.company_level)} eqMap={eqMap}
+        nbFormations={(etat.formations || []).length}
+        palette={new Map(documents.map((d) => [d.cle, d.label]))} groupes={groupes} />
     </>
   );
 }

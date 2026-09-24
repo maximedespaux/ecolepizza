@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getArborescenceCommune, saveArborescenceCommune, getEquivalences } from "../api/apiClient.js";
-import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "./ArchiveTreeEditor.jsx";
+import ArchiveTreeEditor, { treeHasEmptyName } from "./ArchiveTreeEditor.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import { groupesDepuis } from "../lib/arborescence.js";
 
@@ -17,6 +17,9 @@ import { groupesDepuis } from "../lib/arborescence.js";
  * déjà réglées, fusionnées, avec ce qu'il faut trancher (un document rangé à deux endroits) et ce qui
  * a été retiré (un QCM supprimé, une étape qui n'existe plus). Rien n'est écrit avant « Enregistrer ».
  */
+/** Combien de documents une arborescence range : le compte que porte chaque onglet. */
+const nbPlaces = (t) => { let n = 0; const w = (fs) => (fs || []).forEach((f) => { n += (f.items || []).length; w(f.children); }); w(t && t.folders); return n; };
+
 export default function ArborescenceCommune({ onClose, onSaved }) {
   const [etat, setEtat] = useState(null);
   const [tree, setTree] = useState({ folders: [] });
@@ -119,26 +122,33 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
                   )}
                 </div>
               )}
-              <div className="seg" style={{ marginBottom: 12 }}>
-                <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setKind("stagiaire")}>Archivage stagiaire</button>
-                <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setKind("entreprise")}>Archivage entreprise</button>
-              </div>
-              {/* En classes et non en style : sur un écran étroit, l'aperçu passe SOUS l'éditeur
-                  (cf. `.fm-archives` dans app.css). À deux colonnes sur un téléphone, il coupait
-                  chaque nom de dossier au bout de dix caractères. */}
-              <div className="fm-archives">
-                <ArchiveTreeEditor tree={isEnt ? companyTree : tree} onChange={isEnt ? setCompanyTree : setTree}
-                  eqMap={eqMap} docs={docs} nbFormations={formations.length} />
-                <div className="fm-archives-apercu">
-                  <div className="arbo-apercu-t">
-                    Aperçu, {isEnt ? "entreprise" : "stagiaire"}, pour
-                    <select value={code} onChange={(e) => setCode(e.target.value)} aria-label="Formation de l'aperçu">
-                      {formations.map((f) => <option key={f.code} value={f.code}>{f.code}</option>)}
-                    </select>
-                  </div>
-                  <ArchiveTreePreview tree={isEnt ? companyTree : tree} formation={formationVue} palette={libelles} groupes={groupes} />
+              {/* UNE BARRE, UN ARBRE. L'aperçu n'est plus un second arbre à côté du premier : choisir une
+                  formation barre, dans l'arbre même, ce qu'elle n'a pas — et liste dessous ce qu'il ne
+                  nomme pas, avec de quoi le placer. */}
+              <div className="arbo-barre">
+                <div className="seg">
+                  <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setKind("stagiaire")}>
+                    Archivage stagiaire <span className="arbo-compte">{nbPlaces(tree)}</span>
+                  </button>
+                  <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setKind("entreprise")}>
+                    Archivage entreprise <span className="arbo-compte">{nbPlaces(companyTree)}</span>
+                  </button>
                 </div>
+                <label className="arbo-pour">
+                  Aperçu pour
+                  <select value={code} onChange={(e) => setCode(e.target.value)}>
+                    <option value="">aucune formation</option>
+                    {formations.map((f) => <option key={f.code} value={f.code}>{f.code}</option>)}
+                  </select>
+                </label>
               </div>
+              <p className="arbo-intro">
+                Chaque document se range <b>une fois, pour toutes les formations</b> ; une formation qui ne l'a pas le saute.
+                Cliquez le nom d'un dossier pour le renommer, « Document » pour y placer un document.
+              </p>
+              <ArchiveTreeEditor tree={isEnt ? companyTree : tree} onChange={isEnt ? setCompanyTree : setTree}
+                eqMap={eqMap} docs={docs} nbFormations={formations.length}
+                formation={formationVue} palette={libelles} groupes={groupes} />
             </>
           )}
         </div>

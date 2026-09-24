@@ -74,11 +74,19 @@ test('5 — les onglets de la fenêtre défilent, sans s\'écraser', () => {
     assert.match(bloc('.tabs.tabs-defilantes .tab{'), /white-space:nowrap/);
 });
 
-test('l\'aperçu de l\'arborescence passe sous l\'éditeur sur écran étroit', () => {
-    /* L'éditeur vit depuis le 2026-09-24 dans la fenêtre de l'arborescence COMMUNE (une pour toutes
-       les formations) ; l'onglet de la formation n'en montre plus que l'aperçu. La mise en page, elle,
-       n'a pas changé de règle. */
-    const COMMUNE = fs.readFileSync(path.join(UI, 'components/ArborescenceCommune.jsx'), 'utf8');
-    assert.match(COMMUNE, /<div className="fm-archives">/);
-    assert.match(bloc('@media (max-width:640px){\n  .fm-archives'), /\.fm-archives\{grid-template-columns:minmax\(0,1fr\)\}/);
+test('l\'arborescence d\'archivage se lit et se manie sur téléphone', () => {
+    /* Depuis le 2026-09-25, l'arborescence n'est plus un éditeur ET un aperçu côte à côte (le second
+       passait sous le premier sur écran étroit) : c'est UN arbre, modifié en place. Sur téléphone, deux
+       choses le rendaient inutilisable au banc (375 px) : des actions cachées derrière un survol qui
+       n'existe pas au doigt, et « ＋ Document » qui passait à la ligne sous chaque dossier. */
+    const EDITEUR = fs.readFileSync(path.join(UI, 'components/ArchiveTreeEditor.jsx'), 'utf8');
+    assert.match(EDITEUR, /<ul className="arbo-ul racine">/);
+    assert.match(CSS, /@media \(hover:none\)\{\.arbo-actions,\.arbo-retirer\{opacity:1\}\}/,
+        'sans survol, les actions restent visibles : cachées, elles seraient introuvables');
+    const tel = bloc('@media (max-width:640px){\n  .arbo{');
+    assert.match(tel, /\.arbo-act:not\(\.seul\)\{width:28px;padding:0;gap:0;justify-content:center;font-size:0\}/,
+        'l\'icône seule, sur la ligne du dossier');
+    assert.match(tel, /\.arbo-doc-qui\{display:none\}/);
+    // L'intitulé caché à l'écran reste dit à qui l'écoute.
+    assert.match(EDITEUR, /aria-label=\{`Placer un document dans \$\{nomLisible\(d\.name\)\}`\}/);
 });
