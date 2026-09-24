@@ -293,15 +293,19 @@ test('suivi : le compteur compte TOUS les complets et sert d\'interrupteur', () 
        masquer d'abord ferait baisser le pourcentage d'une entreprise à chaque dossier terminé. */
     assert.match(SUIVI, /grouperParEntreprise\(dossiersVus\)/);
     assert.match(SUIVI, /useMemo\(\(\) => sansLesComplets\(groups, voirComplets\)/);
-    assert.match(SUIVI, /\{affiches\.map\(\(g\) =>/);
+    /* Et c'est cette liste-là, masquage fait, que la grille met en tables (2026-09-24). */
+    assert.match(SUIVI, /tableauxDuSuivi\(affiches, pourColonnes, manques\)/);
 });
 
-test('suivi : le libellé « En cours » d\'une feuille de route ne prend pas la forme de la barre .progress', () => {
-    /* La classe d'état porte le même nom que la barre d'avancement (9 px, fond gris, débordement
-       masqué) : sans correctif, le libellé était coupé à mi-hauteur sous une barre grise. */
+test('suivi : l\'état « en cours » d\'une case ne prend pas la forme de la barre .progress', () => {
+    /* La classe d'état de la feuille de route portait le même nom que la barre d'avancement (9 px,
+       fond gris, débordement masqué) : son libellé « En cours » était coupé à mi-hauteur sous une
+       barre grise. La feuille de route est partie avec la grille du 2026-09-24 ; la leçon reste —
+       les pastilles de la grille ont des noms à elles. */
     const CSS = lireUi('styles/app.css');
     assert.match(CSS, /\.progress\{height:9px;/, 'la barre existe toujours sous ce nom');
-    assert.match(CSS, /\.rm-tag\.progress\{height:auto;background:none;border-radius:0;overflow:visible\}/);
+    assert.match(lireUi('pages/Suivi.jsx'), /progress: \{ cls: "encours", lib: "En cours" \}/);
+    assert.doesNotMatch(CSS, /\.sg-[a-z-]*\.progress\b/, 'aucune règle de la grille sur la classe .progress');
 });
 
 /* ─── Les stagiaires d'une entreprise, rangés sous elle (2026-09-23) ───────────────────────── */
@@ -350,30 +354,24 @@ test('tableau de bord : les stagiaires d\'une entreprise se rangent sous elle, e
     assert.match(CTRL, /LEFT JOIN company c ON c\.id = e\.company_id/);
 });
 
-test('suivi : l\'en-tête d\'une entreprise mène AUSSI à sa fiche, sans casser le dépli', () => {
-    /* MÊME DEMANDE QU'AU TABLEAU DE BORD, un cran plus loin (2026-09-23) : ici l'en-tête n'était
-       QU'une bascule. On dépliait le groupe, on lisait ses stagiaires, et l'entreprise — dont la
-       convention et l'accord de prise en charge se signent sur SA fiche — restait hors d'atteinte
-       depuis l'écran qui, justement, dit qu'il lui manque des documents. */
+test('suivi : la ligne d\'une entreprise mène à sa fiche', () => {
+    /* MÊME DEMANDE QU'AU TABLEAU DE BORD (2026-09-23) : l'entreprise — dont la convention et l'accord
+       de prise en charge se signent sur SA fiche — doit être atteignable depuis l'écran qui, justement,
+       dit qu'il lui manque des documents. Dans la grille du 2026-09-24, elle est la ligne d'en-tête de
+       ses stagiaires ; il n'y a plus rien à déplier, et donc plus de bouton pour cohabiter avec le lien. */
     const SUIVI = lireUi('pages/Suivi.jsx');
-    const tete = SUIVI.slice(SUIVI.indexOf('<div className="suivi-groupe-tete">'),
-        SUIVI.indexOf('suivi-groupe-membres'));
-    assert.match(tete, /<Link to=\{`\/entreprises\/\$\{g\.company_id\}`\}/);
-    /* LE LIEN EST LE FRÈRE DU BOUTON, PAS SON ENFANT. Un `<a>` dans un `<button>` n'est pas du
-       HTML valide — le navigateur défait l'imbrication à l'analyse — et le clic déclencherait les
-       deux gestes : on partirait sur la fiche en ayant déplié le groupe qu'on quitte. */
-    assert.ok(tete.indexOf('</button>') < tete.indexOf('suivi-groupe-fiche'),
-        'le bouton doit être refermé AVANT le lien');
-    assert.match(tete, /aria-label=\{`Ouvrir la fiche de \$\{g\.company_name\}`\}/,
+    const ligne = SUIVI.slice(SUIVI.indexOf('className="sg-entreprise"'), SUIVI.indexOf('const d = l.d;'));
+    assert.match(ligne, /<Link to=\{`\/entreprises\/\$\{l\.company_id\}`\}/);
+    assert.doesNotMatch(ligne, /<button/, 'une seule chose à faire sur cette ligne : ouvrir la fiche');
+    assert.match(ligne, /aria-label=\{`Ouvrir la fiche de \$\{l\.company_name\}`\}/,
         'sur téléphone le libellé disparaît : sans aria-label, il ne resterait qu’un chevron muet');
     /* LA MÊME GARDE DE RÔLE QU'AU TABLEAU DE BORD : la fiche d'une entreprise est réservée à
        l'administration, et un auditeur suivi d'un lien serait renvoyé à l'accueil sans un mot. */
     assert.match(SUIVI, /const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen\(user, ENTREE_ENTREPRISES\)/);
-    assert.match(SUIVI, /\{entrepriseOuvrable && \(/);
-    /* 44 PX AU POUCE. Sans libellé, le lien tombait à 30 px de côté : on le manquait, et on
-       dépliait le groupe à la place — l'inverse de ce qu'on voulait faire. */
+    assert.match(ligne, /\{entrepriseOuvrable && \(/);
+    /* 44 PX AU POUCE : sans libellé, le lien tombait à 30 px de côté et on le manquait. */
     assert.match(lireUi('styles/app.css'),
-        /\.suivi-groupe-fiche\{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center\}/);
+        /\.sg-entreprise-fiche\{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center\}/);
 });
 
 test('session : les inscrits d\'une entreprise sont EN RETRAIT sous elle, qui mène à sa fiche', () => {

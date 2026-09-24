@@ -154,10 +154,11 @@ test('« sans objet » sort du DÉCOMPTE, il ne le remplit pas', async () => {
     assert.deepStrictEqual(m.map((x) => x.label), ['Attestation'],
         'une remise écartée n\'est pas un manque');
 
-    // Le suivi Qualiopi l'écarte AVANT d'incrémenter le total, sinon le groupe plafonne.
-    const suivi = readFileSync(path.join(__dirname, '../../app/ui/pages/Suivi.jsx'), 'utf8');
-    assert.match(suivi, /if \(s === "skip"\) continue;\s*\n\s*st\.total\+\+;/,
-        'écarté avant le total, pas après');
+    /* Et la grille du suivi Qualiopi (2026-09-24) la montre pour ce qu'elle est : un tiret, ni coche
+       ni manque. Elle remplace la feuille de route agrégée des entreprises, qui devait l'écarter AVANT
+       d'incrémenter son total — ce total n'existe plus, la case dit l'état elle-même. */
+    const { etatCase } = await import('../../app/ui/lib/grilleSuivi.js');
+    assert.strictEqual(etatCase({ documents: [{ type: 'r1', remise: true, sansObjet: true }] }, 'r1').etat, 'skip');
 });
 
 test('exclure est une décision de l\'école, et n\'efface rien', () => {

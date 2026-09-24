@@ -70,15 +70,14 @@ test('IL N\'EXISTE QU\'UNE SEULE DÉFINITION DANS TOUT LE FRONT', () => {
         'la règle d\'état ne doit vivre QU\'À UN endroit — toute copie finira par diverger.');
 });
 
-test('LES DEUX ÉCRANS TIRENT DE LA MÊME SOURCE', () => {
-    for (const f of ['components/Roadmap.jsx', 'pages/Suivi.jsx']) {
-        /* L'import peut amener d'autres fonctions de la même lib — ce qui compte est que
-           `stepState` VIENNE de là, pas la forme exacte de la ligne. Écrite trop littéralement,
-           l'assertion a cassé à la première fonction ajoutée : un test doit tenir le contrat,
-           pas la ponctuation. */
-        assert.match(lire(f), /import \{[^}]*\bstepState\b[^}]*\} from ["']\.\.\/lib\/etapes\.js["']/,
-            `${f} doit importer la règle, pas la réécrire`);
-    }
+test('LA GRILLE DU SUIVI TIRE DE LA MÊME SOURCE', () => {
+    /* Il y avait deux écrans : la feuille de route (components/Roadmap.jsx) et le suivi. La feuille
+       de route est partie le 2026-09-24 avec les lignes qui la dépliaient, remplacée par la grille
+       (lib/grilleSuivi.js) — qui dit désormais, seule, l'état d'une étape à l'écran du suivi. */
+    assert.match(lire('lib/grilleSuivi.js'), /import \{[^}]*\bstepState\b[^}]*\} from ["']\.\/etapes\.js["']/,
+        'la grille doit importer la règle, pas la réécrire');
+    assert.match(lire('pages/Suivi.jsx'), /import \{[^}]*\betatCase\b[^}]*\} from ["']\.\.\/lib\/grilleSuivi\.js["']/,
+        'la page lit l\'état d\'une case par la grille');
     assert.doesNotMatch(lire('pages/Suivi.jsx'), /function docState/,
         'la copie de Suivi.jsx est supprimée, pas seulement corrigée');
 });
@@ -166,31 +165,21 @@ test('LE FILTRE AU CLIC VISE LE TYPE **ET** LA FORMATION', async () => {
 });
 
 test('LA TEINTE VIENT DE LA PALETTE PARTAGÉE, ET LA CSS LA SUIT PARTOUT', () => {
+    /* Les cartes « Ce qui manque » sont devenues, le 2026-09-24, le pied des colonnes de la grille du
+       suivi. La couleur d'une formation reste celle de `colorOf` — même palette que les badges et
+       l'arbre des archives —, posée UNE fois sur sa table, en variable, et suivie partout où elle
+       compte. (Le code de la formation, lui, s'affiche toujours : il n'est plus répété sur chaque
+       carte, il TITRE la table.) */
     const suivi = lire('pages/Suivi.jsx');
-    assert.match(suivi, /const teinte = plusieursFormations && m\.code \? colorOf\(m\.code\) : null/,
+    assert.match(suivi, /<section className="sg" style=\{\{ "--teinte": colorOf\(t\.code\) \}\}>/,
         'même palette que les badges de formation et l\'arbre des archives');
-    /* LE CODE NE S'AFFICHE QUE S'IL DISTINGUE QUELQUE CHOSE : sur un organisme qui n'a qu'une
-       formation en cours, le répéter sur chaque carte est du bruit, et la couleur ne dirait
-       rien puisqu'elle serait la même partout. */
-    assert.match(suivi, /new Set\(manques\.map\(\(m\) => m\.code\)\)\.size > 1/);
-
-    /* UNE SEULE VARIABLE POUR QUATRE USAGES — liseré, chiffre, bordure au survol, fond de
-       l'état choisi. Vérifié en production sur l'écran réel : les quatre suivent bien la
-       couleur de la formation, et une carte sans formation retombe sur le rouge d'origine. */
     const css = fs.readFileSync(path.join(UI, 'styles/app.css'), 'utf8');
     const T = 'var\\(--teinte,var\\(--ember1\\)\\)';
     for (const [quoi, motif] of [
-        ['le liseré', `border-left:3px solid ${T}`],
-        ['la bordure au survol', `\\.manque-i:hover\\{[^}]*border-color:${T}`],
-        ['le fond de l\'état choisi', `\\.manque-i\\.on\\{[^}]*${T} 13%`],
-        ['la bordure de l\'état choisi', `\\.manque-i\\.on\\{[^}]*border-color:${T}`],
-        ['le chiffre', `\\.manque-i b\\{[^}]*color:${T}`],
+        ['le liseré de la table', `\\.sg-wrap\\{border-left:3px solid ${T}\\}`],
+        ['le fond de la colonne choisie', `\\.sg-case\\.on,\\.sg-manque\\.on\\{background:color-mix\\(in srgb,${T} 12%`],
+        ['le nom de la colonne choisie', `\\.sg-col\\.on \\.sg-col-btn\\{color:${T}`],
     ]) {
         assert.match(css, new RegExp(motif), `${quoi} doit suivre la teinte de la formation`);
     }
-    /* Et AUCUNE couleur en dur ne subsiste : le repli passe par la valeur par défaut de la
-       variable, ce qui garde son rouge d'origine à une carte sans formation. */
-    const bloc = css.slice(css.indexOf('.manque-i{'), css.indexOf('.compteurs'));
-    assert.ok(!/var\(--ember1\)/.test(bloc.replace(/var\(--teinte,var\(--ember1\)\)/g, '')),
-        'plus aucune référence directe à --ember1 dans les règles de carte');
 });
