@@ -1026,6 +1026,10 @@ tbody tr:last-child td{border-bottom:none}
 .tab-bulle{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;margin-left:6px;
   border-radius:99px;background:var(--grad-ember);color:#fff;font-size:10px;font-weight:700;line-height:1;
   vertical-align:middle;font-variant-numeric:tabular-nums}
+/* « Émargement, ma présence » se raccourcit en « Émargement » sur les petits écrans : les deux
+   onglets ne tiennent pas côte à côte sous ~400 px, et le suffixe descriptif est le premier à
+   sauter. Le libellé reste complet dès qu'il y a la place. */
+@media (max-width:560px){ .tab-suite{display:none} }
 /* ONGLETS QUI DÉFILENT quand la place manque (« Modifier la formation »). Quatre intitulés longs
    ne tiennent pas sur un téléphone : ils se repliaient sur trois lignes, et le dernier sortait de
    la fenêtre. Ils restent sur une ligne et défilent au doigt ; l'onglet coupé au bord dit qu'il

@@ -15,7 +15,14 @@ test('deux onglets, parcours par défaut, contenu commuté', () => {
     assert.match(page, /const \[onglet, setOnglet\] = useState\("parcours"\)/);
     /* Les deux intitulés, dans une barre d'onglets standard (.tabs/.tab). */
     assert.match(page, /\{ id: "parcours", label: "Mon parcours", n: parcoursAFaire \}/);
-    assert.match(page, /\{ id: "emargement", label: "Émargement, ma présence", n: emargAFaire \}/);
+    /* Le second intitulé se raccourcit en « Émargement » sur mobile : le suffixe « , ma présence »
+       vit dans un <span class="tab-suite"> que le CSS masque sous le point de rupture. */
+    assert.match(page, /label: <>Émargement<span className="tab-suite">, ma présence<\/span><\/>, n: emargAFaire/);
+    /* Le libellé complet vit toujours dans le DOM (le <span> est inline) — le CSS ne fait que le
+       masquer sur mobile —, mais dans la SOURCE il est coupé par le <span> : on vérifie donc le
+       suffixe et son enveloppe, pas la chaîne contiguë. */
+    const css = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'styles', 'app.css'), 'utf8');
+    assert.match(css, /@media \(max-width:560px\)\{ \.tab-suite\{display:none\} \}/, 'le suffixe est masqué sur mobile');
     /* Le contenu de chaque onglet ne se rend que quand il est actif. */
     assert.match(page, /\{data && onglet === "parcours" && \(/);
     assert.match(page, /\{data && onglet === "emargement" && \(\(\) => \{/);

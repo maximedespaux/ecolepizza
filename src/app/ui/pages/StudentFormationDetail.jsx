@@ -205,7 +205,7 @@ function StudentFormationDetail() {
         <div className="tabs" role="tablist" aria-label="Sections de la formation">
           {[
             { id: "parcours", label: "Mon parcours", n: parcoursAFaire },
-            { id: "emargement", label: "Émargement, ma présence", n: emargAFaire },
+            { id: "emargement", label: <>Émargement<span className="tab-suite">, ma présence</span></>, n: emargAFaire },
           ].map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={onglet === t.id}
               className={"tab" + (onglet === t.id ? " on" : "")} onClick={() => setOnglet(t.id)}>
