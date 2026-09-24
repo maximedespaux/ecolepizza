@@ -116,42 +116,39 @@ function entitesDeLActivite({ role, navAccess }) {
  * ligne) ; le compte, lui, compte les ÉVÉNEMENTS. C'est la question posée : « combien de choses
  * se sont passées depuis ma dernière lecture ».
  */
-async function compteActivite({ orgId, moi, role, navAccess, vue, dormant }) {
+/* LE COMPTE DES NON-LUES, SÉPARÉ SELON L'AUTEUR (2026-09-24). Ce qu'un STAGIAIRE fait compte
+   désormais comme une ALERTE (rouge) — il attend un geste : une pièce à vérifier, un document
+   signé —, ce que l'ÉQUIPE fait reste de l'activité (bleu). Un stagiaire n'est pas « l'équipe » :
+   ses actions n'avaient jamais eu leur place dans « Activité de l'équipe ». Auteur supprimé
+   (role NULL) → équipe, le repli d'avant. */
+async function compteActiviteParRole({ orgId, moi, role, navAccess, vue, dormant }) {
     /* `dormant` : migration 142 non jouée, on ne sait pas où en est la lecture — donc tout est
        réputé lu, et aucune pastille ne saute. Même règle que `estLu`. */
-    if (dormant) return 0;
+    if (dormant) return { equipe: 0, stagiaire: 0 };
     const entites = entitesDeLActivite({ role, navAccess });
-    if (entites.length === 0) return 0;
+    if (entites.length === 0) return { equipe: 0, stagiaire: 0 };
     const params = [orgId, moi, ...entites];
     /* `vue` NULL = rien n'a jamais été marqué comme lu : tout est neuf, et c'est vrai (estLu). */
     const depuis = vue ? ' AND a.created_at > ?' : '';
     if (vue) params.push(vue);
     const [[row]] = await db.promise().query(
-        `SELECT COUNT(*) AS n FROM audit_log a
+        `SELECT SUM(u.role = 'STAGIAIRE') AS stagiaire,
+                SUM(u.role IS NULL OR u.role <> 'STAGIAIRE') AS equipe
+           FROM audit_log a LEFT JOIN user u ON u.id = a.user_id
           WHERE a.organization_id = ? AND a.user_id IS NOT NULL AND a.user_id <> ?
                 AND a.entity IN (${entites.map(() => '?').join(',')})${depuis}`, params);
-    return Number((row && row.n) || 0);
+    return { equipe: Number((row && row.equipe) || 0), stagiaire: Number((row && row.stagiaire) || 0) };
 }
 
+/* DEUX FLUX DEPUIS LE MÊME JOURNAL, SÉPARÉS PAR L'AUTEUR. Ce qu'un stagiaire a fait part en
+   ALERTES (rouge), le reste en ACTIVITÉ (bleu). Deux requêtes, chacune coupée à trente : couper
+   à trente PUIS séparer laisserait un flux presque vide dès que l'autre est bavard. Le filtre de
+   rôle est une chaîne FIXE (jamais une donnée d'utilisateur) — pas d'injection. */
 async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
     const entites = entitesDeLActivite({ role, navAccess });
-    if (entites.length === 0) return [];
+    if (entites.length === 0) return { equipe: [], stagiaire: [] };
 
-    const params = [orgId, moi];
-    const filtre = ` AND a.entity IN (${entites.map(() => '?').join(',')})`;
-    params.push(...entites);
-
-    const [rows] = await db.promise().query(
-        `SELECT a.id, a.action, a.entity, a.entity_id, a.created_at AS quand,
-                DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i') AS created_at,
-                u.first_name, u.last_name
-           FROM audit_log a
-           LEFT JOIN user u ON u.id = a.user_id
-          WHERE a.organization_id = ? AND a.user_id IS NOT NULL AND a.user_id <> ?${filtre}
-          ORDER BY a.created_at DESC
-          LIMIT 30`, params);
-
-    return regrouperConsecutives(rows.map((r) => ({
+    const enPuce = (r) => ({
         /* Préfixe `activite:` — l'identifiant vient d'`audit_log`, pas de `notification`. Il ne
            doit jamais être envoyé à « marquer comme lue » : une marque « jusqu'ici » ne sait pas
            dire l'état d'UNE ligne. C'est « Tout marquer comme lu » qui fait avancer la date. */
@@ -180,7 +177,23 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
         section: sectionDeLEntite(r.entity),
         is_read: estLu({ quand: r.quand, vue, dormant }) ? 1 : 0,
         created_at: r.created_at,
-    })));
+    });
+
+    const lire = async (roleClause) => {
+        const [rows] = await db.promise().query(
+            `SELECT a.id, a.action, a.entity, a.entity_id, a.created_at AS quand,
+                    DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i') AS created_at, u.first_name, u.last_name
+               FROM audit_log a LEFT JOIN user u ON u.id = a.user_id
+              WHERE a.organization_id = ? AND a.user_id IS NOT NULL AND a.user_id <> ? AND ${roleClause}
+                    AND a.entity IN (${entites.map(() => '?').join(',')})
+              ORDER BY a.created_at DESC LIMIT 30`, [orgId, moi, ...entites]);
+        return regrouperConsecutives(rows.map(enPuce));
+    };
+    /* Le stagiaire d'abord, l'équipe ensuite : deux listes distinctes, jamais le même flux coupé. */
+    return {
+        stagiaire: await lire("u.role = 'STAGIAIRE'"),
+        equipe: await lire("(u.role IS NULL OR u.role <> 'STAGIAIRE')"),
+    };
 }
 
 /**
@@ -205,7 +218,10 @@ const getNotifications = async (req, res) => {
              ORDER BY created_at DESC
              LIMIT 40`, [orgId, moi]);
 
-        const activite = await activiteRecente({ orgId, moi, role, navAccess, vue, dormant });
+        /* DEUX FLUX D'ACTIVITÉ : ce qu'un STAGIAIRE a fait rejoint les ALERTES, ce que l'ÉQUIPE a
+           fait reste l'ACTIVITÉ. Un stagiaire n'est pas « l'équipe », et sa pièce déposée ou son
+           document signé appellent un geste — c'est une alerte, pas une information de couloir. */
+        const flux = await activiteRecente({ orgId, moi, role, navAccess, vue, dormant });
 
         /* DEUX LISTES, PLUS UNE SEULE. Elles étaient mêlées par date puis coupées à quarante
            lignes — et comme l'activité est par nature plus récente (trente lignes de journal
@@ -234,12 +250,15 @@ const getNotifications = async (req, res) => {
             `SELECT COUNT(*) AS n FROM notification
               WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL) AND is_read = 0`,
             [orgId, moi]);
-        const nonLuesAlertes = Number((compteur && compteur.n) || 0);
-        const nonLuesActivite = await compteActivite({ orgId, moi, role, navAccess, vue, dormant });
+        const nonLuesNotif = Number((compteur && compteur.n) || 0);
+        const comptes = await compteActiviteParRole({ orgId, moi, role, navAccess, vue, dormant });
+        /* ALERTES = notifications adressées + ce qu'un stagiaire a fait ; ACTIVITÉ = l'équipe. */
+        const nonLuesAlertes = nonLuesNotif + comptes.stagiaire;
+        const nonLuesActivite = comptes.equipe;
 
         res.json({
-            data: notifs.sort(tri),
-            activite: activite.sort(tri),
+            data: [...notifs, ...flux.stagiaire].sort(tri),
+            activite: flux.equipe.sort(tri),
             unread: nonLuesAlertes + nonLuesActivite,
             non_lues: { alertes: nonLuesAlertes, activite: nonLuesActivite },
         });

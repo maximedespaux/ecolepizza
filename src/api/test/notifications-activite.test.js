@@ -107,9 +107,11 @@ test('la lecture d\'un flux est une DATE, pas un état par ligne', () => {
 
 test('le serveur ne renvoie JAMAIS mes propres actions, et filtre avant la coupe', () => {
     assert.match(NOTIF, /a\.user_id <> \?/, 'mes propres actions sont exclues en SQL');
-    const req = NOTIF.slice(NOTIF.indexOf('FROM audit_log'), NOTIF.indexOf('LIMIT 30'));
-    assert.ok(req.includes('${filtre}'), 'le filtre par entité est DANS la requête…');
-    assert.ok(NOTIF.indexOf('a.entity IN') < NOTIF.indexOf('LIMIT 30'), '…donc appliqué avant le LIMIT');
+    /* Le filtre par entité est DANS la requête de liste, donc appliqué AVANT le `LIMIT 30` :
+       filtrer après ramènerait trente lignes dont un formateur n'en verrait que deux. */
+    const req = NOTIF.slice(NOTIF.indexOf('const lire = async'), NOTIF.indexOf('LIMIT 30`'));
+    assert.ok(req.includes('a.entity IN'), 'le filtre par entité est DANS la requête…');
+    assert.ok(req.indexOf('a.entity IN') < req.length, '…donc appliqué avant le LIMIT');
 });
 
 test('aucun libellé français côté serveur — la traduction reste dans l\'interface', () => {
@@ -253,7 +255,7 @@ test('la cloche sépare ce qui appelle un geste de ce qui s\'est passé', () => 
        tout le haut. Seize notifications adressées tombaient déjà hors de la coupe.
 
        Les deux listes voyagent donc séparément, chacune avec sa limite. */
-    assert.match(NOTIF, /res\.json\(\{\s*data: notifs[\s\S]{0,120}activite: activite/,
+    assert.match(NOTIF, /res\.json\(\{\s*data: \[\.\.\.notifs, \.\.\.flux\.stagiaire\][\s\S]{0,120}activite: flux\.equipe/,
         'le serveur renvoie deux listes, pas une liste mêlée');
     assert.ok(!/tout\.slice\(0, 40\)/.test(NOTIF), 'plus de coupe commune aux deux natures');
     /* LE COMPTE NE SE PREND PLUS DANS LES LISTES, ET C'EST LE DÉFAUT SUIVANT (2026-09-23) :
@@ -262,7 +264,7 @@ test('la cloche sépare ce qui appelle un geste de ce qui s\'est passé', () => 
        montre. Deux comptes pris EN BASE, un par nature, puisque les écrans les distinguent
        désormais par la couleur ; `unread` reste leur somme. */
     assert.match(NOTIF, /SELECT COUNT\(\*\) AS n FROM notification/, 'les alertes se comptent en base');
-    assert.match(NOTIF, /SELECT COUNT\(\*\) AS n FROM audit_log a/, 'l\'activité aussi');
+    assert.match(NOTIF, /FROM audit_log a LEFT JOIN user u/, 'l\'activité aussi, jointe à l\'auteur');
     assert.match(NOTIF, /unread: nonLuesAlertes \+ nonLuesActivite/);
     assert.match(NOTIF, /non_lues: \{ alertes: nonLuesAlertes, activite: nonLuesActivite \}/);
     /* LE MÊME FILTRE POUR LA LISTE ET POUR LE COMPTE : deux copies finiraient par diverger, et
@@ -307,4 +309,24 @@ test('les onglets réutilisent le motif de l\'application, pas un troisième sty
     assert.strictEqual((PAGE.match(/role="tab" aria-selected=/g) || []).length, 2,
         'deux onglets, tous deux annoncés à la navigation vocale');
     assert.match(PAGE, /useState\("alertes"\)/, '« Alertes » ouvert par défaut : c\'est ce qui appelle un geste');
+});
+
+test('ce qu\'un stagiaire fait part en ALERTES, ce que l\'équipe fait reste en ACTIVITÉ', () => {
+    /* Demandé le 2026-09-24 : un stagiaire n'est pas « l'équipe ». Sa pièce déposée, son document
+       signé appellent un geste — c'est une alerte (rouge), pas une info de couloir (bleu). Deux
+       flux depuis le même journal, séparés par le RÔLE de l'auteur. */
+    // Le COMPTE des non-lues sépare stagiaire et équipe, en base, joint à l'auteur.
+    assert.match(NOTIF, /SUM\(u\.role = 'STAGIAIRE'\) AS stagiaire/);
+    assert.match(NOTIF, /SUM\(u\.role IS NULL OR u\.role <> 'STAGIAIRE'\) AS equipe/);
+    // La LISTE aussi : deux requêtes, chacune coupée à trente (pas un flux commun re-séparé).
+    assert.match(NOTIF, /stagiaire: await lire\("u\.role = 'STAGIAIRE'"\)/);
+    assert.match(NOTIF, /equipe: await lire\("\(u\.role IS NULL OR u\.role <> 'STAGIAIRE'\)"\)/,
+        'un auteur supprimé (role NULL) retombe côté équipe — le repli d’avant, pas une disparition');
+    // Alertes = notifications adressées + activité du stagiaire ; activité = l'équipe seule.
+    assert.match(NOTIF, /const nonLuesAlertes = nonLuesNotif \+ comptes\.stagiaire;/);
+    assert.match(NOTIF, /const nonLuesActivite = comptes\.equipe;/);
+    /* LES LIGNES DÉPLACÉES GARDENT `type: 'ACTIVITE'` : elles viennent du journal, se lisent avec
+       le libellé d'audit et ne se marquent pas une par une — seule leur PLACE change (alertes),
+       pas leur nature. La page n'a donc rien à changer pour les afficher. */
+    assert.match(NOTIF, /type: 'ACTIVITE'/);
 });

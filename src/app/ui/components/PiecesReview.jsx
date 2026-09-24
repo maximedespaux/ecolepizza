@@ -103,12 +103,16 @@ export default function PiecesReview({ enrollmentId, refresh }) {
                         <Icon name="eye" size={13} /> Voir
                       </button>
                       {/* RETIRER CE FICHIER SEUL — le geste demandé : enlever une page sans vider
-                          toute la pièce. */}
-                      <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
-                        aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
-                        onClick={() => retirerFichier(f, p.label)}>
-                        <Icon name="trash" size={13} />
-                      </button>
+                          toute la pièce. PAS UNE FOIS VALIDÉE : une pièce acceptée est figée, on ne
+                          la rogne pas d'un fichier en douce (le serveur l'autoriserait au personnel,
+                          mais l'écran ne l'offre plus — pour la corriger, on la refuse d'abord). */}
+                      {p.statut !== "VALIDEE" && (
+                        <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
+                          aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
+                          onClick={() => retirerFichier(f, p.label)}>
+                          <Icon name="trash" size={13} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
