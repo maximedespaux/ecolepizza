@@ -69,10 +69,7 @@ test('le volet entreprise de l\'émargement lit le dossier seul', () => {
 test('un document de groupe ne déverrouille pas une AUTRE session', () => {
     // `session_id IS NULL` acceptait les documents de groupe de n'importe quelle session de
     // l'entreprise : une convention signée en mars débloquait la session de septembre.
-    // On vise la requête DU VOLET (companyEmargementGate) : depuis la complétion à deux
-    // casquettes, ce n'est plus le premier « scope = 'COMPANY' » du fichier.
-    const gate = CODE.espace.slice(CODE.espace.indexOf('async function companyEmargementGate'));
-    const bloc = gate.slice(gate.indexOf("scope = 'COMPANY'"));
+    const bloc = CODE.espace.slice(CODE.espace.indexOf("scope = 'COMPANY'"));
     const corps = bloc.slice(0, 400);
     assert.doesNotMatch(corps, /session_id IS NULL OR session_id = \?/,
         'les documents de groupe d\'une autre session repassent');
