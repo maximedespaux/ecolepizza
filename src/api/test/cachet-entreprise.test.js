@@ -88,6 +88,7 @@ test('le cadre est offert DÈS QUE LE REPRÉSENTANT SIGNE — document de groupe
     // L'éditeur lit les DEUX : le niveau du document ET la présence d'« Entreprise » parmi les signataires.
     assert.match(EDITEUR, /setModeleEntreprise\(!!d\.company_level\);/);
     assert.match(EDITEUR, /setEntrepriseSigne\(Array\.isArray\(d\.signers\) && d\.signers\.includes\("ENTREPRISE"\)\);/);
-    // … et n'offre le cadre que là : document de groupe OU « Entreprise » signataire.
-    assert.match(EDITEUR, /\{\(modeleEntreprise \|\| entrepriseSigne\) && \(\s*<button className="tok-chip" draggable/);
+    // … et n'offre le cadre que là : document de groupe OU « Entreprise » signataire. Le cadre vit
+    // désormais DANS le groupe « Entreprise » (avec raison sociale, SIRET…), pas dans un bloc à part.
+    assert.match(EDITEUR, /g\.group === "Entreprise" && \(modeleEntreprise \|\| entrepriseSigne\) && \(/);
 });
