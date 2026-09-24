@@ -75,6 +75,9 @@ const connexion = {
             return [p[0] === 'g1' || p[0] === 'c1' ? [{ pdf: Buffer.from(`%PDF-1.4 signé ${p[0]}`).toString('base64') }] : []];
         }
         if (/SELECT \* FROM generated_document WHERE id = \?/.test(S)) return [[]]; // introuvable : ne se rend plus
+        if (/SELECT id, learner_id FROM generated_document WHERE id = \? AND organization_id = \?/.test(S)) return [[{ id: p[0], learner_id: 'l1' }]];
+        if (/SELECT id FROM learner WHERE id = \? AND user_id = \?/.test(S)) return [[]];
+        if (/SELECT id FROM document_signature WHERE document_id = \? AND user_id = \?/.test(S)) return [[]];
         return [[]];
     },
 };
@@ -94,7 +97,7 @@ function reponse() {
     r.octets = () => Buffer.concat(morceaux);
     return r;
 }
-const requete = (query) => ({ user: { id: 'u1', organization_id: 'org', role: 'SUPER_ADMIN' }, query, headers: {}, ip: '127.0.0.1' });
+const requete = (query, role = 'SUPER_ADMIN') => ({ user: { id: 'u1', organization_id: 'org', role }, query, headers: {}, ip: '127.0.0.1' });
 
 test('l\'archive d\'une session : rangée selon l\'arborescence, rien de perdu, et un sommaire qui dit ce qui manque', async () => {
     const res = reponse();
@@ -139,4 +142,23 @@ test('une sélection vide ou introuvable répond un message, pas une archive', a
     await exporterArchive(requete({ session: 's-inconnue' }), inconnue);
     assert.strictEqual(inconnue.code, 404);
     assert.match(inconnue.corps.message, /Sélection introuvable/);
+});
+
+test('un AUDITEUR ne reçoit pas dans un ZIP ce qu\'on lui refuse un par un', async () => {
+    /* La route de l'archive est celle du coffre, qui admet l'auditeur ; le téléchargement d'un
+       document généré, lui, ne le sert qu'au personnel, au stagiaire ou au signataire. Relevé en
+       relisant le code avant la mise en ligne : sans la garde, le ZIP lui aurait livré les PDF
+       signés. Les pièces et les PDF importés, qu'il ouvre déjà dans le coffre, restent. */
+    const res = reponse();
+    await exporterArchive(requete({ session: 's1' }, 'AUDITEUR'), res);
+    const PizZip = require('pizzip');
+    const z = new PizZip(res.octets(), { checkCRC32: true });
+    assert.deepStrictEqual(Object.keys(z.files).sort(), [
+        "2026/S38/RS7404/BEYNEY David/Pièce d'identité.jpg",
+        '2026/S38/RS7404/Dupont Jean/Ancien contrat.pdf',
+        '_sommaire.txt',
+    ]);
+    const sommaire = z.file('_sommaire.txt').asText();
+    assert.match(sommaire, /Évaluation Formative du Mardi — BEYNEY David : réservé au personnel de l'organisme/);
+    assert.match(sommaire, /Convention de formation — LES ARCADES : réservé au personnel de l'organisme/);
 });

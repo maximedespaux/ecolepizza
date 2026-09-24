@@ -1274,11 +1274,31 @@ const downloadPdf = async (req, res) => {
  * (`code: 'NON_RENDU'`) qui dit POURQUOI : l'archive l'écrit dans son sommaire et continue, au lieu
  * de s'interrompre pour un document dont il manquerait l'adresse.
  *
- * Les droits sont ceux du téléchargement : `fillForRequest` reçoit le vrai utilisateur.
+ * LES DROITS SONT CEUX DU TÉLÉCHARGEMENT, et d'abord pour ce qui est figé. La route de l'archive
+ * est celle du coffre (AUDIT_ROLES, où figure l'AUDITEUR) ; `downloadPdf`, lui, ne sert un document
+ * qu'au personnel (STAFF ci-dessous), au stagiaire lui-même ou au signataire attribué. Sans cette
+ * garde, un auditeur aurait reçu dans un ZIP les PDF signés qu'on lui refuse un par un — relevé en
+ * relisant ce code avant la mise en ligne. Le rendu du jour, lui, passe par `fillForRequest`, qui
+ * fait le même contrôle.
  *
  * @returns {Promise<{ buffer: Buffer, mime: string, nom?: string }>}
  */
 async function fichierPourArchive(conn, user, docId) {
+    const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+    if (!STAFF.includes(user.role)) {
+        const [[sdoc]] = await conn.query('SELECT id, learner_id FROM generated_document WHERE id = ? AND organization_id = ?',
+            [docId, user.organization_id]);
+        let permis = false;
+        if (sdoc) {
+            const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [sdoc.learner_id, user.id]);
+            permis = own.length > 0;
+            if (!permis) {
+                const [att] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?', [sdoc.id, user.id]);
+                permis = att.length > 0;
+            }
+        }
+        if (!permis) { const e = new Error("réservé au personnel de l'organisme"); e.code = 'NON_RENDU'; throw e; }
+    }
     try {
         if (await colonneExiste(conn, 'document_fichier', 'document_id')) {
             const [[fi]] = await conn.query('SELECT nom, mime, bytes FROM document_fichier WHERE document_id = ?', [docId]);
