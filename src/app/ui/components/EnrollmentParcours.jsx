@@ -39,7 +39,11 @@ function listSub(s) {
     if (s.total > 1) return `${s.signed}/${s.total} document(s) signé(s)`; // plusieurs OPCO
     return s.signed >= 1 ? "Signé (organisme + entreprise)" : "À signer (organisme + entreprise)";
   }
-  if (isGroup(s) && s.total > 0) return `${s.signed}/${s.total} signé(s)`;
+  if (isGroup(s) && s.total > 0) {
+    // Document SANS signature (ni QCM) : il ne se signe pas, il se REÇOIT — on compte les reçus.
+    if (!s.signable && !s.quiz) return s.gen >= s.total ? "Reçu" : `${s.gen}/${s.total} reçu(s)`;
+    return `${s.signed}/${s.total} signé(s)`;
+  }
   if (isGroup(s)) return "Aucun stagiaire concerné";
   return s.sub;
 }
@@ -55,6 +59,7 @@ function lineFor(s) {
          une seule incise, et ouvert la parenthèse dans l'une pour la fermer dans l'autre. */
       return s.signed >= 1 ? "Document de groupe : signé (organisme + entreprise)." : "Document de groupe : à faire signer (organisme + entreprise).";
     }
+    if (!s.signable && !s.quiz) return `${s.gen}/${s.total} reçu(s) · document sans signature, fait dès qu'il est reçu · à générer depuis chaque fiche stagiaire.`;
     return `${s.signed}/${s.total} stagiaire(s) ont signé · ${s.gen}/${s.total} généré(s) · à générer depuis chaque fiche stagiaire.`;
   }
   // Doc destiné à l'entreprise, vu depuis la fiche stagiaire : lecture seule.

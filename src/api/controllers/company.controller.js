@@ -7,7 +7,7 @@ const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 /* La section « À l'arrivée via une entreprise » — la MÊME lecture que celle du parcours, pas
    une relecture du JSON écrite une seconde fois ici. */
-const { companyStepSlugs, etatDeGroupe, pourcentFait } = require('../lib/parcours.js');
+const { companyStepSlugs, etatDeGroupe, pourcentFait, needsSignature, SENT } = require('../lib/parcours.js');
 const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
@@ -734,7 +734,7 @@ const getCompanyParcours = async (req, res) => {
         let steps = [];
         for (const s of docSteps) {
             const signers = stepSigners(s);
-            let gen = 0, total = 0, signed = 0, docId = null;
+            let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
             if (s.company_level) {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
                 // pas une par stagiaire. On le représente comme une seule étape signée /
@@ -748,6 +748,7 @@ const getCompanyParcours = async (req, res) => {
                 const allSigned = docs.length > 0 && docs.every((d) => d.status === 'SIGNE');
                 gen = docs.length ? 1 : 0;
                 signed = allSigned ? 1 : 0;
+                recu = docs.some((d) => SENT.includes(d.status)) ? 1 : 0;
                 total = 1; // une signature collective
                 docId = docs[0] ? docs[0].id : null;
             } else if (s.quiz_id) {
@@ -779,8 +780,14 @@ const getCompanyParcours = async (req, res) => {
                 }
                 gen = new Set(rows.map((r) => r.enrollment_id)).size;
                 signed = new Set(rows.filter((r) => r.status === 'SIGNE').map((r) => r.enrollment_id)).size;
+                recu = new Set(rows.filter((r) => SENT.includes(r.status)).map((r) => r.enrollment_id)).size;
             }
-            const done = total > 0 && signed >= total;
+            /* UN DOCUMENT SANS SIGNATURE (ni QCM, ni signataire hors organisme — un CGV, un livret)
+               est FAIT dès qu'il est REÇU, pas signé : il n'attend personne (même règle que le
+               dossier d'un stagiaire, cf. lib/parcours.js `stepDone`). Sans ça, un CGV restait
+               éternellement « 0/1 signés » et bloquait la complétion du groupe. */
+            const attendSignature = !!s.quiz_id || needsSignature(s);
+            const done = total > 0 && (attendSignature ? signed >= total : recu >= total);
             steps.push({
                 key: s.slug, label: s.label,
                 sub: s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
