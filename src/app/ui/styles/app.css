@@ -1020,6 +1020,12 @@ tbody tr:last-child td{border-bottom:none}
   border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;transition:color .15s,border-color .15s}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--text);border-color:var(--ember1)}
+/* Pastille de notification sur un onglet : un petit compteur ember, inline (pas en coin comme
+   `.notif-dot` : un onglet souligné n'a pas de coin fixe où l'ancrer). Dit ce qui attend une
+   action dans l'onglet sans qu'on l'ouvre. */
+.tab-bulle{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;margin-left:6px;
+  border-radius:99px;background:var(--grad-ember);color:#fff;font-size:10px;font-weight:700;line-height:1;
+  vertical-align:middle;font-variant-numeric:tabular-nums}
 /* ONGLETS QUI DÉFILENT quand la place manque (« Modifier la formation »). Quatre intitulés longs
    ne tiennent pas sur un téléphone : ils se repliaient sur trois lignes, et le dernier sortait de
    la fenêtre. Ils restent sur une ligne et défilent au doigt ; l'onglet coupé au bord dit qu'il

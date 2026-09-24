@@ -49,6 +49,7 @@ function StudentFormationDetail() {
   const [viewId, setViewId] = useState(null);
   const [quizDoc, setQuizDoc] = useState(null);
   const [signing, setSigning] = useState(null);
+  const [onglet, setOnglet] = useState("parcours"); // "parcours" | "emargement"
   const fileRef = useRef(null);
   const pieceCible = useRef(null); // pieceTypeId pour lequel on ouvre le sélecteur de fichier
 
@@ -152,6 +153,15 @@ function StudentFormationDetail() {
   const etapes = [...etapesPieces, ...etapesDocs, ...etapesRemises];
   // La PREMIÈRE étape non terminée (et non en attente de vérif) porte la pastille « en cours ».
   const idxCourant = etapes.findIndex((e) => e.etat === "todo" || e.etat === "refused");
+  /* CE QUI ATTEND UNE ACTION, PAR ONGLET — la pastille de chaque onglet. Côté parcours : les
+     étapes « à faire » (à fournir) ou « à renvoyer » (refusées), la même règle que la pastille
+     « en cours ». Côté émargement : les demi-journées signables MAINTENANT — ni signées, ni à
+     venir, ni verrouillées (tant que les documents ne sont pas signés, il n'y a rien à émarger,
+     et ces documents-là sont déjà comptés côté parcours). */
+  const parcoursAFaire = etapes.filter((e) => e.etat === "todo" || e.etat === "refused").length;
+  const emgGate = data?.emargement_gate || {};
+  const emargAFaire = emgGate.locked ? 0
+    : (data?.emargement || []).filter((r) => !r.signed && r.date <= (data?.today || "")).length;
 
   return (
     <>
@@ -188,8 +198,26 @@ function StudentFormationDetail() {
           désormais celle qu'il accepte vraiment (lib/formatsDepot.js). */}
       <input ref={fileRef} type="file" accept={ACCEPT_PIECE} style={{ display: "none" }} onChange={onFichier} />
 
+      {/* DEUX ONGLETS (demandé le 2026-09-24) : le parcours (documents à fournir/signer) d'un côté,
+          l'émargement de l'autre. Une pastille sur chaque onglet dit ce qui attend une action —
+          documents à fournir/signer, demi-journées à émarger — sans avoir à l'ouvrir. */}
       {data && (
-        <Card title="Mon parcours">
+        <div className="tabs" role="tablist" aria-label="Sections de la formation">
+          {[
+            { id: "parcours", label: "Mon parcours", n: parcoursAFaire },
+            { id: "emargement", label: "Émargement, ma présence", n: emargAFaire },
+          ].map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={onglet === t.id}
+              className={"tab" + (onglet === t.id ? " on" : "")} onClick={() => setOnglet(t.id)}>
+              {t.label}
+              {t.n > 0 && <span className="tab-bulle" aria-label={`${t.n} à traiter`}>{t.n}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data && onglet === "parcours" && (
+        <Card>
           {etapes.length === 0 ? (
             <EmptyState icon="file-text">Aucune étape pour le moment.</EmptyState>
           ) : (
@@ -340,11 +368,11 @@ function StudentFormationDetail() {
         </Card>
       )}
 
-      {data && (() => {
+      {data && onglet === "emargement" && (() => {
         const gate = data.emargement_gate || {};
         const locked = !!gate.locked;
         return (
-        <Card title="Émargement, ma présence">
+        <Card>
           {locked && (
             <div className="emarg-lock">
               <Icon name="lock" size={15} />
