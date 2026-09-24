@@ -1,5 +1,5 @@
 const express = require('express');
-const { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp } = require('../controllers/rep.controller.js');
+const { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, downloadRepDocument } = require('../controllers/rep.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 // Accès RÉSERVÉ par les DONNÉES (pas par le rôle) : chaque handler ne renvoie que les
@@ -10,6 +10,7 @@ router.use(authenticateToken);
 
 router.get('/documents', getRepDocuments);
 router.get('/documents/:id/preview', previewRepDocument);
+router.get('/documents/:id/pdf', downloadRepDocument);
 router.post('/documents/:id/sign', signRepDocument);
 router.put('/stamp', setRepStamp);
 
