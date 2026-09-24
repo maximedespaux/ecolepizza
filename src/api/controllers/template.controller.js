@@ -839,9 +839,11 @@ const getTemplateBody = async (req, res) => {
         const steps = await loadOrgSteps(req.user.organization_id);
         const etape = steps.find((x) => x.slug === req.params.slug) || {};
         const docType = etape.doc_type || null;
-        /* MODÈLE D'ENTREPRISE OU NON : l'éditeur n'offre le cadre « Cachet de l'entreprise » que
-           là où le représentant signe — les documents d'entreprise (cf. rep.controller). Posé sur
-           un modèle de stagiaire, il resterait vide à jamais. */
+        /* MODÈLE D'ENTREPRISE OU NON : l'éditeur offre le cadre « Cachet de l'entreprise » là où le
+           représentant signe. DEUX cas, tous deux lisibles ici : le document de GROUPE
+           (company_level ci-dessous) ET le document de stagiaire dont « Entreprise » est signataire
+           (ENTREPRISE dans `signers`, cf. companySignsDoc). Le second était oublié — la convention
+           financée par l'employeur restait sans cadre, et le cachet signé n'apparaissait nulle part. */
         const companyLevel = etape.company_level ? 1 : 0;
         /* Les signataires du modèle : l'éditeur n'offre « Signature de l'intervenant » que si
            « Externe » est coché — le seul cas où quelqu'un viendra la remplir. */

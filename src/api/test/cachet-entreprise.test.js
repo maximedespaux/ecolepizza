@@ -72,13 +72,22 @@ test('LE CACHET ENREGISTRÉ N\'EST PLUS PROPOSÉ COMME « CHAMP »', async () =>
     assert.ok(!champs.includes('company.stamp'), 'une image rangée en texte s\'imprimait en caractères');
 });
 
-test('le cadre n\'est offert que sur un modèle d\'entreprise — le seul que le représentant signe', () => {
-    // Le serveur dit le type du modèle, dans les trois formes de réponse du corps…
+test('le cadre est offert DÈS QUE LE REPRÉSENTANT SIGNE — document de groupe OU stagiaire co-signé', () => {
+    /* LE DÉFAUT QUE CE TEST GÈLE. Le cadre n'était offert que sur un « document entreprise »
+       (company_level). Mais le représentant signe dans la case `representant` sur DEUX sortes de
+       documents : le document de GROUPE, et le document d'un STAGIAIRE dont « Entreprise » est
+       signataire (companySignsDoc = ENTREPRISE parmi les rôles) — une convention, un contrat
+       financé par l'employeur. Sur ceux-là, la palette ne proposait aucun cadre : le représentant
+       signait, et le cachet n'apparaissait NULLE PART sur la page. Les deux conditions se lisent
+       dans la réponse du corps du modèle. */
     const corps = lire('controllers/template.controller.js');
     const debut = corps.indexOf('const getTemplateBody');
     const fonction = corps.slice(debut, corps.indexOf('\n};', debut));
     assert.strictEqual((fonction.match(/company_level: companyLevel/g) || []).length, 3);
-    // … et l'éditeur ne montre le cadre qu'à ce moment-là : sur un modèle de stagiaire, il resterait vide.
+    assert.match(fonction, /signers/, 'le corps doit renvoyer les signataires, que l\'éditeur lit');
+    // L'éditeur lit les DEUX : le niveau du document ET la présence d'« Entreprise » parmi les signataires.
     assert.match(EDITEUR, /setModeleEntreprise\(!!d\.company_level\);/);
-    assert.match(EDITEUR, /\{modeleEntreprise && \(\s*<button className="tok-chip" draggable/);
+    assert.match(EDITEUR, /setEntrepriseSigne\(Array\.isArray\(d\.signers\) && d\.signers\.includes\("ENTREPRISE"\)\);/);
+    // … et n'offre le cadre que là : document de groupe OU « Entreprise » signataire.
+    assert.match(EDITEUR, /\{\(modeleEntreprise \|\| entrepriseSigne\) && \(\s*<button className="tok-chip" draggable/);
 });

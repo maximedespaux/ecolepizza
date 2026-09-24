@@ -114,7 +114,8 @@ function TemplateEditor() {
   // Papier à en-tête automatique : ON par défaut. Un modèle qui met déjà l'identité dans son
   // corps (facture…) peut le couper pour ne pas avoir le nom de l'organisme en double, tout en haut.
   const [noLetterhead, setNoLetterhead] = useState(false);
-  const [modeleEntreprise, setModeleEntreprise] = useState(false); // company_level : cadre « Cachet de l'entreprise »
+  const [modeleEntreprise, setModeleEntreprise] = useState(false); // company_level : document de GROUPE (signé par le représentant)
+  const [entrepriseSigne, setEntrepriseSigne] = useState(false); // « Entreprise » signataire : le représentant signe AUSSI un document de stagiaire
   const [signeParExterne, setSigneParExterne] = useState(false); // « Externe » coché : cadre « Signature de l'intervenant »
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
@@ -174,6 +175,7 @@ function TemplateEditor() {
         setBleed({ header: !!bl.header, body: !!bl.body, footer: !!bl.footer });
         setNoLetterhead(!!(d.layout && d.layout.noLetterhead));
         setModeleEntreprise(!!d.company_level);
+        setEntrepriseSigne(Array.isArray(d.signers) && d.signers.includes("ENTREPRISE"));
         setSigneParExterne(Array.isArray(d.signers) && d.signers.includes("EXTERNAL"));
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
@@ -436,8 +438,13 @@ function TemplateEditor() {
                 Bloc de signature nommé, signé séparément par chaque personne.
               </p>
               {/* Même cadre que la signature du stagiaire : un espace blanc bordé de pointillés
-                  tant que personne n'a signé, le cachet à sa place ensuite. */}
-              {modeleEntreprise && (
+                  tant que personne n'a signé, le cachet à sa place ensuite. OFFERT DÈS QUE LE
+                  REPRÉSENTANT SIGNE — un document de GROUPE (company_level), mais AUSSI un document
+                  de stagiaire où « Entreprise » est signataire (convention, contrat financé par
+                  l'employeur). Le gater sur le seul « document entreprise » laissait ces documents
+                  sans cadre : le représentant signait dans la case `representant`, qui n'existait
+                  nulle part sur la page — le cachet n'apparaissait pas (cf. companySignsDoc). */}
+              {(modeleEntreprise || entrepriseSigne) && (
                 <button className="tok-chip" draggable
                   title={"Cadre vide jusqu'à la signature : le représentant de l'entreprise y appose son cachet, depuis son espace ou par le lien de signature. Cliquer ou glisser."}
                   onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ENTREPRISE))}

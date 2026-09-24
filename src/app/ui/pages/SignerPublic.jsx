@@ -31,6 +31,17 @@ export default function SignerPublic() {
     finally { setBusy(false); }
   }
 
+  /* SIGNER AVEC LE CACHET ENREGISTRÉ, EN UN CLIC. Le serveur relit le cachet de l'entreprise du
+     document (jamais transmis ici) ; on lui passe seulement le nom, celui de l'entreprise à défaut. */
+  async function onSignCachet() {
+    setBusy(true); setError(null);
+    try {
+      await submitPublicSign(token, { use_saved: true, signer_name: data.company || "" });
+      setDone(true);
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -55,7 +66,18 @@ export default function SignerPublic() {
               {done || data.signed ? (
                 <span className="badge g" style={{ fontSize: 14, padding: "8px 14px" }}>✅ Signé{data.signer_name ? ` · ${data.signer_name}` : ""}</span>
               ) : !data.bloque && (
-                <button className="btn primary" onClick={() => setSigning(true)}><Icon name="pencil" size={16} /> {data.label || "Signer le document"}</button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {/* UN CLIC : le cachet enregistré de l'entreprise, sans redessiner. Dessiner reste
+                      offert à côté — le lien peut viser une personne qui n'a pas de cachet. */}
+                  {data.cachet_disponible && (
+                    <button className="btn primary" disabled={busy} onClick={onSignCachet} title="Apposer le cachet enregistré de l'entreprise">
+                      <Icon name="check" size={16} /> {busy ? "Signature…" : "Signer avec le cachet"}
+                    </button>
+                  )}
+                  <button className={data.cachet_disponible ? "btn ghost" : "btn primary"} disabled={busy} onClick={() => setSigning(true)}>
+                    <Icon name="pencil" size={16} /> {data.cachet_disponible ? "Dessiner" : (data.label || "Signer le document")}
+                  </button>
+                </div>
               )}
             </div>
 
