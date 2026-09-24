@@ -130,7 +130,16 @@ async function learnerForUser(conn, userId) {
 }
 
 // Complétude d'un dossier : dernier jour passé + documents à signer tous signés.
-async function completionOf(conn, e, steps, agefice = false) {
+// Entreprises rattachées au compte connecté (company.user_id = user) : un stagiaire qui est AUSSI
+// représentant. Vide pour un stagiaire ordinaire → la complétion ne change alors pas d'un iota.
+async function repCompanyIdsFor(conn, userId, orgId) {
+    try {
+        const [rows] = await conn.query('SELECT id FROM company WHERE user_id = ? AND organization_id = ?', [userId, orgId]);
+        return rows.map((r) => r.id);
+    } catch { return []; }
+}
+
+async function completionOf(conn, e, steps, agefice = false, repCompanyIds = []) {
     const [rows] = await conn.query(
         `SELECT gd.type, gd.status
          FROM generated_document gd
@@ -141,10 +150,18 @@ async function completionOf(conn, e, steps, agefice = false) {
     const statusByType = {};
     for (const r of rows) statusByType[r.type] = r.status;
 
+    /* COMPTE UNIFIÉ POUR UN COMPTE À DEUX CASQUETTES. Quand le compte est AUSSI le représentant de
+       l'entreprise DU DOSSIER, les documents de GROUPE de son propre parcours (🏢), qu'il signe EN
+       TANT QU'ENTREPRISE, entrent dans la MÊME progression que ses documents de stagiaire. On
+       compte les ÉTAPES du parcours — bornées à ce parcours, chacune adossée à SON document par le
+       type — et non une requête large sur toute l'entreprise, qui ramassait des documents d'autres
+       groupes/OPCO et gonflait la barre. Pour un stagiaire ordinaire, `repCompanyIds` ne contient
+       pas l'entreprise du dossier : `required` reste EXACTEMENT ses étapes, rien ne change. */
+    const inclutEntreprise = !!e.company_id && repCompanyIds.includes(e.company_id);
     const required = stepsToDocSet(steps, {
         hygiene: !!e.program_hygiene, rsCode: e.program_rs,
         jours: e.program_days || 1, financing: e.financing, agefice,
-    }).filter((d) => d.stagiaireSign);
+    }).filter((d) => d.stagiaireSign || (inclutEntreprise && d.companySign));
 
     const signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
     const total = required.length;
@@ -629,7 +646,7 @@ const getMyFormations = async (req, res) => {
 
         // Inscriptions du stagiaire (pour déverrouiller les cartes concernées).
         const [enrollments] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.financing, s.program_id, s.year, s.week,
+            `SELECT e.id AS enrollment_id, e.financing, e.company_id, s.program_id, s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
@@ -644,9 +661,11 @@ const getMyFormations = async (req, res) => {
         // On compte aussi le nombre de sessions suivies (onglets dans le détail).
         const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
         const steps = await loadOrgSteps(learner.organization_id);
+        // Compte à deux casquettes : ses documents d'entreprise entrent dans la complétion (cf. completionOf).
+        const repIds = await repCompanyIdsFor(conn, req.user.id, learner.organization_id);
         const byProgram = {};
         for (const e of enrollments) {
-            const c = await completionOf(conn, e, steps, agefice);
+            const c = await completionOf(conn, e, steps, agefice, repIds);
             const g = await emargementGate(conn, e, learner.organization_id, agefice); // point d'accès (breakpoint)
             const info = {
                 enrollment_id: e.enrollment_id, complete: c.complete, dayPassed: c.dayPassed,
@@ -756,7 +775,7 @@ const getMyFormation = async (req, res) => {
         if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
 
         const [rows] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.financing, e.session_id, s.program_id,
+            `SELECT e.id AS enrollment_id, e.financing, e.company_id, e.session_id, s.program_id,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     s.year, s.week,
@@ -774,7 +793,8 @@ const getMyFormation = async (req, res) => {
         // Accès dès l'inscription à une session (plus besoin que la formation soit terminée).
         const steps = await loadOrgSteps(learner.organization_id);
         const agefice = (learner.opco || "").toUpperCase() === "AGEFICE";
-        const c = await completionOf(conn, e, steps, agefice);
+        const repIds = await repCompanyIdsFor(conn, req.user.id, learner.organization_id);
+        const c = await completionOf(conn, e, steps, agefice, repIds);
         const gate = await emargementGate(conn, e, learner.organization_id, agefice);
 
         // Sessions du MÊME programme suivies par ce stagiaire (onglets W23 / W25…).
@@ -2021,4 +2041,5 @@ const updateMyInfos = async (req, res) => {
 module.exports = {
     getMyConsents, setMyConsent,
     saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    completionOf, // exporté pour le test de complétion (compte à deux casquettes)
 };
