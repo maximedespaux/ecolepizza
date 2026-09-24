@@ -200,7 +200,12 @@ function StagiaireDetail() {
        l'ancienne liste. Et le serveur supprime tout, signature et PDF scellé compris : aucun
        retour possible. */
     const signe = d.status === "SIGNE";
-    if (!window.confirm(`Supprimer « ${d.title} » ?${signe ? "\nCe document est SIGNÉ : sa signature et son PDF scellé seront supprimés avec lui." : ""}\nCette action est irréversible.`)) return;
+    /* Un QCM « signé » est un QCM RÉPONDU : ce qui part avec lui, c'est la réponse et sa note, que le
+       serveur supprime aussi (Notation et Résultats QCM la comptaient encore, jusqu'au 2026-09-24). */
+    const avertissement = !signe ? ""
+      : d.quiz_id ? "\nCe QCM est RÉPONDU : la réponse et sa note (Notation, Résultats QCM) seront supprimées avec lui."
+      : "\nCe document est SIGNÉ : sa signature et son PDF scellé seront supprimés avec lui.";
+    if (!window.confirm(`Supprimer « ${d.title} » ?${avertissement}\nCette action est irréversible.`)) return;
     try {
       await deleteDocument(d.id);
       loadDocs();
