@@ -6,6 +6,7 @@ import { dateHeure, dateFr } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 import QuestionsConsentement from "./QuestionsConsentement.jsx";
+import { pingAcces } from "../lib/gamification.js";
 
 /**
  * Aperçu FIDÈLE du document : rendu HTML identique au PDF, affiché en ligne
@@ -68,6 +69,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
     try {
       await signDocument(id, { signer_name, signature_data });
       setSigning(false);
+      // Ce document vient d'être signé : il pouvait être le DERNIER avant le point d'accès.
+      // On prévient la coquille du stagiaire (StudentLayout) de relire l'accès — sans quoi
+      // Pizza Quest, Outils et Communauté resteraient grisés jusqu'à une navigation.
+      pingAcces();
       onChanged && onChanged();
       onClose();
     } catch (err) {

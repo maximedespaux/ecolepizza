@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
@@ -9,7 +9,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 import { getMyAccess } from "../api/apiClient.js";
-import { getAvatar, AVATAR_EVENT, COMMUNITY_EVENT, hydrateProfile } from "../lib/gamification.js";
+import { getAvatar, AVATAR_EVENT, COMMUNITY_EVENT, ACCES_EVENT, hydrateProfile } from "../lib/gamification.js";
 import AvatarCadre from "../components/AvatarCadre.jsx";
 import { cadrePorteDe, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 
@@ -113,11 +113,10 @@ function StudentLayout() {
   const [exclusifs, setExclusifs] = useState([]); // cadres exclusifs accordés par l'école
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   const [menuOpen, setMenuOpen] = useState(false); // tiroir de navigation, sous 900px
-  // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest + Outils.
-  useEffect(() => {
+  // A-t-il franchi le point d'accès (breakpoint) d'une formation ? Débloque Pizza Quest +
+  // Outils + Communauté. Le serveur reste seul juge (getMyAccess).
+  const rafraichirAcces = useCallback(() => {
     if (!user?.id) return;
-    // Relancé à chaque changement de page : la pastille se met donc à jour dès qu'un
-    // document est signé, sans rechargement.
     getMyAccess()
       .then((r) => {
         setUnlocked(r?.data?.quest_unlocked !== false);
@@ -127,9 +126,17 @@ function StudentLayout() {
         setExclusifs(r?.data?.cadres_exclusifs || []);
       })
       .catch(() => setUnlocked(true));
-    // Rejoué à chaque changement de page : quitter la Communauté suffit donc à voir la
-    // pastille retomber, sans rechargement.
-  }, [user?.id, loc.pathname]);
+  }, [user?.id]);
+  // Rejoué au changement de page — ET à la signature d'un document (ACCES_EVENT). Signer son
+  // DERNIER document (celui qui franchit le point d'accès) se fait SUR PLACE, dans une fenêtre
+  // qui ne change pas d'URL : sans ce second déclencheur, le stagiaire qui vient de franchir le
+  // point resterait verrouillé — Pizza Quest, Outils et Communauté grisés — jusqu'à ce qu'il
+  // navigue. La pastille « à signer » se met à jour par la même occasion.
+  useEffect(() => { rafraichirAcces(); }, [rafraichirAcces, loc.pathname]);
+  useEffect(() => {
+    window.addEventListener(ACCES_EVENT, rafraichirAcces);
+    return () => window.removeEventListener(ACCES_EVENT, rafraichirAcces);
+  }, [rafraichirAcces]);
   // La Communauté est rendue dans l'Outlet, la pastille vit ici : sans ce signal, ouvrir une
   // fiche commentée laisserait le compteur figé jusqu'au prochain changement de page. On
   // redemande le total au serveur plutôt que de le décrémenter — un compte tenu côté

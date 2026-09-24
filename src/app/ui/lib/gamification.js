@@ -84,6 +84,19 @@ export const AVATAR_EVENT = AVATAR_EVT;
 export const COMMUNITY_EVENT = "impasto:communaute-vue";
 export const pingCommunaute = () => window.dispatchEvent(new Event(COMMUNITY_EVENT));
 
+/*
+ * « L'accès a peut-être changé » — signalé après la signature d'un document.
+ *
+ * Le point d'accès (Pizza Quest, Outils, Communauté) s'ouvre dès que le stagiaire a signé
+ * tout ce qu'il doit signer jusqu'au point de rupture. Mais StudentLayout ne relit l'accès
+ * (getMyAccess) qu'au CHANGEMENT DE PAGE : celui qui signe son dernier document SUR PLACE
+ * — la fenêtre de signature ne change pas d'URL — restait verrouillé jusqu'à ce qu'il
+ * navigue. Comme pour la Communauté, l'événement ne porte AUCUN état : il dit seulement
+ * « redemande au serveur », qui reste seul juge du franchissement.
+ */
+export const ACCES_EVENT = "impasto:acces-maj";
+export const pingAcces = () => window.dispatchEvent(new Event(ACCES_EVENT));
+
 // Fusionne deux cartes de progression { world: { step: stars } } en gardant le meilleur score.
 function mergeProgress(a = {}, b = {}) {
   const out = {};
