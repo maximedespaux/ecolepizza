@@ -78,6 +78,10 @@ async function request(path, options = {}) {
 export function getOrganisation() {
   return request("/organisation");
 }
+/* PUBLIQUE : la page Confidentialité (avant connexion) y lit le responsable de traitement. */
+export function getOrgCoordonnees() {
+  return request("/organisation/coordonnees");
+}
 /* Le catalogue des informations transmissibles aux partenaires, la sélection de l'école, et
    L'APERÇU DE LA PHRASE que le stagiaire lira. L'aperçu vient du SERVEUR, produit par la même
    fonction que le texte réel : le recomposer ici donnerait une seconde rédaction à maintenir,

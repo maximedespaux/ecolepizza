@@ -224,14 +224,23 @@ export const TRANSMISSIONS = [
   {
     destinataire: 'Partenaires de l\'organisme',
     qui: 'Fournisseurs et partenaires référencés par l\'école',
-    donnees: 'Nom, prénom, adresse e-mail, téléphone, formation suivie et dates de session.',
-    pourquoi: 'Leur permettre de vous proposer leurs offres et de vous contacter directement.',
-    quand: 'Session par session, et UNIQUEMENT si vous y avez consenti.',
+    /* DEUX NIVEAUX, ET LA PAGE DOIT LES DISTINGUER (corrigé le 2026-09-24). Un refus ne retire
+       plus la personne de la liste : il retire ses COORDONNÉES, pas son identité. Le nom et le
+       prénom partent donc que l'on accepte OU que l'on refuse ; seule une personne JAMAIS
+       sollicitée ne figure nulle part. Dire, comme la version précédente, que toute la
+       transmission « n'a lieu que si vous y avez consenti » était donc faux pour l'identité — et
+       une page de confidentialité qui SOUS-DÉCLARE ce qui sort engage l'organisme autant qu'une
+       qui sur-déclare. La règle serveur est dans lib/consentements.js (« le nom part, les
+       coordonnées non »). */
+    donnees: 'Votre nom et votre prénom accompagnent la liste transmise aux partenaires de '
+      + 'l\'école, que vous ayez accepté ou refusé. Vos coordonnées (adresse e-mail, téléphone) '
+      + 'et le détail de la formation ne partent, eux, qu\'avec votre accord. Un refus retire les '
+      + 'coordonnées, pas l\'identité ; une personne jamais sollicitée ne figure sur aucune liste.',
+    pourquoi: 'Permettre aux partenaires de l\'école de vous proposer leurs offres et de vous '
+      + 'contacter directement, dès lors que vous avez accepté qu\'ils reçoivent vos coordonnées.',
+    quand: 'Session par session. Le nom et le prénom accompagnent la liste ; les coordonnées n\'y '
+      + 'figurent qu\'avec votre accord.',
     canal: 'organisme',
-    /* CE QUI DISTINGUE CETTE LIGNE DE TOUTES LES AUTRES : elle repose sur le consentement, pas
-       sur la nécessité du service. Elle ne s'applique donc qu'aux personnes qui ont dit oui, et
-       chacune peut revenir sur sa réponse à tout moment. La page doit le dire, sinon un lecteur
-       comprend que ses coordonnées partent de toute façon. */
     surConsentement: true,
   },
 ];

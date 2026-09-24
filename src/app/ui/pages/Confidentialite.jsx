@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon.jsx";
 import { useEchap } from "../lib/useEchap.js";
+import { getOrgCoordonnees } from "../api/apiClient.js";
 import { TRACEURS, NATURES, TOUT_EXEMPTE, TRANSMISSIONS } from "../lib/traceurs.js";
 
 /**
@@ -58,6 +59,20 @@ function PourquoiPasDeBanniere({ onClose }) {
 
 export default function Confidentialite() {
   const [pourquoi, setPourquoi] = useState(false);
+  /* LE RESPONSABLE DE TRAITEMENT, LU SUR LA FICHE ORGANISME (endpoint public, sans connexion).
+     Le RGPD (art. 13) impose de le nommer ici ; le recopier à la main sur la page en ferait une
+     information qui dérive de la fiche réelle. Tant que la lecture n'a pas répondu — ou si un
+     champ manque — on garde le repli honnête plus bas, jamais une adresse inventée. */
+  const [org, setOrg] = useState(null);
+  useEffect(() => { getOrgCoordonnees().then((r) => setOrg(r.data)).catch(() => {}); }, []);
+  const responsable = (() => {
+    if (!org) return null;
+    const nom = org.legal_name || org.short_name;
+    const postal = [org.address, [org.zip_code, org.town].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    // Il faut une IDENTITÉ et au moins un moyen de contact, sinon le repli « à compléter » reste.
+    if (!nom || !(org.email || postal)) return null;
+    return { nom, manager: org.manager, email: org.email, phone: org.phone, postal };
+  })();
   const parNature = ["cookie", "local", "session"].map((n) => ({
     nature: n, items: TRACEURS.filter((t) => t.nature === n),
   })).filter((g) => g.items.length);
@@ -124,10 +139,14 @@ export default function Confidentialite() {
                     toute façon — et lui indique où reprendre la main. */}
                 {t.surConsentement && (
                   <span className="legale-consent-note">
-                    <b>Uniquement avec votre accord.</b> Cette transmission n'a lieu que si vous
-                    l'avez explicitement acceptée. Refuser n'a aucune conséquence sur votre
-                    formation, et vous pouvez revenir sur votre réponse à tout moment depuis
-                    <b> Mon profil → Confidentialité</b>. Votre réponse est conservée avec sa date.
+                    <b>Vos coordonnées, uniquement avec votre accord.</b> Ce sont vos coordonnées
+                    (adresse e-mail, téléphone) qui reposent sur votre consentement : elles ne
+                    partent que si vous l'avez explicitement accepté. Refuser les retire — mais
+                    votre nom et votre prénom restent transmis aux partenaires de l'école ; seule
+                    une personne jamais sollicitée ne figure nulle part. Refuser n'a aucune
+                    conséquence sur votre formation, et vous pouvez revenir sur votre réponse à tout
+                    moment depuis<b> Mon profil → Confidentialité</b>. Votre réponse est conservée
+                    avec sa date.
                   </span>
                 )}
               </li>
@@ -153,14 +172,29 @@ export default function Confidentialite() {
             les données qui vous concernent. Pour l'exercer, adressez-vous à l'organisme de
             formation qui gère votre dossier.
           </p>
-          {/* À COMPLÉTER PAR L'ORGANISME : coordonnées du responsable de traitement, adresse de
-              contact pour l'exercice des droits, et — si l'organisme en désigne un — le délégué à
-              la protection des données. Laissé en clair plutôt que rempli d'un texte inventé : une
-              adresse fausse sur une page de droits est pire qu'une page absente. */}
-          <p className="legale-atraiter">
-            <b>À compléter avant mise en ligne :</b> coordonnées du responsable de traitement et
-            adresse de contact pour l'exercice des droits.
-          </p>
+          {/* Le responsable de traitement vient de la FICHE ORGANISME, pas d'un texte recopié : une
+              adresse écrite à la main dériverait de la réalité, et une adresse fausse sur une page
+              de droits est pire qu'une page absente. Tant qu'une identité et un contact ne sont pas
+              renseignés, le repli ci-dessous le dit — et indique OÙ les renseigner. */}
+          {responsable ? (
+            <p className="legale-responsable">
+              <b>Responsable de traitement :</b> {responsable.nom}
+              {responsable.manager ? `, représenté par ${responsable.manager}` : ""}.{" "}
+              Pour exercer vos droits, écrivez à{" "}
+              {responsable.email
+                ? <a href={`mailto:${responsable.email}`}>{responsable.email}</a>
+                : "l'organisme"}
+              {responsable.postal ? `, ou par courrier : ${responsable.postal}` : ""}
+              {responsable.phone ? ` — tél. ${responsable.phone}` : ""}.
+            </p>
+          ) : (
+            <p className="legale-atraiter">
+              <b>À compléter :</b> les coordonnées du responsable de traitement et de contact pour
+              l'exercice des droits ne sont pas encore renseignées. Ajoutez-les dans
+              <b> Paramètres → Organisme</b> (raison sociale, e-mail, adresse) : elles s'afficheront
+              ici automatiquement.
+            </p>
+          )}
         </section>
       </div>
     </div>

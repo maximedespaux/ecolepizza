@@ -93,8 +93,14 @@ test('le chemin du retour existe, dans les deux sens', () => {
 
 test('la page de confidentialité dit que cette transmission repose sur l\'accord', () => {
     const page = lire(path.join(UI, 'pages/Confidentialite.jsx'));
-    assert.match(page, /Uniquement avec votre accord/,
+    assert.match(page, /uniquement avec votre accord/i,
         "Sans cette mention, un lecteur comprend que ses coordonnées partent de toute façon.");
+    /* CORRIGÉ le 2026-09-24 : la page distingue désormais l'IDENTITÉ (nom + prénom, transmis que
+       l'on accepte OU refuse) des COORDONNÉES (sur accord). Elle disait auparavant que TOUTE la
+       transmission « n'a lieu que si vous y avez consenti », ce qui SOUS-DÉCLARAIT ce qui sort —
+       aussi trompeur qu'une sur-déclaration. La page doit donc dire les deux niveaux. */
+    assert.match(page, /nom et votre prénom restent transmis/i,
+        "la page doit dire que le nom part que l'on accepte ou non — le taire sous-déclare le transfert");
     /* L'ONGLET S'APPELLE « Confidentialité » depuis le 2026-09-22 : il s'appelait « Visibilité », et
        la fenêtre de consentement envoyait vers un onglet « Confidentialité » qui n'existait pas. */
     assert.match(page, /Mon profil → Confidentialité/, 'et la page doit dire OÙ revenir sur sa réponse');

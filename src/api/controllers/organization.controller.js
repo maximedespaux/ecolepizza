@@ -236,5 +236,34 @@ const saveLocations = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/organisation/coordonnees — PUBLIC, sans authentification.
+ *
+ * La page « Confidentialité » se lit AVANT de créer un compte, et le RGPD (art. 13) impose d'y
+ * nommer le RESPONSABLE DE TRAITEMENT et un contact pour l'exercice des droits. Ces informations
+ * sont publiques par nature — elles figurent déjà sur chaque facture et sur l'écran de connexion.
+ *
+ * ⚠ LISTE BLANCHE EXPLICITE, JAMAIS `SELECT *`. La table `organization` porte aussi la signature
+ * chiffrée, le certificat de scellement, les interrupteurs d'envoi… Un `SELECT *` exposerait tout
+ * cela sur un endpoint ouvert au premier ajout de colonne. On ne sort donc que ce petit lot de
+ * champs de contact, et rien d'autre.
+ *
+ * L'organisme « principal » est le premier créé (même convention que lib/orgContext) : le déploiement
+ * est mono-organisme (École Pizza). Le jour où il ne le serait plus, une page publique sans contexte
+ * d'organisme devrait choisir lequel afficher — ce n'est pas le cas aujourd'hui.
+ */
+const getOrgCoordonnees = async (req, res) => {
+    try {
+        const [[o]] = await db.promise().query(
+            `SELECT legal_name, short_name, manager, email, phone, address, zip_code, town
+               FROM organization ORDER BY created_at LIMIT 1`);
+        res.json({ data: o || null });
+    } catch (err) {
+        // La page a un repli honnête (« à compléter ») : une erreur ne casse pas son affichage.
+        console.error('Erreur coordonnées publiques organisme :', err);
+        res.json({ data: null });
+    }
+};
+
 module.exports = {
-    getPartnerFields, getOrganization, updateOrganization, getLocations, saveLocations };
+    getPartnerFields, getOrganization, updateOrganization, getLocations, saveLocations, getOrgCoordonnees };
