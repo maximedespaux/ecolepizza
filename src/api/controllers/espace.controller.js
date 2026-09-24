@@ -141,14 +141,19 @@ async function repCompanyIdsFor(conn, userId, orgId) {
 
 async function completionOf(conn, e, steps, agefice = false, repCompanyIds = []) {
     const [rows] = await conn.query(
-        `SELECT gd.type, gd.status
+        `SELECT gd.template_slug, gd.status
          FROM generated_document gd
          JOIN document_formation df ON df.document_id = gd.id
          WHERE df.enrollment_id = ?`,
         [e.enrollment_id]
     );
-    const statusByType = {};
-    for (const r of rows) statusByType[r.type] = r.status;
+    /* ADOSSER CHAQUE ÉTAPE À SON PROPRE DOCUMENT PAR LE SLUG, jamais par le TYPE. Plusieurs modèles
+       partagent un même `doc_type` — quatre « DEVIS » (devis-particulier, devis-professionnel,
+       devis-rs7404, devis-professionnel-copie). Keyé par type, UN seul devis signé cochait les
+       QUATRE étapes DEVIS du parcours (« 4/8 » pour une seule signature). Le slug est unique par
+       modèle : la signature ne compte que pour SON étape. */
+    const statusBySlug = {};
+    for (const r of rows) if (r.template_slug) statusBySlug[r.template_slug] = r.status;
 
     /* COMPTE UNIFIÉ POUR UN COMPTE À DEUX CASQUETTES. Quand le compte est AUSSI le représentant de
        l'entreprise DU DOSSIER, les documents de GROUPE de son propre parcours (🏢), qu'il signe EN
@@ -163,7 +168,7 @@ async function completionOf(conn, e, steps, agefice = false, repCompanyIds = [])
         jours: e.program_days || 1, financing: e.financing, agefice,
     }).filter((d) => d.stagiaireSign || (inclutEntreprise && d.companySign));
 
-    const signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
+    const signed = required.filter((d) => statusBySlug[d.slug] === 'SIGNE').length;
     const total = required.length;
     const dayPassed = !!e.end_date && e.end_date <= todayISO();
     const complete = dayPassed && total > 0 && signed === total;
