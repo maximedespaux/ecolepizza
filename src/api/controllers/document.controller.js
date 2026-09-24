@@ -1513,7 +1513,7 @@ const deleteDocument = async (req, res) => {
     try {
         const conn = db.promise();
         const orgId = req.user.organization_id;
-        const [[doc]] = await conn.query('SELECT id, type, enrollment_id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        const [[doc]] = await conn.query('SELECT id, type, enrollment_id, quiz_id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable' });
         if (doc.type === 'EMARGEMENT') {
             let enr = doc.enrollment_id;
@@ -1522,6 +1522,19 @@ const deleteDocument = async (req, res) => {
         }
         try { await conn.query('DELETE FROM document_signed_pdf WHERE document_id = ?', [doc.id]); }
         catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+        /* LA RÉPONSE PART AVEC SON QCM. `quiz_response.document_id` n'a pas de clé étrangère (seul le
+           questionnaire est en cascade) : supprimer le QCM d'un stagiaire laissait sa réponse (note,
+           réponses données, preuve de la migration 144) rattachée à un document disparu, et Notation
+           comme Résultats QCM continuaient de la compter. Constaté le 2026-09-24 : le QCM du mardi
+           d'une stagiaire, supprimé, gardait sa note. Même trace au journal qu'une réponse supprimée
+           depuis Résultats QCM ; ses réponses (quiz_answer) suivent en cascade. */
+        if (doc.quiz_id) {
+            const [reponses] = await conn.query('SELECT id FROM quiz_response WHERE document_id = ? AND organization_id = ?', [doc.id, orgId]);
+            if (reponses.length) {
+                await conn.query('DELETE FROM quiz_response WHERE document_id = ? AND organization_id = ?', [doc.id, orgId]);
+                for (const r of reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', r.id);
+            }
+        }
         await conn.query('DELETE FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         logAudit(req, 'document.delete', 'GeneratedDocument', req.params.id);
         res.status(200).json({ success: true, message: 'Document supprimé' });
