@@ -38,6 +38,7 @@ const ACTION_LABEL = {
     'document.session_externe': ['Document envoyé à un intervenant', G],
     'document.sign_externe': ['Document signé par un intervenant', G],
     'document.delete': ['Document supprimé', R],
+    'enrollment.delete': ['Stagiaire retiré d\'une session', R],
 
     // Facturation et ventes
     'invoice.create': ['Facture créée', G],
