@@ -161,12 +161,15 @@ function TemplateEditor() {
       try {
         const [cat, res] = await Promise.all([getTokenCatalog(slug), getTemplateBody(slug)]);
         if (!alive) return;
+        const d = res.data || {};
+        const entrepriseSigneD = !!d.company_level || (Array.isArray(d.signers) && d.signers.includes("ENTREPRISE"));
         setCatalog(cat.data || []);
         // Enregistre clé→catégorie AVANT d'insérer le contenu : les puces se colorent alors
         // par catégorie dès leur premier rendu (cf. TokenView / categoryColors).
         registerTokenGroups(cat.data || []);
-        setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0])));
-        const d = res.data || {};
+        // Premier groupe ouvert par défaut — ET « Entreprise » quand le représentant signe : le
+        // cadre « Cachet de l'entreprise » y vit désormais, autant qu'il se voie sans déplier.
+        setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0 || (entrepriseSigneD && g.group === "Entreprise")])));
         setPropose(d.propose || null);
         if (body) body.commands.setContent(d.body_html || "<p></p>");
         if (header) header.commands.setContent(d.header_html || "");
@@ -435,23 +438,11 @@ function TemplateEditor() {
             <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Signatures</span></div>
             <div className="tok-list" style={{ padding: "0 10px 8px" }}>
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                Bloc de signature nommé, signé séparément par chaque personne.
+                Un cadre vide, rempli quand la personne signe.
               </p>
-              {/* Même cadre que la signature du stagiaire : un espace blanc bordé de pointillés
-                  tant que personne n'a signé, le cachet à sa place ensuite. OFFERT DÈS QUE LE
-                  REPRÉSENTANT SIGNE — un document de GROUPE (company_level), mais AUSSI un document
-                  de stagiaire où « Entreprise » est signataire (convention, contrat financé par
-                  l'employeur). Le gater sur le seul « document entreprise » laissait ces documents
-                  sans cadre : le représentant signait dans la case `representant`, qui n'existait
-                  nulle part sur la page — le cachet n'apparaissait pas (cf. companySignsDoc). */}
-              {(modeleEntreprise || entrepriseSigne) && (
-                <button className="tok-chip" draggable
-                  title={"Cadre vide jusqu'à la signature : le représentant de l'entreprise y appose son cachet, depuis son espace ou par le lien de signature. Cliquer ou glisser."}
-                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ENTREPRISE))}
-                  onClick={() => target?.chain().focus().insertToken({ token: SIG_ENTREPRISE.key, label: SIG_ENTREPRISE.label }).run()}>
-                  <Icon name="pencil" size={13} /> {SIG_ENTREPRISE.label}
-                </button>
-              )}
+              {/* Le cadre « Cachet de l'entreprise » NE vit plus ici : il a rejoint le groupe
+                  « Entreprise » (plus bas), avec les autres champs de l'entreprise — sa signature
+                  est une donnée de l'entreprise, pas un bloc nommé de plus. */}
               <button className="tok-chip" draggable
                 title={"Cadre vide jusqu'à la signature de l'organisme, qui signe en dernier : juste après le stagiaire ou l'entreprise, ou à l'envoi s'il signe seul. Cliquer ou glisser."}
                 onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ORGANISME))}
@@ -466,12 +457,22 @@ function TemplateEditor() {
                   <Icon name="pencil" size={13} /> {SIG_INTERVENANT.label}
                 </button>
               )}
-              {SIG_PRESETS.map((s) => (
-                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} ». Sur un modèle où « Externe » est coché, il s'attribue à une personne de la session à l'envoi, qui le signe en ligne ; sinon il se signe à la main. Cliquer ou glisser.`}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
-                  onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
-              ))}
+              {/* LES BLOCS NOMMÉS (jury, formateur, stagiaires…) ne servent qu'aux modèles
+                  « Externe » : là, chacun s'attribue à une personne de la session à l'envoi, qui le
+                  signe en ligne. Ailleurs — une convention, un devis — personne ne les remplit ;
+                  les montrer partout ne faisait qu'encombrer. Un rôle absent de cette liste se tape
+                  dans le champ ci-dessous, et cela sur TOUT modèle. */}
+              {signeParExterne && (
+                <>
+                  <p className="sub" style={{ margin: "10px 0 6px", fontSize: 11 }}>Attribués à une personne de la session, à l'envoi :</p>
+                  {SIG_PRESETS.map((s) => (
+                    <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », attribué à une personne de la session à l'envoi, qui le signe en ligne. Cliquer ou glisser.`}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
+                      onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
+                  ))}
+                </>
+              )}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <input className="inp" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { insertSignature(sigLabel); setSigLabel(""); } }}
@@ -508,7 +509,11 @@ function TemplateEditor() {
               </button>
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
-                  {g.tokens.map((t) => (
+                  {/* « Signature de l'organisme » est déjà offerte en CADRE, en haut (bloc
+                      Signatures) : on ne la répète pas ici en jeton brut. Deux entrées identiques
+                      pour la même signature semaient le doute. Le jeton reste connu du moteur —
+                      seule la puce en double disparaît de la palette. */}
+                  {g.tokens.filter((t) => !(g.group === "Signature" && t.key === "Signature organisme")).map((t) => (
                     <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
                       onMouseEnter={(e) => montrerTip(e, t, g.group)} onMouseLeave={cacherTip} onFocus={(e) => montrerTip(e, t, g.group)} onBlur={cacherTip}
                       draggable
@@ -517,6 +522,22 @@ function TemplateEditor() {
                       {t.label}
                     </button>
                   ))}
+                  {/* LA SIGNATURE DE L'ENTREPRISE, avec ses autres champs. Un cadre vide où le
+                      représentant appose son cachet (depuis son espace, ou par le lien de signature).
+                      Offert DÈS QUE l'entreprise signe — un document de GROUPE (company_level), mais
+                      aussi un document de stagiaire co-signé (« Entreprise » signataire, cf.
+                      companySignsDoc) ; ailleurs, personne ne le remplirait, le cadre resterait vide. */}
+                  {g.group === "Entreprise" && (modeleEntreprise || entrepriseSigne) && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
+                      <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>Signature de l'entreprise</p>
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} draggable
+                        title={"Cadre vide jusqu'à la signature : le représentant de l'entreprise y appose son cachet, depuis son espace ou par le lien de signature. Cliquer ou glisser."}
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_ENTREPRISE))}
+                        onClick={() => target?.chain().focus().insertToken({ token: SIG_ENTREPRISE.key, label: SIG_ENTREPRISE.label }).run()}>
+                        <Icon name="pencil" size={13} /> {SIG_ENTREPRISE.label}
+                      </button>
+                    </div>
+                  )}
                   {/* Ligne de facture : ces jetons n'ont de sens QUE dans un bloc
                       {#Articles}…{/Articles}. Sans un moyen de créer ce bloc, les proposer était
                       un piège — on cliquait « Quantité », on obtenait une facture vide, et rien
