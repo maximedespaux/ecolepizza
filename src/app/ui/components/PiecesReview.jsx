@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDossierPieces, verifierPiece, pieceFichierUrl } from "../api/apiClient.js";
+import { getDossierPieces, verifierPiece, pieceFichierUrl, supprimerPieceFichier } from "../api/apiClient.js";
 import Badge from "./Badge.jsx";
 import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
@@ -38,6 +38,17 @@ export default function PiecesReview({ enrollmentId, refresh }) {
       if (!motif) return; // annulé / vide → on ne fait rien (le serveur l'exigerait de toute façon)
     }
     try { await verifierPiece(depotId, statut, motif); setErreur(null); load(); }
+    catch (e) { setErreur(e.message); }
+  }
+
+  /* RETIRER UN SEUL FICHIER, pas toute la pièce. Une pièce peut en porter plusieurs (jusqu'à six) :
+     quand une seule page est en trop ou illisible, on l'enlève sans obliger le stagiaire à tout
+     redéposer. Suppression définitive — c'est la purge manuelle d'une copie chiffrée (cf. la règle
+     de conservation des pièces, CLAUDE.md) —, d'où la confirmation. Si c'était le dernier fichier,
+     le serveur remet la pièce « à fournir ». */
+  async function retirerFichier(f, pieceLabel) {
+    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${pieceLabel} » ?\nLa suppression est définitive.`)) return;
+    try { await supprimerPieceFichier(f.id); setErreur(null); load(); }
     catch (e) { setErreur(e.message); }
   }
 
@@ -90,6 +101,13 @@ export default function PiecesReview({ enrollmentId, refresh }) {
                         aria-label={`Voir ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
                         onClick={() => window.open(pieceFichierUrl(f.id), "_blank", "noopener")}>
                         <Icon name="eye" size={13} /> Voir
+                      </button>
+                      {/* RETIRER CE FICHIER SEUL — le geste demandé : enlever une page sans vider
+                          toute la pièce. */}
+                      <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
+                        aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
+                        onClick={() => retirerFichier(f, p.label)}>
+                        <Icon name="trash" size={13} />
                       </button>
                     </div>
                   ))}
