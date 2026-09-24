@@ -9,6 +9,7 @@
 const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 const { CASE_STAGIAIRE } = require('./documents.js');
+const { JETONS_A_FORME, aUneForme, texteEnLignes, texteEnBlocs } = require('./texteStructure.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -17,6 +18,11 @@ function escapeHtml(s) {
 }
 
 const decodeEnt = (s) => String(s).replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+/* Un jeton SEUL dans son paragraphe : `<p …>` + balises de mise en forme (taille, gras…) + le jeton +
+   leurs fermetures + `</p>`, sans aucun autre texte. Les balises d'ouverture excluent le jeton lui-même. */
+const SEUL_DANS_SON_PARAGRAPHE = /<p\b([^>]*)>((?:\s*<(?:span|strong|em|u|b|i)\b(?![^>]*\bdata-token=)[^>]*>)*)\s*<span[^>]*\sdata-token="([^"]+)"[^>]*>[^<]*<\/span>\s*((?:<\/(?:span|strong|em|u|b|i)>\s*)*)<\/p>/g;
+const compterBalises = (html, fermantes) => (html.match(fermantes ? /<\//g : /<(?!\/)/g) || []).length;
 
 /**
  * Remplace les jetons (puces + {Clé}) du corps par les valeurs du contexte.
@@ -69,7 +75,11 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         out = expandListBlocks(out, 'Paiements', ctx.payments, paiementRowTokens);
     }
 
-    const render = (key) => (RAW_TOKENS.has(key) ? values[key] : escapeHtml(values[key]));
+    /* Le texte d'une formation garde sa forme (lib/texteStructure.js) : dans une phrase, ses lignes et
+       ses puces deviennent des sauts de ligne — un saut de ligne brut ne vaudrait qu'une espace. */
+    const render = (key) => (RAW_TOKENS.has(key) ? values[key]
+        : JETONS_A_FORME.has(key) ? texteEnLignes(values[key])
+        : escapeHtml(values[key]));
     // Un emplacement nommé désigne-t-il le stagiaire ? (Stagiaire 1…, élève, apprenant…)
     const STAG_SLOT = CASE_STAGIAIRE; // règle partagée avec l'envoi des documents de session
     // Jeton de signature multiple « sig:<slot> » : cadre de signature (rempli si signé, sinon vide).
@@ -96,6 +106,17 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     const resizeSig = (html, size) => String(html)
         .replace(/\bwidth="\d+"/, `width="${size.w}"`)
         .replace(/\bheight="\d+"/, `height="${size.h}"`);
+
+    /* 0) Un texte de formation SEUL dans son paragraphe cède la place à ses lignes et à ses VRAIES listes,
+          dans le style du paragraphe (interligne) et des balises qui l'entouraient (taille, police).
+          Placé dans une phrase, il est laissé à l'étape 1, qui le rend en lignes. Constaté le 2026-09-24 :
+          les objectifs d'un devis sortaient « - Connaître… - Citer… » sur une seule ligne. */
+    out = out.replace(SEUL_DANS_SON_PARAGRAPHE, (m, attrsP, ouvrants, rawKey, fermants) => {
+        const key = decodeEnt(rawKey);
+        if (!JETONS_A_FORME.has(key) || !(key in values) || !aUneForme(values[key])) return m;
+        if (compterBalises(ouvrants, false) !== compterBalises(fermants, true)) return m; // mise en forme bancale : en lignes
+        return texteEnBlocs(values[key], attrsP, ouvrants.trim(), fermants.trim());
+    });
 
     // 1) Puces de l'éditeur : <span … data-token="Clé" …>label</span>
     out = out.replace(/<span[^>]*\sdata-token="([^"]+)"[^>]*>[\s\S]*?<\/span>/g, (m, rawKey) => {
