@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp } from "../api/apiClient.js";
+import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, repDocumentPdfUrl } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -110,6 +110,9 @@ function RepresentantEspace() {
                   <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
                   <Badge tone={tone}>{lbl}</Badge>
                   <button className="btn sm ghost" onClick={() => openPreview(d)}><Icon name="eye" size={15} /> Aperçu</button>
+                  {/* UNE FOIS SIGNÉ, l'entreprise récupère SON exemplaire (PDF signé, scellé + contre-
+                      signé par l'organisme) — le document qui fait foi. */}
+                  {d.status === "SIGNE" && <button className="btn sm ghost" onClick={() => window.open(repDocumentPdfUrl(d.id), "_blank", "noopener")} title="Télécharger le PDF signé"><Icon name="download" size={15} /> Télécharger</button>}
                   {d.status !== "SIGNE" && stamp && <button className="btn sm primary" onClick={() => signWithStamp(d)} title="Signer avec le cachet enregistré"><Icon name="check" size={15} /> Signer</button>}
                   {d.status !== "SIGNE" && <button className="btn sm ghost" onClick={() => setSigning(d)}><Icon name="pencil" size={15} /> {stamp ? "Dessiner" : "Signer"}</button>}
                 </div>

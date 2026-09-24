@@ -1,7 +1,7 @@
 // Espace REPRÉSENTANT d'entreprise : le référent d'une entreprise se connecte et
 // signe lui-même les documents de NIVEAU ENTREPRISE de son entreprise.
 const db = require('../config/database.js');
-const { renderDocumentHtml, applySlotSignature, clientIp } = require('./document.controller.js');
+const { renderDocumentHtml, applySlotSignature, clientIp, loadSignedPdf } = require('./document.controller.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
@@ -122,4 +122,31 @@ const signRepDocument = async (req, res) => {
     }
 };
 
-module.exports = { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp };
+/** GET /api/rep/documents/:id/pdf — le PDF SIGNÉ d'un document entreprise, pour le représentant.
+ *  Réservé aux documents SIGNÉS : c'est le document qui fait foi (sceau + contre-seing organisme),
+ *  servi tel quel — jamais régénéré, ce qui invaliderait les signatures. Même garde par les DONNÉES
+ *  que le reste de l'espace : uniquement les documents des entreprises rattachées au compte. */
+const downloadRepDocument = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const companies = await repCompanies(conn, req);
+        const ids = companies.map((c) => c.id);
+        if (!ids.length) return res.status(403).json({ message: 'Accès refusé.' });
+        const [[doc]] = await conn.query(
+            "SELECT id, title, status FROM generated_document WHERE id = ? AND organization_id = ? AND scope = 'COMPANY' AND company_id IN (?)",
+            [req.params.id, req.user.organization_id, ids]);
+        if (!doc) return res.status(404).json({ message: 'Document introuvable.' });
+        if (doc.status !== 'SIGNE') return res.status(409).json({ message: 'Document pas encore signé.' });
+        const pdf = await loadSignedPdf(conn, doc.id);
+        if (!pdf) return res.status(404).json({ message: 'PDF indisponible.' });
+        const base = String(doc.title || 'document').replace(/[\\/:*?"<>|]/g, '');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="${encodeURIComponent(base + '.pdf')}"`);
+        return res.send(pdf);
+    } catch (err) {
+        console.error('Erreur téléchargement document représentant :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, downloadRepDocument };

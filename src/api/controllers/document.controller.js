@@ -1669,4 +1669,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, loadSignedPdf };
