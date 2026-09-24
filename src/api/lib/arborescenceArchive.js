@@ -14,10 +14,11 @@
  * l'arborescence commune, un QCM se désigne donc par son TITRE, et chaque formation y range le sien.
  * Les anciennes arborescences le désignaient par identifiant : elles restent lues telles quelles.
  *
- * CE QUE L'ARBORESCENCE NE NOMME PAS N'EST PAS PERDU. Un document du coffre qu'aucun dossier ne
- * réclame va dans le dossier du stagiaire (de l'entreprise, ou de la formation pour un document de
- * session) : une archive Qualiopi qui oublierait un document en silence serait pire qu'une archive
- * mal rangée.
+ * CE QUE L'ARBORESCENCE NE RANGE PAS N'EST PAS ARCHIVÉ (décidé par l'école le 2026-09-25 — cf.
+ * placesDansLArchive) : ne pas placer un document, c'est choisir de ne pas en garder de copie. Mais
+ * jamais EN SILENCE : l'aperçu de l'arborescence le dit, `_sommaire.txt` le nomme. Et la règle ne vise
+ * que ce que l'école a pu placer — un PDF importé, un document hors parcours gardent leur place par
+ * défaut, dans le dossier du stagiaire (de l'entreprise, ou de la formation pour un document de session).
  *
  * Du JavaScript pur, sans base : les tests l'éprouvent directement.
  */
@@ -146,51 +147,48 @@ function contexteDu(doc) {
     };
 }
 
-/**
- * L'arborescence qui range ce document. Un dossier arrivé par une ENTREPRISE (et les documents de
- * l'entreprise elle-même) suit l'arborescence entreprise quand elle existe ; tout le reste,
- * l'arborescence stagiaire. Sans aucune, la structure standard.
- * `arbres` : { stagiaire, entreprise } — l'une ou l'autre peut manquer.
- */
-function arbrePour(arbres, doc) {
-    const viaEntreprise = doc.scope === 'COMPANY' || !!doc.enr_company_id;
-    if (viaEntreprise && aDesDossiers(arbres && arbres.entreprise)) return arbres.entreprise;
-    if (aDesDossiers(arbres && arbres.stagiaire)) return arbres.stagiaire;
-    return viaEntreprise ? STANDARD_ENTREPRISE : STANDARD;
+/** Les clés par lesquelles l'arborescence désigne ce document du coffre (cf. cleItem, cleEtape). */
+function clesDuDocument(doc) {
+    const cles = [];
+    if (doc.quiz_title) cles.push(`qcm:${normaliserTitre(doc.quiz_title)}`);
+    if (doc.piece_type_id) cles.push(`ref:piece:${doc.piece_type_id}`);
+    if (doc.slug) cles.push(`ref:${doc.slug}`);
+    return cles;
 }
 
-/**
- * La place d'un document dans l'archive.
- * @param groupes les « OU » d'aujourd'hui (clé → { members }), cf. slugsDe
- * @returns {{ dossiers: string[], fichier: string, place: 'arbre' | 'defaut' }}
- *          `fichier` sans extension : c'est l'appelant qui connaît le type réel.
- */
-function placeDansLArchive(arbres, doc, groupes) {
-    const arbre = arbrePour(arbres, doc);
-    const ctx = contexteDu(doc);
+/** Le chemin où CET arbre range ce document — remonté au-dessus d'un dossier qui ne lui convient pas —, ou null. */
+function placeDansUnArbre(arbre, doc, groupes) {
     let chemin = placeDansArbre(arbre, doc, groupes);
-    let place = 'arbre';
-    /* UNE PLACE INCOHÉRENTE AVEC LA NATURE DU DOCUMENT EST IGNORÉE : un document d'entreprise ou de
-       session n'a pas de stagiaire, et ne peut donc pas se ranger dans un dossier « un par
-       stagiaire » — il n'y aurait aucun nom à lui donner. */
-    if (chemin && doc.scope !== 'LEARNER' && chemin.some(estParStagiaire)) chemin = null;
-    if (chemin && doc.scope === 'SESSION' && chemin.some(estEntreprise)) chemin = null;
-    if (!chemin) {
-        place = 'defaut';
-        const versStagiaire = premierChemin(arbre, estParStagiaire)
-            || premierChemin(STANDARD, estParStagiaire);
-        if (doc.scope === 'LEARNER') chemin = versStagiaire;
-        else if (doc.scope === 'COMPANY') {
-            /* L'entreprise a son dossier dans l'arborescence entreprise ; à défaut, on lui en crée
-               un à côté des dossiers de stagiaires. */
-            chemin = premierChemin(arbre, estEntreprise)
-                || [...versStagiaire.slice(0, -1).filter((d) => !estEntreprise(d)), { name: '{Entreprise}' }];
-        } else {
-            // Document de SESSION : au niveau de la formation, au-dessus des stagiaires et des entreprises.
-            const i = versStagiaire.findIndex((d) => estParStagiaire(d) || estEntreprise(d));
-            chemin = versStagiaire.slice(0, i < 0 ? versStagiaire.length - 1 : i);
-        }
+    if (!chemin) return null;
+    /* UNE PLACE QUI NE CONVIENT PAS À LA NATURE DU DOCUMENT SE REMONTE : un document d'entreprise ou
+       de session n'a pas de stagiaire, il ne peut pas se ranger dans un dossier « un par stagiaire »
+       — il n'y aurait aucun nom à lui donner ; il va juste au-dessus. Il partait autrefois au dossier
+       par défaut ; depuis que « non rangé » veut dire « pas archivé », l'ignorer trahirait le choix
+       de l'école, qui l'a placé. */
+    const couper = (predicat) => { const i = chemin.findIndex(predicat); if (i >= 0) chemin = chemin.slice(0, i); };
+    if (doc.scope !== 'LEARNER') couper(estParStagiaire);
+    if (doc.scope === 'SESSION') couper(estEntreprise);
+    return chemin;
+}
+
+/** La place par défaut : le dossier du stagiaire, de l'entreprise, ou de la formation (document de session). */
+function placeParDefaut(arbre, doc) {
+    const versStagiaire = premierChemin(arbre, estParStagiaire) || premierChemin(STANDARD, estParStagiaire);
+    if (doc.scope === 'LEARNER') return versStagiaire;
+    if (doc.scope === 'COMPANY') {
+        /* L'entreprise a son dossier dans l'arborescence entreprise ; à défaut, on lui en crée un à
+           côté des dossiers de stagiaires. */
+        return premierChemin(arbre, estEntreprise)
+            || [...versStagiaire.slice(0, -1).filter((d) => !estEntreprise(d)), { name: '{Entreprise}' }];
     }
+    // Document de SESSION : au niveau de la formation, au-dessus des stagiaires et des entreprises.
+    const i = versStagiaire.findIndex((d) => estParStagiaire(d) || estEntreprise(d));
+    return versStagiaire.slice(0, i < 0 ? versStagiaire.length - 1 : i);
+}
+
+/** Un chemin de dossiers (ceux de l'arbre) devenu des noms : les dossiers résolus, et le nom du fichier. */
+function enPlace(chemin, doc, place, arbre) {
+    const ctx = contexteDu(doc);
     const dossiers = chemin.map((d) => {
         let nom = resoudre(d.name, ctx);
         /* UN DOSSIER « UN PAR STAGIAIRE » SANS SON NOM (« Stagiaires ») rangerait tout le monde au
@@ -204,7 +202,66 @@ function placeDansLArchive(arbres, doc, groupes) {
     const horsDeSonDossier = doc.scope === 'LEARNER' && !chemin.some(estParStagiaire);
     const titre = doc.title || 'Document';
     const fichier = nettoyer(horsDeSonDossier && ctx.stagiaire ? `${titre} — ${ctx.stagiaire}` : titre, 'Document');
-    return { dossiers, fichier, place };
+    return { dossiers, fichier, place, arbre };
+}
+
+/**
+ * LES PLACES D'UN DOCUMENT DANS L'ARCHIVE : aucune, une ou deux (2026-09-25).
+ *
+ * CE QUI N'EST PAS RANGÉ N'EST PAS ARCHIVÉ — décidé par l'école le 2026-09-25 : un document qu'elle
+ * ne place pas, c'est qu'elle n'en veut pas de copie. Jusque-là, un document qu'aucun dossier ne
+ * nommait partait dans le dossier du stagiaire, pour que rien ne se perde en silence ; l'aperçu
+ * annonçait « 13 documents de RS7404 ne sont nommés nulle part : ils iront dans le dossier du
+ * stagiaire », et c'était précisément ce qu'elle ne voulait pas. Le silence reste interdit : l'aperçu
+ * le dit avant, `_sommaire.txt` le nomme après.
+ *
+ * LA RÈGLE NE VISE QUE CE QUE L'ÉCOLE A PU PLACER : ce que l'arborescence propose pour la formation
+ * du document (`offerts`, la liste même de l'aperçu). Un PDF importé, un document généré hors de tout
+ * parcours, celui d'une formation inconnue n'y figurent pas : ne pas les placer n'est pas un choix, et
+ * ils gardent leur place par défaut. De même, une arborescence que l'école n'a pas réglée (aucun
+ * dossier) n'exclut rien : l'archive suit alors la structure standard.
+ *
+ * DEUX ARBORESCENCES, DEUX RÔLES :
+ *   · STAGIAIRE — le dossier de CHAQUE stagiaire, inscrit seul ou par une entreprise, et les
+ *     documents de session ;
+ *   · ENTREPRISE — des COPIES, pour l'entreprise, des documents de ses stagiaires qu'on y range ; et la
+ *     seule place des documents de l'entreprise elle-même (la convention de groupe).
+ * L'arborescence entreprise rangeait auparavant le dossier ENTIER d'un stagiaire inscrit par une
+ * entreprise, à la place de l'arborescence stagiaire. En production, elle ne range que ses
+ * évaluations : sous la règle ci-dessus, contrats et devis de ces stagiaires seraient sortis de
+ * l'archive — alors que l'école les a rangés, côté stagiaire.
+ *
+ * @param arbres  { stagiaire, entreprise } — l'une ou l'autre peut manquer
+ * @param groupes les « OU » d'aujourd'hui (clé → { members }), cf. slugsDe
+ * @param offerts { stagiaire: Set, entreprise: Set } — ce que la formation propose de ranger dans
+ *                chaque arbre (offertsDesFormations) ; null, inconnu : rien n'est exclu
+ * @returns [{ dossiers, fichier, place: 'arbre' | 'defaut', arbre: 'stagiaire' | 'entreprise' }] —
+ *          `fichier` sans extension : c'est l'appelant qui connaît le type réel.
+ */
+function placesDansLArchive(arbres, doc, groupes, offerts = null) {
+    const stagiaire = arbres && arbres.stagiaire;
+    const entreprise = arbres && arbres.entreprise;
+    const propose = (liste) => !!liste && clesDuDocument(doc).some((c) => liste.has(c));
+    const places = [];
+    /* Range le document dans cet arbre ; s'il ne l'y nomme pas, à sa place par défaut — sauf `repli`
+       nul : c'est alors que l'école a choisi de ne pas l'y mettre. */
+    const ranger = (arbre, nom, repli) => {
+        const chemin = placeDansUnArbre(arbre, doc, groupes);
+        if (chemin) places.push(enPlace(chemin, doc, 'arbre', nom));
+        else if (repli) places.push(enPlace(placeParDefaut(repli, doc), doc, 'defaut', nom));
+    };
+    if (doc.scope === 'COMPANY') {
+        if (aDesDossiers(entreprise)) ranger(entreprise, 'entreprise', propose(offerts && offerts.entreprise) ? null : entreprise);
+        // Rien de réglé pour l'entreprise : son document suit l'arborescence stagiaire, et rien n'est exclu.
+        else if (aDesDossiers(stagiaire)) ranger(stagiaire, 'stagiaire', stagiaire);
+        else ranger(STANDARD_ENTREPRISE, 'entreprise', STANDARD_ENTREPRISE);
+        return places;
+    }
+    if (aDesDossiers(stagiaire)) ranger(stagiaire, 'stagiaire', propose(offerts && offerts.stagiaire) ? null : stagiaire);
+    else ranger(STANDARD, 'stagiaire', STANDARD);
+    // La COPIE pour l'entreprise : ce qu'on y a rangé, et rien d'autre — pas de place par défaut.
+    if (doc.scope === 'LEARNER' && doc.enr_company_id && aDesDossiers(entreprise)) ranger(entreprise, 'entreprise', null);
+    return places;
 }
 
 /* ─── La proposition : les arborescences des formations, fusionnées ─────────────────────────── */
@@ -386,6 +443,93 @@ function actualiserLesOu(tree, groupes, libelleDe, homonymeDe = () => null) {
     return { tree: { ...tree, folders: refaire(tree.folders, []) }, ajustements };
 }
 
+/* ─── La palette : ce que chaque formation a, pour ses DEUX arrivées ─────────────────────────── */
+
+/** La clé d'une étape de parcours : celle de l'item qui la range (cf. cleItem) — un QCM par son titre. */
+const cleEtape = (s) => (s.quiz_id ? `qcm:${normaliserTitre(s.label)}` : `ref:${s.slug}`);
+
+/** Le volet entreprise d'une formation (`company_steps`) : chaîne JSON en base, ou déjà liste. */
+function lireVolet(v) {
+    let liste = v;
+    if (typeof liste === 'string') { try { liste = JSON.parse(liste); } catch { liste = null; } }
+    return Array.isArray(liste) ? liste.filter((s) => typeof s === 'string' && s) : [];
+}
+
+/**
+ * LA PALETTE DE L'ARBORESCENCE COMMUNE, et ce que chaque formation y a (2026-09-25).
+ *
+ * UNE FORMATION A DEUX PARCOURS : celui du dossier (ses étapes actives), et son VOLET ENTREPRISE
+ * (`training_program.company_steps`), qui le REMPLACE quand une entreprise inscrit ses stagiaires
+ * (lib/parcours.js, companyParcours). Un document choisi dans le volet sans être actif dans le
+ * parcours du dossier n'existe QUE pour ces inscriptions — c'est ainsi que l'école réserve son devis
+ * professionnel aux entreprises.
+ *
+ * LA PALETTE NE LISAIT QUE LE PREMIER. Relevé en production le 2026-09-25 : « Devis professionnel »,
+ * un document de GROUPE, inactif dans le parcours de chaque formation et choisi dans le volet entreprise
+ * de NIV1H et NIV2, n'était proposé NULLE PART — pas même dans l'arborescence entreprise, sa seule place. Tant qu'un choix « OU » l'emportait
+ * avec le devis particulier, rien ne se voyait ; l'école a supprimé ce « OU » pour ranger les deux devis
+ * séparément, et n'a plus trouvé le second.
+ *
+ * L'ARRIVÉE PAR ENTREPRISE se lit comme companyParcours la calcule : les étapes du volet, actives ou
+ * non ; et si le volet est vide, ou ne désigne que des étapes disparues (NIV1 ne cite plus que
+ * « devis-entreprise », un modèle supprimé), le parcours du dossier — c'est là qu'il retombe.
+ *
+ * @param entrees [{ id, code, title, etapes, volet }] — `etapes` : toutes les étapes candidates de la
+ *        formation, avec `active` (formationSteps) ; `volet` : ses company_steps, dans l'ordre.
+ * @returns {{ documents, formations }}
+ *   documents  [{ cle, slug | titre_qcm, label, company_level, doc_type, formations, formations_entreprise }] :
+ *              `formations`, celles qui l'ont dans le parcours du dossier ; `formations_entreprise`,
+ *              celles qui l'ont à l'arrivée par entreprise ;
+ *   formations [{ id, code, title, documents, documents_entreprise }], en clés.
+ */
+function paletteDesFormations(entrees) {
+    const palette = new Map();
+    const formations = [];
+    const entree = (s) => {
+        const cle = cleEtape(s);
+        if (!palette.has(cle)) {
+            palette.set(cle, s.quiz_id
+                ? { cle, titre_qcm: s.label, label: s.label, company_level: false, formations: [], formations_entreprise: [] }
+                : { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [], formations_entreprise: [] });
+        }
+        return palette.get(cle);
+    };
+    const ajouter = (liste, code) => { if (!liste.includes(code)) liste.push(code); };
+    for (const f of entrees || []) {
+        const etapes = Array.isArray(f.etapes) ? f.etapes : [];
+        const actives = etapes.filter((s) => s.active);
+        const parSlug = new Map(etapes.map((s) => [s.slug, s]));
+        const duVolet = lireVolet(f.volet).map((sl) => parSlug.get(sl)).filter(Boolean);
+        const parEntreprise = duVolet.length ? duVolet : actives;
+        for (const s of actives) ajouter(entree(s).formations, f.code);
+        for (const s of parEntreprise) ajouter(entree(s).formations_entreprise, f.code);
+        formations.push({
+            id: f.id, code: f.code, title: f.title,
+            documents: [...new Set(actives.map(cleEtape))],
+            documents_entreprise: [...new Set(parEntreprise.map(cleEtape))],
+        });
+    }
+    return { documents: [...palette.values()], formations };
+}
+
+/**
+ * CE QUE CHAQUE FORMATION PROPOSE DE RANGER, arbre par arbre — la liste même que l'aperçu de
+ * l'arborescence dit « non rangée » (src/app/ui/lib/arborescence.js, formationDansLArbre), pour que
+ * l'archive exclue exactement ce que l'écran a annoncé :
+ *   · stagiaire : tout ce qu'ont ses dossiers, inscrits seuls ou par une entreprise — sauf les
+ *     documents de groupe (🏢), qui ne se rangent pas côté stagiaire ;
+ *   · entreprise : ses documents de groupe. Ceux de ses stagiaires n'y sont que des copies, facultatives.
+ * @param palette le résultat de paletteDesFormations
+ * @returns Map code de formation → { stagiaire: Set, entreprise: Set } (des clés, cf. clesDuDocument)
+ */
+function offertsDesFormations(palette) {
+    const deGroupe = new Set(((palette && palette.documents) || []).filter((d) => d.company_level).map((d) => d.cle));
+    return new Map(((palette && palette.formations) || []).map((f) => {
+        const tous = [...new Set([...(f.documents || []), ...(f.documents_entreprise || [])])];
+        return [f.code, { stagiaire: new Set(tous.filter((c) => !deGroupe.has(c))), entreprise: new Set(tous.filter((c) => deGroupe.has(c))) }];
+    }));
+}
+
 /** Une arborescence enregistrée (chaîne JSON en base, ou déjà objet), ou null si illisible. */
 function lireArbre(v) {
     if (v == null || v === '') return null;
@@ -434,6 +578,7 @@ function validerArbre(tree) {
 }
 
 module.exports = {
-    normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placeDansLArchive, arbrePour, contexteDu,
+    normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placesDansLArchive, clesDuDocument, contexteDu,
     resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, actualiserLesOu, STANDARD, STANDARD_ENTREPRISE,
+    cleEtape, lireVolet, paletteDesFormations, offertsDesFormations,
 };

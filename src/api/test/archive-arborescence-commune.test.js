@@ -105,7 +105,15 @@ test('un document placé à deux endroits par deux formations est un CONFLIT, no
 const COMMUNE = { stagiaire: Arbo.fusionnerArbres([{ code: 'RS7404', tree: RS7404 }, { code: 'NIV1H', tree: NIV1H }], OPTS).tree };
 const doc = (extra) => ({ scope: 'LEARNER', year: 2026, week: 38, program_code: 'RS7404', program_title: 'Fabriquer des pizzas',
     last_name: 'BEYNEY', first_name: 'David', title: 'Document', ...extra });
-const chemin = (arbres, x, groupes = GROUPES) => { const p = Arbo.placeDansLArchive(arbres, x, groupes); return [...p.dossiers, p.fichier].join('/'); };
+/* Les places d'un document : aucune (hors de l'archive), une, ou deux (la copie de son entreprise). */
+const chemins = (arbres, x, groupes = GROUPES, offerts = null) => Arbo.placesDansLArchive(arbres, x, groupes, offerts)
+    .map((p) => [...p.dossiers, p.fichier].join('/'));
+const chemin = (arbres, x, groupes = GROUPES, offerts = null) => {
+    const c = chemins(arbres, x, groupes, offerts);
+    assert.strictEqual(c.length, 1, `une place et une seule : ${JSON.stringify(c)}`);
+    return c[0];
+};
+const place = (arbres, x, groupes = GROUPES, offerts = null) => Arbo.placesDansLArchive(arbres, x, groupes, offerts)[0].place;
 
 test('chaque formation range SON QCM à la place de son titre', () => {
     const mardi = doc({ quiz_id: 'autre-id', quiz_title: 'Évaluation Formative du Mardi', title: 'Évaluation Formative du Mardi' });
@@ -114,38 +122,65 @@ test('chaque formation range SON QCM à la place de son titre', () => {
     assert.strictEqual(chemin(COMMUNE, niv1), '2026/S38/NIV1/BEYNEY David/Évaluations/Mardi', 'NIV1 prend la même place avec SON QCM');
 });
 
-test('un document que l\'arborescence ne nomme pas n\'est pas perdu : il va dans le dossier du stagiaire', () => {
-    const p = Arbo.placeDansLArchive(COMMUNE, doc({ slug: 'livret-accueil', title: "Livret d'accueil" }), GROUPES);
-    assert.strictEqual(p.place, 'defaut');
-    assert.strictEqual([...p.dossiers, p.fichier].join('/'), "2026/S38/RS7404/BEYNEY David/Livret d'accueil");
-    // Une pièce déposée, désignée par son type.
-    assert.strictEqual(Arbo.placeDansLArchive(COMMUNE, doc({ piece_type_id: '72e9', title: "Pièce d'identité" }), GROUPES).place, 'arbre');
+test('ce que l\'arborescence ne range pas n\'est PAS archivé — mais seulement ce que l\'école a pu placer', () => {
+    /* DÉCIDÉ PAR L'ÉCOLE LE 2026-09-25, devant l'aperçu « 13 documents de RS7404 ne sont nommés nulle
+       part : ils iront dans le dossier du stagiaire » : un document qu'elle ne place pas, c'est qu'elle
+       n'en veut pas de copie. Jusque-là, il partait dans le dossier du stagiaire. */
+    const livret = doc({ slug: 'livret-accueil', title: "Livret d'accueil" });
+    const rs7404 = { stagiaire: new Set(['ref:livret-accueil', 'ref:contrat']), entreprise: new Set() };
+    assert.deepStrictEqual(chemins(COMMUNE, livret, GROUPES, rs7404), [], 'proposé pour RS7404, non rangé : hors de l\'archive');
+    // Ce que l'école N'A PAS PU placer n'est pas un choix : il garde sa place par défaut.
+    const horsParcours = { stagiaire: new Set(['ref:contrat']), entreprise: new Set() };
+    assert.strictEqual(chemin(COMMUNE, livret, GROUPES, horsParcours), "2026/S38/RS7404/BEYNEY David/Livret d'accueil", 'généré hors du parcours');
+    assert.strictEqual(place(COMMUNE, livret, GROUPES, horsParcours), 'defaut');
+    assert.strictEqual(chemin(COMMUNE, doc({ source: 'archive', title: 'Ancien contrat' }), GROUPES, rs7404), '2026/S38/RS7404/BEYNEY David/Ancien contrat',
+        'un PDF importé n\'a ni modèle ni QCM : aucune arborescence ne peut le nommer');
+    assert.strictEqual(chemins(COMMUNE, livret, GROUPES, null).length, 1, 'une formation inconnue n\'a pas de liste : rien n\'est exclu');
+    // Une arborescence que l'école n'a pas réglée n'exclut rien : la structure standard.
+    assert.strictEqual(chemin({}, livret, GROUPES, rs7404), "2026/S38/RS7404/BEYNEY David/Livret d'accueil");
+    // Une pièce déposée, désignée par son type, et rangée.
+    assert.strictEqual(place(COMMUNE, doc({ piece_type_id: '72e9', title: "Pièce d'identité" }), GROUPES, { stagiaire: new Set(['ref:piece:72e9']) }), 'arbre');
 });
 
 test('un « OU » se lit dans ses membres D\'AUJOURD\'HUI, pas dans l\'instantané enregistré', () => {
     /* Le devis des dossiers d'entreprise est « devis-professionnel-copie » : absent de tous les
        instantanés de production, présent dans le groupe actuel. */
     const devis = doc({ slug: 'devis-professionnel-copie', title: 'Devis professionnel entreprise' });
-    assert.strictEqual(Arbo.placeDansLArchive(COMMUNE, devis, GROUPES).place, 'arbre');
+    assert.strictEqual(place(COMMUNE, devis, GROUPES), 'arbre');
     const instantane = squelette(d('{Stagiaire}', [ou(DEVIS, ['devis-particulier', 'devis-professionnel'], 'Devis')], [], true));
-    assert.strictEqual(Arbo.placeDansLArchive({ stagiaire: instantane }, devis, GROUPES).place, 'arbre');
-    assert.strictEqual(Arbo.placeDansLArchive({ stagiaire: instantane }, devis, null).place, 'defaut', 'sans les groupes actuels, il ne trouvait pas sa place');
+    assert.strictEqual(place({ stagiaire: instantane }, devis, GROUPES), 'arbre');
+    assert.strictEqual(place({ stagiaire: instantane }, devis, null), 'defaut', 'sans les groupes actuels, il ne trouvait pas sa place');
 });
 
-test('dossier d\'entreprise : l\'arborescence entreprise, et le nom du stagiaire quand son document est rangé au-dessus de lui', () => {
+test('dossier d\'entreprise : son dossier côté stagiaire, et une COPIE pour l\'entreprise de ce qu\'on y range', () => {
     const entreprise = { folders: [d('{Année}', [], [d('{Semaine}', [], [d('{Code}', [], [d('{Entreprise}', [ref('droit-image'), ref('convention')],
         [d('{Stagiaire}', [], [d('Évaluations', [{ type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Mardi' }])], true)])])])])] };
     const arbres = { stagiaire: COMMUNE.stagiaire, entreprise };
     const membre = { enr_company_id: 'c1', enr_company_name: 'BOULANGERIE LES ARCADES', program_code: 'NIV1H' };
-    assert.strictEqual(chemin(arbres, doc({ ...membre, slug: 'droit-image', title: "Droit à l'image" })),
+    const niv1h = { stagiaire: new Set(['ref:droit-image', 'ref:contrat', 'qcm:evaluation formative du mardi']), entreprise: new Set(['ref:convention']) };
+    assert.deepStrictEqual(chemins(arbres, doc({ ...membre, slug: 'droit-image', title: "Droit à l'image" }), GROUPES, niv1h), [
+        "2026/S38/NIV1H/BEYNEY David/Droit à l'image",
         "2026/S38/NIV1H/BOULANGERIE LES ARCADES/Droit à l'image — BEYNEY David",
-        'sinon les droits à l\'image de toute l\'entreprise s\'écraseraient');
-    assert.strictEqual(chemin(arbres, doc({ ...membre, quiz_title: 'Évaluation Formative du Mardi', title: 'Mardi' })),
-        '2026/S38/NIV1H/BOULANGERIE LES ARCADES/BEYNEY David/Évaluations/Mardi');
+    ], 'la copie porte le nom du stagiaire : sinon les droits à l\'image de toute l\'entreprise s\'écraseraient');
+    assert.deepStrictEqual(chemins(arbres, doc({ ...membre, quiz_title: 'Évaluation Formative du Mardi', title: 'Mardi' }), GROUPES, niv1h), [
+        '2026/S38/NIV1H/BEYNEY David/Évaluations/Mardi',
+        '2026/S38/NIV1H/BOULANGERIE LES ARCADES/BEYNEY David/Évaluations/Mardi',
+    ]);
+    /* LE CAS DE PRODUCTION (2026-09-25) : l'arborescence entreprise ne range que des évaluations. Elle
+       rangeait auparavant le dossier ENTIER de ce stagiaire, à la place de l'arborescence stagiaire :
+       sous « non rangé, pas archivé », son contrat serait sorti de l'archive. Il reste côté stagiaire,
+       sans copie pour l'entreprise. */
+    const contrat = doc({ ...membre, slug: 'contrat', title: 'Contrat de formation' });
+    assert.deepStrictEqual(chemins(arbres, contrat, GROUPES, niv1h), ['2026/S38/NIV1H/BEYNEY David/Contrat de formation']);
+    assert.deepStrictEqual(chemins({ stagiaire: COMMUNE.stagiaire, entreprise }, doc({ ...membre, slug: 'contrat', title: 'Contrat de formation' }), GROUPES, null),
+        ['2026/S38/NIV1H/BEYNEY David/Contrat de formation'], 'une copie ne se fait jamais par défaut');
     // Le document de l'ENTREPRISE elle-même (convention de groupe) : dans son dossier, sans nom de stagiaire.
-    assert.strictEqual(chemin(arbres, { scope: 'COMPANY', year: 2026, week: 38, program_code: 'NIV1H', company_name: 'BOULANGERIE LES ARCADES',
-        last_name: 'BOULANGERIE LES ARCADES', slug: 'convention', title: 'Convention de formation' }),
-    '2026/S38/NIV1H/BOULANGERIE LES ARCADES/Convention de formation');
+    const convention = { scope: 'COMPANY', year: 2026, week: 38, program_code: 'NIV1H', company_name: 'BOULANGERIE LES ARCADES',
+        last_name: 'BOULANGERIE LES ARCADES', slug: 'convention', title: 'Convention de formation' };
+    assert.strictEqual(chemin(arbres, convention, GROUPES, niv1h), '2026/S38/NIV1H/BOULANGERIE LES ARCADES/Convention de formation');
+    // Proposée et non rangée : hors de l'archive — l'arborescence entreprise est sa seule place.
+    const sansConvention = { folders: [d('{Année}', [], [d('{Semaine}', [], [d('{Code}', [], [d('{Entreprise}')])])])] };
+    assert.deepStrictEqual(chemins({ stagiaire: COMMUNE.stagiaire, entreprise: sansConvention }, convention, GROUPES, niv1h), []);
     // Sans arborescence entreprise : celle des stagiaires, et l'entreprise à côté de ses stagiaires.
     assert.strictEqual(chemin({ stagiaire: COMMUNE.stagiaire }, { scope: 'COMPANY', year: 2026, week: 38, program_code: 'NIV1H',
         company_name: 'LES ARCADES', title: 'Convention' }), '2026/S38/NIV1H/LES ARCADES/Convention');
@@ -155,6 +190,10 @@ test('un document de session se range au niveau de la formation, jamais dans un 
     const sess = { scope: 'SESSION', year: 2026, week: 38, program_code: 'NIV1H', slug: 'droit-image', title: "Contrat d'hygiène" };
     // Même quand l'arborescence place son modèle dans le dossier du stagiaire : il n'a pas de stagiaire.
     assert.strictEqual(chemin(COMMUNE, sess), "2026/S38/NIV1H/Contrat d'hygiène");
+    /* Et cette place-là COMPTE : l'école l'a rangé. Remonté d'un cran, il reste dans l'archive — il
+       partait autrefois au dossier par défaut, ce qui, sous « non rangé, pas archivé », l'aurait perdu. */
+    assert.strictEqual(chemin(COMMUNE, sess, GROUPES, { stagiaire: new Set(['ref:droit-image']), entreprise: new Set() }), "2026/S38/NIV1H/Contrat d'hygiène");
+    assert.strictEqual(place(COMMUNE, sess, GROUPES, { stagiaire: new Set(['ref:droit-image']) }), 'arbre');
 });
 
 test('les champs se remplissent en noms de dossier que tous les systèmes acceptent', () => {
@@ -262,16 +301,21 @@ test('la portée : les clés mêmes du coffre, et le dossier reconnu jusque dans
     assert.strictEqual(await porteeDeLArchive(conn(undefined), 'org', { session: 'inconnue' }), null);
 });
 
-test('le sommaire nomme ce qui est rangé hors de l\'arborescence et ce qui manque, avec la raison', () => {
+test('le sommaire nomme ce qui est rangé par défaut, ce qui est laissé dehors PAR CHOIX, et ce qui manque', () => {
     const { sommaireDeLArchive } = require('../controllers/suivi.controller.js');
     const txt = sommaireDeLArchive({ libelle: 'Session RS7404' }, "l'arborescence commune",
-        [{ chemin: 'a/Contrat.pdf', statut: 'SIGNE', place: 'arbre' }, { chemin: 'a/Livret.pdf', statut: 'ENVOYE', place: 'defaut' }],
-        [{ titre: 'Évaluation Formative du Jeudi', qui: 'BEYNEY David', raison: 'QCM envoyé, pas encore rempli' }], new Date(2026, 8, 25, 10, 0));
-    assert.match(txt, /2 document\(s\) inclus/);
+        [{ chemin: 'b/Mardi.pdf', statut: 'SIGNE', place: 'arbre', copie: true }, { chemin: 'a/Contrat.pdf', statut: 'SIGNE', place: 'arbre' },
+            { chemin: 'a/Ancien.pdf', statut: 'ARCHIVE', place: 'defaut' }],
+        [{ titre: 'Évaluation Formative du Jeudi', qui: 'BEYNEY David', raison: 'QCM envoyé, pas encore rempli' }], new Date(2026, 8, 25, 10, 0),
+        [{ titre: "Livret d'accueil" }, { titre: 'Invitation' }, { titre: "Livret d'accueil" }]);
+    assert.match(txt, /3 document\(s\) inclus, dont 1 copie\(s\) pour les entreprises :\r\n {2}a\/Ancien\.pdf/, 'trié par chemin');
     assert.match(txt, /a\/Contrat\.pdf {2}\[signé\]/);
-    assert.match(txt, /a\/Livret\.pdf {2}\[envoyé\]/, 'le statut dit ce qui n\'est pas signé');
-    assert.match(txt, /1 document\(s\) que l'arborescence ne nomme pas[\s\S]*a\/Livret\.pdf/);
+    assert.match(txt, /a\/Ancien\.pdf {2}\[importé\]/, 'le statut dit ce qui n\'est pas signé');
+    assert.match(txt, /1 document\(s\) rangés par défaut[^\r]*PDF importé[\s\S]*a\/Ancien\.pdf/);
+    // CE QUI EST LAISSÉ DEHORS PAR CHOIX se dit, par intitulé, avec où ce choix se change.
+    assert.match(txt, /3 document\(s\) du coffre laissés hors de l'archive : l'arborescence d'archivage ne les range pas \(Formations → Arborescence d'archivage\) :\r\n {2}Invitation\r\n {2}Livret d'accueil \(2\)/);
     assert.match(txt, /1 document\(s\) du coffre NON inclus :\r\n {2}Évaluation Formative du Jeudi — BEYNEY David : QCM envoyé, pas encore rempli/);
+    assert.doesNotMatch(sommaireDeLArchive({ libelle: 'x' }, 'y', [], [], new Date()), /hors de l'archive|dont/, 'rien à dire, rien de dit');
 });
 
 /* ─── L'arborescence commune : l'API, et la migration ──────────────────────────────────────── */
@@ -355,7 +399,7 @@ test('les trois boutons d\'archive : même garde que le coffre, et un comptage a
     assert.match(f, /await request\(`\/suivi\/archives\/zip\?\$\{qs\}&compter=1`\)/,
         'une sélection vide répond un message, pas un fichier d\'erreur au nom de .zip');
     assert.match(f, /a\.href = `\$\{API_BASE_URL\}\/suivi\/archives\/zip\?\$\{qs\}`;/, 'puis le navigateur télécharge, au fil de l\'eau');
-    assert.match(SUIVI, /if \(req\.query && req\.query\.compter\) return res\.json\(\{ data: \{ documents: aEcrire\.length, nom \} \}\);/);
+    assert.match(SUIVI, /if \(req\.query && req\.query\.compter\) return res\.json\(\{ data: \{ documents: fichiers, nom, hors_arborescence: nonRanges\.length \} \}\);/);
     for (const [page, appel] of [['pages/SessionDetail.jsx', /telechargerArchive\(\{ session: id \}\)/],
         ['pages/StagiaireDetail.jsx', /telechargerArchive\(\{ dossier: curEnrId \}\)/]]) {
         const src = lireUi(page);
@@ -485,7 +529,122 @@ test('l\'archive rangeait déjà juste : un « OU » disparu retombe sur les mem
     /* Pourquoi seul l'écran était faux : en attendant l'enregistrement, le « OU » périmé range encore
        ses documents à SA place — la même que celle que le dépliage leur donne. */
     const perime = squelette(d('{Stagiaire}', [ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention')], [d('Autres')], true));
-    const p = Arbo.placeDansLArchive({ stagiaire: perime }, doc({ slug: 'convention', title: 'Convention' }), new Map());
-    assert.strictEqual(p.place, 'arbre');
-    assert.strictEqual([...p.dossiers, p.fichier].join('/'), '2026/S38/RS7404/BEYNEY David/Convention');
+    const convention = doc({ slug: 'convention', title: 'Convention' });
+    assert.strictEqual(place({ stagiaire: perime }, convention, new Map()), 'arbre');
+    assert.strictEqual(chemin({ stagiaire: perime }, convention, new Map()), '2026/S38/RS7404/BEYNEY David/Convention');
+});
+
+/* ─── Le volet entreprise, et ce que l'archive laisse dehors (2026-09-25) ──────────────────────── */
+
+/* LES PARCOURS DE PRODUCTION relevés le 2026-09-25, réduits à ce qui compte : le devis professionnel
+   — un document de GROUPE, comme la convention — est inactif dans le parcours de chaque formation et
+   choisi dans le volet entreprise de NIV1H ; NIV1 ne cite plus dans le sien que « devis-entreprise »,
+   un modèle supprimé ; RS7404 n'a pas de volet. Seul ajout, pour éprouver l'autre cas : un document de
+   STAGIAIRE réservé aux entreprises (« accord de prise en charge »), que la production n'a pas encore. */
+const etape = (slug, label, active, extra = {}) => ({ slug, label, active, quiz_id: null, company_level: false, doc_type: null, ...extra });
+const QCM_MARDI = (id) => etape(`quiz:${id}`, 'Évaluation Formative du Mardi', true, { quiz_id: id, doc_type: 'QCM' });
+const GROUPE = { company_level: true };
+const PARCOURS = [
+    { id: 'p-rs', code: 'RS7404', title: 'Certification', volet: null, etapes: [
+        etape('devis-rs7404', 'Devis RS7404', true), etape('devis-particulier', 'Devis particulier', false),
+        etape('devis-professionnel-copie', 'Devis professionnel', false, GROUPE), etape('convention', 'Convention de formation', false, GROUPE),
+        QCM_MARDI('b85d')] },
+    { id: 'p-n1', code: 'NIV1', title: 'Niveau 1', volet: '["devis-entreprise"]', etapes: [
+        etape('devis-particulier', 'Devis particulier', true), etape('devis-professionnel-copie', 'Devis professionnel', false, GROUPE),
+        etape('convention', 'Convention de formation', true, GROUPE), QCM_MARDI('f214')] },
+    { id: 'p-n1h', code: 'NIV1H', title: 'Niveau 1 hygiène', volet: ['devis-professionnel-copie', 'convention', 'accord-prise-en-charge', 'quiz:b804'], etapes: [
+        etape('devis-particulier', 'Devis particulier', true), etape('devis-professionnel-copie', 'Devis professionnel', false, GROUPE),
+        etape('convention', 'Convention de formation', false, GROUPE), etape('accord-prise-en-charge', 'Accord de prise en charge', false),
+        QCM_MARDI('b804')] },
+];
+
+test('la palette lit AUSSI le volet entreprise : le devis professionnel se range enfin — le cas relevé en production', () => {
+    /* « Je n'ai pas accès au devis particulier / entreprise pour les répartir » : l'école avait supprimé
+       le choix « OU » qui les rangeait ensemble. Le devis particulier restait proposé ; le devis
+       professionnel, choisi dans le seul volet entreprise, ne l'était nulle part — la palette ne lisait
+       que les étapes ACTIVES du parcours du dossier. */
+    const { documents, formations } = Arbo.paletteDesFormations(PARCOURS);
+    const entree = (cle) => documents.find((x) => x.cle === cle);
+    const pro = entree('ref:devis-professionnel-copie');
+    assert.ok(pro, 'le devis professionnel est proposé');
+    assert.deepStrictEqual([pro.formations, pro.formations_entreprise], [[], ['NIV1H']], 'le parcours du dossier ne l\'a nulle part ; le volet de NIV1H, si');
+    /* NIV1 NE CITE QU'UN MODÈLE SUPPRIMÉ : son arrivée par entreprise retombe sur le parcours du dossier,
+       exactement comme companyParcours. RS7404 n'a pas de volet : même chose. */
+    const par = (code) => formations.find((f) => f.code === code);
+    assert.deepStrictEqual(par('NIV1').documents_entreprise, par('NIV1').documents);
+    assert.deepStrictEqual(par('RS7404').documents_entreprise, ['ref:devis-rs7404', 'qcm:evaluation formative du mardi']);
+    assert.deepStrictEqual(par('NIV1H').documents_entreprise,
+        ['ref:devis-professionnel-copie', 'ref:convention', 'ref:accord-prise-en-charge', 'qcm:evaluation formative du mardi'],
+        'le volet, dans son ordre, actif ou non dans le parcours du dossier');
+    assert.deepStrictEqual(entree('ref:devis-particulier').formations_entreprise, ['NIV1'], 'NIV1H l\'a remplacé dans son volet');
+    // Un QCM reste UNE entrée, par son titre, et chaque formation n'y figure qu'une fois.
+    assert.deepStrictEqual(entree('qcm:evaluation formative du mardi').formations, ['RS7404', 'NIV1', 'NIV1H']);
+    assert.strictEqual(documents.filter((x) => x.cle.startsWith('qcm:')).length, 1);
+    // Le volet se lit tel que la base le rend : chaîne JSON, liste, ou rien.
+    assert.deepStrictEqual([Arbo.lireVolet('["a","b"]'), Arbo.lireVolet(['a']), Arbo.lireVolet(null), Arbo.lireVolet('{illisible')], [['a', 'b'], ['a'], [], []]);
+    // Le contrôleur la calcule UNE fois, pour l'éditeur et pour l'archive.
+    const C = lire('controllers/formationProgram.controller.js');
+    assert.match(C, /entrees\.push\(\{ id: p\.id, code: p\.code, title: p\.title, etapes, volet: p\.company_steps \}\);/);
+    assert.match(C, /const \{ programmes, tousLesSlugs, libelles, documents, formations \} = await paletteDeLOrganisme\(conn, orgId\);/);
+    assert.match(SUIVI, /const offerts = offertsDesFormations\(await paletteDeLOrganisme\(conn, orgId\)\);/);
+});
+
+test('l\'archive laisse dehors EXACTEMENT ce que l\'aperçu annonce, arbre par arbre', async () => {
+    /* Deux calculs de la même règle — l'écran dit « ne sera pas dans l'archive », le serveur exclut —
+       finissent par diverger. Ils sont confrontés ici sur les parcours de production. */
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    const palette = Arbo.paletteDesFormations(PARCOURS);
+    const offerts = Arbo.offertsDesFormations(palette);
+    const vide = { folders: [] };
+    for (const f of palette.formations) {
+        for (const kind of ['stagiaire', 'entreprise']) {
+            const vue = ecran.formationDansLArbre(f, kind, palette.documents);
+            assert.deepStrictEqual(ecran.apercuFormation(vide, vue.documents, new Map(), vue.aRanger).nonPlaces.sort(), [...offerts.get(f.code)[kind]].sort(),
+                `${f.code}, arbre ${kind}`);
+        }
+    }
+    // Côté stagiaire, le dossier d'un stagiaire inscrit par une entreprise en fait partie ; le groupe, jamais.
+    assert.ok(offerts.get('NIV1H').stagiaire.has('ref:accord-prise-en-charge'));
+    assert.ok(!offerts.get('NIV1H').stagiaire.has('ref:devis-professionnel-copie'));
+    assert.ok(!offerts.get('NIV1H').stagiaire.has('ref:convention'));
+    /* Côté entreprise, seuls les documents de groupe — les deux que l'écran de production réclamait
+       après la correction : ceux des stagiaires n'y sont que des copies, facultatives. */
+    assert.deepStrictEqual([...offerts.get('NIV1H').entreprise], ['ref:devis-professionnel-copie', 'ref:convention']);
+    // Ce que le coffre sait d'un document suffit à le reconnaître dans ces listes.
+    assert.deepStrictEqual(Arbo.clesDuDocument({ slug: 'contrat', quiz_title: null }), ['ref:contrat']);
+    assert.deepStrictEqual(Arbo.clesDuDocument({ quiz_title: '  Évaluation Formative du MARDI', quiz_id: 'x' }), ['qcm:evaluation formative du mardi']);
+    assert.deepStrictEqual(Arbo.clesDuDocument({ piece_type_id: '72e9' }), ['ref:piece:72e9']);
+    assert.deepStrictEqual(Arbo.clesDuDocument({ source: 'archive', title: 'Ancien contrat' }), [], 'un PDF importé : rien pour le nommer');
+});
+
+test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'un côté, les copies et le groupe de l\'autre', async () => {
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    const { documents } = Arbo.paletteDesFormations(PARCOURS);
+    const stag = ecran.paletteDeLArbre(documents, 'stagiaire');
+    const ent = ecran.paletteDeLArbre(documents, 'entreprise');
+    const cles = (l) => l.map((x) => x.cle).sort();
+    assert.deepStrictEqual(cles(stag), ['qcm:evaluation formative du mardi', 'ref:accord-prise-en-charge', 'ref:devis-particulier', 'ref:devis-rs7404'],
+        'un document de stagiaire réservé aux entreprises, côté stagiaire : c\'est le dossier de ceux qu\'une entreprise inscrit');
+    assert.deepStrictEqual(cles(ent), [...cles(stag), 'ref:convention', 'ref:devis-professionnel-copie'].sort(),
+        'tout, côté entreprise — dont le devis professionnel, document de groupe, qui n\'était proposé nulle part');
+    // « Qui l'a » : le parcours du dossier ET le volet entreprise.
+    assert.deepStrictEqual(stag.find((x) => x.cle === 'ref:accord-prise-en-charge').formations, ['NIV1H']);
+    assert.deepStrictEqual(ent.find((x) => x.cle === 'ref:devis-professionnel-copie').formations, ['NIV1H']);
+    assert.deepStrictEqual(ent.find((x) => x.cle === 'ref:devis-particulier').formations, ['NIV1', 'NIV1H']);
+    /* Ce que l'arbre stagiaire ne propose pas se DIT dans sa liste, avec où aller : chercher « devis »
+       côté stagiaire ne trouvait pas le devis professionnel, et rien ne disait pourquoi. */
+    assert.deepStrictEqual(ecran.horsArbreStagiaire(documents).map((x) => x.cle), ['ref:convention', 'ref:devis-professionnel-copie']);
+    const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
+    assert.match(EDITEUR, /const docs = useMemo\(\(\) => paletteDeLArbre\(documents, kind\), \[documents, kind\]\);/);
+    assert.match(EDITEUR, /const formationVue = formationDansLArbre\(formation, kind, documents\);/);
+    assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{isEnt \? null : ailleurs\}/);
+    assert.match(EDITEUR, /<b>Ce qui n'est rangé nulle part n'est pas archivé\.<\/b>/);
+    const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
+    assert.match(OUTIL, /const ap = formation \? apercuFormation\(tree, formation\.documents, groupes, formation\.aRanger\) : null;/);
+    assert.match(OUTIL, /\{ap\.nonPlaces\.length > 1 \? "ils ne seront" : "il ne sera"\} pas dans l'archive\./);
+    assert.doesNotMatch(OUTIL, /ils iront|il ira/, 'plus de promesse d\'un rangement par défaut');
+    // L'onglet de la formation lit la même règle.
+    const PAGE = lireUi('pages/Formations.jsx');
+    assert.match(PAGE, /const formation = f && formationDansLArbre\(\{ \.\.\.f, code: form\.code \|\| f\.code, title: form\.title \|\| f\.title \}, kind, documents\);/);
+    assert.match(PAGE, /docs=\{paletteDeLArbre\(documents, kind\)\}/);
 });

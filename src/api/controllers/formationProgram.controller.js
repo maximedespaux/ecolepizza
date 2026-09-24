@@ -591,14 +591,41 @@ const getFormationSteps = async (req, res) => {
    formations, au lieu d'une par formation (cf. lib/arborescenceArchive.js pour le pourquoi).
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-/* LA CLÉ D'UNE ÉTAPE, la même que celle d'un item de l'arborescence (lib/arborescenceArchive.js) :
-   un QCM par son TITRE, tout le reste par son identifiant. C'est elle qui dit, pour l'aperçu d'une
-   formation, quels documents l'arborescence range et lesquels elle ne nomme pas. */
-const cleEtape = (s) => (s.quiz_id ? `qcm:${Arbo.normaliserTitre(s.label)}` : `ref:${s.slug}`);
+/**
+ * LA PALETTE DE L'ORGANISME : chaque document d'au moins une formation, UNE fois — un QCM par titre
+ * (« Évaluation Formative du Mardi » existe dans cinq formations : c'est une seule entrée, que chacune
+ * remplit avec la sienne) —, avec les formations qui l'ont, dans le parcours du dossier ET dans le
+ * volet entreprise (`company_steps`, lu par le `SELECT *` ; sans lui, un document réservé aux
+ * entreprises n'était proposé nulle part, cf. Arbo.paletteDesFormations).
+ *
+ * DEUX LECTEURS, UNE FONCTION : l'éditeur de l'arborescence, qui en tire sa liste et son aperçu, et
+ * l'archive ZIP (suivi.controller.js), qui laisse dehors ce qu'une formation propose sans que
+ * l'arborescence le range. Calculés deux fois, l'aperçu et l'archive finiraient par ne plus dire la
+ * même chose.
+ */
+async function paletteDeLOrganisme(conn, orgId) {
+    const [programmes] = await conn.query('SELECT * FROM training_program WHERE organization_id = ? ORDER BY sort_order, code', [orgId]);
+    const entrees = [];
+    const tousLesSlugs = new Set();
+    /* LE LIBELLÉ ACTUEL DE CHAQUE MODÈLE — tous, pas seulement ceux d'un parcours : c'est lui que
+       prend un modèle quand le « OU » qui le rangeait n'existe plus (Arbo.actualiserLesOu). */
+    const libelles = new Map();
+    for (const s of await loadOrgSteps(orgId)) if (s && s.slug) libelles.set(s.slug, s.label);
+    for (const p of programmes) {
+        const etapes = await formationSteps(conn, orgId, p);
+        for (const s of etapes) {
+            tousLesSlugs.add(s.slug);
+            if (!s.quiz_id && !libelles.has(s.slug)) libelles.set(s.slug, s.label);
+        }
+        entrees.push({ id: p.id, code: p.code, title: p.title, etapes, volet: p.company_steps });
+    }
+    return { programmes, tousLesSlugs, libelles, ...Arbo.paletteDesFormations(entrees) };
+}
 
 /**
  * GET /api/formations/arborescence — l'arborescence commune, la palette des documents de TOUTES les
- * formations, et ce que chacune a dans son parcours (pour l'aperçu formation par formation).
+ * formations, et ce que chacune a dans son parcours et à l'arrivée par entreprise (pour l'aperçu
+ * formation par formation, dans chacun des deux arbres).
  *
  * TANT QUE RIEN N'EST ENREGISTRÉ, la réponse PROPOSE la fusion des arborescences déjà réglées sur
  * les formations (`propose: true`), avec ses conflits et ce qu'elle a retiré : l'école part de ce
@@ -616,36 +643,7 @@ const getArborescence = async (req, res) => {
                 enregistree = { tree: Arbo.lireArbre(o.archive_tree) || { folders: [] }, company_tree: Arbo.lireArbre(o.company_archive_tree) || { folders: [] } };
             }
         }
-        const [programmes] = await conn.query('SELECT * FROM training_program WHERE organization_id = ? ORDER BY sort_order, code', [orgId]);
-
-        /* LA PALETTE : chaque document présent dans le parcours d'au moins une formation, UNE fois —
-           un QCM par titre (« Évaluation Formative du Mardi » existe dans cinq formations : c'est une
-           seule entrée, que chacune remplit avec le sien) —, avec la liste des formations qui l'ont. */
-        const palette = new Map();
-        const formations = [];
-        const tousLesSlugs = new Set();
-        /* LE LIBELLÉ ACTUEL DE CHAQUE MODÈLE — tous, pas seulement ceux d'un parcours : c'est lui que
-           prend un modèle quand le « OU » qui le rangeait n'existe plus (Arbo.actualiserLesOu). */
-        const libelles = new Map();
-        for (const s of await loadOrgSteps(orgId)) if (s && s.slug) libelles.set(s.slug, s.label);
-        for (const p of programmes) {
-            const etapes = await formationSteps(conn, orgId, p);
-            for (const s of etapes) {
-                tousLesSlugs.add(s.slug);
-                if (!s.quiz_id && !libelles.has(s.slug)) libelles.set(s.slug, s.label);
-            }
-            const actives = etapes.filter((s) => s.active);
-            formations.push({ id: p.id, code: p.code, title: p.title, documents: [...new Set(actives.map(cleEtape))] });
-            for (const s of actives) {
-                const cle = cleEtape(s);
-                if (!palette.has(cle)) {
-                    palette.set(cle, s.quiz_id
-                        ? { cle, titre_qcm: s.label, label: s.label, company_level: false, formations: [] }
-                        : { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [] });
-                }
-                palette.get(cle).formations.push(p.code);
-            }
-        }
+        const { programmes, tousLesSlugs, libelles, documents, formations } = await paletteDeLOrganisme(conn, orgId);
 
         const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
         const libelleDe = (slug) => (tousLesSlugs.has(slug) || libelles.has(slug) ? libelles.get(slug) || slug : null);
@@ -704,7 +702,7 @@ const getArborescence = async (req, res) => {
                 ajustements,
                 conflits: proposition ? proposition.conflits : [],
                 retires: proposition ? proposition.retires : [],
-                documents: [...palette.values()],
+                documents,
                 formations,
             },
         });
@@ -863,5 +861,5 @@ const saveFormationSteps = async (req, res) => {
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
     getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, resoudreVariantes, deleteProgram,
-    getArborescence, saveArborescence,
+    getArborescence, saveArborescence, paletteDeLOrganisme,
 };

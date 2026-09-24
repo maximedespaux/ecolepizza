@@ -123,10 +123,13 @@ function Bulle({ ancre, onClose, children, className = "" }) {
   useEffect(() => {
     if (!ancre) return;
     const r = ancre.getBoundingClientRect();
-    const gauche = Math.max(8, Math.min(r.left, window.innerWidth - 340));
+    // 8 px de marge à droite comme à gauche : sur un téléphone, la liste touchait le bord de l'écran.
+    const gauche = Math.max(8, Math.min(r.left, window.innerWidth - Math.min(340, window.innerWidth - 16) - 8));
+    /* ELLE TIENT DANS L'ÉCRAN : sa hauteur est bornée à la place qui reste, et c'est sa liste qui défile.
+       Sur un téléphone, la ligne qui dit où se range un document de groupe la poussait sous le bord. */
     setPos(r.bottom > window.innerHeight * 0.6
-      ? { bottom: Math.round(window.innerHeight - r.top + 4), left: Math.round(gauche) }
-      : { top: Math.round(r.bottom + 4), left: Math.round(gauche) });
+      ? { bottom: Math.round(window.innerHeight - r.top + 4), left: Math.round(gauche), maxHeight: Math.round(r.top - 12) }
+      : { top: Math.round(r.bottom + 4), left: Math.round(gauche), maxHeight: Math.round(window.innerHeight - r.bottom - 12) });
   }, [ancre]);
   useEffect(() => {
     const dehors = (e) => { if (!ref.current?.contains(e.target) && !ancre?.contains(e.target)) onClose(); };
@@ -150,12 +153,13 @@ function Bulle({ ancre, onClose, children, className = "" }) {
 
 /* La liste des documents à placer : on tape pour filtrer. Ce qui est déjà ailleurs se DÉPLACE ici ;
    ce qu'un choix « OU » contient déjà se dit, et ne se place pas une seconde fois. */
-function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, onClose }) {
+function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, onClose, ailleurs }) {
   const [q, setQ] = useState("");
   const champ = useRef(null);
   useEffect(() => { champ.current?.focus(); }, []);
   const n = normaliserTitre(q);
   const vus = options.filter((o) => !n || normaliserTitre(o.label).includes(n));
+  const autres = ailleurs ? ailleurs.docs.filter((o) => !n || normaliserTitre(o.label).includes(n)) : [];
   const groupes = [
     ["Documents", vus.filter((o) => o.type !== "quiz" && !o.group)],
     ["Choix « OU »", vus.filter((o) => o.group)],
@@ -197,13 +201,24 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
           </div>
         ))}
       </div>
+      {/* UN DOCUMENT DE GROUPE CHERCHÉ ICI (la convention 🏢) ne s'y trouve pas : « aucun document ne
+          correspond » laissait chercher. On dit où il se range, et on y mène. */}
+      {autres.length > 0 && (
+        <div className="arbo-bulle-ailleurs">
+          <Icon name="building" size={14} aria-hidden="true" />
+          <span>
+            {autres.map((o) => o.label).join(", ")} : {autres.length > 1 ? "documents de groupe, ils se rangent" : "document de groupe, il se range"} dans l'arborescence entreprise.
+            {ailleurs.ouvrir && <>{" "}<button type="button" className="lien-nu" onClick={() => { onClose(); ailleurs.ouvrir(); }}>Y aller</button></>}
+          </span>
+        </div>
+      )}
     </>
   );
 }
 
 /* ─── Un dossier ────────────────────────────────────────────────────────────────────────────── */
 function Dossier({ d, ctx, profondeur }) {
-  const { lectureSeule, ex, concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition } = ctx;
+  const { lectureSeule, ex, concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition, ailleurs } = ctx;
   const [bulle, setBulle] = useState(null); // { genre: "doc" | "menu", ancre }
   const edite = !lectureSeule && enEdition === d.id;
   const champ = useRef(null);
@@ -297,7 +312,7 @@ function Dossier({ d, ctx, profondeur }) {
       {bulle && bulle.genre === "doc" && (
         <Bulle ancre={bulle.ancre} onClose={fermer} className="large">
           <ChoixDocument options={options} placeDe={placeDe} dossierId={d.id} nbFormations={nbFormations}
-            onChoisir={(o) => op.placer(d.id, o)} onClose={fermer} />
+            onChoisir={(o) => op.placer(d.id, o)} onClose={fermer} ailleurs={ailleurs} />
         </Bulle>
       )}
       {bulle && bulle.genre === "menu" && (
@@ -333,17 +348,19 @@ const standardTree = () => ({
 /**
  * L'arborescence commune — à modifier (`onChange`) ou à lire (`lectureSeule`).
  *   `docs`      la palette (GET /formations/arborescence) : modèles, pièces, QCM par titre, et qui les a ;
- *   `formation` ({ code, title, documents }) : l'aperçu POUR elle — barré ce qu'elle n'a pas, et la
- *               liste de ce que l'arborescence ne nomme pas ;
- *   `groupes`   les « OU » d'aujourd'hui (clé → membres), `palette` (clé → libellé).
+ *   `formation` ({ code, title, documents, aRanger }) : l'aperçu POUR elle — barré ce qu'elle n'a pas,
+ *               et la liste de ce que l'arborescence ne range pas, qui ne sera pas archivé ;
+ *   `groupes`   les « OU » d'aujourd'hui (clé → membres), `palette` (clé → libellé) ;
+ *   `arbre`     « stagiaire » ou « entreprise », pour le dire ; `ailleurs` : { docs, ouvrir } — ce qui se
+ *               range dans l'autre arbre, et de quoi y aller.
  */
 export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nbFormations = 0, formation = null,
-  palette = null, groupes = null, lectureSeule = false }) {
+  palette = null, groupes = null, lectureSeule = false, arbre = "stagiaire", ailleurs = null }) {
   const folders = useMemo(() => tree?.folders || [], [tree]);
   const [enEdition, setEnEdition] = useState(null);
   const options = useMemo(() => buildOptions(docs, eqMap), [docs, eqMap]);
   const ex = exemples(formation);
-  const ap = formation ? apercuFormation(tree, formation.documents, groupes) : null;
+  const ap = formation ? apercuFormation(tree, formation.documents, groupes, formation.aRanger) : null;
 
   /* Où chaque document est déjà rangé (clé → dossier et chemin) — et ce qu'un « OU » placé couvre. */
   const placeDe = useMemo(() => {
@@ -380,7 +397,7 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
     // Placer, c'est aussi DÉPLACER : une place par document (lib/arborescence.js).
     placer: (id, o) => set(placerDocument(folders, id, itemDe(o), groupes)),
   };
-  const ctx = { lectureSeule, ex, concerne: ap && ap.concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition };
+  const ctx = { lectureSeule, ex, concerne: ap && ap.concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition, ailleurs };
 
   /* Où placer un document que l'arborescence ne nomme pas : chaque dossier, par son chemin lisible. */
   const cheminsDossiers = useMemo(() => {
@@ -416,13 +433,15 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
         </button>
       )}
 
-      {/* CE QUE L'ARBORESCENCE NE NOMME PAS N'EST PAS PERDU — il ira dans le dossier du stagiaire —,
-          mais mieux vaut le savoir, et le placer d'ici, avant de remettre une archive à un contrôleur. */}
+      {/* CE QUE L'ARBORESCENCE NE RANGE PAS N'EST PAS ARCHIVÉ — décidé par l'école le 2026-09-25 : ne
+          pas placer un document, c'est ne pas en vouloir de copie. Il partait autrefois dans le dossier
+          du stagiaire, et cette liste l'annonçait ; elle dit désormais ce que l'archive laissera dehors
+          (le serveur exclut exactement celle-ci), avec de quoi le placer si c'est un oubli. */}
       {ap && ap.nonPlaces.length > 0 && (
         <div className="arbo-non-places">
           <div className="arbo-non-places-t">
             <Icon name="info" size={15} aria-hidden="true" />
-            <span><b>{ap.nonPlaces.length} document{ap.nonPlaces.length > 1 ? "s" : ""} de {formation.code}</b> ne {ap.nonPlaces.length > 1 ? "sont" : "est"} nommé{ap.nonPlaces.length > 1 ? "s" : ""} nulle part : {ap.nonPlaces.length > 1 ? "ils iront" : "il ira"} dans le dossier du stagiaire.</span>
+            <span><b>{ap.nonPlaces.length} document{ap.nonPlaces.length > 1 ? "s" : ""}{arbre === "entreprise" ? " de groupe" : ""} de {formation.code}</b> ne {ap.nonPlaces.length > 1 ? "sont rangés" : "est rangé"} nulle part : {ap.nonPlaces.length > 1 ? "ils ne seront" : "il ne sera"} pas dans l'archive.</span>
           </div>
           <ul>
             {ap.nonPlaces.map((c) => {

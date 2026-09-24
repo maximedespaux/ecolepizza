@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getArborescenceCommune, saveArborescenceCommune, getEquivalences } from "../api/apiClient.js";
 import ArchiveTreeEditor, { treeHasEmptyName } from "./ArchiveTreeEditor.jsx";
 import StatusMessage from "./StatusMessage.jsx";
-import { groupesDepuis } from "../lib/arborescence.js";
+import { groupesDepuis, paletteDeLArbre, horsArbreStagiaire, formationDansLArbre } from "../lib/arborescence.js";
 
 /**
  * L'ARBORESCENCE D'ARCHIVAGE COMMUNE (migration 182, demandée le 2026-09-24) — une fois pour toutes
@@ -52,16 +52,14 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
   const libelles = useMemo(() => new Map(documents.map((d) => [d.cle, d.label])), [documents]);
   const formations = etat?.formations || [];
   const isEnt = kind === "entreprise";
-  /* Archivage STAGIAIRE : sans les documents de groupe (🏢), qui vont à l'entreprise. Archivage
-     ENTREPRISE : tout — l'inscription passant par une entreprise, chaque document signé peut lui
-     être archivé. (Même règle que l'éditeur par formation qu'il remplace.) */
-  const deGroupe = useMemo(() => new Set(documents.filter((d) => d.company_level).map((d) => d.cle)), [documents]);
-  const docs = isEnt ? documents : documents.filter((d) => !d.company_level);
+  /* Archivage STAGIAIRE : le dossier de chaque stagiaire, inscrit seul ou par une entreprise — tous
+     ses documents, sauf ceux de groupe (🏢). Archivage ENTREPRISE : des copies, et les documents de
+     groupe ; tout y est proposé. La règle vit dans lib/arborescence.js, partagée avec l'onglet de la
+     formation, et le serveur exclut de l'archive exactement ce que l'aperçu dit non rangé. */
+  const docs = useMemo(() => paletteDeLArbre(documents, kind), [documents, kind]);
+  const ailleurs = useMemo(() => ({ docs: horsArbreStagiaire(documents), ouvrir: () => setKind("entreprise") }), [documents]);
   const formation = formations.find((f) => f.code === code) || null;
-  const formationVue = formation && {
-    ...formation,
-    documents: isEnt ? formation.documents : formation.documents.filter((c) => !deGroupe.has(c)),
-  };
+  const formationVue = formationDansLArbre(formation, kind, documents);
 
   async function enregistrer() {
     for (const [t, k, nom] of [[tree, "stagiaire", "stagiaire"], [companyTree, "entreprise", "entreprise"]]) {
@@ -160,13 +158,20 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
                   </select>
                 </label>
               </div>
+              {/* LES DEUX RÔLES, DITS : l'école rangeait l'arborescence entreprise comme une copie (« je
+                  n'en veux pas de copie »), alors qu'elle rangeait jusque-là le dossier ENTIER des stagiaires
+                  inscrits par une entreprise. C'est désormais ce qu'elle est (placesDansLArchive). */}
               <p className="arbo-intro">
                 Chaque document se range <b>une fois, pour toutes les formations</b> ; une formation qui ne l'a pas le saute.
-                Cliquez le nom d'un dossier pour le renommer, « Document » pour y placer un document.
+                {isEnt
+                  ? <> Ici, des <b>copies pour l'entreprise</b> : ce que vous rangez s'ajoute, pour les stagiaires qu'elle inscrit, à leur dossier de l'archivage stagiaire. Ses documents de groupe (🏢) n'ont que cette place.</>
+                  : <> Ici, le dossier de <b>chaque stagiaire</b>, inscrit seul ou par une entreprise.</>}
+                {" "}<b>Ce qui n'est rangé nulle part n'est pas archivé.</b> Cliquez le nom d'un dossier pour le renommer, « Document » pour y placer un document.
               </p>
               <ArchiveTreeEditor tree={isEnt ? companyTree : tree} onChange={isEnt ? setCompanyTree : setTree}
                 eqMap={eqMap} docs={docs} nbFormations={formations.length}
-                formation={formationVue} palette={libelles} groupes={groupes} />
+                formation={formationVue} palette={libelles} groupes={groupes}
+                arbre={kind} ailleurs={isEnt ? null : ailleurs} />
             </>
           )}
         </div>
