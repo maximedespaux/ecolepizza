@@ -23,6 +23,9 @@ test('l\'écran de revue retire un fichier à la fois', () => {
     /* SUPPRESSION DÉFINITIVE (purge d'une copie chiffrée) → confirmation obligatoire. */
     assert.match(rev, /window\.confirm\(`Retirer/);
     assert.match(rev, /await supprimerPieceFichier\(f\.id\)/);
+    /* PAS DE CORBEILLE SUR UNE PIÈCE VALIDÉE : une pièce acceptée est figée à l'écran (pour la
+       corriger, on la refuse d'abord). */
+    assert.match(rev, /\{p\.statut !== "VALIDEE" && \(\s*<button className="btn sm ghost danger"/);
     /* Le client API vise le FICHIER, pas le dépôt. */
     const api = lireUi('api/apiClient.js');
     assert.match(api, /supprimerPieceFichier\(fichierId\) \{ return request\(`\/pieces\/fichier\/\$\{fichierId\}`, \{ method: "DELETE" \}\)/);
