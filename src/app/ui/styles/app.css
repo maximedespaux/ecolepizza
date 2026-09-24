@@ -864,27 +864,6 @@ tbody tr:last-child td{border-bottom:none}
 .grid > *:nth-child(2){animation-delay:.05s}.grid > *:nth-child(3){animation-delay:.1s}
 .grid > *:nth-child(4){animation-delay:.15s}
 
-/* Roadmap / feuille de route (étapes documentaires) ------------------ */
-.roadmap{display:flex;flex-direction:column;margin:6px 0}
-.rm-step{display:flex;gap:12px}
-.rm-rail{display:flex;flex-direction:column;align-items:center;flex:0 0 22px}
-.rm-dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);background:var(--surface3);display:grid;place-items:center;font-size:11px;color:#fff;font-weight:700;z-index:1;flex:0 0 20px}
-.rm-dot.progress{background:var(--ember2);border-color:var(--ember1);box-shadow:0 0 0 3px rgba(224,81,43,.15)}
-.rm-dot.done{background:var(--green);border-color:var(--green)}
-.rm-conn{width:3px;flex:1;background:var(--border);min-height:14px;border-radius:3px}
-.rm-conn.done{background:var(--green)}
-.rm-body{padding:0 0 14px;flex:1}
-.rm-body b{font-size:13.5px}
-.rm-tag{display:block;font-size:11.5px;font-weight:600;margin-top:1px}
-.rm-tag.todo{color:var(--dim)} .rm-tag.progress{color:var(--ember1)} .rm-tag.done{color:var(--green)}
-/* L'état « progress » porte le NOM de la barre d'avancement (.progress, plus haut : 9 px de haut,
-   fond gris, débordement masqué). Le libellé « En cours · 1/2 stagiaire(s) » en héritait, coupé à
-   mi-hauteur sous une barre grise — dans les deux feuilles de route du suivi. On défait la barre. */
-.rm-tag.progress{height:auto;background:none;border-radius:0;overflow:visible}
-/* « Sans objet » : en retrait, sans couleur d'etat. Ni un manque (donc pas d'alerte), ni un
-   acquis (donc pas de vert) — l'etape ne concerne simplement pas cette personne. */
-.rm-tag.skip{color:var(--dim);font-style:italic} .rm-dot.skip{background:var(--surface2);border-style:dashed;color:var(--dim)}
-
 /* Aperçu de document (feuille) -------------------------------------- */
 .doc-sheet{background:#fff;color:#1e2140;border:1px solid var(--border);border-radius:10px;padding:34px 40px;max-width:720px;margin:0 auto;font-size:13.5px;line-height:1.5}
 .doc-sheet h2{font-size:20px;margin:0}
@@ -3988,15 +3967,6 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:10
    nœuds sont deplaçables, cf. la règle plus haut. */
 .pf-node,.pf-add,.pf-add-item{transition:background .14s var(--ease),border-color .14s var(--ease)}
 
-/* --- Feuille de route (Suivi) : le passage « à faire → en cours → fait » était instantané.
-   C'est pourtant le seul endroit où l'on voit un dossier avancer. */
-.rm-dot,.rm-conn{transition:background .3s var(--ease),border-color .3s var(--ease),color .3s var(--ease)}
-.rm-step{animation:rise .4s var(--ease) backwards}
-.rm-step:nth-child(2){animation-delay:.06s}
-.rm-step:nth-child(3){animation-delay:.12s}
-.rm-step:nth-child(4){animation-delay:.18s}
-.rm-step:nth-child(n+5){animation-delay:.24s}
-
 /* --- Barres de répartition (Comptabilité). `.progress span` se remplit déjà en 0,5 s ;
    celles-ci sautaient à leur largeur finale. Même durée, pour que deux barres côte à côte
    sur la même page ne se remplissent pas à deux vitesses. */
@@ -5822,38 +5792,90 @@ label .requis {
 .dossier-groupe-membres .dossier-ligne:last-child{border-bottom:none;padding-bottom:4px}
 /* Tableau de bord : un dossier d'une session terminée, gardé en vue parce qu'il n'est pas complet. */
 .dossier-echu{display:block;font-size:12px;font-weight:600;color:var(--ember1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* SUIVI QUALIOPI — une ligne de dossier, et l'en-tête d'un groupe d'entreprise.
-   Sur ordinateur : une seule ligne — chevron, formation, nom, avancement, score.
-   SUR TÉLÉPHONE, CETTE LIGNE NE TENAIT PAS. L'avancement (90 px), le score, le chevron, la
-   formation et leurs espacements prenaient environ 270 px des 313 disponibles : mesuré à 375 px,
-   la colonne du nom faisait de 0 à 24 px, un mot par ligne, « stagiaire(s) » débordant sous la
-   barre, et chaque ligne montait à près de 200 px. Sous 640 px, la ligne devient une grille : l'état
-   (avancement + score) passe SOUS le nom, dans la même colonne que lui, et le nom récupère toute la
-   largeur. Les retraits du détail et des membres d'un groupe (40 et 34 px) fondent aussi. */
-.suivi-ligne{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left}
-.suivi-ligne-texte{flex:1;min-width:0}
-.suivi-ligne-etat{display:flex;align-items:center;gap:12px;flex-shrink:0}
-/* L'EN-TÊTE D'UN GROUPE D'ENTREPRISE porte DEUX gestes : déplier (le bouton, qui prend toute la
-   place restante) et ouvrir la fiche de l'entreprise (le lien, à droite). Ils sont côte à côte et
-   non imbriqués : un lien dans un bouton n'est pas du HTML valide, et le clic ferait les deux.
-   SUR TÉLÉPHONE, le lien perd son libellé — « Sa fiche » lui coûtait 70 px des 375, pris au nom
-   de l'entreprise, qui est ce qu'on lit d'abord. Le chevron reste, et l'intitulé avec lui
-   (title + aria-label), donc rien ne se perd pour qui l'écoute ou le survole. */
-.suivi-groupe-tete{display:flex;align-items:center}
-.suivi-groupe-fiche{flex:0 0 auto;padding:8px 14px 8px 4px;white-space:nowrap}
+/* SUIVI QUALIOPI — LA GRILLE (2026-09-24) : une table par formation, une ligne par dossier, une
+   colonne par document. Elle remplace les feuilles de route verticales (1 150 px par dossier ouvert,
+   quatorze écrans pour sept dossiers) et le bandeau de 32 cartes « Ce qui manque », devenu le pied
+   des colonnes. La géométrie des en-têtes penchés est MESURÉE (Suivi.jsx, GrilleFormation) : --sg-h
+   est la hauteur qu'il faut au plus long libellé, --sg-deborde la place qu'il lui faut à droite. */
+.sg + .sg{margin-top:22px}
+/* Le titre d'une formation peut être très long (« Pizzaïolo Niveau I – … de la restauration
+   commerciale », 126 signes) : il se replie DANS sa place, à côté du badge, au lieu de passer
+   dessous et de repousser le compte des dossiers sur une troisième ligne. */
+.sg-titre{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.sg-titre .badge{flex:none}
+.sg-titre b{font-size:14px;min-width:0}
+.sg-titre-nb{font-size:12px;color:var(--muted);flex:none;white-space:nowrap}
+/* La table défile DANS sa carte (.tablewrap), jamais la page : dix-huit colonnes ne tiennent pas sur
+   un téléphone, et c'est la grille qui passe sous le nom, resté en place. Le liseré porte la couleur
+   de la formation — la palette de colorOf, celle des badges et de l'arbre des archives. */
+.sg-wrap{border-left:3px solid var(--teinte,var(--ember1))}
+.sg-table{width:auto;font-size:13px}
+.sg-table thead th{position:static;z-index:auto;background:none;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--text);padding:0;border-bottom:1px solid var(--border)}
+/* LE NOM RESTE EN PLACE quand la grille défile : collé à gauche, sur son propre fond (sinon les cases
+   passeraient au travers), avec une largeur à lui — la leçon du 2026-09-21, quand la ligne du suivi
+   réduisait le nom à 24 px sur téléphone, un mot par ligne. */
+.sg-table .sg-nom{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;min-width:150px;padding:8px 12px;font-weight:600;border-right:1px solid var(--border-soft)}
+.sg-table thead .sg-nom,.sg-table thead .sg-av,.sg-table tfoot .sg-nom{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.sg-table thead .sg-nom,.sg-table thead .sg-av{vertical-align:bottom;height:var(--sg-h,150px);padding-bottom:10px}
+.sg-table tbody th{border-bottom:1px solid var(--border-soft)}
+.sg-table tbody tr:hover .sg-nom{background:var(--surface2)}
+.sg-nom a{color:inherit}
+.sg-nom a:hover{color:var(--ember1);text-decoration:underline}
+/* L'EN-TÊTE PENCHÉ. Tourné, le libellé ne compte plus dans la mise en page : la hauteur de l'en-tête
+   et la place à droite sont mesurées sur lui. Ces en-têtes n'ont PAS de fond : le libellé d'une
+   colonne survole les suivantes, et un fond opaque — celui de tout `thead th` — le couperait. Ni
+   le `z-index:2` de tout `thead th` (plus haut, `.sg-table thead th`) : il plaçait chaque en-tête de
+   document AU-DESSUS du nom collé (z-index 1) — relevé au banc sur téléphone, la grille défilée,
+   « Invitation » et « Livret d'accueil » s'écrivaient par-dessus « STAGIAIRE » au lieu de passer dessous. */
+/* LES CLICS TRAVERSENT LES EN-TÊTES, seuls les libellés les prennent. Le libellé d'une colonne passe
+   au-dessus des cinq ou six suivantes, et leurs en-têtes — transparents, mais placés APRÈS lui —
+   recevaient le clic à sa place : mesuré au banc, le milieu de « Justificatifs » tombait sur
+   l'en-tête de « Devis RS7404 », et cliquer un nom de document ne filtrait rien. */
+.sg-table .sg-col{position:relative;width:34px;min-width:34px;max-width:34px;height:var(--sg-h,150px);vertical-align:bottom;pointer-events:none}
+.sg-col-btn{position:absolute;left:calc(50% - 5px);bottom:10px;transform-origin:0 100%;transform:rotate(-45deg);pointer-events:auto;
+  display:block;background:none;border:0;padding:0 4px;border-radius:4px;font:inherit;color:inherit;white-space:nowrap;cursor:pointer;line-height:1.35}
+.sg-col-btn:hover:not(:disabled),.sg-col-btn:focus-visible{color:var(--ember1);background:var(--surface2)}
+.sg-col-btn:disabled{cursor:default;color:var(--muted)}
+.sg-col.on .sg-col-btn{color:var(--teinte,var(--ember1));font-weight:700}
+.sg-col-txt{display:inline-block;max-width:260px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.sg-table .sg-av{text-align:right;padding:8px calc(12px + var(--sg-deborde,0px)) 8px 12px;white-space:nowrap}
+.sg-table tbody .sg-av > span{display:inline-block}
+/* Les cases : 34 px de côté, la pastille au centre. */
+.sg-table td.sg-case{width:34px;min-width:34px;max-width:34px;height:34px;padding:0;text-align:center;vertical-align:middle}
+.sg-case.on,.sg-manque.on{background:color-mix(in srgb,var(--teinte,var(--ember1)) 12%,transparent)}
+/* LES PASTILLES. Fait = coche pleine ; en cours = moitié pleine (envoyé, pas encore signé) ; à faire =
+   anneau vide ; sans objet = un tiret, ni vert ni alerte (une décision de l'école, migration 161) ;
+   absent = rien : le document n'est pas dans le parcours de ce dossier. */
+.sg-etat{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;vertical-align:middle;box-sizing:border-box}
+.sg-etat.fait{background:var(--green);color:#fff}
+.sg-etat.encours{border:2px solid var(--ember1);background:linear-gradient(90deg,var(--ember1) 50%,transparent 50%)}
+.sg-etat.afaire{width:12px;height:12px;border:2px solid var(--dim)}
+.sg-etat.sansobjet{border-radius:0;color:var(--dim);font-weight:700}
+.sg-etat.absent{width:0;height:0}
+/* Une entreprise : une ligne d'en-tête pour ses stagiaires, qui la suivent en retrait. Son contenu
+   est collé à gauche comme le nom : la ligne couvre toute la table, qui défile. */
+.sg-entreprise th{padding:0;background:var(--surface2);border-bottom:1px solid var(--border-soft);text-align:left;font-weight:400}
+.sg-entreprise-in{position:sticky;left:0;display:inline-flex;align-items:center;gap:8px;padding:6px 12px;flex-wrap:wrap}
+.sg-entreprise-ic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:linear-gradient(135deg,#c0392b,#e0932e);color:#fff;flex:none}
+.sg-entreprise-nb{font-size:12px;color:var(--muted)}
+/* UN FILET RELIE LES STAGIAIRES À LEUR ENTREPRISE. Le seul retrait ne suffisait pas : mesuré au banc,
+   un particulier rangé juste après le bloc d'une entreprise (SWYNGHEDAUW, sous « Test ») se lisait
+   comme l'un de ses stagiaires — douze pixels de décalage, rien d'autre pour les distinguer. */
+.sg-membre .sg-nom{padding-left:30px}
+.sg-membre .sg-nom::before{content:"";position:absolute;left:19px;top:0;bottom:-1px;width:2px;background:var(--border)}
+/* Le pied : combien de dossiers n'ont pas encore chaque document. Vide = rien ne manque. */
+.sg-table tfoot th,.sg-table tfoot td{border-top:1px solid var(--border);padding:7px 0;font-size:12.5px}
+.sg-table tfoot .sg-nom{padding:7px 12px}
+.sg-manque{text-align:center;font-weight:700;color:var(--ember1);font-variant-numeric:tabular-nums}
+.sg-legende{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:0 0 14px;font-size:12px;color:var(--muted)}
+.sg-legende > span{display:inline-flex;align-items:center;gap:6px}
+.sg-legende-geste{flex-basis:100%}
+.sg-filtre{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:8px 12px;border-radius:var(--r-sm);background:var(--surface2);font-size:13px}
 @media (max-width:640px){
-  /* 44 px DE CÔTÉ, pas la taille du chevron : sans libellé, le lien ne faisait plus que 30 px —
-     on le manquait au pouce, et on dépliait le groupe à la place. */
-  .suivi-groupe-fiche{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center}
-  .suivi-groupe-fiche svg{font-size:13px}
-}
-.suivi-detail{padding:12px 16px 14px 40px;border-top:1px solid var(--border-soft)}
-.suivi-groupe-membres{padding:10px 14px 14px 34px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:8px}
-@media (max-width:640px){
-  .suivi-ligne{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:6px 10px;padding:12px}
-  .suivi-ligne-etat{grid-row:2;grid-column:3}
-  .suivi-detail{padding:12px 12px 14px}
-  .suivi-groupe-membres{padding:10px 10px 12px}
+  /* 44 PX AU POUCE : sans son libellé, le lien vers la fiche de l'entreprise garde sa cible. */
+  .sg-entreprise-fiche{font-size:0;padding:0;min-width:44px;min-height:44px;justify-content:center}
+  .sg-entreprise-fiche svg{font-size:13px}
+  .sg-table .sg-nom{min-width:128px}
 }
 /* Suivi Qualiopi : le compteur des complets, qui les réaffiche d'un clic. */
 /* Même allure que les compteurs liens (.compteurs a), sans bouton plein. Au survol, on souligne

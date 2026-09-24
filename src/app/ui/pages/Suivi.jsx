@@ -1,7 +1,7 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../components/Icon.jsx";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
   importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
@@ -13,80 +13,174 @@ import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
-import Roadmap from "../components/Roadmap.jsx";
-import { stepState, manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
-import { sansLesComplets, grouperParEntreprise } from "../lib/dossiersASuivre.js";
+import { manquesParFormation, dossiersDuManque } from "../lib/etapes.js";
+import { sansLesComplets, grouperParEntreprise, estComplet } from "../lib/dossiersASuivre.js";
+import { tableauxDuSuivi, etatCase } from "../lib/grilleSuivi.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
-import { scoreBadge, colorOf, dateHeure } from "../lib/format.js";
+import { colorOf, dateHeure } from "../lib/format.js";
 
 /* Les états d'une PIÈCE ne sont pas ceux d'un document : elle n'est ni envoyée ni signée,
    elle est déposée puis vérifiée. Sans ces deux entrées, le coffre affichait « VALIDEE » brut
    en gris, au milieu de libellés soignés. */
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"],
   VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"] };
-const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 
+/* L'état d'une case de la grille. Les classes ne s'appellent PAS comme les états (`progress`…) :
+   `.progress` est déjà la barre d'avancement de l'application (9 px, fond gris, débordement
+   masqué), et la feuille de route qui a précédé cette grille avait coupé son libellé « En cours »
+   à mi-hauteur pour avoir porté ce nom-là. */
+const ETAT_CASE = {
+  done: { cls: "fait", lib: "Fait" },
+  progress: { cls: "encours", lib: "En cours" },
+  todo: { cls: "afaire", lib: "À faire" },
+  skip: { cls: "sansobjet", lib: "Sans objet" },
+  absent: { cls: "absent", lib: "Ne concerne pas ce dossier" },
+};
 
-const RM_TAG = { todo: "À faire", progress: "En cours", done: "Terminé" };
-
-// Feuille de route agrégée d'une entreprise : une étape par document du parcours,
-// avec le nombre de stagiaires ayant terminé cette étape.
-function CompanyRoadmap({ steps }) {
+/* La pastille d'un état, seule : la case de la grille et la légende dessinent la MÊME, sinon la
+   légende finirait par décrire une grille qui n'existe plus. */
+function Pastille({ etat, titre }) {
+  const e = ETAT_CASE[etat] || ETAT_CASE.todo;
   return (
-    <div className="roadmap">
-      {steps.map((s, i) => {
-        const last = i === steps.length - 1;
-        return (
-          <div className="rm-step" key={s.type + i}>
-            <div className="rm-rail">
-              <span className={`rm-dot ${s.state}`}>{s.state === "done" ? <Icon name="check" size={14} /> : i + 1}</span>
-              {!last && <span className={`rm-conn ${s.state === "done" ? "done" : ""}`} />}
-            </div>
-            <div className="rm-body">
-              <b>{s.label}</b>
-              <span className={`rm-tag ${s.state}`}>
-                {s.company_level
-                  ? `${RM_TAG[s.state]} · document de groupe (organisme + entreprise)`
-                  : `${RM_TAG[s.state]} · ${s.done}/${s.total} stagiaire(s)${s.signable ? " · à signer" : ""}`}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <span className={`sg-etat ${e.cls}`} role="img" aria-label={titre || e.lib}>
+      {etat === "done" ? <Icon name="check" size={12} /> : etat === "skip" ? "—" : null}
+    </span>
   );
 }
 
-// Ligne d'un dossier stagiaire (repliable) : entête + feuille de route au clic.
-function DossierRow({ d, isOpen, onToggle, navigate, nested }) {
+/* Les en-têtes de colonne sont les NOMS COMPLETS des documents, penchés à 45° : « Évaluation
+   Formative du Mercredi » ne se laisse pas abréger sans perdre le mot qui la distingue de celle du
+   jeudi. Un texte tourné ne compte plus dans la mise en page — l'en-tête ne le contient donc que si
+   on lui donne la hauteur du plus long, et le tableau n'a de place à droite pour les derniers que si
+   on la leur réserve. D'où la MESURE, faite sur les libellés tels que l'écran les dessine
+   (getBoundingClientRect rend la boîte d'un élément tourné) et refaite quand la police arrive.
+   Une hauteur fixe aurait coupé le plus long ou gaspillé un demi-écran sur des noms courts ; une
+   estimation par le plus long libellé réservait à droite 54 px que seuls les DERNIERS libellés
+   peuvent réclamer — mesuré au banc, assez pour faire défiler la grille sans raison. */
+function GrilleFormation({ t, filtre, onFiltre, entrepriseOuvrable }) {
+  const tete = useRef(null);
+  const [geo, setGeo] = useState({ h: 150, deborde: 0 });
+  useLayoutEffect(() => {
+    const mesurer = () => {
+      const av = tete.current?.querySelector(".sg-av");
+      const boites = tete.current ? [...tete.current.querySelectorAll(".sg-col-btn")].map((b) => b.getBoundingClientRect()) : [];
+      if (!av || !boites.length) return;
+      /* Le bord du tableau SANS la réserve en place (padding-right = 12 px + réserve) : la mesure
+         part du dessin actuel, quelle que soit la réserve qu'il porte déjà. */
+      const bord = av.getBoundingClientRect().right - (parseFloat(getComputedStyle(av).paddingRight) - 12);
+      const g = {
+        h: Math.ceil(Math.max(...boites.map((r) => r.height))) + 16,
+        deborde: Math.max(0, Math.ceil(Math.max(...boites.map((r) => r.right)) - bord) + 8),
+      };
+      setGeo((a) => (a.h === g.h && a.deborde === g.deborde ? a : g));
+    };
+    mesurer();
+    document.fonts?.ready?.then(mesurer).catch(() => {});
+  }, [t.colonnes]);
+
+  const nbCol = t.colonnes.length + 2;
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden", background: nested ? "var(--surface2)" : undefined }}>
-      {/* Mise en page dans app.css (.suivi-ligne) : sur téléphone, l'état passe sous le nom. */}
-      <button type="button" onClick={onToggle} className="suivi-ligne">
-        <span style={{ transition: ".15s", transform: isOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
-        <span className="badge n mono" style={{ background: colorOf(d.program_code), color: "#fff", borderColor: "transparent" }}>{d.program_code}</span>
-        <span className="suivi-ligne-texte">
-          <b>{d.last_name} {d.first_name}</b>
-          <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-            {d.program_title} · {d.done}/{d.total} étape(s){d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}
-          </span>
-        </span>
-        <span className="suivi-ligne-etat">
-          <ProgressPct percent={d.percent} score={d.score} />
-          <Badge tone={scoreBadge(d.score)}>{d.score}</Badge>
-        </span>
-      </button>
-      {isOpen && (
-        <div className="suivi-detail">
-          <Roadmap steps={d.documents} />
-          {/* Sur la fiche, l'onglet de CE dossier — pas le premier (lib/lienDossier.js). */}
-          <button className="btn sm primary" style={{ marginTop: 6 }} onClick={() => navigate(lienDossier(d.learner_id, d.enrollment_id))}>
-            Gérer &amp; envoyer les documents →
-          </button>
-        </div>
-      )}
-    </div>
+    <section className="sg" style={{ "--teinte": colorOf(t.code) }}>
+      <div className="sg-titre">
+        <span className="badge n mono" style={{ background: colorOf(t.code), color: "#fff", borderColor: "transparent" }}>{t.code || "—"}</span>
+        <b>{t.titre || "Sans formation"}</b>
+        <span className="sg-titre-nb">{t.nb} dossier{t.nb > 1 ? "s" : ""}</span>
+      </div>
+      <div className="tablewrap sg-wrap">
+        <table className="sg-table" style={{ "--sg-h": `${geo.h}px`, "--sg-deborde": `${geo.deborde}px` }}>
+          <thead ref={tete}>
+            <tr>
+              <th scope="col" className="sg-nom">Stagiaire</th>
+              {t.colonnes.map((c) => {
+                const actif = !!(filtre && c.manque && filtre.cle === c.manque.cle);
+                return (
+                  <th key={c.type} scope="col" className={"sg-col" + (actif ? " on" : "")}>
+                    {/* LE NOM D'UNE COLONNE EST LE FILTRE : il remplace les 32 cartes « Ce qui
+                        manque ». Sans rien à trouver, il ne propose rien (désactivé). */}
+                    <button type="button" className="sg-col-btn" disabled={!c.manque} aria-pressed={actif}
+                      title={c.manque
+                        ? `${c.label} — manque dans ${c.manque.n} dossier${c.manque.n > 1 ? "s" : ""}. ${actif ? "Cliquer pour tout revoir." : "Cliquer pour ne voir qu'eux."}`
+                        : `${c.label} — ne manque dans aucun dossier`}
+                      onClick={() => onFiltre(actif ? null : c.manque)}>
+                      <span className="sg-col-txt">{c.label}</span>
+                    </button>
+                  </th>
+                );
+              })}
+              <th scope="col" className="sg-av">Avancement</th>
+            </tr>
+          </thead>
+          <tbody>
+            {t.lignes.map((l) => {
+              if (l.genre === "entreprise") {
+                /* UNE ENTREPRISE N'A PAS DE LIGNE DE CASES : ses documents de groupe (convention,
+                   accord de prise en charge) sont dans les colonnes de chacun de ses stagiaires, qui
+                   la suivent. Son en-tête ne sert qu'à dire d'où ils viennent — et à mener à SA
+                   fiche, où ces documents se signent. */
+                return (
+                  <tr key={`c:${l.company_id}`} className="sg-entreprise">
+                    <th colSpan={nbCol} scope="rowgroup">
+                      <span className="sg-entreprise-in">
+                        <span className="sg-entreprise-ic"><Icon name="building" size={13} aria-hidden="true" /></span>
+                        <b>{l.company_name}</b>
+                        <span className="sg-entreprise-nb">
+                          {l.n} stagiaire{l.n > 1 ? "s" : ""}{l.complets > 0 ? ` dont ${l.complets} complet${l.complets > 1 ? "s" : ""}` : ""}
+                        </span>
+                        {entrepriseOuvrable && (
+                          <Link to={`/entreprises/${l.company_id}`} className="card-more sg-entreprise-fiche"
+                            title={`Ouvrir la fiche de ${l.company_name}`}
+                            aria-label={`Ouvrir la fiche de ${l.company_name}`}>
+                            Sa fiche <Icon name="chevron-right" size={13} aria-hidden="true" />
+                          </Link>
+                        )}
+                      </span>
+                    </th>
+                  </tr>
+                );
+              }
+              const d = l.d;
+              return (
+                <tr key={d.enrollment_id} className={l.membre ? "sg-membre" : undefined}>
+                  <th scope="row" className="sg-nom">
+                    {/* Sur la fiche, l'onglet de CE dossier — pas le premier (lib/lienDossier.js). */}
+                    <Link to={lienDossier(d.learner_id, d.enrollment_id)} title="Ouvrir le dossier : gérer et envoyer ses documents">
+                      {d.last_name} {d.first_name}
+                    </Link>
+                  </th>
+                  {t.colonnes.map((c) => {
+                    const { etat, doc } = etatCase(d, c.type);
+                    const e = ETAT_CASE[etat];
+                    const aSigner = doc?.stagiaireSign && (etat === "todo" || etat === "progress");
+                    const titre = `${c.label} — ${e.lib}${aSigner ? " · à signer" : ""}`;
+                    const actif = !!(filtre && c.manque && filtre.cle === c.manque.cle);
+                    return (
+                      <td key={c.type} className={"sg-case" + (actif ? " on" : "")} title={titre}>
+                        <Pastille etat={etat} titre={titre} />
+                      </td>
+                    );
+                  })}
+                  <td className="sg-av">
+                    <ProgressPct percent={d.percent} score={d.score} width={64}
+                      titre={`${d.done}/${d.total} étape(s)${d.to_sign ? ` · ${d.signed}/${d.to_sign} signé(s)` : ""}`} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row" className="sg-nom">Manquent</th>
+              {t.colonnes.map((c) => {
+                const actif = !!(filtre && c.manque && filtre.cle === c.manque.cle);
+                return <td key={c.type} className={"sg-manque" + (actif ? " on" : "")}>{c.manque ? c.manque.n : ""}</td>;
+              })}
+              <td className="sg-av" />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -99,17 +193,14 @@ const ENTREE_ENTREPRISES = NAV.flatMap((g) => g.items).find((it) => it.to === "/
 function Suivi() {
   const { user } = useContext(UserContext);
   const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen(user, ENTREE_ENTREPRISES);
-  const navigate = useNavigate();
   const [tab, setTab] = useState("conformite");
   const [dossiers, setDossiers] = useState([]);
   const [status, setStatus] = useState(null);
-  const [open, setOpen] = useState({});
 
   useEffect(() => {
     getSuivi().then((r) => setDossiers(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
   }, []);
 
-  const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const count = (score) => dossiers.filter((d) => d.score === score).length;
   /* LES DOSSIERS COMPLETS QUITTENT LA LISTE (demandé le 2026-09-21) : à 100 %, il n'y a plus rien à
      y faire, et ils noyaient ceux qui restent à finir. Ils ne disparaissent pas pour autant : le
@@ -117,74 +208,34 @@ function Suivi() {
      les réaffiche (un auditeur peut vouloir en ouvrir un). La règle : lib/dossiersASuivre.js. */
   const [voirComplets, setVoirComplets] = useState(false);
 
-  /* CE QUI MANQUE, nommé. Devant un auditeur, le taux ne sert à rien : ce qu'on demande, c'est
-     LA PIÈCE ABSENTE. Un « 94 % » rassurant cache précisément les 6 % qu'il faut aller chercher,
-     et la page les enfermait dans des lignes repliées qu'il fallait ouvrir une à une.
-     On agrège donc par TYPE de document : c'est ainsi qu'on traite: on ne relance pas
-     « le dossier Durand », on édite les douze conventions qui manquent. */
+  /* CE QUI MANQUE, nommé et compté par document ET par formation (lib/etapes.js). Il s'affichait en
+     cartes, une par document et par formation — 32 cartes pour 7 dossiers, un écran entier avant le
+     premier dossier. C'est désormais le pied de chaque colonne de la grille, et le nom de la colonne
+     filtre comme la carte le faisait : on ne relance pas « le dossier Durand », on édite les douze
+     conventions qui manquent. */
   const [manqueFiltre, setManqueFiltre] = useState(null);
   const manques = useMemo(() => manquesParFormation(dossiers), [dossiers]);
 
-  /* LE CODE NE S'AFFICHE QUE S'IL DISTINGUE QUELQUE CHOSE. Sur un organisme qui n'a qu'une
-     formation en cours, le répéter sur chaque carte est du bruit — et la couleur ne dirait rien
-     non plus, puisqu'elle serait la même partout. */
-  const plusieursFormations = useMemo(
-    () => new Set(manques.map((m) => m.code)).size > 1, [manques]);
-
-  // Cliquer un manque filtre la liste : la page se termine par un geste, pas par un constat.
+  // Cliquer une colonne filtre la liste : la page se termine par un geste, pas par un constat.
   const dossiersVus = useMemo(() => dossiersDuManque(dossiers, manqueFiltre), [dossiers, manqueFiltre]);
 
-  /* Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise apparaît sous
-     l'entreprise (complétion agrégée), les autres restent autonomes. On préserve l'ordre de tri
-     du backend (incomplets d'abord).
-     LE REGROUPEMENT LUI-MÊME VIT DANS `lib/dossiersASuivre.js` depuis le 2026-09-23, partagé avec
-     le tableau de bord : deux boucles écrites côte à côte auraient fini par ranger les mêmes
-     dossiers autrement, et personne n'aurait su laquelle dit vrai. Les agrégats, eux, restent
-     ici — le tableau de bord n'en a pas l'usage. */
-  const groups = useMemo(() => {
-    const out = grouperParEntreprise(dossiersVus);
-    // Agrégats par entreprise : % = somme(étapes faites)/somme(étapes) ; score = pire membre.
-    for (const g of out) {
-      if (g.type !== "company") continue;
-      const done = g.members.reduce((s, m) => s + (m.done || 0), 0);
-      const total = g.members.reduce((s, m) => s + (m.total || 0), 0);
-      g.percent = total ? Math.round((done / total) * 100) : 0;
-      g.done = done; g.total = total;
-      g.score = g.members.reduce((worst, m) =>
-        SCORE_ORDER[m.score] < SCORE_ORDER[worst] ? m.score : worst, "VERT");
-      // Feuille de route agrégée : gabarit = dossier au parcours le plus complet,
-      // puis on compte, par étape, les stagiaires l'ayant terminée / en cours.
-      const template = g.members.reduce((a, b) =>
-        (b.documents?.length || 0) > (a.documents?.length || 0) ? b : a, g.members[0]);
-      const stepMap = new Map();
-      (template.documents || []).forEach((s) =>
-        stepMap.set(s.type, { type: s.type, label: s.label, signable: !!s.stagiaireSign, company_level: !!s.company_level, done: 0, prog: 0, total: 0 }));
-      for (const m of g.members) {
-        for (const doc of (m.documents || [])) {
-          const st = stepMap.get(doc.type);
-          if (!st) continue;
-          const s = stepState(doc);
-          /* HORS DÉCOMPTE AVANT D'INCRÉMENTER LE TOTAL. Une remise « sans objet » (migration 161)
-             sort des DEUX côtés de la fraction : la compter au dénominateur empêcherait le
-             groupe d'atteindre cent pour cent dès qu'une seule personne est écartée. */
-          if (s === "skip") continue;
-          st.total++;
-          if (s === "done") st.done++; else if (s === "progress") st.prog++;
-        }
-      }
-      g.documents = [...stepMap.values()].map((st) => ({
-        ...st,
-        // Document de groupe : UNE signature partagée (organisme + entreprise), pas par
-        // stagiaire → l'état est simplement signé / en cours / à faire.
-        state: st.total && st.done === st.total ? "done" : (st.done || st.prog) ? "progress" : "todo",
-      }));
-    }
-    return out;
-  }, [dossiersVus]);
-  // Ce que la liste affiche : sans les complets, sauf à la demande — les agrégats ci-dessus
-  // restent ceux de TOUT le groupe.
+  /* Regroupe les dossiers par entreprise : un stagiaire ajouté par une entreprise se range sous elle,
+     les autres restent autonomes, dans l'ordre du serveur (les moins avancés d'abord). Le
+     regroupement vit dans `lib/dossiersASuivre.js`, partagé avec le tableau de bord : deux boucles
+     écrites côte à côte auraient fini par ranger les mêmes dossiers autrement. Il se fait sur la
+     liste ENTIÈRE, avant le masquage des complets : c'est ce qui permet de dire « dont 2 complets »
+     d'une entreprise dont on ne montre plus que les stagiaires à finir. */
+  const groups = useMemo(() => grouperParEntreprise(dossiersVus), [dossiersVus]);
+  // Ce que la liste affiche : sans les complets, sauf à la demande.
   const affiches = useMemo(() => sansLesComplets(groups, voirComplets), [groups, voirComplets]);
   const nbAffiches = affiches.reduce((n, g) => n + (g.type === "solo" ? 1 : g.membresVus.length), 0);
+
+  /* LES COLONNES VIENNENT DE TOUS LES DOSSIERS AFFICHABLES, PAS DE CEUX QUE LE FILTRE LAISSE : cliquer
+     une colonne ne doit pas en faire disparaître d'autres sous le curseur. Les complets masqués, eux,
+     n'en apportent pas — une colonne sans aucune ligne pour la remplir ne dirait rien. */
+  const pourColonnes = useMemo(
+    () => (voirComplets ? dossiers : dossiers.filter((d) => !estComplet(d))), [dossiers, voirComplets]);
+  const tableaux = useMemo(() => tableauxDuSuivi(affiches, pourColonnes, manques), [affiches, pourColonnes, manques]);
 
   return (
     <>
@@ -203,52 +254,14 @@ function Suivi() {
 
       {tab === "conformite" ? (
         <>
-          {/* LES MANQUES PASSENT DEVANT LES TAUX. La page ouvrait sur trois compteurs de
-              dossiers ; on n'y voyait donc jamais CE QU'IL FAUT ALLER CHERCHER, enfermé dans
-              des lignes repliées à ouvrir une à une. Chaque pièce absente est ici nommée,
-              comptée, et filtre la liste au clic. */}
-          {manques.length > 0 ? (
-            <div className="manque">
-              <div className="manque-t">
-                Ce qui manque
-                {manqueFiltre && (
-                  <button type="button" className="btn sm ghost" onClick={() => setManqueFiltre(null)}>
-                    <Icon name="x" size={12} /> Tout voir
-                  </button>
-                )}
-              </div>
-              <div className="manque-row">
-                {manques.map((m) => {
-                  const actif = manqueFiltre && manqueFiltre.cle === m.cle;
-                  /* `--teinte` PLUTÔT QU'UN STYLE PAR PROPRIÉTÉ : la CSS s'en sert pour le
-                     liseré, le chiffre, la bordure au survol ET le fond de l'état choisi. Une
-                     variable posée ici les emmène tous les quatre, sans dupliquer les règles
-                     en JavaScript — et sans couleur, la carte retombe sur le rouge d'origine.
-                     La palette est celle de `colorOf` : même code couleur que les badges de
-                     formation et l'arbre des archives, pour qu'une couleur veuille dire la
-                     même chose partout dans l'application. */
-                  const teinte = plusieursFormations && m.code ? colorOf(m.code) : null;
-                  return (
-                    <button key={m.cle} type="button" aria-pressed={!!actif}
-                      className={"manque-i" + (actif ? " on" : "")}
-                      style={teinte ? { "--teinte": teinte } : undefined}
-                      aria-label={`${m.n} ${m.label}${m.code ? ` — formation ${m.code}` : ""}`}
-                      onClick={() => setManqueFiltre((f) => (f && f.cle === m.cle ? null : m))}>
-                      <b className="chiffres">{m.n}</b>
-                      <span>{m.label}{plusieursFormations && m.code && <i>{m.code}</i>}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : dossiers.length > 0 && (
+          {manques.length === 0 && dossiers.length > 0 && (
             <div className="todo-calme">
               <Icon name="check-circle" size={17} aria-hidden="true" />
               Tous les dossiers sont complets, aucune pièce manquante à produire.
             </div>
           )}
 
-          {/* Les compteurs descendent : ils résument, ils ne se traitent pas. */}
+          {/* Les compteurs résument ; ils ne se traitent pas. */}
           <div className="compteurs">
             <span><b className="chiffres">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
             <span><b className="chiffres">{count("ORANGE")}</b> en cours</span><i />
@@ -262,6 +275,14 @@ function Suivi() {
           </div>
 
           <Card title={`Dossiers (${nbAffiches}${manqueFiltre ? ` sur ${dossiers.length}` : ""})`}>
+            {manqueFiltre && (
+              <div className="sg-filtre">
+                <span>Dossiers où manque <b>« {manqueFiltre.label} »</b>{manqueFiltre.code ? ` · ${manqueFiltre.code}` : ""}</span>
+                <button type="button" className="btn sm ghost" onClick={() => setManqueFiltre(null)}>
+                  <Icon name="x" size={12} /> Tout voir
+                </button>
+              </div>
+            )}
             {nbAffiches === 0 ? (
               <EmptyState icon="clipboard-check">
                 {dossiers.length === 0 ? "Aucun dossier à suivre."
@@ -269,68 +290,20 @@ function Suivi() {
                   : "Tous les dossiers sont complets. Le compteur « complets » les réaffiche."}
               </EmptyState>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {affiches.map((g) => {
-                  if (g.type === "solo") {
-                    const d = g.d;
-                    return (
-                      <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
-                        onToggle={() => toggle(d.enrollment_id)} navigate={navigate} />
-                    );
-                  }
-                  // Groupe entreprise : entête agrégé (tout le groupe) + stagiaires encore à finir.
-                  const { membresVus, complets } = g;
-                  const ckey = `c:${g.company_id}`;
-                  const cOpen = !!open[ckey];
-                  return (
-                    <div key={ckey} className="card" style={{ padding: 0, overflow: "hidden", borderColor: "var(--ember1, #c0392b)" }}>
-                      {/* DÉPLIER N'EST PAS ALLER VOIR (2026-09-23, comme au tableau de bord).
-                          L'en-tête n'était qu'une bascule : on ouvrait le groupe, on lisait ses
-                          stagiaires, et l'ENTREPRISE — qui a ses propres documents à signer, la
-                          convention, l'accord de prise en charge — restait hors d'atteinte. Le
-                          lien vit À CÔTÉ du bouton, jamais dedans : un lien dans un bouton n'est
-                          pas du HTML valide, et le clic déclencherait les deux. */}
-                      <div className="suivi-groupe-tete">
-                        <button type="button" onClick={() => toggle(ckey)} className="suivi-ligne">
-                          <span style={{ transition: ".15s", transform: cOpen ? "rotate(90deg)" : "none", color: "var(--dim)" }}><Icon name="chevron-right" size={12} /></span>
-                          <span style={{ width: 26, height: 26, borderRadius: 7, display: "grid", placeItems: "center", flexShrink: 0, background: "linear-gradient(135deg,#c0392b,#e0932e)", color: "#fff" }}><Icon name="building" size={15} /></span>
-                          <span className="suivi-ligne-texte">
-                            <b>{g.company_name}</b>
-                            <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                              {g.members.length} stagiaire(s){complets > 0 ? ` dont ${complets} complet${complets > 1 ? "s" : ""}` : ""} · {g.done}/{g.total} étape(s)
-                            </span>
-                          </span>
-                          <span className="suivi-ligne-etat">
-                            <ProgressPct percent={g.percent} score={g.score} />
-                            <Badge tone={scoreBadge(g.score)}>{g.score}</Badge>
-                          </span>
-                        </button>
-                        {entrepriseOuvrable && (
-                          <Link to={`/entreprises/${g.company_id}`} className="card-more suivi-groupe-fiche"
-                            title={`Ouvrir la fiche de ${g.company_name}`}
-                            aria-label={`Ouvrir la fiche de ${g.company_name}`}>
-                            Sa fiche <Icon name="chevron-right" size={13} aria-hidden="true" />
-                          </Link>
-                        )}
-                      </div>
-                      {cOpen && (
-                        <div className="suivi-groupe-membres">
-                          {g.documents?.length > 0 && (
-                            <div style={{ marginBottom: 4 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: "var(--dim)", marginBottom: 6 }}>PARCOURS DU GROUPE</div>
-                              <CompanyRoadmap steps={g.documents} />
-                            </div>
-                          )}
-                          {membresVus.map((d) => (
-                            <DossierRow key={d.enrollment_id} d={d} isOpen={!!open[d.enrollment_id]}
-                              onToggle={() => toggle(d.enrollment_id)} navigate={navigate} nested />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                <p className="sg-legende">
+                  <span><Pastille etat="done" /> fait</span>
+                  <span><Pastille etat="progress" /> en cours</span>
+                  <span><Pastille etat="todo" /> à faire</span>
+                  <span><Pastille etat="skip" /> sans objet</span>
+                  <span>case vide : ne concerne pas ce dossier</span>
+                  <span className="sg-legende-geste">Cliquer le nom d'un document : seuls les dossiers où il manque.</span>
+                </p>
+                {tableaux.map((t) => (
+                  <GrilleFormation key={t.code || "-"} t={t} filtre={manqueFiltre} onFiltre={setManqueFiltre}
+                    entrepriseOuvrable={entrepriseOuvrable} />
+                ))}
+              </>
             )}
           </Card>
         </>
@@ -566,6 +539,15 @@ function ArchivesView({ onError, onInfo }) {
     };
   }, [rows, q]);
 
+  /* SEULE L'ANNÉE EN COURS S'OUVRE (demandé le 2026-09-24). Chaque année s'ouvrait avec toutes ses
+     semaines : vingt-sept lignes sur deux ans, deux écrans et demi avant d'avoir ouvert quoi que ce
+     soit. Une année passée tient désormais sur une ligne, son total à droite, et s'ouvre au clic.
+     « En cours » = la plus récente qui porte des documents : en janvier, avant le premier dépôt de
+     l'année, c'est encore la précédente qu'on consulte — l'année du calendrier n'ouvrirait rien.
+     PENDANT UNE RECHERCHE, TOUT S'OUVRE : un résultat ne doit pas se cacher sous une année repliée. */
+  const anneeOuverte = tree.find((Y) => /^\d{4}$/.test(Y.label))?.label;
+  const recherche = q.trim() !== "";
+
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
 
   return (
@@ -650,7 +632,7 @@ function ArchivesView({ onError, onInfo }) {
       ) : (
         <div className="arch">
           {tree.map((Y) => (
-            <details key={Y.label} open>
+            <details key={Y.label} open={recherche || Y.label === anneeOuverte}>
               <summary className="arch-sum arch-y">{Y.label} <span className="arch-count">{Y.total}</span></summary>
               <div className="arch-in">
                 {Y.weeksArr.map((W) => (

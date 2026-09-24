@@ -89,7 +89,7 @@ test('suivi, session, pipeline et notation ouvrent la fiche sur LEUR dossier —
     const SESSION = lireUi('pages/SessionDetail.jsx');
     const PIPELINE = lireUi('pages/Pipeline.jsx');
     const NOTATION = lireUi('pages/Notation.jsx');
-    assert.match(SUIVI, /navigate\(lienDossier\(d\.learner_id, d\.enrollment_id\)\)/);
+    assert.match(SUIVI, /<Link to=\{lienDossier\(d\.learner_id, d\.enrollment_id\)\}/);
     assert.match(SESSION, /navigate\(lienDossier\(e\.learner_id, e\.id\)\)/);
     assert.match(PIPELINE, /<Link to=\{lienDossier\(r\.learner_id, r\.enrollment_id\)\} className="pipe-name">/);
     assert.match(NOTATION, /<Link to=\{lienDossier\(s\.learner_id, s\.enrollment_id\)\}/);
