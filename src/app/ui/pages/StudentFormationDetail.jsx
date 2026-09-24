@@ -131,7 +131,17 @@ function StudentFormationDetail() {
   }
 
   // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
-  const etapesPieces = pieces.map((p) => ({ kind: "piece", key: `p-${p.piece_type_id}`, p, etat: PIECE_ETAT[p.statut] || "todo" }));
+  /* UNE PIÈCE PEUT ATTENDRE PLUSIEURS FICHIERS (un justificatif en six pages). Tant qu'elle n'est
+     pas VALIDÉE et qu'il reste de la place (`nb < max`), le stagiaire doit pouvoir en ajouter —
+     sinon, le premier fichier déposé faisait passer l'étape en « à vérifier » et le bouton
+     disparaissait, bloquant les cinq pages suivantes jusqu'à un refus de l'école. On s'arrête donc
+     à l'accord (VALIDÉE) OU au plafond (`fichiers_attendus`), selon ce qui vient en premier. */
+  const etapesPieces = pieces.map((p) => {
+    const etat = PIECE_ETAT[p.statut] || "todo";
+    const nb = p.fichiers?.length || 0;
+    const max = Math.max(1, Number(p.fichiers_attendus) || 1);
+    return { kind: "piece", key: `p-${p.piece_type_id}`, p, etat, nb, max, peutAjouter: etat === "wait" && nb < max };
+  });
   /* « SIGNÉ OU PAS » NE SUFFISAIT PAS : un livret d'accueil, qui n'a aucun signataire, restait
      « À signer » et « à faire » pour toujours — et prenait la pastille « À faire » à l'étape qui
      en avait vraiment besoin. L'état vient désormais de qui doit signer (cf. lib/documentsDossier.js). */
@@ -209,6 +219,14 @@ function StudentFormationDetail() {
                                 qui passent à la ligne, pas le titre qui s'écrase. */}
                             <b style={{ flex: "1 1 160px", minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
                             <Badge tone={{ done: "g", wait: "a", refused: "r", todo: "n", current: "b" }[etat]}>{pas.label}</Badge>
+                            {/* COMBIEN SUR COMBIEN, dès qu'une pièce en attend plusieurs et qu'au
+                                moins un fichier est là : le stagiaire voit ce qu'il a déposé et
+                                combien il peut encore en ajouter. */}
+                            {e.max > 1 && e.nb > 0 && (
+                              <span className="hint" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                                {e.nb} sur {e.max} déposé{e.nb > 1 ? "s" : ""}
+                              </span>
+                            )}
                             {/* UN SEUL FICHIER : un bouton « Voir » suffit, la ligne reste courte.
                                 PLUSIEURS : ils sont listés en dessous, chacun avec son nom — le
                                 bouton unique pointait `fichiers[0]`, et le stagiaire qui envoyait
@@ -219,9 +237,12 @@ function StudentFormationDetail() {
                                 <Icon name="eye" size={14} /> Voir
                               </button>
                             )}
-                            {(e.etat === "todo" || e.etat === "refused") && (
+                            {/* AJOUTER TANT QUE C'EST OUVERT : à fournir (aucun fichier), refusé
+                                (à renvoyer), ou déposé mais pas encore au plafond (`peutAjouter`).
+                                Une fois validé — ou le plafond atteint — plus de bouton. */}
+                            {(e.etat === "todo" || e.etat === "refused" || e.peutAjouter) && (
                               <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id, e.p.fichiers_attendus)}>
-                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : "Fournir"}
+                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : e.peutAjouter ? "Ajouter" : "Fournir"}
                               </button>
                             )}
                           </div>
