@@ -230,4 +230,4 @@ async function companyParcours(conn, orgId, { programId, companyId, sessionId },
     return { steps, docs };
 }
 
-module.exports = { computeDocParcours, companyParcours, companyStepSlugs, etatDeGroupe, pourcentFait, ETATS };
+module.exports = { computeDocParcours, companyParcours, companyStepSlugs, etatDeGroupe, pourcentFait, ETATS, needsSignature, SENT };
