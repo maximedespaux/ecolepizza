@@ -194,10 +194,14 @@ function StudentFormationDetail() {
             <EmptyState icon="file-text">Aucune étape pour le moment.</EmptyState>
           ) : (
             <div className="parcours">
-              {etapes.map((e, i) => {
+              {/* ORDRE INVERSÉ À L'AFFICHAGE (demandé le 2026-09-24) : la DERNIÈRE étape en haut, la
+                  PREMIÈRE en bas. L'ordre logique de `etapes` reste le déroulé — c'est lui qui
+                  désigne l'étape « en cours » (idxCourant) —, on ne retourne que l'affichage. Le bas
+                  de la pile (première étape, i === 0) ne porte pas de trait de liaison sous elle. */}
+              {etapes.map((e, i) => ({ e, i })).reverse().map(({ e, i }) => {
                 const etat = i === idxCourant ? "current" : e.etat;
                 const pas = PASTILLE[etat] || PASTILLE.todo;
-                const dernier = i === etapes.length - 1;
+                const dernier = i === 0;
                 return (
                   <div key={e.key} className="parcours-etape" style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
                     {/* Rail vertical : pastille + trait de liaison. */}
