@@ -49,6 +49,7 @@ function StudentFormationDetail() {
   const [viewId, setViewId] = useState(null);
   const [quizDoc, setQuizDoc] = useState(null);
   const [signing, setSigning] = useState(null);
+  const [onglet, setOnglet] = useState("parcours"); // "parcours" | "emargement"
   const fileRef = useRef(null);
   const pieceCible = useRef(null); // pieceTypeId pour lequel on ouvre le sélecteur de fichier
 
@@ -131,7 +132,17 @@ function StudentFormationDetail() {
   }
 
   // Construit la liste ordonnée des ÉTAPES : d'abord les pièces à fournir, puis les documents.
-  const etapesPieces = pieces.map((p) => ({ kind: "piece", key: `p-${p.piece_type_id}`, p, etat: PIECE_ETAT[p.statut] || "todo" }));
+  /* UNE PIÈCE PEUT ATTENDRE PLUSIEURS FICHIERS (un justificatif en six pages). Tant qu'elle n'est
+     pas VALIDÉE et qu'il reste de la place (`nb < max`), le stagiaire doit pouvoir en ajouter —
+     sinon, le premier fichier déposé faisait passer l'étape en « à vérifier » et le bouton
+     disparaissait, bloquant les cinq pages suivantes jusqu'à un refus de l'école. On s'arrête donc
+     à l'accord (VALIDÉE) OU au plafond (`fichiers_attendus`), selon ce qui vient en premier. */
+  const etapesPieces = pieces.map((p) => {
+    const etat = PIECE_ETAT[p.statut] || "todo";
+    const nb = p.fichiers?.length || 0;
+    const max = Math.max(1, Number(p.fichiers_attendus) || 1);
+    return { kind: "piece", key: `p-${p.piece_type_id}`, p, etat, nb, max, peutAjouter: etat === "wait" && nb < max };
+  });
   /* « SIGNÉ OU PAS » NE SUFFISAIT PAS : un livret d'accueil, qui n'a aucun signataire, restait
      « À signer » et « à faire » pour toujours — et prenait la pastille « À faire » à l'étape qui
      en avait vraiment besoin. L'état vient désormais de qui doit signer (cf. lib/documentsDossier.js). */
@@ -142,6 +153,15 @@ function StudentFormationDetail() {
   const etapes = [...etapesPieces, ...etapesDocs, ...etapesRemises];
   // La PREMIÈRE étape non terminée (et non en attente de vérif) porte la pastille « en cours ».
   const idxCourant = etapes.findIndex((e) => e.etat === "todo" || e.etat === "refused");
+  /* CE QUI ATTEND UNE ACTION, PAR ONGLET — la pastille de chaque onglet. Côté parcours : les
+     étapes « à faire » (à fournir) ou « à renvoyer » (refusées), la même règle que la pastille
+     « en cours ». Côté émargement : les demi-journées signables MAINTENANT — ni signées, ni à
+     venir, ni verrouillées (tant que les documents ne sont pas signés, il n'y a rien à émarger,
+     et ces documents-là sont déjà comptés côté parcours). */
+  const parcoursAFaire = etapes.filter((e) => e.etat === "todo" || e.etat === "refused").length;
+  const emgGate = data?.emargement_gate || {};
+  const emargAFaire = emgGate.locked ? 0
+    : (data?.emargement || []).filter((r) => !r.signed && r.date <= (data?.today || "")).length;
 
   return (
     <>
@@ -178,16 +198,38 @@ function StudentFormationDetail() {
           désormais celle qu'il accepte vraiment (lib/formatsDepot.js). */}
       <input ref={fileRef} type="file" accept={ACCEPT_PIECE} style={{ display: "none" }} onChange={onFichier} />
 
+      {/* DEUX ONGLETS (demandé le 2026-09-24) : le parcours (documents à fournir/signer) d'un côté,
+          l'émargement de l'autre. Une pastille sur chaque onglet dit ce qui attend une action —
+          documents à fournir/signer, demi-journées à émarger — sans avoir à l'ouvrir. */}
       {data && (
-        <Card title="Mon parcours">
+        <div className="tabs" role="tablist" aria-label="Sections de la formation">
+          {[
+            { id: "parcours", label: "Mon parcours", n: parcoursAFaire },
+            { id: "emargement", label: <>Émargement<span className="tab-suite">, ma présence</span></>, n: emargAFaire },
+          ].map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={onglet === t.id}
+              className={"tab" + (onglet === t.id ? " on" : "")} onClick={() => setOnglet(t.id)}>
+              {t.label}
+              {t.n > 0 && <span className="tab-bulle" aria-label={`${t.n} à traiter`}>{t.n}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data && onglet === "parcours" && (
+        <Card>
           {etapes.length === 0 ? (
             <EmptyState icon="file-text">Aucune étape pour le moment.</EmptyState>
           ) : (
             <div className="parcours">
-              {etapes.map((e, i) => {
+              {/* ORDRE INVERSÉ À L'AFFICHAGE (demandé le 2026-09-24) : la DERNIÈRE étape en haut, la
+                  PREMIÈRE en bas. L'ordre logique de `etapes` reste le déroulé — c'est lui qui
+                  désigne l'étape « en cours » (idxCourant) —, on ne retourne que l'affichage. Le bas
+                  de la pile (première étape, i === 0) ne porte pas de trait de liaison sous elle. */}
+              {etapes.map((e, i) => ({ e, i })).reverse().map(({ e, i }) => {
                 const etat = i === idxCourant ? "current" : e.etat;
                 const pas = PASTILLE[etat] || PASTILLE.todo;
-                const dernier = i === etapes.length - 1;
+                const dernier = i === 0;
                 return (
                   <div key={e.key} className="parcours-etape" style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
                     {/* Rail vertical : pastille + trait de liaison. */}
@@ -209,6 +251,14 @@ function StudentFormationDetail() {
                                 qui passent à la ligne, pas le titre qui s'écrase. */}
                             <b style={{ flex: "1 1 160px", minWidth: 0 }}>Fournir&nbsp;: {e.p.label}</b>
                             <Badge tone={{ done: "g", wait: "a", refused: "r", todo: "n", current: "b" }[etat]}>{pas.label}</Badge>
+                            {/* COMBIEN SUR COMBIEN, dès qu'une pièce en attend plusieurs et qu'au
+                                moins un fichier est là : le stagiaire voit ce qu'il a déposé et
+                                combien il peut encore en ajouter. */}
+                            {e.max > 1 && e.nb > 0 && (
+                              <span className="hint" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                                {e.nb} sur {e.max} déposé{e.nb > 1 ? "s" : ""}
+                              </span>
+                            )}
                             {/* UN SEUL FICHIER : un bouton « Voir » suffit, la ligne reste courte.
                                 PLUSIEURS : ils sont listés en dessous, chacun avec son nom — le
                                 bouton unique pointait `fichiers[0]`, et le stagiaire qui envoyait
@@ -219,9 +269,12 @@ function StudentFormationDetail() {
                                 <Icon name="eye" size={14} /> Voir
                               </button>
                             )}
-                            {(e.etat === "todo" || e.etat === "refused") && (
+                            {/* AJOUTER TANT QUE C'EST OUVERT : à fournir (aucun fichier), refusé
+                                (à renvoyer), ou déposé mais pas encore au plafond (`peutAjouter`).
+                                Une fois validé — ou le plafond atteint — plus de bouton. */}
+                            {(e.etat === "todo" || e.etat === "refused" || e.peutAjouter) && (
                               <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id, e.p.fichiers_attendus)}>
-                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : "Fournir"}
+                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : e.peutAjouter ? "Ajouter" : "Fournir"}
                               </button>
                             )}
                           </div>
@@ -315,11 +368,11 @@ function StudentFormationDetail() {
         </Card>
       )}
 
-      {data && (() => {
+      {data && onglet === "emargement" && (() => {
         const gate = data.emargement_gate || {};
         const locked = !!gate.locked;
         return (
-        <Card title="Émargement, ma présence">
+        <Card>
           {locked && (
             <div className="emarg-lock">
               <Icon name="lock" size={15} />
