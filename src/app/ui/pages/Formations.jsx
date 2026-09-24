@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, saveArchiveTree, getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence, getConditions } from "../api/apiClient.js";
+import { getFormations, createFormation, updateFormation, deleteFormation, reorderFormations, getFormationSteps, saveFormationSteps, getFormation, getEquivalences, createEquivalence, updateEquivalence, deleteEquivalence, getConditions, getArborescenceCommune } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
-import ArchiveTreeEditor, { treeHasEmptyName, ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
+import { ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
+import ArborescenceCommune from "../components/ArborescenceCommune.jsx";
+import { groupesDepuis } from "../lib/arborescence.js";
 import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -17,6 +19,7 @@ function Formations() {
   const [programs, setPrograms] = useState([]);
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(null); // formation en cours d'édition
+  const [arborescence, setArborescence] = useState(false); // l'éditeur de l'arborescence COMMUNE
 
   async function load() {
     try {
@@ -60,7 +63,14 @@ function Formations() {
     <>
       <PageHead eyebrow="Catalogue" title="Formations"
         lead="Les programmes proposés par l'École Pizza. Glissez une ligne (poignée ⠿) pour réorganiser l'ordre ; cliquez « Modifier » pour éditer le contenu pédagogique et le niveau."
-        actions={<button className="btn primary" onClick={() => setEditing({ _new: true })}>＋ Nouvelle formation</button>}
+        actions={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {/* UNE ARBORESCENCE POUR TOUTES LES FORMATIONS (2026-09-24) : elle se règle ici, une fois,
+                et non plus dans chaque formation, où il fallait la recomposer dix fois. */}
+            <button className="btn ghost" onClick={() => setArborescence(true)}>Arborescence d'archivage</button>
+            <button className="btn primary" onClick={() => setEditing({ _new: true })}>＋ Nouvelle formation</button>
+          </div>
+        }
       />
       <StatusMessage status={status} />
 
@@ -122,7 +132,12 @@ function Formations() {
           onClose={() => setEditing(null)}
           onSaved={onSaved}
           onError={(m) => setStatus({ type: "error", message: m })}
+          onOuvrirArborescence={() => { setEditing(null); setArborescence(true); }}
         />
+      )}
+      {arborescence && (
+        <ArborescenceCommune onClose={() => setArborescence(false)}
+          onSaved={() => setStatus({ type: "success", message: "Arborescence d'archivage enregistrée pour toutes les formations." })} />
       )}
     </>
   );
@@ -135,7 +150,45 @@ const FIELDS = [
   "horaires", "rs_code", "hygiene", "needs_emargement", "active",
 ];
 
-function FormationModal({ program, onClose, onSaved, onError }) {
+/* L'onglet « Arborescence d'archivage » d'une formation : l'arborescence COMMUNE, lue pour elle.
+   Chargée à l'ouverture de l'onglet seulement — elle parcourt le parcours de toutes les formations. */
+function ApercuArborescence({ program, form, eqMap, kind, setKind, onModifier }) {
+  const [etat, setEtat] = useState(null);
+  const [erreur, setErreur] = useState(null);
+  useEffect(() => {
+    getArborescenceCommune().then((r) => setEtat(r.data || {})).catch((e) => setErreur(e.message));
+  }, []);
+  const groupes = groupesDepuis(eqMap);
+  if (erreur) return <p className="hint">{erreur}</p>;
+  if (!etat) return <p className="hint">Chargement…</p>;
+  const isEnt = kind === "entreprise";
+  const documents = etat.documents || [];
+  const deGroupe = new Set(documents.filter((d) => d.company_level).map((d) => d.cle));
+  const f = (etat.formations || []).find((x) => x.id === program.id);
+  const formation = f && { ...f, code: form.code || f.code, title: form.title || f.title,
+    documents: isEnt ? f.documents : f.documents.filter((c) => !deGroupe.has(c)) };
+  return (
+    <>
+      <div className="arbo-avis">
+        L'arborescence d'archivage est <b>commune à toutes les formations</b> : un document que {form.code || "cette formation"} n'a
+        pas y est simplement sauté pour elle.{etat.propose ? " Elle n'est pas encore enregistrée : ce qui suit est la proposition, faite des arborescences déjà réglées." : ""}
+        <div style={{ marginTop: 8 }}>
+          <button type="button" className="btn sm" onClick={onModifier}>Modifier l'arborescence commune</button>
+        </div>
+      </div>
+      <div className="seg" style={{ marginBottom: 12 }}>
+        <button type="button" className={"seg-btn" + (!isEnt ? " on" : "")} onClick={() => setKind("stagiaire")}>Archivage stagiaire</button>
+        <button type="button" className={"seg-btn" + (isEnt ? " on" : "")} onClick={() => setKind("entreprise")}>Archivage entreprise</button>
+      </div>
+      <div className="fm-archives-apercu">
+        <ArchiveTreePreview tree={isEnt ? etat.company_tree : etat.tree} formation={formation}
+          palette={new Map(documents.map((d) => [d.cle, d.label]))} groupes={groupes} />
+      </div>
+    </>
+  );
+}
+
+function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescence }) {
   const isNew = !program.id;
   const [form, setForm] = useState(() => {
     const f = {};
@@ -147,8 +200,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const [breakSlug, setBreakSlug] = useState(null); // point d'accès émargement (slug avant la flèche)
   const [companySteps, setCompanySteps] = useState([]); // sous-parcours « arrivée via entreprise » (slugs ordonnés)
   const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point d'accès émargement du volet entreprise
-  const [archiveTree, setArchiveTree] = useState({ folders: [] });
-  const [companyArchiveTree, setCompanyArchiveTree] = useState({ folders: [] });
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU »)
   const [equivs, setEquivs] = useState([]); // liste des équivalences (pour l'ajout de variantes OU)
   const [conditions, setConditions] = useState([]); // conditions perso (pour conditionner une pièce en « OU »)
@@ -168,17 +219,10 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   const pickerHex = /^#[0-9a-fA-F]{6}$/.test(effColor) ? effColor : "#5b6079";
 
   useEffect(() => { if (program.id) getFormationSteps(program.id).then((r) => setSteps(r.data || [])).catch(() => {}); }, [program.id]);
-  // Arborescence d'archivage enregistrée sur la formation.
+  // Réglages lus sur la fiche complète (la liste ne les renvoie pas).
   useEffect(() => {
     if (!program.id) return;
     getFormation(program.id).then((r) => {
-      const parseTree = (raw) => {
-        let t = { folders: [] };
-        if (raw) { try { t = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { t = { folders: [] }; } }
-        return t && t.folders ? t : { folders: [] };
-      };
-      setArchiveTree(parseTree(r.data?.archive_tree));
-      setCompanyArchiveTree(parseTree(r.data?.company_archive_tree));
       if (r.data && r.data.needs_emargement != null) setForm((p) => ({ ...p, needs_emargement: r.data.needs_emargement ? 1 : 0 }));
       // horaires n'est pas renvoyé par la liste (getFormations) : on le charge ici.
       if (r.data && "horaires" in r.data) setForm((p) => ({ ...p, horaires: r.data.horaires || "" }));
@@ -268,16 +312,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
-    if (!isNew && treeHasEmptyName(archiveTree)) {
-      setTab("archives"); setArchKind("stagiaire");
-      onError("Nommez tous les dossiers de l'arborescence d'archivage stagiaire avant d'enregistrer.");
-      return;
-    }
-    if (!isNew && treeHasEmptyName(companyArchiveTree)) {
-      setTab("archives"); setArchKind("entreprise");
-      onError("Nommez tous les dossiers de l'arborescence d'archivage entreprise avant d'enregistrer.");
-      return;
-    }
     setSaving(true);
     try {
       if (isNew) {
@@ -296,7 +330,6 @@ function FormationModal({ program, onClose, onSaved, onError }) {
             // (lib/groupesPieces.js) ; ne pas l'envoyer évite d'entretenir une valeur morte.
             ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null }
           : { slug: s.slug, active: s.active })), breakSlug || null, companySteps, companyBreakSlug || null);
-        await saveArchiveTree(program.id, archiveTree, companyArchiveTree).catch(() => {}); // tolère l'absence de migration
         onSaved(ru?.avertissement ? `Formation mise à jour. ${ru.avertissement}` : "Formation mise à jour.");
       }
     } catch (e) {
@@ -440,38 +473,13 @@ function FormationModal({ program, onClose, onSaved, onError }) {
           </div>
 
           <div style={{ display: tab === "archives" ? "block" : "none" }}>
-            {(() => {
-              const isEntArch = archKind === "entreprise";
-              const curTree = isEntArch ? companyArchiveTree : archiveTree;
-              const setCurTree = isEntArch ? setCompanyArchiveTree : setArchiveTree;
-              // Documents attribuables. Les feuilles d'émargement sont DÉJÀ présentes dans
-              // `steps` (injectées depuis emargement_template, doc_type EMARGEMENT) : elles
-              // apparaissent donc sous leur vrai nom, avec un slug qui existe réellement.
-              // Archivage ENTREPRISE : l'inscription passant par une entreprise, tout document
-              // signé peut lui être archivé — groupe (🏢) comme stagiaire → parcours actif entier.
-              const toDoc = (s) => ({ slug: s.slug, label: s.label, quiz_id: s.quiz_id, company_level: !!s.company_level });
-              const docs = isEntArch
-                ? steps.filter((s) => s.active).map(toDoc)
-                : steps.filter((s) => s.active && !s.company_level).map(toDoc);
-              return (
-                <>
-                  <div className="seg" style={{ marginBottom: 12 }}>
-                    <button type="button" className={"seg-btn" + (!isEntArch ? " on" : "")} onClick={() => setArchKind("stagiaire")}>Archivage stagiaire</button>
-                    <button type="button" className={"seg-btn" + (isEntArch ? " on" : "")} onClick={() => setArchKind("entreprise")}>Archivage entreprise</button>
-                  </div>
-                  {/* En classes et non en style : sur un écran étroit, l'aperçu passe SOUS l'éditeur
-                      (cf. `.fm-archives` dans app.css). À deux colonnes sur un téléphone, il
-                      coupait chaque nom de dossier au bout de dix caractères. */}
-                  <div className="fm-archives">
-                    <ArchiveTreeEditor tree={curTree} onChange={setCurTree} eqMap={eqMap} docs={docs} />
-                    <div className="fm-archives-apercu">
-                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--dim)", marginBottom: 8 }}>Aperçu, {isEntArch ? "entreprise" : "stagiaire"}</div>
-                      <ArchiveTreePreview tree={curTree} code={form.code} title={form.title} />
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
+            {/* L'ARBORESCENCE EST COMMUNE (migration 182) : ici, on la LIT pour cette formation —
+                ce qu'elle saute, grisé ; ce qu'elle ne nomme pas, listé. Elle se modifie une fois,
+                pour toutes, depuis la liste des formations. */}
+            {tab === "archives" && !isNew && (
+              <ApercuArborescence program={program} form={form} eqMap={eqMap} kind={archKind} setKind={setArchKind}
+                onModifier={onOuvrirArborescence} />
+            )}
           </div>
 
           {/* MONTÉ SEULEMENT QUAND ON L'OUVRE, à la différence des autres onglets qu'un

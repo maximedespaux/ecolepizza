@@ -753,10 +753,35 @@ export function getPlayableChapters(programId) {
 export function getFormation(id) {
   return request(`/formations/${id}`);
 }
-export function saveArchiveTree(id, tree, company_tree) {
-  const body = { tree };
-  if (company_tree !== undefined) body.company_tree = company_tree;
-  return request(`/formations/${id}/archive-tree`, { method: "PUT", body: JSON.stringify(body) });
+/* L'ARBORESCENCE D'ARCHIVAGE COMMUNE (migration 182) — une pour toutes les formations. La lecture
+   rend aussi la palette des documents de toutes les formations, et, tant que rien n'est
+   enregistré, la PROPOSITION : les arborescences des formations fusionnées (`propose: true`). */
+export function getArborescenceCommune() {
+  return request("/formations/arborescence");
+}
+export function saveArborescenceCommune(tree, company_tree) {
+  return request("/formations/arborescence", { method: "PUT", body: JSON.stringify({ tree, company_tree }) });
+}
+
+/**
+ * L'ARCHIVE ZIP DU COFFRE — ?session=…, ?dossier=… ou ?annee=&semaine=&formation=.
+ *
+ * D'ABORD COMPTER, PUIS LAISSER LE NAVIGATEUR TÉLÉCHARGER. Un lien direct livrerait, pour une
+ * sélection vide, un « fichier » fait du message d'erreur — ou un « Échec : aucun fichier » muet.
+ * Le comptage répond un vrai message ; le téléchargement, lui, passe par le navigateur, qui en
+ * affiche la progression et écrit sur le disque au fil de l'eau : une année du coffre (plusieurs
+ * centaines de mégaoctets) ne transite jamais par la mémoire de la page.
+ */
+export async function telechargerArchive(params) {
+  const qs = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v != null && v !== "")).toString();
+  const r = await request(`/suivi/archives/zip?${qs}&compter=1`);
+  const a = document.createElement("a");
+  a.href = `${API_BASE_URL}/suivi/archives/zip?${qs}`;
+  a.download = (r && r.data && r.data.nom) || "archive.zip";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return r && r.data;
 }
 
 // --- Sessions ---

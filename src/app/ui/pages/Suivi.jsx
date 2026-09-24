@@ -4,7 +4,7 @@ import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl } from "../api/apiClient.js";
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl, telechargerArchive } from "../api/apiClient.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
@@ -471,6 +471,14 @@ function ArchivesView({ onError, onInfo }) {
   }
   const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap((L) => L.docs));
   const formationDocs = (F) => F.learnersArr.flatMap((L) => L.docs);
+  /* L'ARCHIVE ZIP D'UNE LIGNE DU COFFRE (2026-09-24) — une année, une semaine, une formation —, avec
+     les clés MÊMES de l'arbre (« - » pour une valeur absente) : la ligne et son archive désignent
+     exactement les mêmes documents. Rangée selon l'arborescence d'archivage. */
+  const ZipBtn = ({ params, quoi }) => (
+    <button type="button" className="iconbtn" title={`Télécharger l'archive (ZIP) : ${quoi}`} aria-label={`Télécharger l'archive ZIP : ${quoi}`}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); telechargerArchive(params).catch((err) => onError?.(err.message)); }}
+      style={{ marginLeft: 8 }}><Icon name="download" size={15} /></button>
+  );
   // Bouton de suppression sur une ligne de regroupement (semaine / formation / stagiaire).
   const DelBtn = ({ onClick, title }) => (
     <button type="button" className="iconbtn del" title={title}
@@ -633,11 +641,14 @@ function ArchivesView({ onError, onInfo }) {
         <div className="arch">
           {tree.map((Y) => (
             <details key={Y.label} open={recherche || Y.label === anneeOuverte}>
-              <summary className="arch-sum arch-y">{Y.label} <span className="arch-count">{Y.total}</span></summary>
+              <summary className="arch-sum arch-y">{Y.label} <span className="arch-count">{Y.total}</span>
+                <ZipBtn params={{ annee: Y.label }} quoi={Y.label === "-" ? "sans année" : Y.label} />
+              </summary>
               <div className="arch-in">
                 {Y.weeksArr.map((W) => (
                   <details key={W.week}>
                     <summary className="arch-sum">{W.week ? `Semaine ${W.week}` : "Sans session"} <span className="arch-count">{W.total}</span>
+                      <ZipBtn params={{ annee: Y.label, semaine: W.week ? String(W.week) : "-" }} quoi={`${W.week ? `semaine ${W.week}` : "sans session"}, ${Y.label}`} />
                       {peutModifier && <DelBtn title="Supprimer toute la semaine" onClick={() => deleteDocs(weekDocs(W), W.week ? `Semaine ${W.week}` : "Sans session")} />}
                     </summary>
                     <div className="arch-in">
@@ -646,6 +657,7 @@ function ArchivesView({ onError, onInfo }) {
                           <summary className="arch-sum">
                             <span className="badge n mono" style={{ background: colorOf(F.code), color: "#fff", borderColor: "transparent" }}>{F.code}</span>
                             {" "}{F.title} <span className="arch-count">{F.total}</span>
+                            <ZipBtn params={{ annee: Y.label, semaine: W.week ? String(W.week) : "-", formation: F.code }} quoi={`${F.code}, ${W.week ? `semaine ${W.week}` : "sans session"}, ${Y.label}`} />
                             {peutModifier && <DelBtn title="Supprimer toute la formation" onClick={() => deleteDocs(formationDocs(F), F.title)} />}
                           </summary>
                           <div className="arch-in">
