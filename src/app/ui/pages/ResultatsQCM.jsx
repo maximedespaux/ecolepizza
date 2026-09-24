@@ -319,6 +319,52 @@ function grouperParFormation(rows) {
  * QCM » (sans rapport avec le Pizza Quest). Vue d'ensemble par QCM (groupée par formation), puis
  * par question / par stagiaire.
  */
+/* LA VUE CHOISIE (« par semaine » ou « globale ») se retrouve à la visite suivante. Une commodité de ce
+   navigateur, rien de plus : sans stockage (navigation privée…), on retombe sur la semaine en cours. */
+const CLE_VUE = "impastio.resultatsQcm.vue";
+const vueMemorisee = () => { try { return localStorage.getItem(CLE_VUE); } catch { return null; } };
+const memoriserVue = (v) => { try { localStorage.setItem(CLE_VUE, v); } catch { /* sans stockage : rien à retenir */ } };
+
+/* PAR SEMAINE : l'historique d'un QCM, semaine de session après semaine de session, côte à côte, pour
+   comparer les promotions sans passer d'une semaine à l'autre. Le serveur les range comme le filtre et
+   les calcule comme le total : cliquer une semaine y bascule, ce QCM restant ouvert, et y retrouve ces
+   chiffres. Même rangée que la liste des QCM, compacte : la colonne fait 380 px. */
+function SemainesTable({ lignes, quiz, onOuvrir }) {
+  const note = quiz.kind === "GRADED";
+  if (!lignes.length) return <p className="hint" style={{ margin: 0 }}>Aucune réponse.</p>;
+  const coupe = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const rangee = { display: "flex", alignItems: "center", gap: 8, textAlign: "left", padding: "7px 9px", borderRadius: 9,
+    color: "var(--text)", background: "transparent", border: "1px solid var(--border-soft)" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {lignes.map((l) => {
+        const cle = l.annee ? `${l.annee}-${String(l.semaine).padStart(2, "0")}` : null;
+        const contenu = (
+          <>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontWeight: 600, fontSize: 13, ...coupe }}>
+                {cle ? `S${l.semaine} · ${l.annee}` : "Sans session"}
+                {l.formations && <span className="hint" style={{ fontWeight: 400 }}> · {l.formations}</span>}
+              </span>
+              <span className="hint" style={{ display: "block", fontSize: 11.5, ...coupe }}>
+                {l.responses} rép.{note && l.avg_pct != null && ` · ${l.avg_pct} % moy.`}
+                {!cle && " · dossier retiré de sa session"}
+              </span>
+            </span>
+            {note && quiz.pass_score != null && l.pass_rate != null && <Badge tone={pctTone(l.pass_rate)}>{l.pass_rate} %</Badge>}
+            {cle && <Icon name="chevron-right" size={14} style={{ flex: "none" }} />}
+          </>
+        );
+        return cle ? (
+          <button key={cle} type="button" onClick={() => onOuvrir(cle)} title="Voir cette semaine" style={{ ...rangee, cursor: "pointer" }}>{contenu}</button>
+        ) : (
+          <div key="sans-session" style={rangee}>{contenu}</div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResultatsQCM() {
   const [rows, setRows] = useState(null);
   const [status, setStatus] = useState(null);
@@ -354,6 +400,21 @@ function ResultatsQCM() {
      prendrait pour une absence de réponses. */
   const args = () => [null, semaine ? null : (selYear || null), semaine || null];
 
+  /* PAR SEMAINE / GLOBALE. La vue globale EST « toutes les semaines » (semaine === "") : le bouton et
+     l'entrée du sélecteur disent la même chose — jamais deux états qui pourraient se contredire. */
+  const globale = semaine === "";
+  const semainesDispo = grouperParSemaine(filtres.sessions);
+  // L'onglet « Par semaine » du détail n'existe qu'en vue globale : hors d'elle, on retombe sur les questions.
+  const vueEffective = !globale && vue === "semaines" ? "questions" : vue;
+  function choisirSemaine(v) {
+    memoriserVue(v ? "semaine" : "globale");
+    setSemaine(v);
+  }
+  function choisirVue(v) {
+    if (v === "globale") choisirSemaine("");
+    else choisirSemaine(semaineParDefaut(semainesDispo) || "");
+  }
+
   /* 1) OUVRIR SUR LA SEMAINE EN COURS — la même règle que Notation (`semaineParDefaut`) : celle
      d'aujourd'hui si elle a des réponses, sinon la plus récente qui en a. On attend la liste
      avant de charger quoi que ce soit, sans quoi l'écran afficherait d'abord TOUT, puis
@@ -363,7 +424,9 @@ function ResultatsQCM() {
       .then((r) => {
         const f = r.filtres || { sessions: [], years: [] };
         setFiltres(f);
-        setSemaine(semaineParDefaut(grouperParSemaine(f.sessions)) || "");
+        const parDefaut = semaineParDefaut(grouperParSemaine(f.sessions)) || "";
+        // Vue globale retenue à la dernière visite : toutes les semaines d'emblée.
+        setSemaine(vueMemorisee() === "globale" ? "" : parDefaut);
       })
       .catch((e) => { setStatus({ type: "error", message: e.message }); setSemaine(""); });
   }, []);
@@ -458,13 +521,21 @@ function ResultatsQCM() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "0 0 14px" }}>
           {/* LE SÉLECTEUR DE NOTATION, avec son entrée « toutes » en plus. Il montre sur chaque
               semaine les badges de ses formations — on choisit en voyant ce qu'on va trouver. */}
-          <div style={{ flex: "1 1 320px", maxWidth: 460 }}>
-            <SelecteurSemaine sessions={filtres.sessions} valeur={semaine || ""} onChoisir={setSemaine}
-              label="Semaine des réponses" toutes="Toutes les semaines" vide="Aucune réponse enregistrée." />
+          <div className="tabs" role="tablist" aria-label="Vue des résultats" style={{ display: "flex", gap: 4 }}>
+            <button type="button" role="tab" aria-selected={!globale} className={"tab" + (!globale ? " on" : "")}
+              disabled={!semainesDispo.length} onClick={() => choisirVue("semaine")}>Par semaine</button>
+            <button type="button" role="tab" aria-selected={globale} className={"tab" + (globale ? " on" : "")}
+              onClick={() => choisirVue("globale")}>Globale</button>
           </div>
+          {!globale && (
+            <div style={{ flex: "1 1 320px", maxWidth: 460 }}>
+              <SelecteurSemaine sessions={filtres.sessions} valeur={semaine || ""} onChoisir={choisirSemaine}
+                label="Semaine des réponses" toutes="Toutes les semaines" vide="Aucune réponse enregistrée." />
+            </div>
+          )}
           {/* L'année ne sert que sur « toutes les semaines » : une semaine désigne déjà la sienne. */}
           {!semaine && filtres.years.length > 0 && (
-            <select className="inp" value={selYear} onChange={(e) => setSelYear(e.target.value)} style={{ maxWidth: 150 }}
+            <select className="inp" value={selYear} onChange={(e) => setSelYear(e.target.value)} style={{ maxWidth: 190 }}
               aria-label="Filtrer par année">
               <option value="">Toutes les années</option>
               {filtres.years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
@@ -522,10 +593,15 @@ function ResultatsQCM() {
                     ) : (
                       <>
                         <div className="tabs" role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border-soft)" }}>
-                          <button type="button" role="tab" className={"tab" + (vue === "questions" ? " on" : "")} onClick={() => setVue("questions")}>Par question</button>
-                          <button type="button" role="tab" className={"tab" + (vue === "stagiaires" ? " on" : "")} onClick={() => setVue("stagiaires")}>Par stagiaire ({detail.learners.length})</button>
+                          <button type="button" role="tab" className={"tab" + (vueEffective === "questions" ? " on" : "")} onClick={() => setVue("questions")}>Par question</button>
+                          <button type="button" role="tab" className={"tab" + (vueEffective === "stagiaires" ? " on" : "")} onClick={() => setVue("stagiaires")}>Par stagiaire ({detail.learners.length})</button>
+                          {globale && detail.par_semaine && (
+                            <button type="button" role="tab" className={"tab" + (vueEffective === "semaines" ? " on" : "")} onClick={() => setVue("semaines")}>Par semaine ({detail.par_semaine.length})</button>
+                          )}
                         </div>
-                        {vue === "questions" ? (
+                        {vueEffective === "semaines" ? (
+                          <SemainesTable lignes={detail.par_semaine || []} quiz={detail.quiz} onOuvrir={choisirSemaine} />
+                        ) : vueEffective === "questions" ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                             {detail.questions.map((q, i) => <DetailQuestion key={q.id} q={q} num={i + 1} />)}
                           </div>
