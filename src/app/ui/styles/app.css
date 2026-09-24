@@ -1153,15 +1153,6 @@ tbody tr:last-child td{border-bottom:none}
   .pf-brk{min-width:44px;min-height:40px;justify-content:center}
   .pf-or-add{min-height:36px}
 }
-/* Onglet « Arborescence d'archivage » : l'éditeur et son aperçu côte à côte, l'aperçu collé en
-   haut pendant qu'on fait défiler l'éditeur. Sous 640 px, deux colonnes ne laissent plus lire un
-   nom de dossier : l'aperçu passe dessous, et cesse d'être collant. */
-.fm-archives{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
-.fm-archives-apercu{position:sticky;top:0;border:1px solid var(--border-soft);border-radius:10px;padding:12px;background:var(--surface3, #faf9f7)}
-@media (max-width:640px){
-  .fm-archives{grid-template-columns:minmax(0,1fr)}
-  .fm-archives-apercu{position:static}
-}
 /* L'ARBORESCENCE COMMUNE (2026-09-24). Un avis en tête — la proposition, la migration attendue —,
    bleu d'information et non l'ambre des alertes : rien n'y est faux, il y a seulement à relire. */
 .arbo-avis{margin-bottom:12px;padding:11px 13px;border-radius:12px;font-size:13px;line-height:1.5;
@@ -1170,15 +1161,120 @@ tbody tr:last-child td{border-bottom:none}
 .arbo-avis ul{margin:4px 0 0;padding-left:18px}
 .arbo-avis code{font-size:12px}
 .arbo-avis-t{margin:10px 0 0;font-weight:800}
-.arbo-apercu-t{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;
-  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
-.arbo-apercu-t select{width:auto;padding:4px 8px;font-size:12px;text-transform:none;letter-spacing:0}
-/* Un document que la formation n'a pas : sa PLACE reste lisible, barrée d'un trait léger — c'est
-   une place commune, sautée pour elle, pas une erreur à corriger. */
-.arbo-saute{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--dim) 55%,transparent)}
-.arbo-legende{margin-bottom:6px;font-family:var(--font-b);font-size:12px;color:var(--dim)}
-.arbo-non-places{margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-family:var(--font-b);font-size:12.5px;color:var(--muted)}
-.arbo-non-places ul{margin:4px 0 0;padding-left:18px}
+/* L'ARBRE (2026-09-25) — dessiné comme l'explorateur de fichiers qu'il produira, modifié en place.
+   Il remplace un formulaire par dossier (1 480 px pour cinq dossiers, mesuré au banc) et un aperçu
+   qui redessinait le même arbre à côté. */
+.arbo-barre{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.arbo-compte{display:inline-grid;place-items:center;min-width:20px;height:18px;padding:0 6px;margin-left:6px;border-radius:9px;
+  font-size:11px;font-weight:700;background:color-mix(in srgb,currentColor 13%,transparent)}
+.arbo-pour{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.arbo-pour select{width:auto;padding:5px 8px;font-size:13px;font-weight:600;text-transform:none;letter-spacing:0}
+.arbo-intro{margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--muted)}
+.arbo{border:1px solid var(--border-soft);border-radius:12px;padding:10px 12px 12px;background:var(--surface)}
+.arbo-ul{list-style:none;margin:0;padding:0 0 0 24px}
+.arbo-ul.racine{padding-left:0}
+/* LES FILETS DE L'ARBRE, tracés par chaque élément et non par la liste : le trait vertical d'un
+   dernier enfant s'arrête à son raccord (└), au lieu de longer tout le sous-arbre qui le suit. */
+.arbo-noeud,.arbo-doc,.arbo-vide{position:relative}
+.arbo-ul:not(.racine) > li::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:1px;background:var(--border)}
+.arbo-ul:not(.racine) > li::after{content:"";position:absolute;left:-14px;top:17px;width:11px;height:1px;background:var(--border)}
+.arbo-ul:not(.racine) > li:last-child::before{bottom:auto;height:17px}
+.arbo-ul:not(.racine) > li.arbo-doc::after,.arbo-ul:not(.racine) > li.arbo-vide::after{top:15px}
+.arbo-ul:not(.racine) > li.arbo-doc:last-child::before,.arbo-ul:not(.racine) > li.arbo-vide:last-child::before{height:15px}
+/* Un dossier : une ligne. Ses actions n'apparaissent qu'au survol (ou au clavier) : affichées sur
+   chaque ligne, elles noyaient les noms, qui sont ce qu'on lit. */
+.arbo-ligne{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:34px;padding:2px 6px;border-radius:8px}
+.arbo-ligne:hover,.arbo-ligne:focus-within{background:var(--surface2)}
+.arbo-ic-dossier{flex:none;color:var(--ember1)}
+.arbo-nom{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;padding:2px 4px;margin:0 -4px;border:0;border-radius:6px;
+  background:none;font:inherit;font-size:14px;font-weight:700;color:var(--text);text-align:left}
+button.arbo-nom{cursor:text}
+button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
+/* Un champ se reconnaît sans lire d'accolades : une pastille, et sa valeur d'exemple à côté. */
+.arbo-champ{display:inline-flex;align-items:center;padding:1px 7px;border-radius:6px;font-size:12px;font-weight:700;
+  color:var(--blue);background:var(--blue-bg);border:1px solid color-mix(in srgb,var(--blue) 22%,transparent)}
+.arbo-exemple{font-family:var(--font-m);font-size:12px;color:var(--dim)}
+.arbo-tag{padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
+.arbo-tag.ou{color:var(--ember1);background:color-mix(in srgb,var(--ember1) 7%,transparent);border-color:color-mix(in srgb,var(--ember1) 28%,transparent)}
+.arbo-sans-nom,.arbo-ligne.sans-nom .arbo-nom{color:var(--ember1);font-style:italic}
+.arbo-actions{display:inline-flex;gap:4px;margin-left:auto;opacity:0;transition:opacity .12s var(--ease)}
+.arbo-ligne:hover .arbo-actions,.arbo-ligne:focus-within .arbo-actions{opacity:1}
+.arbo-act{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 9px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surface);font:inherit;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer}
+.arbo-act:hover{border-color:var(--ember1);color:var(--ember1)}
+.arbo-act.seul{width:28px;padding:0;justify-content:center}
+/* Renommer : le champ, et les champs dynamiques en pastilles à cliquer — plus de liste déroulante. */
+.arbo-renommer{flex:1;display:flex;flex-direction:column;gap:6px;padding:4px 0}
+.arbo-renommer .inp{max-width:360px;padding:6px 10px}
+.arbo-champs-insert{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.arbo-champ.bouton{cursor:pointer;font-family:inherit}
+.arbo-champ.bouton:hover{background:color-mix(in srgb,var(--blue) 18%,transparent)}
+/* Un document : une ligne plus fine, son icône dit ce qu'il est (document, QCM, choix « OU »). */
+.arbo-doc{display:flex;align-items:center;gap:8px;min-height:30px;padding:1px 6px;border-radius:7px;font-size:13px}
+.arbo-doc:hover{background:var(--surface2)}
+.arbo-ic-doc{flex:none;color:var(--dim)} .arbo-ic-doc.qcm{color:var(--blue)} .arbo-ic-doc.ou{color:var(--ember1)}
+.arbo-doc-l{min-width:0}
+.arbo-doc-qui{font-size:11.5px;color:var(--dim);white-space:nowrap}
+.arbo-retirer{display:grid;place-items:center;width:24px;height:24px;margin-left:auto;border:0;border-radius:6px;background:none;
+  color:var(--dim);cursor:pointer;opacity:0}
+.arbo-doc:hover .arbo-retirer,.arbo-retirer:focus-visible{opacity:1}
+.arbo-retirer:hover{color:var(--ember1);background:color-mix(in srgb,var(--ember1) 10%,transparent)}
+/* Sauté pour la formation de l'aperçu : sa PLACE reste lisible, barrée — une place commune, pas une erreur. */
+.arbo-doc.saute .arbo-doc-l{color:var(--dim);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--dim) 60%,transparent)}
+.arbo-doc.saute .arbo-ic-doc{opacity:.45}
+.arbo-vide{display:flex;align-items:center;min-height:30px;padding-left:6px;font-size:12.5px;font-style:italic;color:var(--dim)}
+.arbo-vide .lien-nu{margin-left:4px;font-style:normal}
+.arbo-rien{padding:14px;text-align:center;font-size:13px;color:var(--muted)}
+.arbo-rien p{margin:0 0 10px}
+.arbo-racine{margin-top:8px}
+/* LA BULLE — liste des documents ou menu d'un dossier — vit dans un portail, AU-DESSUS de la fenêtre
+   (.overlay est à 100 ; le menu des lignes, à 60, y serait caché). */
+.arbo-bulle{position:fixed;z-index:130;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  box-shadow:var(--shadow-3);animation:hudPose .16s var(--ease) backwards}
+.arbo-bulle.large{width:340px;max-width:calc(100vw - 16px)}
+.arbo-bulle.menu{display:flex;flex-direction:column;gap:2px;min-width:230px;padding:5px}
+.arbo-bulle.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;border:none;border-radius:7px;background:none;
+  font:inherit;font-size:13px;color:var(--text);text-align:left;white-space:nowrap;cursor:pointer}
+.arbo-bulle.menu button:hover{background:var(--surface2)}
+.arbo-bulle.menu button > svg{flex:none;color:var(--dim)}
+.arbo-bulle.menu button.danger,.arbo-bulle.menu button.danger > svg{color:var(--ember1)}
+.arbo-bulle-recherche{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border-soft);color:var(--dim)}
+.arbo-bulle-recherche input{flex:1;min-width:0;border:0;outline:none;background:none;font:inherit;font-size:14px;color:var(--text)}
+.arbo-bulle-liste{max-height:320px;overflow:auto;padding:4px}
+.arbo-bulle-t{padding:8px 8px 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.arbo-opt{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:0;border-radius:7px;background:none;
+  font:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer}
+.arbo-opt:hover:not(:disabled){background:var(--surface2)}
+.arbo-opt:disabled{cursor:default;opacity:.55}
+.arbo-opt > svg{flex:none;color:var(--dim)}
+.arbo-opt-l{flex:1;min-width:0}
+.arbo-opt.place .arbo-opt-l{color:var(--muted)}
+.arbo-opt-qui{font-size:11.5px;color:var(--dim);white-space:nowrap}
+.arbo-opt-ou{font-size:11.5px;color:var(--ember1);white-space:nowrap}
+.arbo-bulle-vide{margin:10px;font-size:13px;color:var(--dim)}
+/* Ce que l'arborescence ne nomme pas, pour la formation de l'aperçu — avec de quoi le placer. */
+.arbo-non-places{margin-top:12px;padding:10px 12px;border:1px dashed color-mix(in srgb,var(--blue) 35%,var(--border));border-radius:10px;
+  background:color-mix(in srgb,var(--blue) 4%,var(--surface))}
+.arbo-non-places-t{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:13px;line-height:1.45;color:var(--text)}
+.arbo-non-places-t > svg{flex:none;margin-top:2px;color:var(--blue)}
+.arbo-non-places ul{list-style:none;margin:0;padding:0}
+.arbo-non-places li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px;font-size:13px}
+.arbo-non-places li > svg{flex:none;color:var(--dim)}
+.arbo-non-places select{width:auto;max-width:300px;margin-left:auto;padding:4px 8px;font-size:12.5px}
+/* SANS SURVOL (téléphone, tablette), les actions restent visibles : cachées, elles seraient introuvables. */
+@media (hover:none){.arbo-actions,.arbo-retirer{opacity:1}}
+@media (max-width:640px){
+  .arbo{padding:8px}
+  .arbo-ul{padding-left:18px}
+  .arbo-ul:not(.racine) > li::before,.arbo-ul:not(.racine) > li::after{left:-11px}
+  .arbo-ul:not(.racine) > li::after{width:8px}
+  /* L'ICÔNE SEULE, sur la ligne du dossier : avec son libellé, « Document » passait à la ligne sous
+     CHAQUE dossier, et l'arbre doublait de hauteur. L'intitulé reste pour qui l'écoute (aria-label). */
+  .arbo-act:not(.seul){width:28px;padding:0;gap:0;justify-content:center;font-size:0}
+  /* « Qui a ce document » s'écrasait contre son libellé : la liste des documents le dit déjà. */
+  .arbo-doc-qui{display:none}
+  .arbo-non-places select{margin-left:22px;max-width:100%}
+}
 /* Pendant un glissé : la carte saisie s'efface, la place visée s'entoure. */
 .pf-node.cible{border-color:var(--ember1);box-shadow:0 0 0 2px color-mix(in srgb,var(--ember1) 35%,transparent)}
 

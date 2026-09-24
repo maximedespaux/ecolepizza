@@ -369,3 +369,47 @@ test('les trois boutons d\'archive : même garde que le coffre, et un comptage a
     assert.match(COFFRE, /<ZipBtn params=\{\{ annee: Y\.label, semaine: W\.week \? String\(W\.week\) : "-" \}\}/, 'les clés mêmes de l\'arbre du coffre');
     assert.match(COFFRE, /<ZipBtn params=\{\{ annee: Y\.label, semaine: W\.week \? String\(W\.week\) : "-", formation: F\.code \}\}/);
 });
+
+/* ─── L'éditeur dessiné comme l'arbre (2026-09-25) ────────────────────────────────────────────── */
+
+test('placer un document le DÉPLACE : une place par document, et un « OU » emporte ses membres', async () => {
+    /* L'archive range un document au PREMIER dossier qui le nomme. Placé à deux endroits, il semblait
+       y avoir deux copies — et c'était l'ordre de l'arbre, invisible, qui décidait laquelle comptait. */
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    const arbre = [{ id: 'stag', name: '{Stagiaire}', per_learner: true, items: [ref('droit-image'), ref('contrat'), ref('convention')],
+        children: [{ id: 'eval', name: 'Évaluations', items: [], children: [] }] }];
+    const gele = JSON.stringify(arbre);
+    const t1 = ecran.placerDocument(arbre, 'eval', ref('droit-image'), new Map());
+    assert.deepStrictEqual(t1[0].items.map(Arbo.cleItem), ['ref:contrat', 'ref:convention'], 'il a quitté sa place d\'avant');
+    assert.deepStrictEqual(t1[0].children[0].items.map(Arbo.cleItem), ['ref:droit-image']);
+    assert.strictEqual(JSON.stringify(arbre), gele, 'l\'arbre reçu n\'est pas modifié : l\'écran compare les références');
+    // Le « OU » emporte les modèles seuls qu'il contient, là où ils étaient.
+    const groupes = new Map([[CONTRAT, ['contrat', 'convention']]]);
+    const t2 = ecran.placerDocument(t1, 'eval', ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention'), groupes);
+    assert.deepStrictEqual(t2[0].items, []);
+    assert.deepStrictEqual(t2[0].children[0].items.map(Arbo.cleItem), ['ref:droit-image', `ou:${CONTRAT}`]);
+    // Replacé au même endroit : pas de doublon.
+    const t3 = ecran.placerDocument(t2, 'eval', ref('droit-image'), groupes);
+    assert.strictEqual(t3[0].children[0].items.filter((it) => Arbo.cleItem(it) === 'ref:droit-image').length, 1);
+});
+
+test('l\'éditeur est l\'arbre : une bulle au-dessus de la fenêtre, et la même vue en lecture', () => {
+    const EDITEUR = lireUi('components/ArchiveTreeEditor.jsx');
+    const CSSU = lireUi('styles/app.css');
+    /* LA BULLE (liste des documents, menu d'un dossier) vit dans un PORTAIL — un `position:fixed` dans la
+       fenêtre animée se placerait par rapport à elle — et AU-DESSUS d'elle : la fenêtre est à 100, et le
+       menu des lignes du reste de l'application (60) y serait caché. */
+    assert.match(EDITEUR, /return createPortal\(<div ref=\{ref\} className=\{`arbo-bulle \$\{className\}`\} style=\{pos\}>/);
+    const zBulle = Number(/\.arbo-bulle\{position:fixed;z-index:(\d+)/.exec(CSSU)[1]);
+    const zFenetre = Number(/\.overlay\{[^}]*z-index:(\d+)/.exec(CSSU)[1]);
+    assert.ok(zBulle > zFenetre, `bulle (${zBulle}) au-dessus de la fenêtre (${zFenetre})`);
+    // Défiler DANS la bulle (une longue liste) ne la ferme pas.
+    assert.match(EDITEUR, /const defile = \(e\) => \{ if \(!ref\.current\?\.contains\(e\.target\)\) onClose\(\); \};/);
+    // Placer passe par la règle « une place par document ».
+    assert.match(EDITEUR, /placer: \(id, o\) => set\(placerDocument\(folders, id, itemDe\(o\), groupes\)\)/);
+    // L'onglet d'une formation montre LE MÊME dessin, sans rien à modifier.
+    assert.match(EDITEUR, /return <ArchiveTreeEditor \{\.\.\.props\} lectureSeule onChange=\{\(\) => \{\}\} \/>;/);
+    assert.match(EDITEUR, /\{!lectureSeule && \(\s*<span className="arbo-actions">/);
+    // Plus de formulaire par dossier : ni liste déroulante des champs, ni liste des documents pleine largeur.
+    assert.doesNotMatch(EDITEUR, /＋ champ…|＋ Attribuer un document…/);
+});

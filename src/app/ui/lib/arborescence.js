@@ -72,3 +72,20 @@ export function groupesDepuis(eqMap) {
   }
   return g;
 }
+
+/** Les dossiers, transformés récursivement : `fn` rend le dossier modifié, ou null pour le retirer. */
+export const transformerDossiers = (folders, fn) =>
+  (folders || []).map((f) => fn({ ...f, children: transformerDossiers(f.children, fn) })).filter(Boolean);
+
+/**
+ * PLACER UN DOCUMENT, C'EST AUSSI LE DÉPLACER (2026-09-25). L'archive range un document au PREMIER
+ * dossier qui le nomme : le laisser à deux endroits faisait croire à deux copies, et c'est l'ordre
+ * de l'arbre, invisible, qui décidait. Il quitte donc sa place d'avant — et un « OU » emporte avec lui
+ * les modèles seuls qu'il contient (`groupes` : ses membres d'aujourd'hui). L'arbre reçu n'est pas
+ * modifié : l'écran compare les références pour savoir quoi redessiner.
+ */
+export function placerDocument(folders, dossierId, item, groupes) {
+  const couverts = new Set([cleItem(item), ...(item && item.group ? clesCouvertes(item, groupes) : [])]);
+  const sans = transformerDossiers(folders, (f) => ({ ...f, items: (f.items || []).filter((it) => !couverts.has(cleItem(it))) }));
+  return transformerDossiers(sans, (f) => (f.id === dossierId ? { ...f, items: [...(f.items || []), item] } : f));
+}
