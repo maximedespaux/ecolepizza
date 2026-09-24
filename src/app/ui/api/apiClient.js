@@ -1105,6 +1105,10 @@ export async function deposerPiece(enrollmentId, pieceTypeId, file) {
 }
 // URL directe du fichier (déchiffré à la volée côté serveur) — pour un aperçu inline.
 export function pieceFichierUrl(fichierId) { return `${API_BASE_URL}/pieces/fichier/${fichierId}`; }
+/* Retirer UN fichier d'une pièce (pas tout le dépôt) : le serveur supprime la ligne, et si c'était
+   le dernier, le dépôt redevient « à fournir ». Personnel à tout moment, stagiaire tant que non
+   validée (cf. supprimerFichier). C'est la « purge manuelle » des copies chiffrées. */
+export function supprimerPieceFichier(fichierId) { return request(`/pieces/fichier/${fichierId}`, { method: "DELETE" }); }
 // Personnel : valider ou refuser (motif requis si REFUSEE).
 export function verifierPiece(depotId, statut, motif_refus) { return request(`/pieces/depot/${depotId}`, { method: "PATCH", body: JSON.stringify({ statut, motif_refus }) }); }
 
