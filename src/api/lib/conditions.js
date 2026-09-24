@@ -277,6 +277,26 @@ async function getEnabledFields(conn, orgId, purpose = 'token') {
     return (await getAllFields(conn, orgId)).filter((f) => f[flag]);
 }
 
+/*
+ * LES CHAMPS À LIRE POUR ÉVALUER UNE CONDITION — et non ceux à proposer dans l'éditeur.
+ *
+ * `enabled_condition` (Paramètres → Champs) règle la liste de l'éditeur de conditions : ce qu'on
+ * peut choisir pour en ÉCRIRE une. Il décidait aussi, sans que personne l'ait voulu, de ce qu'une
+ * condition DÉJÀ ENREGISTRÉE avait le droit de lire : décocher un champ encore utilisé la faisait
+ * évaluer contre une valeur absente, en silence. Mesuré le 2026-09-24 : `enrollment.financing`
+ * décoché, « Financeur Particulier » répondait faux pour TOUS les dossiers, particuliers compris.
+ *
+ * On lit donc les champs cochés PLUS ceux qu'une condition existante désigne : une condition vit
+ * tant qu'on ne la supprime pas, le champ qu'elle lit doit vivre avec elle. Réservé à
+ * l'ÉVALUATION — l'éditeur garde getEnabledFields, pour ne proposer que ce qui est coché.
+ * `condById` : la carte des conditions, si l'appelant l'a déjà chargée (une requête de moins).
+ */
+async function champsDesConditions(conn, orgId, condById = null) {
+    const [tous, conditions] = await Promise.all([getAllFields(conn, orgId), condById || loadConditionMap(conn, orgId)]);
+    const lus = new Set([...conditions.values()].map((c) => c.field));
+    return tous.filter((f) => f.enabled_condition || lus.has(f.key));
+}
+
 const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
 const truthy = (v) => !!v && v !== '0' && v !== 0 && norm(v) !== 'false';
 
@@ -421,6 +441,6 @@ async function loadConditionMap(conn, orgId) {
 
 module.exports = {
     ELIGIBLE_TABLES, TABLE_LABEL, OPERATORS, VIRTUALS, computeAge,
-    introspectFields, getAllFields, getEnabledFields, loadDossierFactsMap,
+    introspectFields, getAllFields, getEnabledFields, champsDesConditions, loadDossierFactsMap,
     evalCondition, matchCustom, validateCondition, loadConditionMap,
 };

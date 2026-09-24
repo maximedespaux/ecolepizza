@@ -214,7 +214,8 @@ async function formationSteps(conn, orgId, program) {
  *   personnalisées (map) ; `eq` = équivalences d'organisme (map slug → { group }).
  *
  * Une étape ISOLÉE passe si ses conditions correspondent au dossier. Un groupe « OU » ne garde
- * qu'UNE variante : la plus spécifique qui s'applique, sinon la première (jamais de jalon perdu).
+ * qu'UNE variante : la plus spécifique qui s'applique, sinon la première — une copie marquée
+ * `repli`, affichée (jamais de jalon perdu) mais jamais exigée (lib/pointDeRupture.js).
  * DEUX sources de groupe, disjointes : les DOCUMENTS par équivalence d'organisme, les PIÈCES par
  * `program_step.or_group` (par formation) — d'où le préfixe `piece:` qui isole leurs espaces.
  */
@@ -253,9 +254,15 @@ function resoudreVariantes(active, ctx, conds, eq) {
         seen.add(g);
         const members = active.filter((m) => groupOf(m) === g);
         const passing = members.filter(passes);
+        /* LE REPLI EST MARQUÉ. Aucune variante ne s'applique : la première reste pour que le jalon
+           soit VISIBLE, mais ce dossier n'aura pas ce document. On le dit (`repli: true`), sur une
+           COPIE — l'étape d'origine sert aussi aux dossiers pour qui elle s'applique. Sans ce
+           marquage, le point d'accès réclamait le `contrat` des particuliers à une stagiaire
+           professionnelle : seul membre ACTIF du groupe, la variante professionnelle vivant dans
+           la section entreprise (constaté le 2026-09-24). */
         const chosen = passing.length
             ? passing.reduce((best, m) => (specificity(m) > specificity(best) ? m : best), passing[0])
-            : members[0];
+            : { ...members[0], repli: true };
         out.push(chosen);
     }
     return out;

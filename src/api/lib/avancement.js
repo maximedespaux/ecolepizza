@@ -1,5 +1,5 @@
 const { computeDocParcours, companyParcours } = require('./parcours.js');
-const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('./conditions.js');
+const { champsDesConditions, loadDossierFactsMap, loadConditionMap } = require('./conditions.js');
 const { loadEquivalences, equivalenceMap } = require('./equivalence.js');
 const { enrollmentSteps, formationSteps } = require('../controllers/formationProgram.controller.js');
 const { loadOrgSteps } = require('../controllers/template.controller.js');
@@ -59,7 +59,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
     // Conditions, équivalences et faits : chargés UNE fois pour toute la série.
     const condById = await loadConditionMap(conn, orgId);
     const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
-    const fieldCatalog = await getEnabledFields(conn, orgId, 'condition');
+    const fieldCatalog = await champsDesConditions(conn, orgId, condById);
     const factsMap = await loadDossierFactsMap(conn, orgId, dossiers.map((e) => e.enrollment_id), fieldCatalog);
 
     /* Statut des pièces déposées, pour tous les dossiers en une requête. Une étape « pièce »

@@ -24,7 +24,7 @@ const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { companySignsDoc, stepSigners, typeDuModele, groupesParOpco, cleOpco } = require('../lib/documents.js');
-const { loadConditionMap, getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
+const { loadConditionMap, champsDesConditions, loadDossierFactsMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
 
@@ -44,7 +44,7 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
          WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?`, [companyId, sessionId, orgId]);
     const condById = await loadConditionMap(conn, orgId);
     const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
-    const catalog = await getEnabledFields(conn, orgId, 'condition');
+    const catalog = await champsDesConditions(conn, orgId, condById);
     const factsMap = await loadDossierFactsMap(conn, orgId, enr.map((e) => e.id), catalog);
     const enrollments = [];
     for (const e of enr) {

@@ -41,9 +41,15 @@ function statutsDocuments(docs) {
  * VOLET DOSSIER — les étapes exigées : celles DU DOSSIER (parcours résolu, conditions comprises)
  * que le stagiaire signe, jusqu'au point. `seuil` est le rang du point dans le parcours de la
  * FORMATION : le point peut désigner une étape que les conditions du dossier écartent.
+ *
+ * JAMAIS UN REPLI. Quand aucune variante d'un groupe « OU » ne s'applique, le parcours en garde une
+ * pour l'affichage, marquée `repli` (resoudreVariantes) : ce dossier n'aura pas ce document, et
+ * l'exiger fermerait l'émargement pour toujours. Constaté le 2026-09-24 sur une stagiaire
+ * PROFESSIONNELLE, à qui l'on réclamait le `contrat` des particuliers — son entreprise avait signé
+ * la convention, le volet entreprise était franchi, aucun geste ne pouvait satisfaire celui-ci.
  */
 function exigencesDossier(etapesDuDossier, seuil) {
-    return (etapesDuDossier || []).filter((s) => s.stagiaire_sign && !exempte(s) && Number(s.sort_order) <= seuil);
+    return (etapesDuDossier || []).filter((s) => s.stagiaire_sign && !s.repli && !exempte(s) && Number(s.sort_order) <= seuil);
 }
 /** Signée par son modèle, ou à défaut par son type (documents antérieurs aux modèles). */
 const signeeDossier = (s, statuts) => statuts.parSlug[s.slug] === 'SIGNE' || statuts.parType[s.doc_type] === 'SIGNE';

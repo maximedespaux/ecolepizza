@@ -11,7 +11,7 @@ const { loadOrgSteps } = require('./template.controller.js');
    l'avancement des dossiers : le tableau de bord et l'émargement disent la même chose. */
 const PointDeRupture = require('../lib/pointDeRupture.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
-const { getEnabledFields, loadDossierFactsMap } = require('../lib/conditions.js');
+const { champsDesConditions, loadDossierFactsMap } = require('../lib/conditions.js');
 const { regenEmargement } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
@@ -292,7 +292,7 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
        pas exiger autre chose que ce que le parcours affiche, sinon elle réclame l'impossible. */
     const ctx = { hygiene: !!e.program_hygiene, rsCode: e.program_rs, jours: e.program_days || 1, financing: e.financing, agefice };
     try {
-        const catalogue = await getEnabledFields(conn, orgId, 'condition');
+        const catalogue = await champsDesConditions(conn, orgId); // ce que LISENT les conditions, coché ou non
         const faits = await loadDossierFactsMap(conn, orgId, [e.enrollment_id], catalogue);
         Object.assign(ctx, faits.get(e.enrollment_id) || {});
     } catch { /* champs de condition indisponibles : on s'en tient aux conditions intégrées */ }
