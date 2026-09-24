@@ -438,7 +438,7 @@ function TemplateEditor() {
             <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Signatures</span></div>
             <div className="tok-list" style={{ padding: "0 10px 8px" }}>
               <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
-                Bloc de signature nommé, signé séparément par chaque personne.
+                Un cadre vide, rempli quand la personne signe.
               </p>
               {/* Le cadre « Cachet de l'entreprise » NE vit plus ici : il a rejoint le groupe
                   « Entreprise » (plus bas), avec les autres champs de l'entreprise — sa signature
@@ -457,12 +457,22 @@ function TemplateEditor() {
                   <Icon name="pencil" size={13} /> {SIG_INTERVENANT.label}
                 </button>
               )}
-              {SIG_PRESETS.map((s) => (
-                <button key={s} className="tok-chip" title={`Bloc de signature « ${s} ». Sur un modèle où « Externe » est coché, il s'attribue à une personne de la session à l'envoi, qui le signe en ligne ; sinon il se signe à la main. Cliquer ou glisser.`}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
-                  onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
-              ))}
+              {/* LES BLOCS NOMMÉS (jury, formateur, stagiaires…) ne servent qu'aux modèles
+                  « Externe » : là, chacun s'attribue à une personne de la session à l'envoi, qui le
+                  signe en ligne. Ailleurs — une convention, un devis — personne ne les remplit ;
+                  les montrer partout ne faisait qu'encombrer. Un rôle absent de cette liste se tape
+                  dans le champ ci-dessous, et cela sur TOUT modèle. */}
+              {signeParExterne && (
+                <>
+                  <p className="sub" style={{ margin: "10px 0 6px", fontSize: 11 }}>Attribués à une personne de la session, à l'envoi :</p>
+                  {SIG_PRESETS.map((s) => (
+                    <button key={s} className="tok-chip" title={`Bloc de signature « ${s} », attribué à une personne de la session à l'envoi, qui le signe en ligne. Cliquer ou glisser.`}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: sigKey(s), label: s }))}
+                      onClick={() => insertSignature(s)}><Icon name="pencil" size={13} /> {s}</button>
+                  ))}
+                </>
+              )}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 <input className="inp" value={sigLabel} onChange={(e) => setSigLabel(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { insertSignature(sigLabel); setSigLabel(""); } }}
@@ -499,7 +509,11 @@ function TemplateEditor() {
               </button>
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
-                  {g.tokens.map((t) => (
+                  {/* « Signature de l'organisme » est déjà offerte en CADRE, en haut (bloc
+                      Signatures) : on ne la répète pas ici en jeton brut. Deux entrées identiques
+                      pour la même signature semaient le doute. Le jeton reste connu du moteur —
+                      seule la puce en double disparaît de la palette. */}
+                  {g.tokens.filter((t) => !(g.group === "Signature" && t.key === "Signature organisme")).map((t) => (
                     <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
                       onMouseEnter={(e) => montrerTip(e, t, g.group)} onMouseLeave={cacherTip} onFocus={(e) => montrerTip(e, t, g.group)} onBlur={cacherTip}
                       draggable
