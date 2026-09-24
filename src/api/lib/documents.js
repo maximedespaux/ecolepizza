@@ -113,7 +113,7 @@ function stepsToDocSet(steps, ctx) {
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((s, i) => ({
             num: i + 1, slug: s.slug, type: s.doc_type, label: s.label, sort_order: s.sort_order,
-            signable: !!s.signable, stagiaireSign: !!s.stagiaire_sign,
+            signable: !!s.signable, stagiaireSign: !!s.stagiaire_sign, companySign: !!s.company_sign,
         }));
 }
 

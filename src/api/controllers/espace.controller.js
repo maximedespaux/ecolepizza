@@ -150,35 +150,21 @@ async function completionOf(conn, e, steps, agefice = false, repCompanyIds = [])
     const statusByType = {};
     for (const r of rows) statusByType[r.type] = r.status;
 
+    /* COMPTE UNIFIÉ POUR UN COMPTE À DEUX CASQUETTES. Quand le compte est AUSSI le représentant de
+       l'entreprise DU DOSSIER, les documents de GROUPE de son propre parcours (🏢), qu'il signe EN
+       TANT QU'ENTREPRISE, entrent dans la MÊME progression que ses documents de stagiaire. On
+       compte les ÉTAPES du parcours — bornées à ce parcours, chacune adossée à SON document par le
+       type — et non une requête large sur toute l'entreprise, qui ramassait des documents d'autres
+       groupes/OPCO et gonflait la barre. Pour un stagiaire ordinaire, `repCompanyIds` ne contient
+       pas l'entreprise du dossier : `required` reste EXACTEMENT ses étapes, rien ne change. */
+    const inclutEntreprise = !!e.company_id && repCompanyIds.includes(e.company_id);
     const required = stepsToDocSet(steps, {
         hygiene: !!e.program_hygiene, rsCode: e.program_rs,
         jours: e.program_days || 1, financing: e.financing, agefice,
-    }).filter((d) => d.stagiaireSign);
+    }).filter((d) => d.stagiaireSign || (inclutEntreprise && d.companySign));
 
-    let signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
-    let total = required.length;
-
-    /* COMPTE UNIFIÉ POUR UN COMPTE À DEUX CASQUETTES. Quand le compte est AUSSI le représentant de
-       l'entreprise DU DOSSIER, ce qu'il signe EN TANT QU'ENTREPRISE — les documents de groupe de
-       cette session — entre dans la MÊME progression : une seule personne, une seule barre. Sinon
-       (stagiaire ordinaire, ou entreprise du dossier non rattachée à ce compte), `repCompanyIds` est
-       vide ou ne contient pas `e.company_id`, et rien ne change. On compte les documents RÉELS
-       (scope=COMPANY, cette entreprise + cette session), comme l'espace représentant les liste. */
-    if (e.company_id && e.session_id && repCompanyIds.includes(e.company_id)) {
-        try {
-            const [crows] = await conn.query(
-                `SELECT status FROM generated_document
-                  WHERE scope = 'COMPANY' AND company_id = ? AND session_id = ?
-                    AND status IN ('ENVOYE','CONSULTE','SIGNE')`,
-                [e.company_id, e.session_id]
-            );
-            for (const r of crows) { total += 1; if (r.status === 'SIGNE') signed += 1; }
-        } catch (err) {
-            // scope / session_id absents (migrations 157) : on s'en tient au compte du stagiaire.
-            if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err;
-        }
-    }
-
+    const signed = required.filter((d) => statusByType[d.type] === 'SIGNE').length;
+    const total = required.length;
     const dayPassed = !!e.end_date && e.end_date <= todayISO();
     const complete = dayPassed && total > 0 && signed === total;
     return { complete, dayPassed, signed, total };
@@ -660,7 +646,7 @@ const getMyFormations = async (req, res) => {
 
         // Inscriptions du stagiaire (pour déverrouiller les cartes concernées).
         const [enrollments] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.financing, e.company_id, e.session_id, s.program_id, s.year, s.week,
+            `SELECT e.id AS enrollment_id, e.financing, e.company_id, s.program_id, s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     p.code AS program_code, p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs
