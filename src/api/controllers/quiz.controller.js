@@ -1205,6 +1205,12 @@ const resultatsOverview = async (req, res) => {
  *   · Échelle : répartition 1..max + moyenne (ex. satisfaction).
  *   · Grille : seul le nombre de réponses (le détail par cellule attendra une v2).
  */
+/* LE SCORE MOYEN ET LA RÉUSSITE d'un lot de réponses (alias `r`), écrits UNE fois : le total du détail
+   et chacune de ses lignes « par semaine » les calculent ainsi tous deux — une semaine ouverte depuis la
+   vue globale redonne donc exactement ses chiffres. Paramètres : pass_score, pass_score. */
+const SCORE_ET_REUSSITE = `ROUND(AVG(CASE WHEN r.max_score > 0 THEN r.score / r.max_score * 100 END)) AS avg_pct,
+                    ROUND(AVG(CASE WHEN r.max_score > 0 AND ? IS NOT NULL THEN r.score / r.max_score * 100 >= ? END) * 100) AS pass_rate`;
+
 const resultatsDetail = async (req, res) => {
     try {
         const conn = db.promise();
@@ -1218,8 +1224,7 @@ const resultatsDetail = async (req, res) => {
 
         const [[agg]] = await conn.query(
             `SELECT COUNT(*) AS responses,
-                    ROUND(AVG(CASE WHEN r.max_score > 0 THEN r.score / r.max_score * 100 END)) AS avg_pct,
-                    ROUND(AVG(CASE WHEN r.max_score > 0 AND ? IS NOT NULL THEN r.score / r.max_score * 100 >= ? END) * 100) AS pass_rate
+                    ${SCORE_ET_REUSSITE}
                FROM quiz_response r WHERE r.quiz_id = ?${f.sql}`,
             [quiz.pass_score, quiz.pass_score, quiz.id, ...f.params]);
 
@@ -1261,7 +1266,29 @@ const resultatsDetail = async (req, res) => {
               ORDER BY r.completed_at DESC`,
             [quiz.id, req.user.organization_id, ...f.params]);
 
-        res.json({ data: { quiz, ...agg, questions: out, learners } });
+        /* PAR SEMAINE — en vue globale seulement (aucune semaine choisie) : l'historique du QCM, promotion
+           par promotion, côte à côte. Rangé COMME LE FILTRE (clauseFiltre) : la semaine de la SESSION du
+           dossier, pas la date de réponse — cliquer une semaine y retrouve ce nombre exact. Une réponse
+           sans session retrouvable (dossier retiré) tombe dans une ligne sans semaine, pour que les
+           lignes redonnent le total. */
+        let par_semaine = null;
+        if (lireSemaine(req.query.semaine).semaine == null) {
+            [par_semaine] = await conn.query(
+                `SELECT s.year AS annee, s.week AS semaine,
+                        GROUP_CONCAT(DISTINCT p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                        COUNT(*) AS responses,
+                        ${SCORE_ET_REUSSITE}
+                   FROM quiz_response r
+                   LEFT JOIN enrollment e ON e.id = r.enrollment_id
+                   LEFT JOIN training_session s ON s.id = e.session_id
+                   LEFT JOIN training_program p ON p.id = s.program_id
+                  WHERE r.quiz_id = ?${f.sql}
+                  GROUP BY s.year, s.week
+                  ORDER BY s.year IS NULL, s.year DESC, s.week DESC`,
+                [quiz.pass_score, quiz.pass_score, quiz.id, ...f.params]);
+        }
+
+        res.json({ data: { quiz, ...agg, questions: out, learners, par_semaine } });
     } catch (err) {
         console.error('Erreur résultats QCM (détail) :', err);
         res.status(500).json({ error: 'Internal Server Error' });
