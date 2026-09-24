@@ -224,6 +224,12 @@ const TOKEN_CATALOG = [
             { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
             { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
             { key: 'Forme juridique', label: 'Forme juridique', sample: 'SARL' },
+            /* LA DATE OÙ L'ENTREPRISE A SIGNÉ CE document — celle du cadre « Cachet de l'entreprise »
+               (créneau `representant`), pas la signature du stagiaire. Vide tant qu'elle n'a pas
+               signé, comme le cadre. Pour « Fait à …, le ___ » au-dessus du cachet de l'entreprise. */
+            { key: 'Date signature entreprise', label: "Date de signature de l'entreprise", sample: '06/07/2026',
+              desc: "La date où le représentant de l'entreprise a signé CE document (son cachet). "
+                  + "Vide tant qu'il n'a pas signé, comme le cadre « Cachet de l'entreprise »." },
             { key: 'Stagiaires', label: 'Liste des stagiaires (un nom par ligne)', sample: 'M. Jean DUPONT\nMme Marie MARTIN' },
             /* COMBIEN L'ENTREPRISE EN ENVOIE — demandé le 2026-09-23. La convention l'écrit en
                toutes lettres (« la société inscrit 3 salariés »), et jusqu'ici il fallait compter
@@ -1142,7 +1148,7 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 // Jetons dont la valeur vide est NORMALE (renseignés plus tard, ou facultatifs) :
 // on ne les compte pas comme « information manquante » à la génération.
 const OPTIONAL_TOKENS = new Set([
-    'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature',
+    'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature', 'Date signature entreprise',
     'Today', 'Date', 'Stagiaires', 'Nombre stagiaires',
     'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
     /* LES RÉPONSES DU STAGIAIRE : vides tant qu'il n'a pas répondu, et c'est la SIGNATURE qui
@@ -1303,6 +1309,9 @@ function resolveTokens(ctx = {}) {
     const today = frDate(new Date());
     const semaine = f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start);
     const sig = ctx.signature || {};
+    // Le représentant de l'entreprise signe dans le cadre `representant` (document_signature) : sa
+    // date de signature vient de LÀ, pas de la signature « principale » du document (sig, le stagiaire).
+    const repSig = (ctx.slotSignatures && ctx.slotSignatures.representant) || {};
 
     // Examen de certification. `ex` = la session, `res` = le résultat du candidat.
     const ex = ctx.exam || {};
@@ -1444,6 +1453,7 @@ function resolveTokens(ctx = {}) {
         'Signature organisme': signatureBox(o.signature_image, "Signature de l'organisme"),
         'Nom signataire': sig.name || '',
         'Date signature': sig.date ? frDate(sig.date) : '',
+        'Date signature entreprise': repSig.date ? frDate(repSig.date) : '',
         // Boucle docxtemplater : {#formations}{Titre} — {PrixLigne}{/formations}
         formations: forms.map((x) => ({
             Titre: x.title || '', Code: x.code || '', Heures: x.hours != null ? String(x.hours) : '',
