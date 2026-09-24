@@ -286,7 +286,7 @@ test('l\'arborescence commune se lit avant `/:id`, s\'écrit par le bureau, et a
     assert.match(C, /return res\.status\(503\)\.json\(\{ error: "Migration 182 non jouée/);
     // Tant que rien n'est enregistré : la proposition, pas une page vide.
     assert.match(C, /const st = Arbo\.fusionnerArbres\(entrees\('archive_tree'\), opts\);/);
-    assert.match(C, /const opts = \{ titreDuQcm: \(id\) => titres\.get\(id\) \|\| null, existe, groupes \};/);
+    assert.match(C, /const opts = \{ titreDuQcm: \(id\) => titres\.get\(id\) \|\| null, existe, groupes, libelleDe, homonymeDe \};/);
     // L'archive suit la commune dès qu'elle existe, sinon celles des formations : elle marche avant la 182.
     assert.match(SUIVI, /SELECT archive_tree, company_archive_tree FROM organization WHERE id = \?/);
     assert.match(SUIVI, /SELECT code, archive_tree, company_archive_tree FROM training_program WHERE organization_id = \?/);
@@ -412,4 +412,80 @@ test('l\'éditeur est l\'arbre : une bulle au-dessus de la fenêtre, et la même
     assert.match(EDITEUR, /\{!lectureSeule && \(\s*<span className="arbo-actions">/);
     // Plus de formulaire par dossier : ni liste déroulante des champs, ni liste des documents pleine largeur.
     assert.doesNotMatch(EDITEUR, /＋ champ…|＋ Attribuer un document…/);
+});
+
+/* ─── Un « OU » supprimé dans Modèles → Équivalences (2026-09-25) ─────────────────────────────── */
+
+test('un « OU » supprimé se DÉPLIE à sa place : ses documents, un par un — le cas relevé en production', () => {
+    /* L'école avait supprimé TOUTES ses équivalences ; l'arborescence enregistrée affichait encore
+       « Devis particulier / Devis professionnel (OU) » et « Contrat / Convention de formation (OU) ».
+       Forme exacte de la production, le 2026-09-25 : deux « OU » dans le dossier du stagiaire. */
+    const enregistree = squelette(d('{Stagiaire}', [
+        ref('invitation', 'Invitation'),
+        ou(DEVIS, ['devis-particulier', 'devis-professionnel'], 'Devis particulier / Devis professionnel'),
+        ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention de formation'),
+    ], [d('Évaluations', [ref('convention', 'Convention de formation')])], true));
+    const libelles = new Map([['devis-particulier', 'Devis particulier'], ['contrat', 'Contrat'], ['convention', 'Convention de formation']]);
+    const { tree, ajustements } = Arbo.actualiserLesOu(enregistree, new Map(), (s) => libelles.get(s) || null);
+    const stag = dossierNomme(tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}');
+    assert.deepStrictEqual(stag.items.map(Arbo.cleItem), ['ref:invitation', 'ref:devis-particulier', 'ref:contrat'],
+        'plus aucun « OU » ; chaque document à la place du choix qui le rangeait');
+    assert.deepStrictEqual(dossierNomme(stag, 'Évaluations').items.map(Arbo.cleItem), ['ref:convention'],
+        'un document déjà rangé seul ailleurs y reste : une place par document');
+    assert.deepStrictEqual(ajustements.map((a) => [a.label, a.documents, a.perdus]), [
+        ['Devis particulier / Devis professionnel', ['Devis particulier'], ['Devis professionnel']],
+        ['Contrat / Convention de formation', ['Contrat'], []],
+    ], 'nommé : ce qu\'il est devenu, et le modèle qui n\'existe plus — sous son NOM, pas son slug');
+
+    /* L'HOMONYME : en production, « devis-professionnel » n'existait plus — le devis professionnel
+       d'aujourd'hui est « devis-professionnel-copie », MÊME NOM à l'écran. Dire qu'il « n'existe plus »
+       aurait été faux pour qui le voit dans ses modèles : le modèle actuel de ce nom prend sa place. */
+    const avecCopie = new Map([...libelles, ['devis-professionnel-copie', 'Devis professionnel']]);
+    const parNom = new Map([...avecCopie].map(([s, l]) => [Arbo.normaliserTitre(l), { slug: s, label: l }]));
+    const r = Arbo.actualiserLesOu(enregistree, new Map(), (s) => avecCopie.get(s) || null, (n) => parNom.get(Arbo.normaliserTitre(n)) || null);
+    assert.deepStrictEqual(dossierNomme(r.tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}').items.map(Arbo.cleItem),
+        ['ref:invitation', 'ref:devis-particulier', 'ref:devis-professionnel-copie', 'ref:contrat']);
+    assert.deepStrictEqual(r.ajustements[0].remplaces, [{ nom: 'Devis professionnel', ancien: 'devis-professionnel', nouveau: 'devis-professionnel-copie' }]);
+    assert.deepStrictEqual(r.ajustements[0].perdus, []);
+    assert.ok(!JSON.stringify(tree).includes('"group"'));
+    // Un « OU » qui existe toujours prend ses membres et son libellé d'AUJOURD'HUI.
+    const vivant = Arbo.actualiserLesOu(enregistree, GROUPES, (s) => libelles.get(s) || null);
+    const devis = dossierNomme(vivant.tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}').items.find((i) => i.group === DEVIS);
+    assert.deepStrictEqual(devis.members, ['devis-particulier', 'devis-professionnel-copie']);
+    assert.strictEqual(vivant.ajustements.length, 0);
+});
+
+test('la proposition aussi déplie un « OU » supprimé, au lieu de perdre ses documents', () => {
+    const A = squelette(d('{Stagiaire}', [ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention')], [], true));
+    const { tree, retires } = Arbo.fusionnerArbres([{ code: 'NIV1H', tree: A }], {
+        ...OPTS, groupes: new Map(), libelleDe: (s) => ({ contrat: 'Contrat', convention: 'Convention de formation' })[s] || null,
+    });
+    const stag = dossierNomme(tree, '{Année}', '{Semaine}', '{Code}', '{Stagiaire}');
+    assert.deepStrictEqual(stag.items.map((i) => i.label), ['Contrat', 'Convention de formation']);
+    assert.deepStrictEqual(retires, []);
+});
+
+test('l\'arborescence enregistrée se lit avec les « OU » d\'aujourd\'hui, et l\'écran le dit', () => {
+    const C = lire('controllers/formationProgram.controller.js');
+    assert.match(C, /const st = Arbo\.actualiserLesOu\(enregistree\.tree, groupes, libelleDe, homonymeDe\);/);
+    assert.match(C, /const en = Arbo\.actualiserLesOu\(enregistree\.company_tree, groupes, libelleDe, homonymeDe\);/);
+    assert.match(C, /const opts = \{ titreDuQcm: \(id\) => titres\.get\(id\) \|\| null, existe, groupes, libelleDe, homonymeDe \};/);
+    // Deux modèles du même nom : on ne devine pas.
+    assert.match(C, /parNom\.set\(k, parNom\.has\(k\) \? null : \{ slug, label \}\);/);
+    // Le libellé d'un modèle déplié vient de TOUS les modèles, pas des seuls parcours.
+    assert.match(C, /for \(const s of await loadOrgSteps\(orgId\)\) if \(s && s\.slug\) libelles\.set\(s\.slug, s\.label\);/);
+    const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
+    assert.match(EDITEUR, /\{etat\.ajustements\?\.length > 0 && \(/);
+    assert.match(EDITEUR, /<b>Enregistrez<\/b> pour garder ce rangement\./, 'rien n\'est gardé sans enregistrer');
+    assert.match(EDITEUR, /conflits: \[\], retires: \[\], ajustements: \[\] \}\)\);/, 'enregistré, l\'avis s\'efface');
+    assert.match(lireUi('pages/Formations.jsx'), /etat\.ajustements\?\.length > 0 \? " Des choix « OU » supprimés y sont dépliés/);
+});
+
+test('l\'archive rangeait déjà juste : un « OU » disparu retombe sur les membres enregistrés avec lui', () => {
+    /* Pourquoi seul l'écran était faux : en attendant l'enregistrement, le « OU » périmé range encore
+       ses documents à SA place — la même que celle que le dépliage leur donne. */
+    const perime = squelette(d('{Stagiaire}', [ou(CONTRAT, ['contrat', 'convention'], 'Contrat / Convention')], [d('Autres')], true));
+    const p = Arbo.placeDansLArchive({ stagiaire: perime }, doc({ slug: 'convention', title: 'Convention' }), new Map());
+    assert.strictEqual(p.place, 'arbre');
+    assert.strictEqual([...p.dossiers, p.fichier].join('/'), '2026/S38/RS7404/BEYNEY David/Convention');
 });

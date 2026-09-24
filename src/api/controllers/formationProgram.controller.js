@@ -624,9 +624,16 @@ const getArborescence = async (req, res) => {
         const palette = new Map();
         const formations = [];
         const tousLesSlugs = new Set();
+        /* LE LIBELLÉ ACTUEL DE CHAQUE MODÈLE — tous, pas seulement ceux d'un parcours : c'est lui que
+           prend un modèle quand le « OU » qui le rangeait n'existe plus (Arbo.actualiserLesOu). */
+        const libelles = new Map();
+        for (const s of await loadOrgSteps(orgId)) if (s && s.slug) libelles.set(s.slug, s.label);
         for (const p of programmes) {
             const etapes = await formationSteps(conn, orgId, p);
-            for (const s of etapes) tousLesSlugs.add(s.slug);
+            for (const s of etapes) {
+                tousLesSlugs.add(s.slug);
+                if (!s.quiz_id && !libelles.has(s.slug)) libelles.set(s.slug, s.label);
+            }
             const actives = etapes.filter((s) => s.active);
             formations.push({ id: p.id, code: p.code, title: p.title, documents: [...new Set(actives.map(cleEtape))] });
             for (const s of actives) {
@@ -638,6 +645,28 @@ const getArborescence = async (req, res) => {
                 }
                 palette.get(cle).formations.push(p.code);
             }
+        }
+
+        const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
+        const libelleDe = (slug) => (tousLesSlugs.has(slug) || libelles.has(slug) ? libelles.get(slug) || slug : null);
+        /* Le SEUL modèle actuel qui porte ce nom exact — pour qu'un membre disparu d'un « OU » (un slug
+           dupliqué depuis) retrouve sa place sous son nom d'aujourd'hui. Deux homonymes : on ne devine pas. */
+        const parNom = new Map();
+        for (const [slug, label] of libelles) {
+            const k = Arbo.normaliserTitre(label);
+            parNom.set(k, parNom.has(k) ? null : { slug, label });
+        }
+        const homonymeDe = (nom) => parNom.get(Arbo.normaliserTitre(nom)) || null;
+
+        /* L'ARBORESCENCE ENREGISTRÉE, LUE AVEC LES « OU » D'AUJOURD'HUI : un « OU » supprimé dans Modèles →
+           Équivalences s'affichait encore (relevé en production le 2026-09-25). Il se déplie ici, à sa
+           place ; l'écran le DIT, et l'école enregistre pour le garder. */
+        let ajustements = [];
+        if (enregistree) {
+            const st = Arbo.actualiserLesOu(enregistree.tree, groupes, libelleDe, homonymeDe);
+            const en = Arbo.actualiserLesOu(enregistree.company_tree, groupes, libelleDe, homonymeDe);
+            enregistree = { tree: st.tree, company_tree: en.tree };
+            ajustements = [...st.ajustements.map((a) => ({ ...a, arbre: 'stagiaire' })), ...en.ajustements.map((a) => ({ ...a, arbre: 'entreprise' }))];
         }
 
         let proposition = null;
@@ -654,8 +683,7 @@ const getArborescence = async (req, res) => {
                 .map((p) => ({ code: p.code, tree: Arbo.lireArbre(p[col]) }))
                 .filter((e) => compte(e.tree) > 0 || Arbo.aDesDossiers(e.tree))
                 .sort((a, b) => compte(b.tree) - compte(a.tree));
-            const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
-            const opts = { titreDuQcm: (id) => titres.get(id) || null, existe, groupes };
+            const opts = { titreDuQcm: (id) => titres.get(id) || null, existe, groupes, libelleDe, homonymeDe };
             const st = Arbo.fusionnerArbres(entrees('archive_tree'), opts);
             const en = Arbo.fusionnerArbres(entrees('company_archive_tree'), opts);
             proposition = {
@@ -673,6 +701,7 @@ const getArborescence = async (req, res) => {
                 tree: enregistree ? enregistree.tree : proposition.tree,
                 company_tree: enregistree ? enregistree.company_tree : proposition.company_tree,
                 sources: proposition ? proposition.sources : [],
+                ajustements,
                 conflits: proposition ? proposition.conflits : [],
                 retires: proposition ? proposition.retires : [],
                 documents: [...palette.values()],
