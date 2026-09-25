@@ -9,7 +9,7 @@ const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // c
 const { colonneExiste } = require('../lib/colonnes.js');
 const { decryptBytes } = require('../lib/crypto.js');
 const { ecrivainZip } = require('../lib/zip.js');
-const { placeDansLArchive, lireArbre, normaliserTitre } = require('../lib/arborescenceArchive.js');
+const { placesDansLArchive, offertsDesFormations, lireArbre, normaliserTitre } = require('../lib/arborescenceArchive.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -790,19 +790,33 @@ const STATUT_LU = { SIGNE: 'signé', ENVOYE: 'envoyé', CONSULTE: 'consulté', G
     VALIDEE: 'pièce validée', DEPOSEE: 'pièce à vérifier', REFUSEE: 'pièce refusée' };
 const dateFr = (d) => d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
 
-/** Le sommaire de l'archive : ce qu'elle contient, ce qu'elle range hors de l'arborescence, ce qui manque. */
-function sommaireDeLArchive(portee, source, inclus, absents, quand) {
+/**
+ * Le sommaire de l'archive : ce qu'elle contient, ce qu'elle range par défaut, ce qu'elle laisse dehors
+ * PAR CHOIX (l'arborescence ne le range pas), et ce qui manque malgré elle.
+ * @param nonRanges les documents que l'arborescence ne range pas : { titre } — comptés par intitulé
+ */
+function sommaireDeLArchive(portee, source, inclus, absents, quand, nonRanges = []) {
+    const copies = inclus.filter((d) => d.copie).length;
     const lignes = [
         `Archive Impastio — ${portee.libelle}`,
         `Exportée le ${dateFr(quand)}. Rangée selon ${source}.`,
         '',
-        `${inclus.length} document(s) inclus :`,
-        ...inclus.map((d) => `  ${d.chemin}  [${STATUT_LU[d.statut] || String(d.statut || '').toLowerCase() || '—'}]`),
+        `${inclus.length} document(s) inclus${copies ? `, dont ${copies} copie(s) pour les entreprises` : ''} :`,
+        ...[...inclus].sort((a, b) => a.chemin.localeCompare(b.chemin, 'fr'))
+            .map((d) => `  ${d.chemin}  [${STATUT_LU[d.statut] || String(d.statut || '').toLowerCase() || '—'}]`),
     ];
     const horsArbre = inclus.filter((d) => d.place === 'defaut');
     if (horsArbre.length) {
-        lignes.push('', `${horsArbre.length} document(s) que l'arborescence ne nomme pas — rangés dans le dossier du stagiaire, de l'entreprise ou de la formation :`,
+        lignes.push('', `${horsArbre.length} document(s) rangés par défaut dans le dossier du stagiaire, de l'entreprise ou de la formation — l'arborescence ne peut pas les nommer (PDF importé, document hors parcours) ou n'est pas réglée :`,
             ...horsArbre.map((d) => `  ${d.chemin}`));
+    }
+    /* CE QUI EST LAISSÉ DEHORS PAR CHOIX est nommé, par intitulé : celui qui lira l'archive doit
+       savoir qu'un document manque parce qu'on l'a voulu, et où ce choix se change. */
+    if (nonRanges.length) {
+        const parTitre = new Map();
+        for (const d of nonRanges) parTitre.set(d.titre || 'Document', (parTitre.get(d.titre || 'Document') || 0) + 1);
+        lignes.push('', `${nonRanges.length} document(s) du coffre laissés hors de l'archive : l'arborescence d'archivage ne les range pas (Formations → Arborescence d'archivage) :`,
+            ...[...parTitre].sort((a, b) => a[0].localeCompare(b[0], 'fr')).map(([t, n]) => `  ${t}${n > 1 ? ` (${n})` : ''}`));
     }
     if (absents.length) {
         lignes.push('', `${absents.length} document(s) du coffre NON inclus :`,
@@ -824,7 +838,7 @@ function sommaireDeLArchive(portee, source, inclus, absents, quand) {
 const exporterArchive = async (req, res) => {
     const conn = db.promise();
     const orgId = req.user.organization_id;
-    let portee; let arbres; let aEcrire;
+    let portee; let arbres; let aEcrire; let nonRanges;
     try {
         portee = await porteeDeLArchive(conn, orgId, req.query || {});
         if (!portee) return res.status(404).json({ message: 'Sélection introuvable : rien à archiver.' });
@@ -835,17 +849,33 @@ const exporterArchive = async (req, res) => {
         if (!lignes.length) return res.status(404).json({ message: 'Aucun document dans le coffre pour cette sélection.' });
         arbres = await arborescencesDeLArchive(conn, orgId);
         const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
-        aEcrire = lignes.map((l) => ({ l, place: placeDansLArchive(arbres.pour(l.program_code), l, groupes) }))
-            .sort((a, b) => [...a.place.dossiers, a.place.fichier].join('/').localeCompare([...b.place.dossiers, b.place.fichier].join('/'), 'fr'));
+        /* CE QUE CHAQUE FORMATION PROPOSE DE RANGER — la liste même que l'aperçu de l'arborescence dit
+           « non rangée » : ce qui y figure sans être rangé reste HORS de l'archive, c'est le choix de
+           l'école (2026-09-25). Un document d'une formation inconnue n'a pas de liste : rien n'en est exclu. */
+        const { paletteDeLOrganisme } = require('./formationProgram.controller.js');
+        const offerts = offertsDesFormations(await paletteDeLOrganisme(conn, orgId));
+        aEcrire = []; nonRanges = [];
+        for (const l of lignes) {
+            const places = placesDansLArchive(arbres.pour(l.program_code), l, groupes, offerts.get(l.program_code) || null);
+            if (places.length) aEcrire.push({ l, places });
+            else nonRanges.push({ titre: l.title });
+        }
+        const cle = (p) => [...p.dossiers, p.fichier].join('/');
+        aEcrire.sort((a, b) => cle(a.places[0]).localeCompare(cle(b.places[0]), 'fr'));
     } catch (err) {
         console.error('Erreur préparation archive :', err);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 
     const nom = `${portee.nom.replace(/[\\/:*?"<>|]/g, '-')}.zip`;
+    const fichiers = aEcrire.reduce((n, x) => n + x.places.length, 0);
+    if (!fichiers) {
+        const n = nonRanges.length;
+        return res.status(404).json({ message: `Rien à archiver : ${n > 1 ? `les ${n} documents` : 'le document'} de cette sélection ${n > 1 ? 'ne sont rangés' : 'n\'est rangé'} nulle part dans l'arborescence d'archivage.` });
+    }
     /* `?compter=1` : ce que l'archive contiendrait, sans l'écrire. L'écran demande d'abord, pour
        répondre un vrai message à une sélection vide au lieu d'un téléchargement raté. */
-    if (req.query && req.query.compter) return res.json({ data: { documents: aEcrire.length, nom } });
+    if (req.query && req.query.compter) return res.json({ data: { documents: fichiers, nom, hors_arborescence: nonRanges.length } });
     res.set('Content-Type', 'application/zip');
     res.set('Content-Disposition', `attachment; filename="${nom.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(nom)}`);
     res.set('Cache-Control', 'no-store');
@@ -853,7 +883,7 @@ const exporterArchive = async (req, res) => {
     const pris = new Set();
     const inclus = []; const absents = [];
     try {
-        for (const { l, place } of aEcrire) {
+        for (const { l, places } of aEcrire) {
             const qui = l.scope === 'LEARNER' ? `${l.last_name || ''} ${l.first_name || ''}`.trim() : (l.company_name || '');
             let f;
             try {
@@ -864,18 +894,22 @@ const exporterArchive = async (req, res) => {
                 continue;
             }
             if (!f || !f.buffer || !f.buffer.length) { absents.push({ titre: l.title, qui, raison: 'fichier illisible ou vide' }); continue; }
-            /* DEUX DOCUMENTS DE MÊME NOM AU MÊME ENDROIT gardent tous les deux leur place : le second
-               prend « (2) ». Un ZIP accepte les doublons, mais l'extraction écraserait le premier. */
             const ext = extensionDe(f);
-            let chemin = [...place.dossiers, `${place.fichier}${ext}`].join('/');
-            for (let n = 2; pris.has(chemin.toLowerCase()); n++) chemin = [...place.dossiers, `${place.fichier} (${n})${ext}`].join('/');
-            pris.add(chemin.toLowerCase());
             const quand = l.signed_at || l.sent_at;
-            await zip.ajouter(chemin, f.buffer, quand ? new Date(String(quand).replace(' ', 'T')) : new Date());
-            inclus.push({ chemin, statut: l.status, place: place.place });
+            /* UN DOCUMENT, RENDU UNE FOIS, écrit à chacune de ses places — le dossier du stagiaire, et la
+               copie de son entreprise : rendre deux fois un PDF composé coûterait deux fois LibreOffice. */
+            for (const place of places) {
+                /* DEUX DOCUMENTS DE MÊME NOM AU MÊME ENDROIT gardent tous les deux leur place : le second
+                   prend « (2) ». Un ZIP accepte les doublons, mais l'extraction écraserait le premier. */
+                let chemin = [...place.dossiers, `${place.fichier}${ext}`].join('/');
+                for (let n = 2; pris.has(chemin.toLowerCase()); n++) chemin = [...place.dossiers, `${place.fichier} (${n})${ext}`].join('/');
+                pris.add(chemin.toLowerCase());
+                await zip.ajouter(chemin, f.buffer, quand ? new Date(String(quand).replace(' ', 'T')) : new Date());
+                inclus.push({ chemin, statut: l.status, place: place.place, copie: place.arbre === 'entreprise' && l.scope !== 'COMPANY' });
+            }
         }
         const maintenant = new Date();
-        await zip.ajouter('_sommaire.txt', sommaireDeLArchive(portee, arbres.source, inclus, absents, maintenant), maintenant);
+        await zip.ajouter('_sommaire.txt', sommaireDeLArchive(portee, arbres.source, inclus, absents, maintenant, nonRanges), maintenant);
         await zip.terminer();
         res.end();
         logAudit(req, 'archive.export', 'Archive', null);

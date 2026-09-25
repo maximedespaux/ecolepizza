@@ -48,18 +48,63 @@ export function clesRangees(tree, groupes) {
 }
 
 /**
- * L'aperçu d'une formation : ce que l'arborescence commune range pour elle, et ce qu'elle ne nomme
- * pas (qui ira dans le dossier du stagiaire — rien n'est perdu, mais mieux vaut le savoir).
- * @param documents les clés du parcours de la formation (GET /formations/arborescence)
+ * L'aperçu d'une formation : ce que l'arborescence commune range pour elle, et ce qu'elle ne range pas
+ * — qui ne sera PAS dans l'archive (décidé par l'école le 2026-09-25 : ne pas placer un document,
+ * c'est ne pas en vouloir de copie). Le serveur exclut exactement cette liste (offertsDesFormations).
+ * @param documents les clés de ce que la formation a dans cet arbre (formationDansLArbre)
+ * @param aRanger   celles dont l'absence se signale — par défaut toutes ; côté entreprise, les seuls
+ *                  documents de groupe : ceux des stagiaires n'y sont que des copies, facultatives
  */
-export function apercuFormation(tree, documents, groupes) {
+export function apercuFormation(tree, documents, groupes, aRanger = documents) {
   const siens = new Set(documents || []);
   const ranges = clesRangees(tree, groupes);
   return {
     /** L'item concerne-t-il cette formation ? Sinon il est simplement sauté pour elle. */
     concerne: (it) => clesCouvertes(it, groupes).some((c) => siens.has(c)),
-    nonPlaces: [...siens].filter((c) => !ranges.has(c)),
+    nonPlaces: [...new Set(aRanger || [])].filter((c) => !ranges.has(c)),
   };
+}
+
+const union = (...listes) => [...new Set(listes.flatMap((l) => l || []))];
+
+/**
+ * CE QUE PROPOSE CHAQUE ARBRE, et ce qu'une formation y a (2026-09-25). La palette vient du serveur
+ * (GET /formations/arborescence) : pour chaque document, les formations qui l'ont dans le parcours du
+ * dossier (`formations`) et à l'arrivée par entreprise (`formations_entreprise`, leur volet entreprise,
+ * que la palette ignorait : le devis professionnel n'était proposé NULLE PART).
+ *
+ * DEUX ARBRES, DEUX RÔLES (côté serveur : placesDansLArchive) :
+ *   · STAGIAIRE — le dossier de CHAQUE stagiaire, inscrit seul ou par une entreprise : tous leurs
+ *     documents, sauf ceux de groupe (🏢), qui vont à l'entreprise ;
+ *   · ENTREPRISE — des COPIES pour l'entreprise, de ce qu'on y range ; et la seule place de ses
+ *     documents de groupe. Tout y est proposé.
+ */
+export function paletteDeLArbre(documents, kind) {
+  const docs = (documents || []).map((d) => ({ ...d, formations: union(d.formations, d.formations_entreprise) }));
+  return kind === "entreprise" ? docs : docs.filter((d) => !d.company_level && d.formations.length);
+}
+
+/** Ce que seule l'arborescence ENTREPRISE range : la liste de l'autre arbre le dit, au lieu de le taire. */
+export function horsArbreStagiaire(documents) {
+  const siens = new Set(paletteDeLArbre(documents, "stagiaire").map((d) => d.cle));
+  return (documents || []).filter((d) => !siens.has(d.cle));
+}
+
+/**
+ * Ce qu'une formation a dans un arbre (`documents`, ce qui la concerne), et ce qui, non rangé, ne sera
+ * pas archivé (`aRanger`) — la liste même que le serveur exclut (offertsDesFormations) :
+ *   · stagiaire : tout ce qu'ont ses dossiers, seuls ou par une entreprise, sauf le groupe ;
+ *   · entreprise : ce qu'a son arrivée par entreprise ; seuls ses documents de groupe se signalent.
+ */
+export function formationDansLArbre(formation, kind, documents) {
+  if (!formation) return null;
+  const deGroupe = new Set((documents || []).filter((d) => d.company_level).map((d) => d.cle));
+  const tous = union(formation.documents, formation.documents_entreprise);
+  if (kind === "entreprise") {
+    return { ...formation, documents: formation.documents_entreprise || formation.documents || [], aRanger: tous.filter((c) => deGroupe.has(c)) };
+  }
+  const siens = tous.filter((c) => !deGroupe.has(c));
+  return { ...formation, documents: siens, aRanger: siens };
 }
 
 /** Les groupes « OU » d'aujourd'hui, depuis la carte slug → { group } des équivalences. */

@@ -4,7 +4,7 @@ import { getFormations, createFormation, updateFormation, deleteFormation, reord
 import PageHead from "../components/PageHead.jsx";
 import { ArchiveTreePreview } from "../components/ArchiveTreeEditor.jsx";
 import ArborescenceCommune from "../components/ArborescenceCommune.jsx";
-import { groupesDepuis } from "../lib/arborescence.js";
+import { groupesDepuis, paletteDeLArbre, formationDansLArbre } from "../lib/arborescence.js";
 import Badge from "../components/Badge.jsx";
 import DataTable from "../components/DataTable.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -163,15 +163,14 @@ function ApercuArborescence({ program, form, eqMap, kind, setKind, onModifier })
   if (!etat) return <p className="hint">Chargement…</p>;
   const isEnt = kind === "entreprise";
   const documents = etat.documents || [];
-  const deGroupe = new Set(documents.filter((d) => d.company_level).map((d) => d.cle));
   const f = (etat.formations || []).find((x) => x.id === program.id);
-  const formation = f && { ...f, code: form.code || f.code, title: form.title || f.title,
-    documents: isEnt ? f.documents : f.documents.filter((c) => !deGroupe.has(c)) };
+  // La règle de l'éditeur commun (lib/arborescence.js) : ce qu'on lit ici est ce que l'archive fera.
+  const formation = f && formationDansLArbre({ ...f, code: form.code || f.code, title: form.title || f.title }, kind, documents);
   return (
     <>
       <div className="arbo-avis">
         L'arborescence d'archivage est <b>commune à toutes les formations</b> : un document que {form.code || "cette formation"} n'a
-        pas y est simplement sauté pour elle.{etat.propose ? " Elle n'est pas encore enregistrée : ce qui suit est la proposition, faite des arborescences déjà réglées." : ""}
+        pas y est simplement sauté pour elle, et ce qu'elle ne range nulle part n'est pas archivé.{etat.propose ? " Elle n'est pas encore enregistrée : ce qui suit est la proposition, faite des arborescences déjà réglées." : ""}
         {etat.ajustements?.length > 0 ? " Des choix « OU » supprimés y sont dépliés en leurs documents : ouvrez-la et enregistrez pour le garder." : ""}
         <div style={{ marginTop: 8 }}>
           <button type="button" className="btn sm" onClick={onModifier}>Modifier l'arborescence commune</button>
@@ -184,8 +183,8 @@ function ApercuArborescence({ program, form, eqMap, kind, setKind, onModifier })
         </div>
       </div>
       {/* LE MÊME DESSIN que l'éditeur commun, en lecture : ce qu'on lit ici est ce qu'on y modifie. */}
-      <ArchiveTreePreview tree={isEnt ? etat.company_tree : etat.tree} formation={formation}
-        docs={isEnt ? documents : documents.filter((d) => !d.company_level)} eqMap={eqMap}
+      <ArchiveTreePreview tree={isEnt ? etat.company_tree : etat.tree} formation={formation} arbre={kind}
+        docs={paletteDeLArbre(documents, kind)} eqMap={eqMap}
         nbFormations={(etat.formations || []).length}
         palette={new Map(documents.map((d) => [d.cle, d.label]))} groupes={groupes} />
     </>

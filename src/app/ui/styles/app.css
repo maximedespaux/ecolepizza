@@ -1230,8 +1230,11 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 /* LA BULLE — liste des documents ou menu d'un dossier — vit dans un portail, AU-DESSUS de la fenêtre
    (.overlay est à 100 ; le menu des lignes, à 60, y serait caché). */
 .arbo-bulle{position:fixed;z-index:130;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
-  box-shadow:var(--shadow-3);animation:hudPose .16s var(--ease) backwards}
-.arbo-bulle.large{width:340px;max-width:calc(100vw - 16px)}
+  box-shadow:var(--shadow-3);animation:hudPose .16s var(--ease) backwards;overflow:auto}
+/* En colonne : bornée en hauteur par l'écran, c'est la liste qui cède (et défile), jamais la recherche
+   ni la ligne du bas. */
+.arbo-bulle.large{display:flex;flex-direction:column;width:340px;max-width:calc(100vw - 16px)}
+.arbo-bulle.large > *{flex:none}
 .arbo-bulle.menu{display:flex;flex-direction:column;gap:2px;min-width:230px;padding:5px}
 .arbo-bulle.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;border:none;border-radius:7px;background:none;
   font:inherit;font-size:13px;color:var(--text);text-align:left;white-space:nowrap;cursor:pointer}
@@ -1240,6 +1243,7 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 .arbo-bulle.menu button.danger,.arbo-bulle.menu button.danger > svg{color:var(--ember1)}
 .arbo-bulle-recherche{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border-soft);color:var(--dim)}
 .arbo-bulle-recherche input{flex:1;min-width:0;border:0;outline:none;background:none;font:inherit;font-size:14px;color:var(--text)}
+.arbo-bulle.large > .arbo-bulle-liste{flex:0 1 auto;min-height:0}
 .arbo-bulle-liste{max-height:320px;overflow:auto;padding:4px}
 .arbo-bulle-t{padding:8px 8px 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .arbo-opt{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:0;border-radius:7px;background:none;
@@ -1252,6 +1256,8 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 .arbo-opt-qui{font-size:11.5px;color:var(--dim);white-space:nowrap}
 .arbo-opt-ou{font-size:11.5px;color:var(--ember1);white-space:nowrap}
 .arbo-bulle-vide{margin:10px;font-size:13px;color:var(--dim)}
+.arbo-bulle-ailleurs{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border-top:1px solid var(--border-soft);font-size:12.5px;line-height:1.45;color:var(--dim)}
+.arbo-bulle-ailleurs > svg{flex:none;margin-top:2px}
 /* Ce que l'arborescence ne nomme pas, pour la formation de l'aperçu — avec de quoi le placer. */
 .arbo-non-places{margin-top:12px;padding:10px 12px;border:1px dashed color-mix(in srgb,var(--blue) 35%,var(--border));border-radius:10px;
   background:color-mix(in srgb,var(--blue) 4%,var(--surface))}
