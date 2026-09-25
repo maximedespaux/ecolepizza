@@ -495,12 +495,13 @@ function paletteDesFormations(entrees, documentsDeSession = []) {
     const entree = (s) => {
         const cle = cleEtape(s);
         if (!palette.has(cle)) {
-            palette.set(cle, s.quiz_id
-                ? { cle, titre_qcm: s.label, label: s.label, company_level: false, formations: [], formations_entreprise: [] }
-                : { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [], formations_entreprise: [] });
+            palette.set(cle, { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [], formations_entreprise: [] });
         }
         return palette.get(cle);
     };
+    /* LES ÉVALUATIONS (QCM) NE S'ARCHIVENT PLUS (2026-09-25, cf. sansEvaluations) : la liste ne les
+       propose pas, et aucune formation ne les « a » pour l'aperçu. */
+    const archivable = (s) => !s.quiz_id;
     const ajouter = (liste, code) => { if (!liste.includes(code)) liste.push(code); };
     const deSession = [];
     for (const m of documentsDeSession || []) {
@@ -514,12 +515,15 @@ function paletteDesFormations(entrees, documentsDeSession = []) {
         const actives = etapes.filter((s) => s.active);
         const parSlug = new Map(etapes.map((s) => [s.slug, s]));
         const duVolet = lireVolet(f.volet).map((sl) => parSlug.get(sl)).filter(Boolean);
-        const parEntreprise = duVolet.length ? duVolet : actives;
-        for (const s of actives) ajouter(entree(s).formations, f.code);
+        /* LE REPLI SE DÉCIDE SUR LE VOLET ENTIER, comme companyParcours : un volet fait de seuls QCM n'est
+           pas vide pour lui. Les évaluations ne sont écartées qu'ensuite. */
+        const parEntreprise = (duVolet.length ? duVolet : actives).filter(archivable);
+        const siennes = actives.filter(archivable);
+        for (const s of siennes) ajouter(entree(s).formations, f.code);
         for (const s of parEntreprise) ajouter(entree(s).formations_entreprise, f.code);
         formations.push({
             id: f.id, code: f.code, title: f.title,
-            documents: [...new Set(actives.map(cleEtape))],
+            documents: [...new Set(siennes.map(cleEtape))],
             documents_entreprise: [...new Set(parEntreprise.map(cleEtape))],
             documents_session: deSession,
         });
@@ -527,6 +531,32 @@ function paletteDesFormations(entrees, documentsDeSession = []) {
     /* Les documents des formations d'abord, dans l'ordre des parcours ; ceux de session ensuite. */
     const rang = (d) => (d.formations.length || d.formations_entreprise.length ? 0 : 1);
     return { documents: [...palette.values()].sort((a, b) => rang(a) - rang(b)), formations };
+}
+
+/** Un QCM placé dans une arborescence : par son titre, ou par son identifiant (les anciennes). */
+const estEvaluation = (it) => !!it && !it.group && (it.type === 'quiz' || /^quiz:/.test(String(it.ref || '')));
+
+/**
+ * LES ÉVALUATIONS NE S'ARCHIVENT PLUS — décidé par l'école le 2026-09-25. Un QCM n'est pas un
+ * document : aucun modèle, aucun PDF. Le coffre l'ouvrait sur « Aucun modèle », et l'archive ZIP
+ * rangeait les 31 réponses de production en « NON inclus » : les dossiers « Évaluations » que l'école
+ * avait placés dans ses deux arborescences restaient vides. Ses réponses, figées, vivent dans
+ * Résultats QCM. Le coffre ne les liste plus (suivi.controller.js, lignesDuCoffre) ; ceci retire leurs
+ * places des arborescences, et dit lesquelles, et où — rien n'est gardé sans que l'école enregistre.
+ * @returns {{ tree, retirees: [{ label, dossier }] }}
+ */
+function sansEvaluations(tree) {
+    const retirees = [];
+    const refaire = (dossiers, chemin) => (dossiers || []).map((f) => {
+        const ici = [...chemin, f.name];
+        const items = [];
+        for (const it of f.items || []) {
+            if (estEvaluation(it)) retirees.push({ label: it.label || it.titre || it.ref, dossier: ici.join(' / ') });
+            else items.push(it);
+        }
+        return { ...f, items, children: refaire(f.children, ici) };
+    });
+    return { tree: tree && Array.isArray(tree.folders) ? { ...tree, folders: refaire(tree.folders, []) } : tree, retirees };
 }
 
 /**
@@ -598,5 +628,5 @@ function validerArbre(tree) {
 module.exports = {
     normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placesDansLArchive, clesDuDocument, contexteDu,
     resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, actualiserLesOu, STANDARD, STANDARD_ENTREPRISE,
-    cleEtape, lireVolet, paletteDesFormations, offertsDesFormations,
+    cleEtape, lireVolet, paletteDesFormations, offertsDesFormations, sansEvaluations,
 };

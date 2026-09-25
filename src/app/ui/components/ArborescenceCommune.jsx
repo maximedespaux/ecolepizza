@@ -15,7 +15,7 @@ import { groupesDepuis, paletteDeLArbre, horsDeLArbre, formationDansLArbre } fro
  *
  * TANT QUE RIEN N'EST ENREGISTRÉ, l'éditeur s'ouvre sur la PROPOSITION du serveur : les arborescences
  * déjà réglées, fusionnées, avec ce qu'il faut trancher (un document rangé à deux endroits) et ce qui
- * a été retiré (un QCM supprimé, une étape qui n'existe plus). Rien n'est écrit avant « Enregistrer ».
+ * a été retiré (une étape qui n'existe plus). Rien n'est écrit avant « Enregistrer ».
  */
 /** Combien de documents une arborescence range : le compte que porte chaque onglet. */
 const nbPlaces = (t) => { let n = 0; const w = (fs) => (fs || []).forEach((f) => { n += (f.items || []).length; w(f.children); }); w(t && t.folders); return n; };
@@ -75,7 +75,7 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
     setSaving(true);
     try {
       const r = await saveArborescenceCommune(tree, companyTree);
-      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [], ajustements: [] }));
+      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [], ajustements: [], evaluations_retirees: [] }));
       setStatus({ type: "success", message: r?.message || "Arborescence enregistrée pour toutes les formations." });
       onSaved?.();
     } catch (e) {
@@ -105,6 +105,16 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
               {/* UN « OU » SUPPRIMÉ (Modèles → Équivalences) s'affichait encore ici. Le serveur le déplie à
                   la lecture — ses documents, un par un, à sa place — et l'écran le dit : rien n'est gardé
                   tant que l'école n'enregistre pas. */}
+              {/* LES ÉVALUATIONS NE S'ARCHIVENT PLUS (2026-09-25) : le serveur retire leurs places de l'arbre
+                  montré, et l'écran le dit. Rien n'est gardé tant que l'école n'enregistre pas. */}
+              {etat.evaluations_retirees?.length > 0 && (
+                <div className="arbo-avis attente">
+                  <b>Les évaluations (QCM) ne s'archivent plus</b> : ce ne sont pas des documents, et leurs réponses vivent
+                  dans Résultats QCM. Leurs {etat.evaluations_retirees.length} places ont été retirées
+                  ({[...new Set(etat.evaluations_retirees.map((r) => `${r.arbre}, ${r.dossier.replace(/[{}]/g, "").split(" / ").join(" › ")}`))].join(" ; ")}).
+                  {" "}<b>Enregistrez</b> pour garder ce rangement ; un dossier resté vide peut être supprimé.
+                </div>
+              )}
               {etat.ajustements?.length > 0 && (
                 <div className="arbo-avis attente">
                   <b>Choix « OU » supprimés</b> dans Modèles → Équivalences : leurs documents sont maintenant rangés un par un,
@@ -123,8 +133,8 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
               {etat.propose && (
                 <div className="arbo-avis">
                   <b>Proposition, rien n'est encore enregistré.</b> Elle réunit les arborescences déjà réglées
-                  {etat.sources?.length ? <> sur {etat.sources.join(", ")}</> : null} : chaque document y est placé une fois,
-                  et chaque QCM par son titre. Relisez-la, puis enregistrez-la pour toutes les formations.
+                  {etat.sources?.length ? <> sur {etat.sources.join(", ")}</> : null} : chaque document y est placé une fois.
+                  Relisez-la, puis enregistrez-la pour toutes les formations.
                   {etat.conflits?.length > 0 && (
                     <>
                       <p className="arbo-avis-t">À trancher : rangés à deux endroits selon la formation</p>

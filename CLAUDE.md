@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-25** :
-**2014 tests — 2007 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2015 tests — 2008 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -164,18 +164,30 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 
 ---
 
-## 4. Migrations — **sept à jouer : 176 à 182 ; la 175 jouée, à constater (relevé le 2026-09-25)**
+## 4. Migrations — **toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-25)**
 
-**182 est À JOUER** (`182_arborescence_commune.sql`, l'arborescence d'archivage UNE fois pour toutes les
+**176, 178, 179, 180, 181 et 182 sont jouées — constaté le 2026-09-25 par l'API, sans SQL :** `GET /api/memos`
+rend une liste (176) ; `GET /api/mailing/modeles` rend `disponible: true` et un texte `perso: true` (178) ;
+`GET /api/mailing/regles` rend `disponible: true` (179) ; `GET /api/mailing/images` répond sans « Migration 180 non
+jouée » (180) ; `GET /api/sessions/:id/intervenants` rend `horaires: true` (181) ; `GET /api/formations/arborescence`
+rend `disponible: true` et `propose: false` (182). Leurs paragraphes ci-dessous gardent ce qu'elles font et leurs
+reverts. ⚠️ **177 n'est PAS constatée** : les mémos lus portent la clé `liens`, mais elle existe aussi sans la table
+(repli de `memo.controller.js`) — seule la requête `information_schema` de son paragraphe tranche, ou un mémo écrit
+avec @.
+
+**182** (`182_arborescence_commune.sql`, l'arborescence d'archivage UNE fois pour toutes les
 formations — demandée le 2026-09-24). Deux colonnes sur `organization` : `archive_tree` et `company_archive_tree`
 (longtext, NULL par défaut). L'arborescence se réglait formation par formation, à la main, et NE SERVAIT À RIEN :
 l'export ZIP qu'elle devait ranger (« étape 2 » du 2026-07-10) n'avait jamais été écrit. Il existe désormais :
 `GET /api/suivi/archives/zip` (?session= | ?dossier= | ?annee=&semaine=&formation=), sous la garde du coffre
 (AUDIT_ROLES), appelé par trois boutons (session, fiche stagiaire, lignes du coffre). Un document qu'une formation
-n'a pas est sauté ; un QCM se désigne par son TITRE (chaque formation a le sien) ; un « OU » se lit dans ses
-membres D'AUJOURD'HUI ; ce que l'arborescence ne nomme pas va dans le dossier du stagiaire, et `_sommaire.txt`
-nomme ce qui manque (QCM pas rempli, document qui ne se rend plus). Règles : `lib/arborescenceArchive.js` (serveur)
-et `lib/arborescence.js` (écran), tenues d'accord par un test.
+n'a pas est sauté ; un « OU » se lit dans ses membres D'AUJOURD'HUI. **Décidé par l'école le 2026-09-25 : ce que
+l'arborescence ne range pas n'est PAS archivé** — l'aperçu le dit, `_sommaire.txt` le nomme —, sauf ce qu'elle ne
+peut pas nommer (PDF importé, document hors parcours), qui garde sa place par défaut ; l'arborescence STAGIAIRE range
+le dossier de chaque stagiaire (inscrit seul ou par une entreprise) et les documents de session, l'arborescence
+ENTREPRISE des copies et les documents de groupe ; **les évaluations (QCM) ne s'archivent plus**, ni au coffre ni dans
+l'archive : ce ne sont pas des documents (aucun PDF), leurs réponses vivent dans Résultats QCM. Règles :
+`lib/arborescenceArchive.js` (serveur) et `lib/arborescence.js` (écran), tenues d'accord par un test.
 Sans la migration, rien ne casse : l'éditeur commun (Formations → Arborescence d'archivage) le dit et ne propose
 pas d'enregistrer, et l'archive suit l'arborescence de chaque formation (053, 083), telle qu'elle est. Tant que
 rien n'est enregistré, l'éditeur s'ouvre sur la PROPOSITION : les arborescences de RS7404, NIV1, NIV1H (et le
@@ -187,7 +199,7 @@ et `propose: false`. Ou une requête, qui doit rendre 2 :
 ⚠️ L'ancien `PUT /formations/:id/archive-tree` est RETIRÉ (plus rien ne l'appelait) ; les colonnes des formations
 restent, lues en repli.
 
-**181 est À JOUER** (`181_intervenant_horaires.sql`, les heures d'un intervenant externe,
+**181** (`181_intervenant_horaires.sql`, les heures d'un intervenant externe,
 demi-journée par demi-journée — demandé le 2026-09-23). Deux colonnes `time` sur
 `session_intervenant_slot` : `heure_debut` et `heure_fin`. Une case cochée disait QU'il est venu,
 jamais QUAND, et un intervenant externe ne suit pas les horaires des stagiaires (l'expert hygiène
@@ -208,7 +220,7 @@ Ou une requête, qui doit rendre 2 :
 ⚠️ Son revert efface les heures saisies, et elles seules : affectations, demi-journées et signatures
 restent. Les feuilles déjà générées en PDF gardent les heures qu'elles portaient.
 
-**180 est À JOUER** (`180_mail_images.sql`, les images des e-mails — à jouer APRÈS la 178). Une table
+**180** (`180_mail_images.sql`, les images des e-mails — à jouer APRÈS la 178). Une table
 `mail_image` : nom, type MIME, octets. Le fichier part EN BASE, jamais sur le disque du serveur — même
 modèle que `community_image` (114) et `learner_avatar` (094), pour qu'un déploiement ou une restauration
 n'ait aucun dossier à recopier. Dans un message, l'image s'écrit `![légende](image:<id>)` ; elle voyage
@@ -221,7 +233,7 @@ déposer une image dans Mailing → la bibliothèque la liste. Ou une requête, 
 ⚠️ Son revert supprime la table : les messages déjà envoyés gardent leur image (elle est partie avec eux),
 mais un texte programmé qui la citait la rendra vide.
 
-**179 est À JOUER** (`179_mails_programmes.sql`, les envois programmés : « 3 mois après la fin de la
+**179** (`179_mails_programmes.sql`, les envois programmés : « 3 mois après la fin de la
 session », demandé le 2026-09-23 — à jouer APRÈS la 178, dont elle prolonge l'écran). Deux tables.
 `mail_regle` : un nom, un déclencheur (`fin_session`, `debut_session`, `inscription`), un sens
 (avant/après), un nombre et une unité (jour/mois/année), un filtre de formation facultatif, l'objet et le
@@ -240,7 +252,7 @@ s'arrête sans rien écrire. **Elle se vérifie par l'API, sans SQL** : créer u
 ⚠️ Son revert SUPPRIME les deux tables — dont la MÉMOIRE de ce qui est parti : une règle recréée ensuite
 réécrirait à des stagiaires déjà touchés (bornée toutefois par le nouveau `depuis`).
 
-**178 est À JOUER** (`178_mails_personnalises.sql`, les e-mails de l'école écrits par l'école, demandé le
+**178** (`178_mails_personnalises.sql`, les e-mails de l'école écrits par l'école, demandé le
 2026-09-23). Deux tables. `mail_modele` : le texte d'un e-mail AUTOMATIQUE quand l'école l'a réécrit — une
 ligne par type (credentials, reset, forgot, security, notifications), avec l'objet, le titre et deux zones
 de prose. Rien n'y est créé d'avance : sans ligne, c'est le texte livré avec l'application qui sert, et
@@ -263,7 +275,7 @@ requête, qui doit rendre 2 :
 ⚠️ Son revert SUPPRIME les deux tables : les textes réécrits reviennent à ceux d'origine sans prévenir, et
 l'historique des envois disparaît.
 
-**176 est À JOUER** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
+**176** (`176_memos.sql`, les mémos du personnel : un pense-bête et une liste de choses à
 faire, demandés le 2026-09-22). Une table `memo` — auteur, texte, échéance facultative, partage,
 `fait_le`/`fait_par`. Un mémo est PRIVÉ ; son auteur peut le partager, et alors tout le personnel le
 voit et peut le cocher, mais lui seul le supprime ou le reprend (le privé d'un autre répond 404, jamais
@@ -278,7 +290,7 @@ requête, qui doit rendre 1 :
 `SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo';`
 ⚠️ Son revert SUPPRIME la table : tous les mémos, privés et partagés, faits ou non.
 
-**177 est À JOUER** (`177_memo_liens.sql`, ce qu'un mémo DÉSIGNE : les liens écrits avec @ et #, demandés
+**177 — À CONSTATER** (`177_memo_liens.sql`, ce qu'un mémo DÉSIGNE : les liens écrits avec @ et #, demandés
 le 2026-09-22 après la 176 — à jouer APRÈS elle, la table s'y accroche par une clé étrangère). `@` trouve
 QUI (stagiaire, entreprise, membre de l'équipe), `#` trouve QUOI (session, partenaire, facture) : la liste
 vit dans `lib/memos.js`, des DEUX côtés, tenue par un test. Le texte du mémo reste ce qu'on a tapé — les

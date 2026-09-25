@@ -61,23 +61,18 @@ function NomDossier({ nom }) {
 }
 
 const iconeDossier = (d) => (d.per_learner ? "user" : /\{Entreprise\}/.test(d.name || "") ? "building" : "folder");
-const iconeDoc = (it) => (it.type === "quiz" ? "help" : it.group ? "copy" : "file-text");
+const iconeDoc = (it) => (it.group ? "copy" : "file-text");
 
 /* Construit la liste des documents attribuables, depuis la palette de TOUTES les formations :
-   - un QCM y figure UNE fois, par son titre — chaque formation range le sien à cette place ;
-   - les variantes « OU » (même ÉQUIVALENCE, cf. Modèles → Équivalences) fusionnent en UNE option,
-     résolue au bon variant par dossier à l'export.
-   Chaque option garde la liste des formations qui ont le document. */
+   les variantes « OU » (même ÉQUIVALENCE, cf. Modèles → Équivalences) fusionnent en UNE option,
+   résolue au bon variant par dossier à l'export. Chaque option garde la liste des formations qui ont
+   le document. Pas d'évaluation (QCM) : elles ne s'archivent plus (2026-09-25), la palette n'en a pas. */
 function buildOptions(docs, eqMap) {
   const groupKeyOf = (d) => (d.slug && eqMap && eqMap.get(d.slug) ? eqMap.get(d.slug).group : null);
   const options = [];
   const done = new Set();
   const union = (listes) => [...new Set(listes.flat())];
   for (const d of docs) {
-    if (d.titre_qcm) {
-      options.push({ key: d.cle, type: "quiz", titre: d.titre_qcm, label: d.label, company_level: false, formations: d.formations || [], sansStagiaire: false });
-      continue;
-    }
     const gk = groupKeyOf(d);
     const members = gk ? docs.filter((x) => groupKeyOf(x) === gk) : [d];
     if (gk && members.length > 1) {
@@ -99,7 +94,6 @@ function buildOptions(docs, eqMap) {
   return options;
 }
 const itemDe = (o) => (o.group ? { type: o.type, group: o.group, members: o.members, label: o.label }
-  : o.type === "quiz" ? { type: "quiz", titre: o.titre, label: o.label }
   : { type: o.type, ref: o.ref, label: o.label });
 
 /* « RS7404 » ou « 5 formations » : qui a ce document. Rien quand toutes l'ont — c'est le cas
@@ -164,10 +158,9 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
   const vus = options.filter((o) => !n || normaliserTitre(o.label).includes(n));
   const autres = ailleurs ? ailleurs.docs.filter((o) => !n || normaliserTitre(o.label).includes(n)) : [];
   const groupes = [
-    ["Documents", vus.filter((o) => o.type !== "quiz" && !o.group && !o.session)],
+    ["Documents", vus.filter((o) => !o.group && !o.session)],
     ["Documents de session", vus.filter((o) => o.session)],
     ["Choix « OU »", vus.filter((o) => o.group)],
-    ["QCM", vus.filter((o) => o.type === "quiz")],
   ].filter(([, l]) => l.length);
   return (
     <>
@@ -300,7 +293,7 @@ function Dossier({ d, ctx, profondeur, sousStagiaire = false }) {
             return (
               <li key={cle} className={"arbo-doc" + (saute ? " saute" : "")}
                 title={saute ? `Pas dans le parcours de ${formation.code} : sauté pour cette formation` : undefined}>
-                <Icon name={iconeDoc(it)} size={14} className={"arbo-ic-doc" + (it.type === "quiz" ? " qcm" : it.group ? " ou" : "")} aria-hidden="true" />
+                <Icon name={iconeDoc(it)} size={14} className={"arbo-ic-doc" + (it.group ? " ou" : "")} aria-hidden="true" />
                 <span className="arbo-doc-l">{it.label}</span>
                 {it.group && <span className="arbo-tag ou" title="Choix « OU » : le bon variant est retenu selon le dossier">OU</span>}
                 {qui && <span className="arbo-doc-qui">{qui}</span>}
@@ -358,7 +351,7 @@ const standardTree = () => ({
 
 /**
  * L'arborescence commune — à modifier (`onChange`) ou à lire (`lectureSeule`).
- *   `docs`      la palette (GET /formations/arborescence) : modèles, pièces, QCM par titre, et qui les a ;
+ *   `docs`      la palette (GET /formations/arborescence) : modèles, pièces, documents de session, et qui les a ;
  *   `formation` ({ code, title, documents, aRanger }) : l'aperçu POUR elle — barré ce qu'elle n'a pas,
  *               et la liste de ce que l'arborescence ne range pas, qui ne sera pas archivé ;
  *   `groupes`   les « OU » d'aujourd'hui (clé → membres), `palette` (clé → libellé) ;
@@ -462,7 +455,7 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
               const cibles = o && o.sansStagiaire ? cheminsDossiers.filter((p) => !p.sousStagiaire) : cheminsDossiers;
               return (
                 <li key={c}>
-                  <Icon name={c.startsWith("qcm:") ? "help" : "file-text"} size={14} aria-hidden="true" />
+                  <Icon name="file-text" size={14} aria-hidden="true" />
                   <span className="arbo-doc-l">{(palette && palette.get(c)) || c}</span>
                   {!lectureSeule && o && cibles.length > 0 && (
                     <select value="" aria-label={`Placer ${(palette && palette.get(c)) || c}`}
