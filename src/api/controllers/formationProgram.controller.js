@@ -598,6 +598,9 @@ const getFormationSteps = async (req, res) => {
  * volet entreprise (`company_steps`, lu par le `SELECT *` ; sans lui, un document réservé aux
  * entreprises n'était proposé nulle part, cf. Arbo.paletteDesFormations).
  *
+ * Plus les DOCUMENTS DE SESSION, qu'aucun parcours ne porte (« Contrat Hygiène ») : ceux que la page
+ * d'une session propose d'envoyer — la même fonction qui les y liste, pour qu'ils ne divergent pas.
+ *
  * DEUX LECTEURS, UNE FONCTION : l'éditeur de l'arborescence, qui en tire sa liste et son aperçu, et
  * l'archive ZIP (suivi.controller.js), qui laisse dehors ce qu'une formation propose sans que
  * l'arborescence le range. Calculés deux fois, l'aperçu et l'archive finiraient par ne plus dire la
@@ -619,7 +622,8 @@ async function paletteDeLOrganisme(conn, orgId) {
         }
         entrees.push({ id: p.id, code: p.code, title: p.title, etapes, volet: p.company_steps });
     }
-    return { programmes, tousLesSlugs, libelles, ...Arbo.paletteDesFormations(entrees) };
+    const { modelesExternes } = require('./documentSession.controller.js');
+    return { programmes, tousLesSlugs, libelles, ...Arbo.paletteDesFormations(entrees, await modelesExternes(orgId)) };
 }
 
 /**
@@ -692,14 +696,20 @@ const getArborescence = async (req, res) => {
                 retires: [...st.retires.map((c) => ({ ...c, arbre: 'stagiaire' })), ...en.retires.map((c) => ({ ...c, arbre: 'entreprise' }))],
             };
         }
+        /* LES ÉVALUATIONS NE S'ARCHIVENT PLUS (2026-09-25) : leurs places sortent de l'arbre montré, et
+           l'écran le dit — comme un « OU » supprimé, rien n'est gardé tant que l'école n'enregistre pas. */
+        const st = Arbo.sansEvaluations(enregistree ? enregistree.tree : proposition.tree);
+        const en = Arbo.sansEvaluations(enregistree ? enregistree.company_tree : proposition.company_tree);
         res.json({
             data: {
                 disponible,
                 propose: !enregistree,
-                tree: enregistree ? enregistree.tree : proposition.tree,
-                company_tree: enregistree ? enregistree.company_tree : proposition.company_tree,
+                tree: st.tree,
+                company_tree: en.tree,
                 sources: proposition ? proposition.sources : [],
                 ajustements,
+                evaluations_retirees: enregistree
+                    ? [...st.retirees.map((r) => ({ ...r, arbre: 'stagiaire' })), ...en.retirees.map((r) => ({ ...r, arbre: 'entreprise' }))] : [],
                 conflits: proposition ? proposition.conflits : [],
                 retires: proposition ? proposition.retires : [],
                 documents,
@@ -716,8 +726,9 @@ const getArborescence = async (req, res) => {
 const saveArborescence = async (req, res) => {
     let tree; let companyTree;
     try {
-        tree = Arbo.validerArbre((req.body || {}).tree) || { folders: [] };
-        companyTree = Arbo.validerArbre((req.body || {}).company_tree) || { folders: [] };
+        // Une évaluation n'a plus de place à garder : un écran d'avant pourrait encore en envoyer.
+        tree = Arbo.sansEvaluations(Arbo.validerArbre((req.body || {}).tree) || { folders: [] }).tree;
+        companyTree = Arbo.sansEvaluations(Arbo.validerArbre((req.body || {}).company_tree) || { folders: [] }).tree;
     } catch (e) {
         if (e && e.code === 'ARBRE_INVALIDE') return res.status(422).json({ error: e.message });
         throw e;

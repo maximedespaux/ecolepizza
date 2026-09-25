@@ -474,50 +474,97 @@ function lireVolet(v) {
  * non ; et si le volet est vide, ou ne désigne que des étapes disparues (NIV1 ne cite plus que
  * « devis-entreprise », un modèle supprimé), le parcours du dossier — c'est là qu'il retombe.
  *
+ * ET LES DOCUMENTS DE SESSION, qu'aucun parcours ne porte : « Contrat Hygiène », signé par
+ * l'intervenant externe, s'envoie depuis la page de la session (documentSession.controller.js,
+ * modelesExternes) — un par session, pour n'importe quelle formation. Relevé en production le même
+ * jour : le coffre en avait un, et la liste ne le proposait pas. Chaque formation les a donc tous
+ * (`documents_session`).
+ *
  * @param entrees [{ id, code, title, etapes, volet }] — `etapes` : toutes les étapes candidates de la
  *        formation, avec `active` (formationSteps) ; `volet` : ses company_steps, dans l'ordre.
+ * @param documentsDeSession [{ slug, label, doc_type }] — les modèles qu'on envoie depuis une session
  * @returns {{ documents, formations }}
- *   documents  [{ cle, slug | titre_qcm, label, company_level, doc_type, formations, formations_entreprise }] :
+ *   documents  [{ cle, slug | titre_qcm, label, company_level, doc_type, formations, formations_entreprise, session? }] :
  *              `formations`, celles qui l'ont dans le parcours du dossier ; `formations_entreprise`,
- *              celles qui l'ont à l'arrivée par entreprise ;
- *   formations [{ id, code, title, documents, documents_entreprise }], en clés.
+ *              celles qui l'ont à l'arrivée par entreprise ; `session`, un document de session ;
+ *   formations [{ id, code, title, documents, documents_entreprise, documents_session }], en clés.
  */
-function paletteDesFormations(entrees) {
+function paletteDesFormations(entrees, documentsDeSession = []) {
     const palette = new Map();
     const formations = [];
     const entree = (s) => {
         const cle = cleEtape(s);
         if (!palette.has(cle)) {
-            palette.set(cle, s.quiz_id
-                ? { cle, titre_qcm: s.label, label: s.label, company_level: false, formations: [], formations_entreprise: [] }
-                : { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [], formations_entreprise: [] });
+            palette.set(cle, { cle, slug: s.slug, label: s.label, company_level: !!s.company_level, doc_type: s.doc_type || null, formations: [], formations_entreprise: [] });
         }
         return palette.get(cle);
     };
+    /* LES ÉVALUATIONS (QCM) NE S'ARCHIVENT PLUS (2026-09-25, cf. sansEvaluations) : la liste ne les
+       propose pas, et aucune formation ne les « a » pour l'aperçu. */
+    const archivable = (s) => !s.quiz_id;
     const ajouter = (liste, code) => { if (!liste.includes(code)) liste.push(code); };
+    const deSession = [];
+    for (const m of documentsDeSession || []) {
+        if (!m || !m.slug) continue;
+        const e = entree({ slug: m.slug, label: m.label || m.slug, doc_type: m.doc_type, quiz_id: null, company_level: false });
+        e.session = true;
+        if (!deSession.includes(e.cle)) deSession.push(e.cle);
+    }
     for (const f of entrees || []) {
         const etapes = Array.isArray(f.etapes) ? f.etapes : [];
         const actives = etapes.filter((s) => s.active);
         const parSlug = new Map(etapes.map((s) => [s.slug, s]));
         const duVolet = lireVolet(f.volet).map((sl) => parSlug.get(sl)).filter(Boolean);
-        const parEntreprise = duVolet.length ? duVolet : actives;
-        for (const s of actives) ajouter(entree(s).formations, f.code);
+        /* LE REPLI SE DÉCIDE SUR LE VOLET ENTIER, comme companyParcours : un volet fait de seuls QCM n'est
+           pas vide pour lui. Les évaluations ne sont écartées qu'ensuite. */
+        const parEntreprise = (duVolet.length ? duVolet : actives).filter(archivable);
+        const siennes = actives.filter(archivable);
+        for (const s of siennes) ajouter(entree(s).formations, f.code);
         for (const s of parEntreprise) ajouter(entree(s).formations_entreprise, f.code);
         formations.push({
             id: f.id, code: f.code, title: f.title,
-            documents: [...new Set(actives.map(cleEtape))],
+            documents: [...new Set(siennes.map(cleEtape))],
             documents_entreprise: [...new Set(parEntreprise.map(cleEtape))],
+            documents_session: deSession,
         });
     }
-    return { documents: [...palette.values()], formations };
+    /* Les documents des formations d'abord, dans l'ordre des parcours ; ceux de session ensuite. */
+    const rang = (d) => (d.formations.length || d.formations_entreprise.length ? 0 : 1);
+    return { documents: [...palette.values()].sort((a, b) => rang(a) - rang(b)), formations };
+}
+
+/** Un QCM placé dans une arborescence : par son titre, ou par son identifiant (les anciennes). */
+const estEvaluation = (it) => !!it && !it.group && (it.type === 'quiz' || /^quiz:/.test(String(it.ref || '')));
+
+/**
+ * LES ÉVALUATIONS NE S'ARCHIVENT PLUS — décidé par l'école le 2026-09-25. Un QCM n'est pas un
+ * document : aucun modèle, aucun PDF. Le coffre l'ouvrait sur « Aucun modèle », et l'archive ZIP
+ * rangeait les 31 réponses de production en « NON inclus » : les dossiers « Évaluations » que l'école
+ * avait placés dans ses deux arborescences restaient vides. Ses réponses, figées, vivent dans
+ * Résultats QCM. Le coffre ne les liste plus (suivi.controller.js, lignesDuCoffre) ; ceci retire leurs
+ * places des arborescences, et dit lesquelles, et où — rien n'est gardé sans que l'école enregistre.
+ * @returns {{ tree, retirees: [{ label, dossier }] }}
+ */
+function sansEvaluations(tree) {
+    const retirees = [];
+    const refaire = (dossiers, chemin) => (dossiers || []).map((f) => {
+        const ici = [...chemin, f.name];
+        const items = [];
+        for (const it of f.items || []) {
+            if (estEvaluation(it)) retirees.push({ label: it.label || it.titre || it.ref, dossier: ici.join(' / ') });
+            else items.push(it);
+        }
+        return { ...f, items, children: refaire(f.children, ici) };
+    });
+    return { tree: tree && Array.isArray(tree.folders) ? { ...tree, folders: refaire(tree.folders, []) } : tree, retirees };
 }
 
 /**
  * CE QUE CHAQUE FORMATION PROPOSE DE RANGER, arbre par arbre — la liste même que l'aperçu de
  * l'arborescence dit « non rangée » (src/app/ui/lib/arborescence.js, formationDansLArbre), pour que
  * l'archive exclue exactement ce que l'écran a annoncé :
- *   · stagiaire : tout ce qu'ont ses dossiers, inscrits seuls ou par une entreprise — sauf les
- *     documents de groupe (🏢), qui ne se rangent pas côté stagiaire ;
+ *   · stagiaire : tout ce qu'ont ses dossiers, inscrits seuls ou par une entreprise, et ses documents
+ *     de session — sauf les documents de groupe (🏢), qui ne se rangent pas côté stagiaire ;
  *   · entreprise : ses documents de groupe. Ceux de ses stagiaires n'y sont que des copies, facultatives.
  * @param palette le résultat de paletteDesFormations
  * @returns Map code de formation → { stagiaire: Set, entreprise: Set } (des clés, cf. clesDuDocument)
@@ -526,7 +573,8 @@ function offertsDesFormations(palette) {
     const deGroupe = new Set(((palette && palette.documents) || []).filter((d) => d.company_level).map((d) => d.cle));
     return new Map(((palette && palette.formations) || []).map((f) => {
         const tous = [...new Set([...(f.documents || []), ...(f.documents_entreprise || [])])];
-        return [f.code, { stagiaire: new Set(tous.filter((c) => !deGroupe.has(c))), entreprise: new Set(tous.filter((c) => deGroupe.has(c))) }];
+        const stagiaire = [...new Set([...tous, ...(f.documents_session || [])])].filter((c) => !deGroupe.has(c));
+        return [f.code, { stagiaire: new Set(stagiaire), entreprise: new Set(tous.filter((c) => deGroupe.has(c))) }];
     }));
 }
 
@@ -580,5 +628,5 @@ function validerArbre(tree) {
 module.exports = {
     normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placesDansLArchive, clesDuDocument, contexteDu,
     resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, actualiserLesOu, STANDARD, STANDARD_ENTREPRISE,
-    cleEtape, lireVolet, paletteDesFormations, offertsDesFormations,
+    cleEtape, lireVolet, paletteDesFormations, offertsDesFormations, sansEvaluations,
 };

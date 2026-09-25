@@ -172,6 +172,7 @@ function ApercuArborescence({ program, form, eqMap, kind, setKind, onModifier })
         L'arborescence d'archivage est <b>commune à toutes les formations</b> : un document que {form.code || "cette formation"} n'a
         pas y est simplement sauté pour elle, et ce qu'elle ne range nulle part n'est pas archivé.{etat.propose ? " Elle n'est pas encore enregistrée : ce qui suit est la proposition, faite des arborescences déjà réglées." : ""}
         {etat.ajustements?.length > 0 ? " Des choix « OU » supprimés y sont dépliés en leurs documents : ouvrez-la et enregistrez pour le garder." : ""}
+        {etat.evaluations_retirees?.length > 0 ? " Les évaluations (QCM) n'y sont plus rangées — elles vivent dans Résultats QCM : ouvrez-la et enregistrez pour le garder." : ""}
         <div style={{ marginTop: 8 }}>
           <button type="button" className="btn sm" onClick={onModifier}>Modifier l'arborescence commune</button>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getArborescenceCommune, saveArborescenceCommune, getEquivalences } from "../api/apiClient.js";
 import ArchiveTreeEditor, { treeHasEmptyName } from "./ArchiveTreeEditor.jsx";
 import StatusMessage from "./StatusMessage.jsx";
-import { groupesDepuis, paletteDeLArbre, horsArbreStagiaire, formationDansLArbre } from "../lib/arborescence.js";
+import { groupesDepuis, paletteDeLArbre, horsDeLArbre, formationDansLArbre } from "../lib/arborescence.js";
 
 /**
  * L'ARBORESCENCE D'ARCHIVAGE COMMUNE (migration 182, demandée le 2026-09-24) — une fois pour toutes
@@ -15,7 +15,7 @@ import { groupesDepuis, paletteDeLArbre, horsArbreStagiaire, formationDansLArbre
  *
  * TANT QUE RIEN N'EST ENREGISTRÉ, l'éditeur s'ouvre sur la PROPOSITION du serveur : les arborescences
  * déjà réglées, fusionnées, avec ce qu'il faut trancher (un document rangé à deux endroits) et ce qui
- * a été retiré (un QCM supprimé, une étape qui n'existe plus). Rien n'est écrit avant « Enregistrer ».
+ * a été retiré (une étape qui n'existe plus). Rien n'est écrit avant « Enregistrer ».
  */
 /** Combien de documents une arborescence range : le compte que porte chaque onglet. */
 const nbPlaces = (t) => { let n = 0; const w = (fs) => (fs || []).forEach((f) => { n += (f.items || []).length; w(f.children); }); w(t && t.folders); return n; };
@@ -53,11 +53,14 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
   const formations = etat?.formations || [];
   const isEnt = kind === "entreprise";
   /* Archivage STAGIAIRE : le dossier de chaque stagiaire, inscrit seul ou par une entreprise — tous
-     ses documents, sauf ceux de groupe (🏢). Archivage ENTREPRISE : des copies, et les documents de
-     groupe ; tout y est proposé. La règle vit dans lib/arborescence.js, partagée avec l'onglet de la
-     formation, et le serveur exclut de l'archive exactement ce que l'aperçu dit non rangé. */
+     ses documents, sauf ceux de groupe (🏢) —, et les documents de session. Archivage ENTREPRISE : des
+     copies, et les documents de groupe. La règle vit dans lib/arborescence.js, partagée avec l'onglet
+     de la formation, et le serveur exclut de l'archive exactement ce que l'aperçu dit non rangé. */
   const docs = useMemo(() => paletteDeLArbre(documents, kind), [documents, kind]);
-  const ailleurs = useMemo(() => ({ docs: horsArbreStagiaire(documents), ouvrir: () => setKind("entreprise") }), [documents]);
+  const ailleurs = useMemo(() => ({
+    stagiaire: { docs: horsDeLArbre(documents, "stagiaire"), nature: "de groupe", arbre: "entreprise", ouvrir: () => setKind("entreprise") },
+    entreprise: { docs: horsDeLArbre(documents, "entreprise"), nature: "de session", arbre: "stagiaire", ouvrir: () => setKind("stagiaire") },
+  }), [documents]);
   const formation = formations.find((f) => f.code === code) || null;
   const formationVue = formationDansLArbre(formation, kind, documents);
 
@@ -72,7 +75,7 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
     setSaving(true);
     try {
       const r = await saveArborescenceCommune(tree, companyTree);
-      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [], ajustements: [] }));
+      setEtat((e) => ({ ...e, propose: false, conflits: [], retires: [], ajustements: [], evaluations_retirees: [] }));
       setStatus({ type: "success", message: r?.message || "Arborescence enregistrée pour toutes les formations." });
       onSaved?.();
     } catch (e) {
@@ -102,6 +105,16 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
               {/* UN « OU » SUPPRIMÉ (Modèles → Équivalences) s'affichait encore ici. Le serveur le déplie à
                   la lecture — ses documents, un par un, à sa place — et l'écran le dit : rien n'est gardé
                   tant que l'école n'enregistre pas. */}
+              {/* LES ÉVALUATIONS NE S'ARCHIVENT PLUS (2026-09-25) : le serveur retire leurs places de l'arbre
+                  montré, et l'écran le dit. Rien n'est gardé tant que l'école n'enregistre pas. */}
+              {etat.evaluations_retirees?.length > 0 && (
+                <div className="arbo-avis attente">
+                  <b>Les évaluations (QCM) ne s'archivent plus</b> : ce ne sont pas des documents, et leurs réponses vivent
+                  dans Résultats QCM. Leurs {etat.evaluations_retirees.length} places ont été retirées
+                  ({[...new Set(etat.evaluations_retirees.map((r) => `${r.arbre}, ${r.dossier.replace(/[{}]/g, "").split(" / ").join(" › ")}`))].join(" ; ")}).
+                  {" "}<b>Enregistrez</b> pour garder ce rangement ; un dossier resté vide peut être supprimé.
+                </div>
+              )}
               {etat.ajustements?.length > 0 && (
                 <div className="arbo-avis attente">
                   <b>Choix « OU » supprimés</b> dans Modèles → Équivalences : leurs documents sont maintenant rangés un par un,
@@ -120,8 +133,8 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
               {etat.propose && (
                 <div className="arbo-avis">
                   <b>Proposition, rien n'est encore enregistré.</b> Elle réunit les arborescences déjà réglées
-                  {etat.sources?.length ? <> sur {etat.sources.join(", ")}</> : null} : chaque document y est placé une fois,
-                  et chaque QCM par son titre. Relisez-la, puis enregistrez-la pour toutes les formations.
+                  {etat.sources?.length ? <> sur {etat.sources.join(", ")}</> : null} : chaque document y est placé une fois.
+                  Relisez-la, puis enregistrez-la pour toutes les formations.
                   {etat.conflits?.length > 0 && (
                     <>
                       <p className="arbo-avis-t">À trancher : rangés à deux endroits selon la formation</p>
@@ -165,13 +178,13 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
                 Chaque document se range <b>une fois, pour toutes les formations</b> ; une formation qui ne l'a pas le saute.
                 {isEnt
                   ? <> Ici, des <b>copies pour l'entreprise</b> : ce que vous rangez s'ajoute, pour les stagiaires qu'elle inscrit, à leur dossier de l'archivage stagiaire. Ses documents de groupe (🏢) n'ont que cette place.</>
-                  : <> Ici, le dossier de <b>chaque stagiaire</b>, inscrit seul ou par une entreprise.</>}
+                  : <> Ici, le dossier de <b>chaque stagiaire</b>, inscrit seul ou par une entreprise, et les documents de la session.</>}
                 {" "}<b>Ce qui n'est rangé nulle part n'est pas archivé.</b> Cliquez le nom d'un dossier pour le renommer, « Document » pour y placer un document.
               </p>
               <ArchiveTreeEditor tree={isEnt ? companyTree : tree} onChange={isEnt ? setCompanyTree : setTree}
                 eqMap={eqMap} docs={docs} nbFormations={formations.length}
                 formation={formationVue} palette={libelles} groupes={groupes}
-                arbre={kind} ailleurs={isEnt ? null : ailleurs} />
+                arbre={kind} ailleurs={ailleurs[kind]} />
             </>
           )}
         </div>

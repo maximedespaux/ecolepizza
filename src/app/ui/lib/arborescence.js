@@ -75,25 +75,31 @@ const union = (...listes) => [...new Set(listes.flatMap((l) => l || []))];
  *
  * DEUX ARBRES, DEUX RÔLES (côté serveur : placesDansLArchive) :
  *   · STAGIAIRE — le dossier de CHAQUE stagiaire, inscrit seul ou par une entreprise : tous leurs
- *     documents, sauf ceux de groupe (🏢), qui vont à l'entreprise ;
+ *     documents, sauf ceux de groupe (🏢), qui vont à l'entreprise ; et les documents de SESSION
+ *     (`session`, « Contrat Hygiène »), qu'aucun parcours ne porte ;
  *   · ENTREPRISE — des COPIES pour l'entreprise, de ce qu'on y range ; et la seule place de ses
- *     documents de groupe. Tout y est proposé.
+ *     documents de groupe. Tout ce qu'une entreprise ou ses stagiaires peuvent avoir y est proposé —
+ *     pas un document de session, qui n'a pas d'entreprise.
  */
 export function paletteDeLArbre(documents, kind) {
   const docs = (documents || []).map((d) => ({ ...d, formations: union(d.formations, d.formations_entreprise) }));
-  return kind === "entreprise" ? docs : docs.filter((d) => !d.company_level && d.formations.length);
+  return kind === "entreprise"
+    ? docs.filter((d) => d.formations.length)
+    : docs.filter((d) => !d.company_level && (d.formations.length || d.session));
 }
 
-/** Ce que seule l'arborescence ENTREPRISE range : la liste de l'autre arbre le dit, au lieu de le taire. */
-export function horsArbreStagiaire(documents) {
-  const siens = new Set(paletteDeLArbre(documents, "stagiaire").map((d) => d.cle));
-  return (documents || []).filter((d) => !siens.has(d.cle));
+/** Ce que seule l'AUTRE arborescence range (le groupe côté entreprise, la session côté stagiaire) : la
+    liste de celle-ci le dit, au lieu d'un « aucun document ne correspond » qui laisse chercher. */
+export function horsDeLArbre(documents, kind) {
+  const siens = new Set(paletteDeLArbre(documents, kind).map((d) => d.cle));
+  return paletteDeLArbre(documents, kind === "entreprise" ? "stagiaire" : "entreprise").filter((d) => !siens.has(d.cle));
 }
 
 /**
  * Ce qu'une formation a dans un arbre (`documents`, ce qui la concerne), et ce qui, non rangé, ne sera
  * pas archivé (`aRanger`) — la liste même que le serveur exclut (offertsDesFormations) :
- *   · stagiaire : tout ce qu'ont ses dossiers, seuls ou par une entreprise, sauf le groupe ;
+ *   · stagiaire : tout ce qu'ont ses dossiers, seuls ou par une entreprise, et ses documents de
+ *     session — sauf le groupe ;
  *   · entreprise : ce qu'a son arrivée par entreprise ; seuls ses documents de groupe se signalent.
  */
 export function formationDansLArbre(formation, kind, documents) {
@@ -103,9 +109,13 @@ export function formationDansLArbre(formation, kind, documents) {
   if (kind === "entreprise") {
     return { ...formation, documents: formation.documents_entreprise || formation.documents || [], aRanger: tous.filter((c) => deGroupe.has(c)) };
   }
-  const siens = tous.filter((c) => !deGroupe.has(c));
+  const siens = union(tous, formation.documents_session).filter((c) => !deGroupe.has(c));
   return { ...formation, documents: siens, aRanger: siens };
 }
+
+/** Un document SANS STAGIAIRE — de groupe, ou de session seulement — ne se range pas dans un dossier
+    « un par stagiaire » : il n'aurait aucun nom à y prendre (le serveur le remonterait d'un cran). */
+export const sansStagiaire = (d) => !!d && (!!d.company_level || (!!d.session && !(d.formations || []).length));
 
 /** Les groupes « OU » d'aujourd'hui, depuis la carte slug → { group } des équivalences. */
 export function groupesDepuis(eqMap) {

@@ -93,9 +93,16 @@ const getSuivi = async (req, res) => {
  * auraient fini par ne plus compter les mêmes documents, et l'archive remise à un contrôle aurait
  * oublié ce que l'écran montrait.
  *
- * Chaque ligne porte aussi ce qu'il faut pour la RANGER (2026-09-24) : le modèle (`slug`), le titre
- * du QCM, le type de pièce, le dossier et son entreprise, la session et ses dates. L'écran les
- * ignore ; l'archive s'en sert pour suivre l'arborescence (lib/arborescenceArchive.js).
+ * Chaque ligne porte aussi ce qu'il faut pour la RANGER (2026-09-24) : le modèle (`slug`), le type
+ * de pièce, le dossier et son entreprise, la session et ses dates. L'écran les ignore ; l'archive
+ * s'en sert pour suivre l'arborescence (lib/arborescenceArchive.js).
+ *
+ * LES ÉVALUATIONS (QCM) N'Y SONT PLUS — décidé par l'école le 2026-09-25. Un QCM n'est pas un
+ * document : aucun modèle, aucun PDF. Ici, il s'ouvrait sur « Aucun modèle », son téléchargement
+ * échouait, et l'archive ZIP rangeait les 31 réponses de production en « NON inclus » — les dossiers
+ * « Évaluations » des arborescences restaient vides. Ses réponses, figées au moment de l'envoi, vivent
+ * dans Résultats QCM (ouvert aux auditeurs, export CSV). La ligne du document, elle, reste en base :
+ * c'est elle qui fait avancer le parcours du dossier (lib/avancement.js), et rien ne l'efface.
  */
 async function lignesDuCoffre(conn, orgId) {
     // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
@@ -108,7 +115,7 @@ async function lignesDuCoffre(conn, orgId) {
                 p.code AS program_code, p.title AS program_title,
                 l.id AS learner_id, l.first_name, l.last_name, 'gen' AS source,
                 NULL AS dossier,
-                gd.template_slug AS slug, qz.title AS quiz_title, e.id AS enrollment_id,
+                gd.template_slug AS slug, NULL AS quiz_title, e.id AS enrollment_id,
                 e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
          FROM generated_document gd
@@ -117,9 +124,8 @@ async function lignesDuCoffre(conn, orgId) {
          LEFT JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
          LEFT JOIN training_program p ON p.id = s.program_id
-         LEFT JOIN quiz qz ON qz.id = gd.quiz_id
          LEFT JOIN company dc ON dc.id = e.company_id
-         WHERE gd.organization_id = ? AND gd.status IN (?)`,
+         WHERE gd.organization_id = ? AND gd.status IN (?) AND gd.quiz_id IS NULL`,
         [orgId, SHARED]
     );
     // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
@@ -523,7 +529,11 @@ const bulkDeleteArchive = async (req, res) => {
             deleted += r.affectedRows || 0;
         }
         if (documentIds.length) {
-            const [r] = await conn.query('DELETE FROM generated_document WHERE organization_id = ? AND id IN (?)', [orgId, documentIds]);
+            /* JAMAIS UNE ÉVALUATION : supprimée d'ici, elle laissait sa réponse dans Résultats QCM
+               (`quiz_response` ne tient pas au document), et l'espace du stagiaire la renvoyait,
+               comme jamais faite. Le coffre ne les liste plus ; cette route les refuse aussi. */
+            const [r] = await conn.query('DELETE FROM generated_document WHERE organization_id = ? AND id IN (?) AND quiz_id IS NULL',
+                [orgId, documentIds]);
             deleted += r.affectedRows || 0;
         }
         logAudit(req, 'archive.bulk_delete', 'Archive', null);
@@ -779,9 +789,6 @@ async function fichierDuCoffre(conn, user, l) {
         const clair = p && p.bytes ? decryptBytes(p.bytes) : null;
         return clair ? { buffer: clair, mime: p.mime || 'application/octet-stream', nom: p.nom } : null;
     }
-    /* UN QCM ENVOYÉ MAIS PAS REMPLI n'a pas de contenu : le rendre produirait un questionnaire vide,
-       qui aurait l'air d'une pièce du dossier. Il est nommé au sommaire, pas inventé. */
-    if (l.quiz_id && l.status !== 'SIGNE') { const e = new Error('QCM envoyé, pas encore rempli'); e.code = 'NON_RENDU'; throw e; }
     const { fichierPourArchive } = require('./document.controller.js');
     return fichierPourArchive(conn, user, l.doc_id);
 }

@@ -260,8 +260,10 @@ test('l\'archive a UNE route, sous la garde du coffre, et la liste même de l\'�
     assert.match(SUIVI, /const zip = ecrivainZip\(res\);/);
     assert.match(SUIVI, /res\.destroy\(err\);/);
     assert.match(SUIVI, /logAudit\(req, 'archive\.export', 'Archive', null\);/);
-    // Un QCM envoyé mais pas rempli n'est pas rendu en questionnaire vide.
-    assert.match(SUIVI, /if \(l\.quiz_id && l\.status !== 'SIGNE'\) \{ const e = new Error\('QCM envoyé, pas encore rempli'\)/);
+    // Les évaluations ne sont plus dans le coffre (2026-09-25) : ni à l'écran, ni dans l'archive, ni à la corbeille.
+    assert.match(SUIVI, /WHERE gd\.organization_id = \? AND gd\.status IN \(\?\) AND gd\.quiz_id IS NULL`/);
+    assert.match(SUIVI, /'DELETE FROM generated_document WHERE organization_id = \? AND id IN \(\?\) AND quiz_id IS NULL'/);
+    assert.doesNotMatch(SUIVI, /QCM envoyé, pas encore rempli|LEFT JOIN quiz qz/);
 });
 
 test('le fichier d\'un document : le reçu, sinon le signé figé, sinon le rendu du jour — comme au téléchargement', () => {
@@ -326,7 +328,7 @@ test('l\'arborescence commune se lit avant `/:id`, s\'écrit par le bureau, et a
         'sinon « arborescence » serait pris pour l\'identifiant d\'une formation');
     assert.match(R, /router\.put\('\/arborescence', authorizeRoles\(\.\.\.ADMIN_ROLES\), saveArborescence\);/);
     const C = lire('controllers/formationProgram.controller.js');
-    assert.match(C, /tree = Arbo\.validerArbre\(\(req\.body \|\| \{\}\)\.tree\)/);
+    assert.match(C, /tree = Arbo\.sansEvaluations\(Arbo\.validerArbre\(\(req\.body \|\| \{\}\)\.tree\) \|\| \{ folders: \[\] \}\)\.tree;/);
     assert.match(C, /return res\.status\(503\)\.json\(\{ error: "Migration 182 non jouée/);
     // Tant que rien n'est enregistré : la proposition, pas une page vide.
     assert.match(C, /const st = Arbo\.fusionnerArbres\(entrees\('archive_tree'\), opts\);/);
@@ -390,7 +392,7 @@ test('l\'arborescence se règle UNE fois, depuis la liste des formations — plu
     assert.match(EDITEUR, /await saveArborescenceCommune\(tree, companyTree\)/);
     assert.match(EDITEUR, /disabled=\{saving \|\| !etat \|\| !etat\.disponible\}/, 'sans la 182, on ne fait pas semblant d\'enregistrer');
     const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
-    assert.match(OUTIL, /: o\.type === "quiz" \? \{ type: "quiz", titre: o\.titre, label: o\.label \}/, 'un QCM se place par son TITRE');
+    assert.doesNotMatch(OUTIL, /\["QCM", |titre_qcm/, 'plus d\'évaluation à placer (2026-09-25) : elles ne s\'archivent plus');
 });
 
 test('les trois boutons d\'archive : même garde que le coffre, et un comptage avant de télécharger', () => {
@@ -521,7 +523,7 @@ test('l\'arborescence enregistrée se lit avec les « OU » d\'aujourd\'hui, et 
     const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
     assert.match(EDITEUR, /\{etat\.ajustements\?\.length > 0 && \(/);
     assert.match(EDITEUR, /<b>Enregistrez<\/b> pour garder ce rangement\./, 'rien n\'est gardé sans enregistrer');
-    assert.match(EDITEUR, /conflits: \[\], retires: \[\], ajustements: \[\] \}\)\);/, 'enregistré, l\'avis s\'efface');
+    assert.match(EDITEUR, /conflits: \[\], retires: \[\], ajustements: \[\], evaluations_retirees: \[\] \}\)\);/, 'enregistré, l\'avis s\'efface');
     assert.match(lireUi('pages/Formations.jsx'), /etat\.ajustements\?\.length > 0 \? " Des choix « OU » supprimés y sont dépliés/);
 });
 
@@ -557,6 +559,10 @@ const PARCOURS = [
         etape('convention', 'Convention de formation', false, GROUPE), etape('accord-prise-en-charge', 'Accord de prise en charge', false),
         QCM_MARDI('b804')] },
 ];
+/* « Contrat Hygiène », signé par l'intervenant externe : le seul modèle de production dont la case
+   « Externe » est cochée, donc le seul qu'une session propose d'envoyer (modelesExternes). */
+const DE_SESSION = [{ slug: 'contrat-hygiene', label: 'Contrat Hygiène', doc_type: 'CONTRAT' }];
+
 
 test('la palette lit AUSSI le volet entreprise : le devis professionnel se range enfin — le cas relevé en production', () => {
     /* « Je n'ai pas accès au devis particulier / entreprise pour les répartir » : l'école avait supprimé
@@ -572,14 +578,12 @@ test('la palette lit AUSSI le volet entreprise : le devis professionnel se range
        exactement comme companyParcours. RS7404 n'a pas de volet : même chose. */
     const par = (code) => formations.find((f) => f.code === code);
     assert.deepStrictEqual(par('NIV1').documents_entreprise, par('NIV1').documents);
-    assert.deepStrictEqual(par('RS7404').documents_entreprise, ['ref:devis-rs7404', 'qcm:evaluation formative du mardi']);
-    assert.deepStrictEqual(par('NIV1H').documents_entreprise,
-        ['ref:devis-professionnel-copie', 'ref:convention', 'ref:accord-prise-en-charge', 'qcm:evaluation formative du mardi'],
+    assert.deepStrictEqual(par('RS7404').documents_entreprise, ['ref:devis-rs7404']);
+    assert.deepStrictEqual(par('NIV1H').documents_entreprise, ['ref:devis-professionnel-copie', 'ref:convention', 'ref:accord-prise-en-charge'],
         'le volet, dans son ordre, actif ou non dans le parcours du dossier');
     assert.deepStrictEqual(entree('ref:devis-particulier').formations_entreprise, ['NIV1'], 'NIV1H l\'a remplacé dans son volet');
-    // Un QCM reste UNE entrée, par son titre, et chaque formation n'y figure qu'une fois.
-    assert.deepStrictEqual(entree('qcm:evaluation formative du mardi').formations, ['RS7404', 'NIV1', 'NIV1H']);
-    assert.strictEqual(documents.filter((x) => x.cle.startsWith('qcm:')).length, 1);
+    // Les évaluations ne s'archivent plus (2026-09-25) : la liste n'en propose aucune.
+    assert.ok(!documents.some((x) => x.cle.startsWith('qcm:')));
     // Le volet se lit tel que la base le rend : chaîne JSON, liste, ou rien.
     assert.deepStrictEqual([Arbo.lireVolet('["a","b"]'), Arbo.lireVolet(['a']), Arbo.lireVolet(null), Arbo.lireVolet('{illisible')], [['a', 'b'], ['a'], [], []]);
     // Le contrôleur la calcule UNE fois, pour l'éditeur et pour l'archive.
@@ -593,7 +597,7 @@ test('l\'archive laisse dehors EXACTEMENT ce que l\'aperçu annonce, arbre par a
     /* Deux calculs de la même règle — l'écran dit « ne sera pas dans l'archive », le serveur exclut —
        finissent par diverger. Ils sont confrontés ici sur les parcours de production. */
     const ecran = await import('../../app/ui/lib/arborescence.js');
-    const palette = Arbo.paletteDesFormations(PARCOURS);
+    const palette = Arbo.paletteDesFormations(PARCOURS, DE_SESSION);
     const offerts = Arbo.offertsDesFormations(palette);
     const vide = { folders: [] };
     for (const f of palette.formations) {
@@ -623,7 +627,7 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     const stag = ecran.paletteDeLArbre(documents, 'stagiaire');
     const ent = ecran.paletteDeLArbre(documents, 'entreprise');
     const cles = (l) => l.map((x) => x.cle).sort();
-    assert.deepStrictEqual(cles(stag), ['qcm:evaluation formative du mardi', 'ref:accord-prise-en-charge', 'ref:devis-particulier', 'ref:devis-rs7404'],
+    assert.deepStrictEqual(cles(stag), ['ref:accord-prise-en-charge', 'ref:devis-particulier', 'ref:devis-rs7404'],
         'un document de stagiaire réservé aux entreprises, côté stagiaire : c\'est le dossier de ceux qu\'une entreprise inscrit');
     assert.deepStrictEqual(cles(ent), [...cles(stag), 'ref:convention', 'ref:devis-professionnel-copie'].sort(),
         'tout, côté entreprise — dont le devis professionnel, document de groupe, qui n\'était proposé nulle part');
@@ -633,11 +637,11 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     assert.deepStrictEqual(ent.find((x) => x.cle === 'ref:devis-particulier').formations, ['NIV1', 'NIV1H']);
     /* Ce que l'arbre stagiaire ne propose pas se DIT dans sa liste, avec où aller : chercher « devis »
        côté stagiaire ne trouvait pas le devis professionnel, et rien ne disait pourquoi. */
-    assert.deepStrictEqual(ecran.horsArbreStagiaire(documents).map((x) => x.cle), ['ref:convention', 'ref:devis-professionnel-copie']);
+    assert.deepStrictEqual(ecran.horsDeLArbre(documents, 'stagiaire').map((x) => x.cle), ['ref:convention', 'ref:devis-professionnel-copie']);
     const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
     assert.match(EDITEUR, /const docs = useMemo\(\(\) => paletteDeLArbre\(documents, kind\), \[documents, kind\]\);/);
     assert.match(EDITEUR, /const formationVue = formationDansLArbre\(formation, kind, documents\);/);
-    assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{isEnt \? null : ailleurs\}/);
+    assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{ailleurs\[kind\]\}/);
     assert.match(EDITEUR, /<b>Ce qui n'est rangé nulle part n'est pas archivé\.<\/b>/);
     const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
     assert.match(OUTIL, /const ap = formation \? apercuFormation\(tree, formation\.documents, groupes, formation\.aRanger\) : null;/);
@@ -647,4 +651,83 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     const PAGE = lireUi('pages/Formations.jsx');
     assert.match(PAGE, /const formation = f && formationDansLArbre\(\{ \.\.\.f, code: form\.code \|\| f\.code, title: form\.title \|\| f\.title \}, kind, documents\);/);
     assert.match(PAGE, /docs=\{paletteDeLArbre\(documents, kind\)\}/);
+});
+
+/* ─── Les documents de session (2026-09-25) ─────────────────────────────────────────────────── */
+
+test('un document de SESSION se range aussi — le « Contrat Hygiène » que la liste ne proposait pas', async () => {
+    /* « Le contrat hygiène n'apparaît pas dans les choix, pourquoi ? » : il n'est dans le parcours
+       d'aucun stagiaire. Il s'envoie depuis la page de la session, un par session, pour n'importe
+       quelle formation — le coffre de production en avait un (NIV1H, 2026) que rien ne permettait
+       de placer. */
+    const palette = Arbo.paletteDesFormations(PARCOURS, DE_SESSION);
+    const hyg = palette.documents.find((x) => x.cle === 'ref:contrat-hygiene');
+    assert.deepStrictEqual([hyg.session, hyg.formations, hyg.formations_entreprise, hyg.company_level], [true, [], [], false]);
+    assert.strictEqual(palette.documents[palette.documents.length - 1], hyg, 'après les documents des formations');
+    for (const f of palette.formations) assert.deepStrictEqual(f.documents_session, ['ref:contrat-hygiene'], `${f.code} : toute session peut l'avoir`);
+    // Proposé côté stagiaire, pour toute formation : non rangé, il reste hors de l'archive — la même règle.
+    const offerts = Arbo.offertsDesFormations(palette);
+    for (const [code, o] of offerts) {
+        assert.ok(o.stagiaire.has('ref:contrat-hygiene'), code);
+        assert.ok(!o.entreprise.has('ref:contrat-hygiene'), `${code} : un document de session n'a pas d'entreprise`);
+    }
+    const contrat = { scope: 'SESSION', year: 2026, week: 42, program_code: 'NIV1H', slug: 'contrat-hygiene', title: 'Contrat Hygiène' };
+    assert.deepStrictEqual(chemins(COMMUNE, contrat, GROUPES, offerts.get('NIV1H')), [], 'proposé, non rangé : dehors');
+    const avecSession = squelette(d('{Stagiaire}', [], [], true));
+    avecSession.folders[0].children[0].children[0].children.unshift(d('Session', [ref('contrat-hygiene', 'Contrat Hygiène')]));
+    assert.deepStrictEqual(chemins({ stagiaire: avecSession }, contrat, GROUPES, offerts.get('NIV1H')), ['2026/S42/NIV1H/Session/Contrat Hygiène']);
+
+    // L'écran : dans la liste STAGIAIRE, à part ; pas dans celle de l'entreprise, qui le dit.
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    assert.ok(ecran.paletteDeLArbre(palette.documents, 'stagiaire').some((x) => x.cle === 'ref:contrat-hygiene'));
+    assert.ok(!ecran.paletteDeLArbre(palette.documents, 'entreprise').some((x) => x.cle === 'ref:contrat-hygiene'));
+    assert.deepStrictEqual(ecran.horsDeLArbre(palette.documents, 'entreprise').map((x) => x.cle), ['ref:contrat-hygiene']);
+    const niv1h = ecran.formationDansLArbre(palette.formations.find((f) => f.code === 'NIV1H'), 'stagiaire', palette.documents);
+    assert.ok(niv1h.aRanger.includes('ref:contrat-hygiene'), 'l\'aperçu le dit non rangé, comme l\'archive le laisse dehors');
+    // Ni lui ni un document de groupe ne vont dans un dossier « un par stagiaire » : ils n'y auraient aucun nom.
+    const entree = (cle) => ecran.paletteDeLArbre(palette.documents, 'entreprise').concat(ecran.paletteDeLArbre(palette.documents, 'stagiaire'))
+        .find((x) => x.cle === cle);
+    assert.deepStrictEqual(['ref:contrat-hygiene', 'ref:convention', 'ref:devis-particulier'].map((c) => ecran.sansStagiaire(entree(c))), [true, true, false]);
+    const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
+    assert.match(OUTIL, /\["Documents de session", vus\.filter\(\(o\) => o\.session\)\]/);
+    assert.match(OUTIL, /const horsLieu = !ici && sousStagiaire && o\.sansStagiaire;/);
+    assert.match(OUTIL, /disabled=\{ici \|\| !!couvert \|\| horsLieu\}/);
+    assert.match(OUTIL, /const cibles = o && o\.sansStagiaire \? cheminsDossiers\.filter\(\(p\) => !p\.sousStagiaire\) : cheminsDossiers;/);
+    // Le serveur les liste par la fonction même de la page de la session.
+    assert.match(lire('controllers/formationProgram.controller.js'),
+        /return \{ programmes, tousLesSlugs, libelles, \.\.\.Arbo\.paletteDesFormations\(entrees, await modelesExternes\(orgId\)\) \};/);
+});
+
+/* ─── Les évaluations ne s'archivent plus (2026-09-25) ───────────────────────────────────────── */
+
+test('les évaluations ne s\'archivent plus : leurs places sortent de l\'arborescence, et l\'écran le dit', () => {
+    /* « Les évaluations ne sont pas un vrai document PDF, et elles vivent dans Résultats QCM : ne serait-il
+       pas plus logique de les retirer des archives ? » — un QCM n'a ni modèle ni PDF. Le coffre l'ouvrait sur
+       « Aucun modèle », son téléchargement échouait, et l'archive ZIP rangeait les 31 réponses de production
+       en « NON inclus » : les dossiers « Évaluations » des deux arborescences restaient vides. */
+    const prod = { folders: [d('{Stagiaire}', [ref('droit-image', "Droit à l'image"), qcm('94be', 'Test de positionnement')],
+        [d('Évaluations', [{ type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Évaluation Formative du Mardi' }])], true)] };
+    const { tree, retirees } = Arbo.sansEvaluations(prod);
+    assert.deepStrictEqual(tree.folders[0].items.map(Arbo.cleItem), ['ref:droit-image'], 'le reste ne bouge pas');
+    assert.deepStrictEqual(tree.folders[0].children[0].items, [], 'le dossier reste, vide : c\'est à l\'école de le supprimer');
+    assert.deepStrictEqual(retirees, [
+        { label: 'Test de positionnement', dossier: '{Stagiaire}' },
+        { label: 'Évaluation Formative du Mardi', dossier: '{Stagiaire} / Évaluations' },
+    ], 'par son titre comme par son ancien identifiant, et où');
+    assert.strictEqual(prod.folders[0].items.length, 2, 'l\'arbre reçu n\'est pas modifié');
+    /* UN VOLET FAIT DE SEULS QCM n'est pas vide pour companyParcours : l'arrivée par entreprise n'y retombe
+       pas sur le parcours du dossier. Les écarter AVANT de décider aurait prêté à cette formation des
+       documents que ses entreprises ne reçoivent pas. */
+    const seulsQcm = Arbo.paletteDesFormations([{ id: 'x', code: 'X', volet: ['quiz:1'], etapes: [
+        etape('contrat', 'Contrat', true), etape('quiz:1', 'Évaluation', false, { quiz_id: '1' })] }]);
+    assert.deepStrictEqual(seulsQcm.formations[0].documents_entreprise, []);
+    assert.deepStrictEqual(seulsQcm.formations[0].documents, ['ref:contrat']);
+    // Le serveur les retire de l'arbre montré ET de l'arbre enregistré ; l'écran dit lesquels, et où.
+    const C = lire('controllers/formationProgram.controller.js');
+    assert.match(C, /const st = Arbo\.sansEvaluations\(enregistree \? enregistree\.tree : proposition\.tree\);/);
+    assert.match(C, /companyTree = Arbo\.sansEvaluations\(Arbo\.validerArbre\(\(req\.body \|\| \{\}\)\.company_tree\) \|\| \{ folders: \[\] \}\)\.tree;/);
+    const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
+    assert.match(EDITEUR, /\{etat\.evaluations_retirees\?\.length > 0 && \(/);
+    assert.match(EDITEUR, /<b>Les évaluations \(QCM\) ne s'archivent plus<\/b>/);
+    assert.match(lireUi('pages/Formations.jsx'), /etat\.evaluations_retirees\?\.length > 0 \? " Les évaluations \(QCM\) n'y sont plus rangées/);
 });
