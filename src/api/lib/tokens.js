@@ -29,6 +29,8 @@ function frDate(v) {
     if (Number.isNaN(d.getTime())) return String(v);
     return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
+/** « 10,5 » : un nombre (d'heures, de jours) avec la virgule décimale, sans séparateur de milliers. */
+const decimaleFr = (v) => String(v).replace('.', ',');
 function euro(v) {
     const n = Number(v);
     if (!Number.isFinite(n) || n === 0) return '';
@@ -116,7 +118,11 @@ const TOKEN_CATALOG = [
             /* Même règle pour le lieu de naissance (migration 171). */
             { key: 'Lieu naissance', label: 'Lieu de naissance', sample: 'TOULOUSE' },
             { key: 'Statut', label: 'Statut professionnel', sample: "Demandeur d'emploi" },
-            { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A' },
+            /* LE SEUL MOYEN D'IMPRIMER L'IDENTIFIANT : la colonne est chiffrée et finit en `_id`, deux
+               raisons pour lesquelles les Champs documents ne la proposeront jamais. */
+            { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A',
+              desc: 'L’identifiant France Travail du stagiaire, déchiffré au moment d’imprimer. '
+                  + 'Vide si sa fiche n’en porte pas.' },
         ],
     },
     /* LES RÉPONSES DU STAGIAIRE, IMPRIMÉES (2026-09-22) — photos et partenaires, deux questions
@@ -142,8 +148,11 @@ const TOKEN_CATALOG = [
     {
         group: 'Formation',
         tokens: [
-            { key: 'Formation', label: 'Intitulé', sample: 'Fabriquer des pizzas artisanales' },
-            { key: 'Code', label: 'Code formation', sample: 'RS7404' },
+            { key: 'Formation', label: 'Intitulé', sample: 'Fabriquer des pizzas artisanales',
+              desc: 'L’intitulé de la formation — de toutes les formations du document, séparées par '
+                  + 'des virgules, quand il en couvre plusieurs.' },
+            { key: 'Code', label: 'Code (ou code RS)', sample: 'RS7404',
+              desc: 'Le code de la formation, ou à défaut son code RS.' },
             { key: 'Public', label: 'Public visé', sample: 'Tout public' },
             /* Placé contre « Public visé » parce que les deux se lisent ensemble sur un programme :
                l'un dit À QUI la formation s'adresse, l'autre CE QU'IL FAUT DÉJÀ savoir ou posséder.
@@ -155,7 +164,10 @@ const TOKEN_CATALOG = [
             { key: 'Déroulé', label: 'Programme / déroulé', sample: 'Jour 1 : la pâte…' },
             { key: 'Heures', label: 'Nombre d’heures', sample: '35' },
             { key: 'Jours', label: 'Nombre de jours', sample: '5' },
-            { key: 'PrixFormation', label: 'Prix catalogue', sample: '1 500 €' },
+            /* ANCIEN NOM DE {Prix} : il rend la même valeur — le prix de l'INSCRIPTION, et celui du
+               catalogue seulement à défaut. « Prix catalogue » promettait l'autre ; le champ
+               « Prix catalogue » (training_program.price) est celui qui le tient. Reconnu, plus proposé. */
+            { key: 'PrixFormation', label: 'Prix du dossier (€)', sample: '1 500 €' },
         ],
     },
     {
@@ -168,8 +180,11 @@ const TOKEN_CATALOG = [
             { key: 'endDate', label: 'Date de fin', sample: '06/06/2025',
               desc: 'La clé s’écrit en anglais (héritage des premiers modèles) ; sa valeur est bien '
                   + 'la date de fin de session, au format 06/06/2025.' },
-            { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025' },
-            { key: 'Formateur', label: 'Formateur', sample: 'Marc Leblanc' },
+            { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025',
+              desc: '« Semaine 23 — 2025 » : la semaine de la session et son année. À défaut de '
+                  + 'semaine, la date de début.' },
+            { key: 'Formateur', label: 'Formateur', sample: 'Marc Leblanc',
+              desc: 'Le formateur de la session.' },
             /* CES CINQ JETONS NE DONNENT PAS LE JOUR QU'ILS NOMMENT, et le libellé le disait
                pourtant (« Date — Mardi (jour 2) »). Ils donnent le 1er, 2e, 3e… JOUR OUVRÉ à
                partir du début de la session (`businessDay`) : une session qui commence un mercredi
@@ -195,19 +210,31 @@ const TOKEN_CATALOG = [
     {
         group: 'Dossier',
         tokens: [
-            { key: 'Financement', label: 'Financement', sample: 'CPF' },
-            { key: 'Prix', label: 'Prix du dossier', sample: '1 500 €' },
-            { key: 'Acompte', label: 'Acompte', sample: '450 €' },
-            { key: 'Reste à payer', label: 'Reste à payer (prix − acompte)', sample: '1 050 €' },
-            { key: 'Prix HT', label: 'Prix HT', sample: '1 500 €' },
+            /* « (€) » DANS LE LIBELLÉ : ces jetons impriment « 1 500 € », symbole compris, là où les
+               Champs documents « Prix du dossier (nombre) » et « Acompte (nombre) » impriment le
+               chiffre seul. Deux puces « Prix » et « Acompte » côte à côte ne disaient pas laquelle
+               prendre (relevé le 2026-09-26). */
+            { key: 'Financement', label: 'Financement', sample: 'CPF',
+              desc: 'Le mode de financement du dossier : CPF, OPCO, particulier…' },
+            { key: 'Prix', label: 'Prix du dossier (€)', sample: '1 500 €',
+              desc: 'Le prix de l’inscription, symbole « € » compris. Un document qui couvre plusieurs '
+                  + 'formations (ou les stagiaires d’une entreprise) imprime leur somme.' },
+            { key: 'Acompte', label: 'Acompte (€)', sample: '450 €',
+              desc: 'L’acompte enregistré sur l’inscription, symbole « € » compris.' },
+            { key: 'Reste à payer', label: 'Reste à payer (€)', sample: '1 050 €',
+              desc: 'Le prix du dossier moins l’acompte, symbole « € » compris.' },
+            { key: 'Prix HT', label: 'Prix HT (€)', sample: '1 500 €' },
             /* « 0 € » ÉTAIT IMPOSSIBLE : `euro(0)` rend une chaîne VIDE, exprès — un zéro imprimé
                sur une convention exonérée se lit comme une erreur de saisie. L'exemple montre donc
                un montant réel ; sur une formation exonérée, le jeton sort vide. */
-            { key: 'TVA', label: 'Montant de la TVA', sample: '300 €',
+            { key: 'TVA', label: 'Montant de la TVA (€)', sample: '300 €',
               desc: 'Vide quand la formation est exonérée de TVA — un « 0 € » imprimé se lirait '
                   + 'comme une erreur.' },
-            { key: 'Taux TVA', label: 'Taux de TVA', sample: 'Exonérée' },
-            { key: 'Prix TTC', label: 'Prix TTC', sample: '1 500 €' },
+            /* UN SEUL EXEMPLE, COHÉRENT : 1 500 € HT, 20 %, 300 € de TVA, 1 800 € TTC. Le TTC valait
+               « 1 500 € » à côté d'une TVA de « 300 € » et d'un taux « Exonérée ». */
+            { key: 'Taux TVA', label: 'Taux de TVA', sample: '20 %',
+              desc: 'Le taux de l’organisme (Paramètres → Organisme), ou « Exonérée ».' },
+            { key: 'Prix TTC', label: 'Prix TTC (€)', sample: '1 800 €' },
         ],
     },
     {
@@ -215,11 +242,19 @@ const TOKEN_CATALOG = [
         tokens: [
             { key: 'Nom entreprise', label: 'Raison sociale', sample: 'Pizza Napoli SARL' },
             { key: 'Siret', label: 'SIRET', sample: '123 456 789 00012' },
-            { key: 'OPCO', label: 'OPCO', sample: 'AKTO' },
-            { key: 'Civ représentant', label: 'Civilité du représentant', sample: 'Mme' },
-            { key: 'Nom représentant', label: 'Nom du représentant', sample: 'Sophie Martin' },
-            { key: 'Fonction représentant', label: 'Fonction du représentant', sample: 'Gérante' },
-            { key: 'Adresse entreprise', label: 'Adresse de l’entreprise', sample: '5 av. de la Gare, 33000 Bordeaux' },
+            { key: 'OPCO', label: 'OPCO (nom saisi)', sample: 'AKTO',
+              desc: 'L’OPCO inscrit sur la fiche de l’entreprise, ou à défaut sur celle du stagiaire, '
+                  + 'tel qu’il y est écrit. « Nom du financeur » donne celui du référentiel des OPCO.' },
+            /* LE RÉFÉRENT, sous le nom que lui donne la fiche entreprise (migration 174) : les Champs
+               documents disent « Nom du référent », le catalogue disait « représentant » — deux mots
+               pour la même personne, dans le même groupe. */
+            { key: 'Civ représentant', label: 'Civilité du référent', sample: 'Mme' },
+            { key: 'Nom représentant', label: 'Nom complet du référent', sample: 'Sophie MARTIN',
+              desc: 'Prénom et NOM du référent de l’entreprise, sur une ligne — ou le stagiaire choisi '
+                  + 'comme référent. Sans la civilité : placez « Civilité du référent » devant, au besoin.' },
+            { key: 'Fonction représentant', label: 'Fonction du référent', sample: 'Gérante' },
+            { key: 'Adresse entreprise', label: 'Adresse complète', sample: '5 av. de la Gare, 33000 BORDEAUX',
+              desc: 'Rue, code postal et ville de l’entreprise, sur une ligne.' },
             { key: 'Email entreprise', label: 'E-mail de l’entreprise', sample: 'contact@pizzanapoli.fr' },
             { key: 'Téléphone entreprise', label: 'Téléphone de l’entreprise', sample: '05 56 11 22 33' },
             { key: 'NAF entreprise', label: 'Code NAF/APE', sample: '5610C' },
@@ -246,7 +281,12 @@ const TOKEN_CATALOG = [
     {
         group: 'Financeur (OPCO)',
         tokens: [
-            { key: 'Nom financeur', label: 'Nom du financeur', sample: 'AKTO' },
+            /* CES CINQ JETONS N'ÉTAIENT DANS AUCUN GROUPE DE LA PALETTE — le nom du groupe figurait
+               pourtant dans son ordre d'affichage. Ils se remplissaient si on les tapait (relevé le
+               2026-09-26). */
+            { key: 'Nom financeur', label: 'Nom du financeur', sample: 'AKTO',
+              desc: 'L’OPCO de l’entreprise, ou à défaut celui du stagiaire. Ses coordonnées (SIRET, '
+                  + 'adresse…) viennent du référentiel des OPCO, s’il y figure — sinon elles restent vides.' },
             { key: 'SIRET financeur', label: 'SIRET du financeur', sample: '180 020 016 00019' },
             { key: 'Adresse financeur', label: 'Adresse du financeur', sample: "1 rue de l'OPCO, 75001 Paris" },
             { key: 'Email financeur', label: 'E-mail du financeur', sample: 'contact@akto.fr' },
@@ -262,12 +302,15 @@ const TOKEN_CATALOG = [
             { key: 'Siret organisme', label: 'SIRET', sample: '987 654 321 00019' },
             { key: 'TVA organisme', label: 'N° TVA', sample: 'FR76987654321' },
             { key: 'NDA', label: 'N° déclaration d’activité', sample: '75330000000' },
-            { key: 'Adresse organisme', label: 'Adresse', sample: '1 rue du Four, 33000 Bordeaux' },
+            { key: 'Adresse organisme', label: 'Adresse complète', sample: '1 rue du Four, 33000 BORDEAUX',
+              desc: 'Rue, code postal et ville de l’organisme, sur une ligne.' },
             { key: 'Ville organisme', label: 'Ville', sample: 'BORDEAUX' },
             { key: 'Code postal organisme', label: 'Code postal', sample: '33000' },
             { key: 'Forme juridique organisme', label: 'Forme juridique', sample: 'SAS' },
-            { key: 'Capital organisme', label: 'Capital social', sample: '2 000 €' },
-            { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136' },
+            { key: 'Capital organisme', label: 'Capital social', sample: '2 000 €',
+              desc: 'Propre à une facture : celui de l’entité qui l’émet (Paramètres → Facturation).' },
+            { key: 'RCS organisme', label: 'RCS + ville', sample: 'RCS Tarbes 879 955 136',
+              desc: 'Propre à une facture : celui de l’entité qui l’émet (Paramètres → Facturation).' },
             { key: 'NAF organisme', label: 'Code NAF/APE', sample: '8559A' },
             { key: 'Téléphone organisme', label: 'Téléphone', sample: '05 56 00 00 00' },
             { key: 'Email organisme', label: 'E-mail', sample: 'contact@ecole-pizza.fr' },
@@ -300,7 +343,7 @@ const TOKEN_CATALOG = [
             { key: 'Total TVA', label: 'Total TVA', sample: '3,56 €' },
             { key: 'Total TTC', label: 'Total toutes taxes comprises', sample: '21,38 €' },
             { key: 'Total remise', label: 'Total des remises', sample: '4,20 €',
-              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0.00 € » '
+              desc: 'Somme des remises accordées sur la facture, en euros. Affiche « 0,00 € » '
                   + 'quand il n’y a aucune remise. Vaut 0 sur les factures émises avant que la '
                   + 'remise ne soit enregistrée (migration 122).' },
             { key: 'Détail TVA', label: 'Détail de la TVA par taux', sample: '20,00 % sur 17,82 € : 3,56 €' },
@@ -329,8 +372,13 @@ const TOKEN_CATALOG = [
         tokens: [
             { key: 'Signature stagiaire', label: 'Signature du stagiaire', sample: '✍ (cadre rempli au moment de la signature)' },
             { key: 'Signature organisme', label: "Signature de l'organisme", sample: '✍ (image enregistrée dans Paramètres → Organisme)' },
-            { key: 'Nom signataire', label: 'Nom du signataire', sample: 'M. Jean DUPONT' },
-            { key: 'Date signature', label: 'Date de signature', sample: '06/07/2026' },
+            /* LE STAGIAIRE, et lui seul : ces deux jetons lisent la signature PRINCIPALE du document,
+               celle qu'il pose depuis son espace. Ni l'un ni l'autre n'était dans la palette. */
+            { key: 'Nom signataire', label: 'Nom saisi à la signature', sample: 'M. Jean DUPONT',
+              desc: 'Le nom sous lequel le stagiaire a signé CE document. Vide tant qu’il n’a pas signé.' },
+            { key: 'Date signature', label: 'Date de signature du stagiaire', sample: '06/07/2026',
+              desc: 'La date où le stagiaire a signé CE document. Vide tant qu’il n’a pas signé, comme '
+                  + 'son cadre de signature.' },
         ],
     },
     // Examen de certification — alimente le PROCÈS-VERBAL DE SESSION.
@@ -819,7 +867,11 @@ function stagiaireRowTokens(s, i) {
         'N°': String(i + 1),
         Personne: full, 'Civilité': s.civility || '', Nom: s.last_name || '', 'Prénom': s.first_name || '',
         Email: s.email || '', 'Téléphone': s.phone || '', OPCO: s.opco || '',
-        Ville: s.town || '', Adresse: s.address || '', CP: s.zip_code || '',
+        /* {Adresse} dit ici ce qu'il dit hors du bloc : rue, code postal et ville (la ligne ne donnait
+           que la rue). Aucun modèle ni jeton personnalisé de production ne l'employait dans un bloc,
+           vérifié le 2026-09-26 : la palette peut désormais l'offrir sans double sens. */
+        Ville: s.town || '', Adresse: [s.address, [s.zip_code, s.town].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+        CP: s.zip_code || '',
         'Lieu naissance': s.birth_place || '', D_Naissance: frDate(s.birthday), Naissance: frDate(s.birthday),
     };
 }
@@ -1359,9 +1411,11 @@ function resolveTokens(ctx = {}) {
         'Prérequis': block('prerequisites'),
         ObjectifG: multi ? uniq(forms.map((x) => x.objective_general)).join('\n') : (f.objective_general || ''),
         'DuréeDétail': durationDetail, 'Déroulé': block('program_detail'),
-        Heures: sumHours ? String(sumHours) : (f.hours != null ? String(f.hours) : ''),
-        Jours: sumDays ? String(sumDays) : (f.days != null ? String(f.days) : ''),
-        TmpTotSem: sumHours ? String(sumHours) : (f.hours != null ? String(f.hours) : ''),
+        /* LA VIRGULE DÉCIMALE : « 10,5 » heures, pas « 10.5 » — la forme que `String()` donne, et que
+           le champ document « Durée (heures) » n'imprime plus (`nombreChamp`, lib/montants.js). */
+        Heures: sumHours ? decimaleFr(sumHours) : (f.hours != null ? decimaleFr(f.hours) : ''),
+        Jours: sumDays ? decimaleFr(sumDays) : (f.days != null ? decimaleFr(f.days) : ''),
+        TmpTotSem: sumHours ? decimaleFr(sumHours) : (f.hours != null ? decimaleFr(f.hours) : ''),
         PrixFormation: euro(totalPrice),
         // Session
         Jour1: frDate(start), endDate: frDate(end), Semaine: semaine,

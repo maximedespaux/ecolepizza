@@ -16,43 +16,45 @@
  * découlent. Les noms sont volontairement quelconques et sans lien avec l'école.
  */
 
+/* LES VILLES EN CAPITALES, comme la base les stocke (migrations 162 et 171) et comme le document les
+   imprime : l'aperçu montrait « Toulouse », une casse qu'aucun document ne sortira jamais. */
 const PERSONNES = [
     {
         civilite: 'Mme', prenom: 'Camille', nom: 'BERGER',
-        adresse: '14 rue des Lilas', cp: '31000', ville: 'Toulouse',
+        adresse: '14 rue des Lilas', cp: '31000', ville: 'TOULOUSE',
         tel: '06 11 22 33 44', email: 'camille.berger@exemple.fr',
-        naissance: '12/03/1988', lieuNaissance: 'Albi',
+        naissance: '12/03/1988', lieuNaissance: 'ALBI',
     },
     {
         civilite: 'M.', prenom: 'Farid', nom: 'BENALI',
-        adresse: '3 impasse du Moulin', cp: '33000', ville: 'Bordeaux',
+        adresse: '3 impasse du Moulin', cp: '33000', ville: 'BORDEAUX',
         tel: '07 55 66 77 88', email: 'farid.benali@exemple.fr',
-        naissance: '27/09/1992', lieuNaissance: 'Pau',
+        naissance: '27/09/1992', lieuNaissance: 'PAU',
     },
     {
         civilite: 'Mme', prenom: 'Sophie', nom: 'MARCHAND',
-        adresse: '8 avenue de la Gare', cp: '65000', ville: 'Tarbes',
+        adresse: '8 avenue de la Gare', cp: '65000', ville: 'TARBES',
         tel: '06 44 33 22 11', email: 'sophie.marchand@exemple.fr',
-        naissance: '05/01/1979', lieuNaissance: 'Auch',
+        naissance: '05/01/1979', lieuNaissance: 'AUCH',
     },
     {
         civilite: 'M.', prenom: 'Thomas', nom: 'LEROY',
-        adresse: '22 chemin des Vignes', cp: '64000', ville: 'Pau',
+        adresse: '22 chemin des Vignes', cp: '64000', ville: 'PAU',
         tel: '07 12 98 76 54', email: 'thomas.leroy@exemple.fr',
-        naissance: '18/06/1995', lieuNaissance: 'Bayonne',
+        naissance: '18/06/1995', lieuNaissance: 'BAYONNE',
     },
     {
         civilite: 'Mme', prenom: 'Aïcha', nom: 'NDIAYE',
-        adresse: '5 place du Marché', cp: '32000', ville: 'Auch',
+        adresse: '5 place du Marché', cp: '32000', ville: 'AUCH',
         tel: '06 78 90 12 34', email: 'aicha.ndiaye@exemple.fr',
-        naissance: '30/11/1985', lieuNaissance: 'Toulouse',
+        naissance: '30/11/1985', lieuNaissance: 'TOULOUSE',
     },
 ];
 
 const ENTREPRISES = [
-    { nom: 'Pizza Napoli SARL', statut: 'SARL', siret: '842 013 567 00021', naf: '5610C', tel: '05 61 22 33 44', email: 'contact@pizzanapoli.exemple', adresse: '5 avenue de la Gare', cp: '31000', ville: 'Toulouse' },
-    { nom: 'Le Four à Bois SAS', statut: 'SAS', siret: '793 456 128 00034', naf: '5610C', tel: '05 59 88 77 66', email: 'gerance@fourabois.exemple', adresse: '17 route de la Plage', cp: '64000', ville: 'Pau' },
-    { nom: 'Trattoria du Coteau', statut: 'EURL', siret: '651 209 874 00017', naf: '5610A', tel: '05 62 11 44 55', email: 'bonjour@trattoria.exemple', adresse: '2 rue Basse', cp: '65000', ville: 'Tarbes' },
+    { nom: 'Pizza Napoli SARL', statut: 'SARL', siret: '842 013 567 00021', naf: '5610C', tel: '05 61 22 33 44', email: 'contact@pizzanapoli.exemple', adresse: '5 avenue de la Gare', cp: '31000', ville: 'TOULOUSE' },
+    { nom: 'Le Four à Bois SAS', statut: 'SAS', siret: '793 456 128 00034', naf: '5610C', tel: '05 59 88 77 66', email: 'gerance@fourabois.exemple', adresse: '17 route de la Plage', cp: '64000', ville: 'PAU' },
+    { nom: 'Trattoria du Coteau', statut: 'EURL', siret: '651 209 874 00017', naf: '5610A', tel: '05 62 11 44 55', email: 'bonjour@trattoria.exemple', adresse: '2 rue Basse', cp: '65000', ville: 'TARBES' },
 ];
 
 /** Entier pseudo-aléatoire dans [0, n[. */

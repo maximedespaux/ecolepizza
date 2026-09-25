@@ -24,6 +24,21 @@ const EXCLUDED_EXACT = new Set([
        puce et s'imprimait en caractères — des milliers — sur le document. Le cachet a sa place
        dans le cadre « Cachet de l'entreprise », rempli à la signature. */
     'stamp',
+    /* LE LOGO, POUR LA MÊME RAISON (relevé le 2026-09-26) : `organization.logo_image` est une image
+       rangée en texte. Proposé comme « Logo » dans le groupe Organisme — et coché en production —,
+       il aurait imprimé son data-URL, des milliers de caractères, le jour où un logo serait déposé. */
+    'logo_image',
+    /* DES RÉGLAGES, PAS DES DONNÉES DU DOSSIER (même relevé). L'introspection prend toute colonne
+       texte ou nombre des tables du dossier ; ces colonnes-là règlent l'APPLICATION — arborescences
+       d'archivage et étapes d'entreprise (du JSON), interrupteurs des e-mails, liste des données
+       transmises aux partenaires, feuille d'émargement, profil communautaire, cadres de Pizza Quest.
+       Elles s'offraient sous des libellés de repli (« Organisme · Archive tree ») : insérées dans un
+       document, elles auraient imprimé du JSON ; en condition, elles ne disent rien d'un dossier.
+       Aucune condition enregistrée ne les lit (vérifié par l'API le même jour). */
+    'archive_tree', 'company_archive_tree', 'company_steps', 'emargement_config', 'emargement_break_slug',
+    'company_break_slug', 'needs_emargement', 'partner_fields',
+    'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications',
+    'avatar', 'profile_visibility', 'cadre', 'cadres_exclusifs',
 ]);
 function isExcludedColumn(name) {
     if (EXCLUDED_EXACT.has(name)) return true;
@@ -157,19 +172,34 @@ const FR_LABELS = {
     project_support: 'Projet : accompagnement souhaité',
     project_more_training: 'Projet : formation complémentaire',
     note_libre: 'Note libre', // migration 168 : le texte sous « Votre projet »
+    completed_levels: 'Formations terminées', // migration 094 : cochées à la main par l'école
+    a_recontacter: 'À recontacter', // migration 169
     // Inscription
+    /* « (nombre) » : le champ imprime le chiffre seul (« 1 750 »), le modèle écrit « € » après. Les jetons
+       {Prix} et {Acompte} du groupe « Prix et financement » impriment « 1 750 € », symbole compris —
+       deux puces nommées « Prix » et « Acompte » ne disaient pas laquelle choisir. */
+    'enrollment.price': 'Prix du dossier (nombre)', 'enrollment.acompte': 'Acompte (nombre)',
     price: 'Prix', acompte: 'Acompte', crm_stage: 'Étape CRM', conformite_score: 'Score de conformité',
     // Formation
     'training_program.code': 'Code formation', 'training_program.level': 'Niveau de formation',
     'training_program.title': 'Intitulé de la formation', 'training_program.price': 'Prix catalogue',
     days: 'Durée (jours)', hours: 'Durée (heures)', audience: 'Public', objectives: 'Objectifs',
     objective_general: 'Objectif général', duration_detail: 'Détail de durée', program_detail: 'Déroulé du programme',
-    rs_code: 'Code RS (certifiante)', hygiene: 'Formation hygiène', active: 'Active',
+    rs_code: 'Code RS (certifiante)', hygiene: 'Formation hygiène', active: 'Formation active',
+    /* LES PRÉREQUIS S'OFFRAIENT SOUS « Formation · Prerequisites » — la colonne, en anglais, derrière le
+       nom de la table : relevé le 2026-09-26 sur cinq modèles (devis, convention, contrat) qui la portent. */
+    prerequisites: 'Prérequis',
     // Session
     year: 'Année', week: 'Semaine', trainer: 'Formateur', status: 'Statut',
     // Entreprise
     'company.name': "Nom de l'entreprise", 'company.legal_name': 'Raison sociale', siret: 'SIRET',
     vat_number: 'N° TVA', naf_ape: 'Code NAF/APE', legal_status: 'Forme juridique',
+    /* LE RÉFÉRENT (migration 174), sous le nom que lui donne la fiche entreprise. Sans ces entrées,
+       l'éditeur montrait « Entreprise · Representative civ » et, pour le prénom, le COMMENTAIRE de la
+       colonne — « Prenom du referent. representative_name porte alors le nom seul. Cf. migration 174. » :
+       une note de développeur, imprimée en puce dans la convention. */
+    representative_civ: 'Civilité du référent', representative_first_name: 'Prénom du référent',
+    representative_name: 'Nom du référent', representative_role: 'Fonction du référent',
     // Organisme. Sans ces entrées, le repli fabriquait « Organisme · Nda », « · Bic »,
     // « · Short name » — le nom de la colonne, en anglais, coupé au milieu. Personne ne devine
     // ce qu'est un « Nda » en construisant un modèle de facture.
@@ -181,8 +211,9 @@ const FR_LABELS = {
     'organization.iban': 'IBAN',
     'organization.bic': 'BIC / SWIFT',
     'organization.bank_name': 'Banque',
-    'organization.logo_image': 'Logo',
     'organization.vat_rate': 'Taux de TVA',
+    'organization.code': "Code de l'organisme",
+    'organization.qualiopi': 'Certifié Qualiopi',
     // Formation
     horaires: 'Horaires',
 };

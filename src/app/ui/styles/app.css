@@ -1929,6 +1929,10 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 
 /* ---- Éditeur de document (jetons glisser-déposer) ---- */
 .doc-token{display:inline-block;padding:1px 7px;margin:0 1px;border-radius:6px;background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b);border:1px solid var(--ember1,#c0392b);font-size:.86em;font-weight:600;white-space:nowrap;cursor:default;-webkit-user-select:none;user-select:none}
+/* Un jeton que rien ne connaît s'imprime VIDE (cf. jetonsInconnus, lib/categoryColors.js). La puce par
+   défaut étant déjà rouge, il se distingue par un filet TIRETÉ, un texte barré et un signe d'alerte. */
+.doc-token.inconnu{border-style:dashed;background:transparent;text-decoration:line-through;text-decoration-thickness:1px}
+.doc-token.inconnu::before{content:"⚠ ";text-decoration:none;display:inline-block;margin-right:2px}
 .tpl-editor{display:flex;flex-direction:column;gap:12px}
 .tpl-editor-head{display:flex;align-items:center;gap:12px}
 .tpl-editor-actions{margin-left:auto;display:flex;gap:8px}

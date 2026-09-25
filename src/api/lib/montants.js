@@ -39,4 +39,43 @@ function pourcentFr(v) {
     return `${sansZeroNegatif(n.toFixed(2).replace('.', ','))} %`;
 }
 
-module.exports = { montantFr, pourcentFr };
+/**
+ * UN NOMBRE DE « CHAMP DOCUMENT » ({field:training_program.price}…) tel qu'un DOCUMENT l'imprime.
+ *
+ * La valeur sortait brute : « 1750 » pour un prix, « 82.5 » pour un pourcentage — pendant que la
+ * palette annonçait « 1 500 » en exemple. Relevé le 2026-09-26 sur six modèles (devis, convention,
+ * contrat, attestation) qui impriment le prix de la formation par ce champ.
+ *
+ * CE N'EST PAS `montantFr`, ET C'EST VOULU. Celui-ci écrit les pièces COMPTABLES (factures), sans
+ * séparateur de milliers pour ne pas changer la largeur de leurs colonnes. Un champ document vit
+ * dans un devis ou une convention, où les jetons nommés écrivent déjà « 1 500 € » (`euro()`,
+ * lib/tokens.js) : le champ suit la même typographie, symbole en moins — le modèle l'écrit
+ * lui-même après la puce, et le mettre ici le doublerait.
+ *
+ *   · un MONTANT (prix, acompte, montant CPF…) : milliers séparés, et deux décimales s'il a des
+ *     centimes — « 1 750 », « 1 750,50 » ;
+ *   · tout autre nombre : la virgule décimale, SANS séparateur — une année reste « 2025 ».
+ *
+ * `cle` est « table.colonne ». Une valeur qui n'est pas un nombre ressort telle quelle ; une CHAÎNE
+ * n'est lue comme un nombre que dans une colonne de montant (un DECIMAL arrive en texte, « 1750.00 »),
+ * jamais ailleurs : un code postal ou un SIRET sont faits de chiffres, et ne sont pas des nombres.
+ */
+const COLONNE_MONTANT = /(^|_)(price|prix|acompte|amount|montant|capital|total)(_|$)/;
+function nombreChamp(cle, v) {
+    const colonne = String(cle || '').split('.').pop();
+    const montant = COLONNE_MONTANT.test(colonne);
+    let n = v;
+    if (typeof v === 'string') {
+        if (!montant || !/^-?\d+(\.\d+)?$/.test(v.trim())) return v;
+        n = Number(v);
+    }
+    if (typeof n !== 'number' || !Number.isFinite(n)) return String(v);
+    const centimes = montant && !Number.isInteger(n);
+    return n.toLocaleString('fr-FR', {
+        useGrouping: montant,
+        minimumFractionDigits: centimes ? 2 : 0,
+        maximumFractionDigits: 2,
+    });
+}
+
+module.exports = { montantFr, pourcentFr, nombreChamp };

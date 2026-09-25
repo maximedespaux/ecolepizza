@@ -13,21 +13,36 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
 const { applyTemplate, shiftNumber } = require('../lib/customtokens.js');
 const { TOKEN_CATALOG } = require('../lib/tokens.js');
 
-const CTRL = fs.readFileSync(
-    path.join(__dirname, '..', 'controllers/template.controller.js'), 'utf8');
+/* LA VRAIE PALETTE, sur une base factice où rien n'est activé : `COMPUTED_KEYS` n'existe plus
+   (2026-09-26). La liste à la main qui décidait seule du groupe « calculé » a laissé place à une
+   palette complète par construction — chaque jeton du catalogue s'y range dans son groupe. Le
+   contrat reste celui de ce test : {Today} et {HorairesJours} se TROUVENT. */
+const faux = {
+    promise: () => ({ query: async () => [[]] }),
+    query: (sql, params, cb) => { if (typeof cb === 'function') cb(null, {}); },
+};
+const cheminDb = require.resolve('../config/database.js');
+require.cache[cheminDb] = { id: cheminDb, filename: cheminDb, loaded: true, exports: faux };
+const { getTokens } = require('../controllers/template.controller.js');
 
-test('{Today} et {HorairesJours} sont PROPOSÉS dans la palette', () => {
-    const m = /const COMPUTED_KEYS = \[([\s\S]*?)\];/.exec(CTRL);
-    assert.ok(m, 'COMPUTED_KEYS introuvable');
-    for (const k of ['Today', 'HorairesJours']) {
-        assert.ok(m[1].includes(`'${k}'`), `${k} doit figurer dans COMPUTED_KEYS, sinon il est introuvable`);
-    }
-    // Et il faut qu'ils soient AU CATALOGUE, sinon `computedGroup` les filtre en silence.
+async function palette() {
+    let corps = null;
+    const res = { status() { return this; }, json(b) { corps = b; return this; } };
+    await getTokens({ user: { organization_id: 'o1' }, query: {} }, res);
+    return corps.data;
+}
+
+test('{Today} et {HorairesJours} sont PROPOSÉS dans la palette', async () => {
+    const groupes = await palette();
+    const groupeDe = (k) => (groupes.find((g) => g.tokens.some((t) => t.key === k)) || {}).group;
+    assert.strictEqual(groupeDe('Today'), 'Dates et valeurs calculées');
+    /* Les journées et leurs horaires se cherchent avec les dates de la SESSION : ils vivaient dans le
+       groupe « calculé », à côté du prix et du formateur. */
+    assert.strictEqual(groupeDe('HorairesJours'), 'Session');
+    // Et il faut qu'ils soient AU CATALOGUE : c'est de lui que la palette les tire.
     const cles = TOKEN_CATALOG.flatMap((g) => g.tokens).map((t) => t.key);
     for (const k of ['Today', 'HorairesJours']) assert.ok(cles.includes(k), `${k} absent du catalogue`);
 });

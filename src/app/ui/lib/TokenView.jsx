@@ -1,5 +1,5 @@
 import { NodeViewWrapper } from "@tiptap/react";
-import { chipStyleForKey } from "./categoryColors.js";
+import { chipStyleForKey, libelleAffiche, jetonConnu } from "./categoryColors.js";
 
 // Dimensions par défaut du cadre de signature — DOIVENT rester synchronisées avec
 // SIG_W / SIG_H côté rendu (src/api/lib/tokens.js).
@@ -24,9 +24,14 @@ export default function TokenView({ node, updateAttributes, selected }) {
     // Teinte de la catégorie du jeton (comme la puce de la palette) — repérage visuel de la
     // famille (Stagiaire, Facture…) directement dans le document. null = catégorie inconnue → défaut.
     const catStyle = chipStyleForKey(token);
+    /* Un jeton que rien ne connaît s'imprime VIDE : la puce le dit, en rouge (cf. jetonsInconnus). Le
+       libellé affiché est celui de la palette quand le libellé figé ne dit plus vrai (libelleAffiche). */
+    const inconnu = !jetonConnu(token);
     return (
-      <NodeViewWrapper as="span" className="doc-token" contentEditable={false} style={catStyle || undefined}>
-        {label || token || ""}
+      <NodeViewWrapper as="span" className={"doc-token" + (inconnu ? " inconnu" : "")} contentEditable={false}
+        style={(!inconnu && catStyle) || undefined}
+        title={inconnu ? `Ce jeton n'existe plus ({${token}}) : il s'imprimera vide. Supprimez-le et insérez le bon champ depuis la palette.` : undefined}>
+        {libelleAffiche(token, label)}
       </NodeViewWrapper>
     );
   }

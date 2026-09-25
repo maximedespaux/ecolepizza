@@ -23,7 +23,8 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
   const taRef = useRef(null); // textarea « Modèle » actuellement focalisé
 
   useEffect(() => {
-    getCustomTokens().then((r) => setList((r.data || []).map((t) => ({ ...t })))).catch((e) => setStatus({ type: "error", message: e.message }));
+    /* `existant` : la clé d'un jeton déjà enregistré ne se modifie plus (cf. la cellule « Nom (clé) »). */
+    getCustomTokens().then((r) => setList((r.data || []).map((t) => ({ ...t, existant: true })))).catch((e) => setStatus({ type: "error", message: e.message }));
   }, []);
 
   // Valeurs d'exemple issues du catalogue, pour l'aperçu.
@@ -85,6 +86,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
             Combine jetons et texte. Dates, en jours : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
             Montants : <code>{"{Prix|-450}"}</code>, <code>{"{Prix|*20%}"}</code> (20 % du prix),{" "}
             <code>{"{Prix|*90%}"}</code> (remise de 10 %), <code>{"{Prix|/3}"}</code> (un tiers).
+            {" "}La <b>clé</b> d'un jeton ne change plus une fois enregistrée — les modèles la désignent ; le <b>libellé</b>, si.
           </p>
           {status && <div className={"status " + (status.type || "")} style={{ marginBottom: 8 }}>{status.message}</div>}
 
@@ -94,7 +96,15 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
               <tbody>
                 {list.map((t, i) => (
                   <tr key={i}>
-                    <td><input className="inp" value={t.token_key} onChange={(e) => setRow(i, { token_key: e.target.value })} placeholder="Periode" /></td>
+                    {/* LA CLÉ EST UN IDENTIFIANT, comme le slug d'un modèle : les puces des modèles la désignent.
+                        La corriger ici — « Acomtpe » en « Acompte », 2026-09-26 — laissait ces puces pointer vers
+                        rien, et le devis, la convention et le contrat imprimaient un blanc à la place de l'acompte.
+                        Elle se choisit à la création ; le LIBELLÉ, lui, se change à volonté. Le serveur refuse de
+                        toute façon de retirer une clé employée. */}
+                    <td><input className="inp" value={t.token_key} readOnly={!!t.existant}
+                      onChange={(e) => setRow(i, { token_key: e.target.value })} placeholder="Periode"
+                      title={t.existant ? "La clé ne change plus une fois le jeton créé : les modèles la désignent. Changez plutôt le libellé." : undefined}
+                      style={t.existant ? { background: "var(--surface2)", color: "var(--muted)" } : undefined} /></td>
                     <td><input className="inp" value={t.label} onChange={(e) => setRow(i, { label: e.target.value })} placeholder="Période de formation" /></td>
                     <td>
                       <select className="inp" value={t.category || ""} onChange={(e) => setRow(i, { category: e.target.value })} title="Groupe où ranger ce jeton (défaut : Personnalisé)">

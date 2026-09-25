@@ -5,12 +5,13 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { defaultTemplateBuffer } = require('../lib/docxfill.js');
 const { mergeSteps, stepsToDocSet, DEFAULT_SLUGS, SIGNER_ROLES, stepSigners } = require('../lib/documents.js');
-const { articlesTable, paiementsTable, TOKEN_CATALOG, signatureBox } = require('../lib/tokens.js');
+const { articlesTable, paiementsTable, TOKEN_CATALOG, signatureBox, resolveTokens } = require('../lib/tokens.js');
 const { decrypt } = require('../lib/crypto.js');
 const { composeDocumentPdf, computeReserves } = require('../lib/pdfcompose.js');
 const { avecPapierEnTete } = require('../lib/htmlfill.js');
 const { getEnabledFields } = require('../lib/conditions.js');
 const { resolveCustomTokens } = require('../lib/customtokens.js');
+const { nombreChamp } = require('../lib/montants.js');
 const { identiteExemple } = require('../lib/echantillons.js');
 const { MODELES: MODELES_JURY } = require('../lib/modelesJury.js');
 // Le « Droit à l'image » proposé à une page blanche (jamais écrit sans enregistrement).
@@ -273,23 +274,72 @@ const saveTemplate = async (req, res) => {
  * sous le slug voulu. */
 // Échantillon d'aperçu RÉALISTE selon le type et le NOM de colonne (pas le libellé, qui
 // afficherait « Intitulé de la formation » au lieu d'une vraie valeur d'exemple).
+/* L'IDENTITÉ D'EXEMPLE DE LA PALETTE — celle du catalogue (M. Jean DUPONT, Pizza Napoli SARL), pour
+   qu'un champ document et le jeton nommé qui imprime la même chose montrent le même exemple. Sans
+   elle, la palette illustrait chaque colonne par un motif de son nom, sans savoir de QUI elle
+   parlait : la forme juridique d'une ENTREPRISE montrait « Demandeur d'emploi », son nom et son
+   n° TVA « Exemple », son e-mail celui du stagiaire, et le LIEU de naissance une date (relevé le
+   2026-09-26). L'aperçu, lui, tire une identité au hasard (lib/echantillons.js) et la passe en `ident`. */
+const IDENTITE_PALETTE = {
+    personne: {
+        civilite: 'M.', prenom: 'Jean', nom: 'DUPONT', email: 'jean.dupont@email.fr', tel: '06 12 34 56 78',
+        adresse: '12 rue des Fours', cp: '33000', ville: 'BORDEAUX', naissance: '15/04/1990', lieuNaissance: 'TOULOUSE',
+    },
+    entreprise: {
+        nom: 'Pizza Napoli SARL', statut: 'SARL', siret: '123 456 789 00012', naf: '5610C', tel: '05 56 11 22 33',
+        email: 'contact@pizzanapoli.fr', adresse: '5 av. de la Gare', cp: '33000', ville: 'BORDEAUX',
+    },
+};
+/* Le RÉFÉRENT de l'entreprise : une autre personne que le stagiaire, et jamais le nom de la société,
+   que le motif « name » attrapait pour « Nom du référent ». La même que {Nom représentant}. */
+const REFERENT_EXEMPLE = {
+    representative_civ: 'Mme', representative_first_name: 'Sophie', representative_name: 'MARTIN',
+    representative_role: 'Gérante',
+};
+/* Les colonnes qu'aucun motif ne sait illustrer : un exemple écrit, plutôt que « Exemple » — un mot
+   qui ne montre rien, et qui dans l'aperçu d'un modèle tient la place d'une vraie valeur. */
+const EXEMPLES_COLONNE = {
+    'learner.diploma_level': 'Niveau 3 (CAP, BEP)', 'learner.diploma_name': 'CAP Cuisine',
+    'learner.diploma_year': '2012', 'learner.last_experience': 'Commis de cuisine',
+    'learner.experience_value': '3', 'learner.experience_unit': 'ans', 'learner.contacted_by': 'Salon',
+    'learner.current_contract': 'CDI', 'learner.levels': 'NIV1', 'learner.completed_levels': 'NIV1',
+    'learner.note_libre': 'Ouvrir une pizzeria au feu de bois en 2027.',
+    'training_program.code': 'NIV1', 'training_program.level': 'Débutant',
+    'training_session.trainer': 'Marc Leblanc', 'organization.code': 'EP',
+};
+/* Les NOMBRES d'exemple, écrits comme le document les imprimera (`nombreChamp`) : « 1 500 », et non
+   un « 1 500 » tapé à la main pendant que le document sortait « 1500 ». */
+const NOMBRES_COLONNE = { 'enrollment.acompte': 450, 'virtual.evaluation_percent': 82, 'virtual.age': 34 };
+
 /**
  * Échantillon d'un champ document. `ident` (facultatif) = identité fictive du document, pour que
  * `field:learner.phone` et le jeton `Téléphone` désignent la MÊME personne dans un aperçu ; sans
- * elle, on retombe sur les valeurs génériques (palette, hors contexte d'aperçu).
+ * elle, c'est l'identité de la palette (IDENTITE_PALETTE).
  */
 function sampleForField(f, ident) {
     if (f.type === 'bool') return 'Oui';
     if (f.type === 'enum') return (f.options && f.options[0] && f.options[0].value) || 'Valeur';
     const c = String(f.column || '').toLowerCase();
-    // `organization` est volontairement EXCLU : ses champs sont écrasés plus loin par les
-    // valeurs RÉELLES de la fiche organisme, et lui prêter le téléphone d'une personne fictive
-    // ferait clignoter un faux numéro sur les modèles où la colonne est vide.
     const table = String(f.table || '').toLowerCase();
-    if (ident && table !== 'organization') {
-        const estEntreprise = table === 'company';
-        const p = ident.personne, e = ident.entreprise;
-        if (estEntreprise) {
+    const cle = `${table}.${c}`;
+    if (f.type === 'number') {
+        if (cle in NOMBRES_COLONNE) return nombreChamp(cle, NOMBRES_COLONNE[cle]);
+        if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return nombreChamp(cle, 1500);
+        if (/day|jour/.test(c)) return '5';
+        if (/hour|heure/.test(c)) return '35';
+        if (/week|semaine/.test(c)) return '23';
+        if (/year|annee|an\b/.test(c)) return '2025';
+        if (/age/.test(c)) return '30';
+        return '12';
+    }
+    if (cle in EXEMPLES_COLONNE) return EXEMPLES_COLONNE[cle];
+    // `organization` est volontairement EXCLU de l'identité : ses champs prennent les valeurs RÉELLES
+    // de la fiche organisme (palette et aperçu), et lui prêter le téléphone d'une personne fictive
+    // ferait clignoter un faux numéro sur les modèles où la colonne est vide.
+    if (table === 'company' || table === 'learner') {
+        const { personne: p, entreprise: e } = ident || IDENTITE_PALETTE;
+        if (table === 'company') {
+            if (c in REFERENT_EXEMPLE) return REFERENT_EXEMPLE[c];
             if (/(phone|tel|mobile|portable|gsm)/.test(c)) return e.tel;
             if (/(email|mail|courriel)/.test(c)) return e.email;
             if (/(address|adresse|rue|voie)/.test(c)) return e.adresse;
@@ -297,6 +347,8 @@ function sampleForField(f, ident) {
             if (/(zip|postal|cp\b)/.test(c)) return e.cp;
             if (/siret/.test(c)) return e.siret;
             if (/(naf|ape)/.test(c)) return e.naf;
+            if (/(vat|tva)/.test(c)) return 'FR76123456789';
+            if (/opco/.test(c)) return 'AKTO';
             if (/(legal_status|forme|statut_jur)/.test(c)) return e.statut;
             if (/(company|entreprise|societe|raison|name|nom)/.test(c)) return e.nom;
         } else {
@@ -308,30 +360,26 @@ function sampleForField(f, ident) {
             if (/(address|adresse|rue|voie)/.test(c)) return p.adresse;
             if (/(city|ville|town|commune)/.test(c)) return p.ville;
             if (/(zip|postal|cp\b)/.test(c)) return p.cp;
+            // Le LIEU avant la date : `birth_place` répondait au motif « birth » par une date.
+            if (/(birth_place|lieu)/.test(c)) return p.lieuNaissance || '';
             if (/(birth|naissance)/.test(c)) return p.naissance;
         }
     }
-    if (f.type === 'number') {
-        if (/price|amount|montant|prix|acompte|cpf|reste|total/.test(c)) return '1 500';
-        if (/day|jour/.test(c)) return '5';
-        if (/hour|heure/.test(c)) return '35';
-        if (/week|semaine/.test(c)) return '23';
-        if (/year|annee|an\b/.test(c)) return '2025';
-        if (/age/.test(c)) return '30';
-        return '123';
-    }
+    // Le DÉROULÉ avant l'intitulé : `program_detail` répondait au motif « program » par un titre.
+    if (/program_detail|deroul/.test(c)) return 'Jour 1 : la pâte…';
     if (/first_?name|prenom/.test(c)) return 'Jean';
     if (/(company|entreprise|societe|raison)/.test(c)) return 'Pizza Napoli SARL';
-    if (/last_?name|nom/.test(c)) return 'Dupont';
+    if (/last_?name|nom/.test(c)) return 'DUPONT';
     if (/civilit|gender|sexe/.test(c)) return 'M.';
     if (/(intitul|titre|title|program|formation|libell)/.test(c)) return 'Fabriquer des pizzas artisanales';
     if (/(email|mail|courriel)/.test(c)) return 'jean.dupont@email.fr';
     if (/(phone|tel|mobile|portable|gsm)/.test(c)) return '06 12 34 56 78';
     if (/(address|adresse|rue|voie)/.test(c)) return '12 rue des Fours';
-    if (/(city|ville|town|commune)/.test(c)) return 'Bordeaux';
+    if (/(city|ville|town|commune)/.test(c)) return 'BORDEAUX';
     if (/(zip|postal|cp\b)/.test(c)) return '33000';
     if (/siret/.test(c)) return '123 456 789 00012';
     if (/(naf|ape)/.test(c)) return '5610C';
+    if (/(vat|tva)/.test(c)) return 'FR76987654321';
     if (/opco/.test(c)) return 'AKTO';
     if (/(code|rs_)/.test(c)) return 'RS7404';
     if (/(date|birth|naissance|debut|fin|jour1)/.test(c)) return '02/06/2025';
@@ -349,6 +397,13 @@ function sampleForField(f, ident) {
     if (/(objectiv|objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
     if (/(audience|public)/.test(c)) return 'Tout public';
     if (/level|niveau/.test(c)) return 'Débutant';
+    // L'organisme : ces exemples ne se voient que si SA fiche laisse la colonne vide (cf. getTokens).
+    if (/(manager|responsable|dirigeant)/.test(c)) return 'Claire MOREAU';
+    if (/bank/.test(c)) return 'Crédit Agricole';
+    if (/iban/.test(c)) return 'FR76 3000 4000 0100 0001 2345 678';
+    if (/bic/.test(c)) return 'AGRIFRPP';
+    if (/nda/.test(c)) return '75330000000';
+    if (/short/.test(c)) return 'Mon école';
     return 'Exemple';
 }
 
@@ -380,21 +435,6 @@ async function fieldTokenGroups(orgId, ident) {
         (by[f.tableLabel] || (by[f.tableLabel] = [])).push({ key, label: f.label, sample });
     }
     return Object.entries(by).map(([group, tokens]) => ({ group, tokens }));
-}
-
-// Groupe « Calculé / dates » : jetons INTÉGRÉS dérivés du dossier (dates de session,
-// semaine, durées…). Ils sont calculés au rendu par resolveTokens.
-/* CETTE LISTE DÉCIDE SEULE de ce qui apparaît dans « Dates et valeurs calculées ». Un jeton
-   ajouté au catalogue mais absent d'ici fonctionne si on le TAPE et reste introuvable dans la
-   palette — c'était le cas de {Today} depuis toujours, et ça a bien failli l'être de
-   {HorairesJours}, livré la veille. Ajouter un jeton calculé, c'est donc DEUX gestes. */
-const COMPUTED_KEYS = ['Today', 'Jour1', 'endDate', 'Semaine', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi',
-    'HorairesJours', 'Formateur', 'Heures', 'Jours', 'DuréeDétail', 'Prix', 'Acompte', 'Financement'];
-function computedGroup() {
-    const byKey = {};
-    for (const g of TOKEN_CATALOG) for (const t of (g.tokens || [])) byKey[t.key] = t;
-    const tokens = COMPUTED_KEYS.map((k) => byKey[k]).filter(Boolean).map((t) => ({ key: t.key, label: t.label, sample: t.sample || '' }));
-    return { group: 'Calculé / dates', tokens };
 }
 
 // Jetons « groupe entreprise » intégrés (non issus d'une colonne du dossier) : la liste
@@ -446,14 +486,14 @@ function acheteurFactureGroup() {
         group: 'Acheteur (facture)',
         tokens: [
             // Acheteur ENTREPRISE (facture entreprise)
-            t('field:company.email', 'E-mail (entreprise)', 'Entreprise', 'contact@napoli.fr', "Adresse e-mail de l'acheteur lorsque c'est une ENTREPRISE. Se remplit avec l'e-mail de la fiche entreprise de l'acheteur."),
+            t('field:company.email', 'E-mail (entreprise)', 'Entreprise', 'contact@pizzanapoli.fr', "Adresse e-mail de l'acheteur lorsque c'est une ENTREPRISE. Se remplit avec l'e-mail de la fiche entreprise de l'acheteur."),
             t('field:company.phone', 'Téléphone (entreprise)', 'Entreprise', '05 56 11 22 33', "Téléphone de l'acheteur ENTREPRISE (depuis sa fiche)."),
             t('field:company.address', 'Adresse (entreprise)', 'Entreprise', '5 av. de la Gare', "Adresse postale de l'acheteur ENTREPRISE."),
             t('field:company.vat_number', 'N° TVA (entreprise)', 'Entreprise', 'FR76123456789', "Numéro de TVA intracommunautaire de l'acheteur ENTREPRISE. Mention attendue dès qu'on facture une société, et obligatoire sur une opération intracommunautaire. Se remplit depuis sa fiche entreprise (migration 123)."),
             t('field:company.naf_ape', 'NAF/APE (entreprise)', 'Entreprise', '5610C', "Code NAF/APE de l'acheteur ENTREPRISE."),
             t('field:company.legal_status', 'Forme juridique (entreprise)', 'Entreprise', 'SARL', "Forme juridique de l'acheteur ENTREPRISE (SARL, SAS…)."),
             // Acheteur PARTICULIER / STAGIAIRE (facture particulier)
-            t('field:learner.email', 'E-mail (particulier)', 'Stagiaire', 'jean@exemple.fr', "Adresse e-mail de l'acheteur lorsque c'est un PARTICULIER / stagiaire."),
+            t('field:learner.email', 'E-mail (particulier)', 'Stagiaire', 'jean.dupont@email.fr', "Adresse e-mail de l'acheteur lorsque c'est un PARTICULIER / stagiaire."),
             t('field:learner.phone', 'Téléphone (particulier)', 'Stagiaire', '06 12 34 56 78', "Téléphone de l'acheteur PARTICULIER / stagiaire."),
             t('field:learner.address', 'Adresse (particulier)', 'Stagiaire', '12 rue des Fours', "Adresse postale de l'acheteur PARTICULIER / stagiaire."),
         ],
@@ -518,14 +558,16 @@ async function loadCustomTokens(orgId) {
 // Les groupes non listés tombent à la fin, triés alphabétiquement.
 const GROUP_ORDER = [
     'Stagiaire', 'Autorisations', 'Entreprise', 'Groupe entreprise', 'Financeur (OPCO)',
-    'Inscription', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Examen', 'Lieu de formation',
-    'Organisme', 'Émetteur (identité)', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
+    'Inscription', 'Prix et financement', 'Formation', 'Session', 'Évaluation pratique', 'Jury', 'Examen', 'Lieu de formation',
+    'Organisme', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Dates et valeurs calculées', 'Personnalisés',
 ];
 // Groupes dont l'ORDRE des jetons est déjà réfléchi (ne pas trier alphabétiquement).
 /* L'ordre des jetons d'évaluation est réfléchi (intitulé, total, points, seuil, résultat,
    détail) : trié alphabétiquement, « NoteDétail » ouvrirait le groupe et le total arriverait
    après le seuil. */
-const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates et valeurs calculées', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Émetteur (identité)',
+/* « Prix et financement » suit l'ordre d'un devis : le financement, le prix, l'acompte, le reste,
+   puis le détail HT / TVA / TTC. */
+const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Groupe entreprise', 'Facture', 'Acheteur (facture)', 'Ligne de facture', 'Ligne de règlement', 'Prix et financement',
     /* Photos puis partenaires, et dans chacun « Autorise » avant « N'autorise pas » : l'ordre où
        les cases se posent sur le document. Trié par libellé, « Partenaires » passerait devant. */
     'Autorisations']);
@@ -539,13 +581,146 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates
    aucun dossier à lire et sortiraient vides. */
 const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Autorisations', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
-/* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens).
-   « Nom complet » (civilité, prénom, NOM) et « Adresse complète » (rue, code postal, ville, sur une
-   ligne) n'ont AUCUN champ équivalent : relevé le 2026-09-26 sur le devis RS7404, qui les emploie, ils
-   s'imprimaient mais ne se trouvaient plus dans la palette — ni pour les insérer, ni pour les colorer. */
-const STAGIAIRE_NOMMES = ['Personne', 'Adresse', 'D_Naissance'];
-/* Le nom, dans la palette, d'un groupe du catalogue qui y porte un autre nom. */
-const NOM_EN_PALETTE = { Dates: 'Dates et valeurs calculées' };
+/*
+ * LA PALETTE EST COMPLÈTE PAR CONSTRUCTION (2026-09-26).
+ *
+ * Elle était une composition À LA MAIN : les Champs documents, plus des groupes et des jetons
+ * nommés ajoutés un à un. Chaque jeton ajouté au catalogue demandait un second geste ici, et ce
+ * second geste s'oubliait : évaluation pratique, examen, {Today}, {Nombre stagiaires},
+ * {D_Naissance}, {Date signature entreprise}… Chacun se remplissait si on le TAPAIT et restait
+ * introuvable. L'audit du 2026-09-26 en a encore trouvé treize : le groupe « Financeur (OPCO) »
+ * entier (son nom figurait pourtant dans GROUP_ORDER), le reste à payer, le HT, la TVA et le TTC,
+ * la date de signature du stagiaire, son identifiant France Travail, l'adresse de l'entreprise
+ * sur une ligne, le nom complet de son référent…
+ *
+ * DÉSORMAIS, TOUT JETON DU CATALOGUE EST PROPOSÉ dans son groupe (`completerLaPalette`), sauf :
+ *   · s'il a un JUMEAU proposé — le Champ document qui imprime la même valeur : {Civilité} et le
+ *     champ Civilité, {Siret organisme} et le champ SIRET. Deux puces pour une même valeur
+ *     n'apprenaient rien ; les deux groupes « Organisme » et « Émetteur (identité) » en
+ *     alignaient quatorze, sous les mêmes libellés. Le jumeau décoché, le jeton nommé revient :
+ *     aucune donnée ne disparaît de la palette parce qu'un champ est éteint ;
+ *   · s'il est un ANCIEN NOM, gardé pour les modèles qui l'emploient ({Date} vaut {Today}) ;
+ *   · s'il est offert AILLEURS : les deux cadres de signature, par le bloc « Signatures » ;
+ *   · si son groupe est masqué pour ce type de document (un document d'entreprise n'a pas UN
+ *     stagiaire), ou s'il n'a de sens que sur une facture.
+ * Ce qui n'est pas proposé reste RECONNU (`connus`) : la puce d'un modèle ancien garde sa couleur.
+ */
+/* Le groupe de la palette d'un groupe du catalogue qui y porte un autre nom. « Dossier » devient
+   « Prix et financement » : ses jetons sont des montants en euros, et « Inscription » — le groupe
+   des champs `enrollment.*` — est masqué sur un document d'entreprise, où {Prix} imprime pourtant
+   la somme des inscriptions du groupe. La signature principale est celle du stagiaire. */
+const NOM_EN_PALETTE = { Dates: 'Dates et valeurs calculées', Dossier: 'Prix et financement', Signature: 'Stagiaire' };
+/* Un jeton rangé ailleurs que son groupe du catalogue : la liste des stagiaires d'une entreprise
+   n'a de sens que dans « Groupe entreprise », masqué sur un document de stagiaire. */
+const PLACE_EN_PALETTE = { Stagiaires: 'Groupe entreprise', 'Nombre stagiaires': 'Groupe entreprise',
+    // {OPCO} est celui de l'entreprise OU du stagiaire : sa place est avec le financeur.
+    OPCO: 'Financeur (OPCO)' };
+/* LES JUMEAUX : jeton nommé → Champ document qui imprime la MÊME valeur. Ne figurent ici que des
+   égalités VRAIES, éprouvées une à une par palette-complete.test.js sur un vrai contexte. {Adresse}
+   (rue, code postal ET ville sur une ligne), {Personne} (civilité, prénom, NOM), {Nom représentant}
+   (prénom et nom), les montants en euros de « Prix et financement » n'ont pas de jumeau : aucun
+   champ ne les imprime ainsi. Ni {Code} (le code, OU le code RS), ni {OPCO} (celui de l'entreprise,
+   OU du stagiaire) : chacun a un repli que son champ n'a pas. */
+const JUMEAUX = {
+    'Civilité': 'learner.civility', 'Prénom': 'learner.first_name', Nom: 'learner.last_name',
+    CP: 'learner.zip_code', Ville: 'learner.town', Email: 'learner.email', 'Téléphone': 'learner.phone',
+    'Lieu naissance': 'learner.birth_place', Statut: 'learner.professional_status',
+    Formation: 'training_program.title', Public: 'training_program.audience',
+    'Prérequis': 'training_program.prerequisites', Objectifs: 'training_program.objectives',
+    ObjectifG: 'training_program.objective_general', 'DuréeDétail': 'training_program.duration_detail',
+    'Déroulé': 'training_program.program_detail', Heures: 'training_program.hours', Jours: 'training_program.days',
+    Formateur: 'training_session.trainer',
+    Financement: 'enrollment.financing',
+    'Nom entreprise': 'company.name', Siret: 'company.siret',
+    'Civ représentant': 'company.representative_civ', 'Fonction représentant': 'company.representative_role',
+    'Email entreprise': 'company.email', 'Téléphone entreprise': 'company.phone',
+    'NAF entreprise': 'company.naf_ape', 'Forme juridique': 'company.legal_status',
+    Organisme: 'organization.legal_name', 'Organisme court': 'organization.short_name',
+    Responsable: 'organization.manager', 'Siret organisme': 'organization.siret',
+    'TVA organisme': 'organization.vat_number', NDA: 'organization.nda', 'Ville organisme': 'organization.town',
+    'Code postal organisme': 'organization.zip_code', 'Forme juridique organisme': 'organization.legal_status',
+    'NAF organisme': 'organization.naf_ape', 'Téléphone organisme': 'organization.phone',
+    'Email organisme': 'organization.email', IBAN: 'organization.iban', BIC: 'organization.bic',
+    Banque: 'organization.bank_name',
+};
+/* Les anciens noms : {Date} vaut {Today}, {PrixFormation} vaut {Prix}. Reconnus, jamais proposés. */
+const ANCIENS_NOMS = new Set(['Date', 'PrixFormation']);
+/* Les clés que le moteur remplit sans qu'elles soient au catalogue (ALIAS_KEYS, lib/tokens.js),
+   avec le groupe dont elles portent la couleur. Reconnues, jamais proposées. */
+const ALIAS_EN_PALETTE = {
+    'Niveau suggérer': 'Formation', TmpTotSem: 'Formation', Offre: 'Prix et financement',
+    'Semaine de la formation': 'Session', 'Nom de l’entreprise': 'Entreprise', 'Responsable entreprise': 'Entreprise',
+};
+/* LES LIBELLÉS QU'UNE PUCE A FIGÉS ET QUI NE DISENT PLUS VRAI. Une puce garde le libellé du jour de
+   son insertion (`data-label`) : relevé le 2026-09-26 en production, le « Contrat Hygiène » affichait
+   encore « Date — Mardi (jour 2) » — la promesse retirée du catalogue parce que {Mardi} donne le
+   2e jour OUVRÉ —, la convention « Entreprise · Representative civ ». L'éditeur montre donc le
+   libellé ACTUEL à la place de ceux-ci (ainsi que des libellés de repli « Table · colonne » et des
+   commentaires de colonne, qu'il reconnaît à leur forme). Tout autre libellé figé est un CHOIX —
+   « Qté », « PU HT » dans un tableau d'articles — et reste affiché tel quel. */
+const ANCIENS_LIBELLES = {
+    Lundi: ['Date — Lundi (jour 1)'], Mardi: ['Date — Mardi (jour 2)'], Mercredi: ['Date — Mercredi (jour 3)'],
+    Jeudi: ['Date — Jeudi (jour 4)'], Vendredi: ['Date — Vendredi (jour 5)'],
+    'Données partenaires': ['Partenaires : informations transmises'],
+    'Adresse organisme': ['Adresse'], 'Adresse entreprise': ['Adresse de l’entreprise'],
+    'Civ représentant': ['Civilité du représentant'], 'Nom représentant': ['Nom du représentant'],
+    'Fonction représentant': ['Fonction du représentant'],
+    Prix: ['Prix du dossier'], Acompte: ['Acompte'], 'Reste à payer': ['Reste à payer (prix − acompte)'],
+    'Prix HT': ['Prix HT'], TVA: ['Montant de la TVA'], 'Prix TTC': ['Prix TTC'],
+    Code: ['Code formation'], OPCO: ['OPCO'], PrixFormation: ['Prix catalogue'],
+    'Date signature': ['Date de signature'], 'Nom signataire': ['Nom du signataire'],
+    'field:enrollment.price': ['Prix'], 'field:enrollment.acompte': ['Acompte'],
+    'field:training_program.active': ['Active'],
+};
+/* Les deux cadres de signature : le bloc « Signatures » de l'éditeur les offre, en cadres. */
+const OFFERTS_PAR_L_EDITEUR = new Set(['Signature stagiaire', 'Signature organisme']);
+/* Propres à une facture émise par une entité (Paramètres → Facturation) : partout ailleurs ils
+   sortent vides, et un jeton vide que le modèle attend BLOQUE la génération du document. Seuls les
+   modèles de type FACTURE passent par la facturation (buildInvoicePdf) — devis, acomptes et avoirs
+   compris : un « DEVIS » des modèles de documents, lui, est un document de stagiaire. */
+const FACTURE_SEULEMENT = new Set(['Capital organisme', 'RCS organisme']);
+/* Les types de modèle à qui la palette offre les coordonnées de l'ACHETEUR (groupe « Acheteur
+   (facture) ») : les pièces de facturation, et le devis — qui s'adresse, lui aussi, à qui paie. */
+const TYPES_FACTURE = ['FACTURE', 'ACOMPTE', 'AVOIR', 'DEVIS'];
+
+const GROUPES_DE_LIGNE = new Set(['Ligne de facture', 'Ligne de règlement']);
+
+/** Le groupe de la palette où se range un jeton du catalogue. */
+function groupeEnPalette(cle, groupeCatalogue) {
+    return PLACE_EN_PALETTE[cle] || NOM_EN_PALETTE[groupeCatalogue] || groupeCatalogue;
+}
+
+/**
+ * Ajoute à la palette VISIBLE chaque jeton du catalogue qu'elle ne propose pas encore (cf. le
+ * commentaire au-dessus). `masques` : les groupes masqués pour ce type de document. `echantillon`
+ * donne l'exemple d'un jeton (valeurs réelles de l'organisme, sinon celui du catalogue).
+ */
+function completerLaPalette(visible, { masques, docType, echantillon }) {
+    const offerts = new Set();
+    /* UNE MÊME CLÉ, DEUX SENS : {Taux TVA} est, hors de tout bloc, le taux de l'organisme
+       (« Exonérée »), et dans une ligne d'articles celui de la ligne ; {Banque}, la banque de
+       l'organisme, et dans un règlement celle du chèque. Proposée dans « Ligne de facture », la clé
+       ne l'est pas pour autant là où on la cherche hors du bloc : les groupes de LIGNE ne comptent
+       pas ici. (Relevé le 2026-09-26 : {Taux TVA} manquait à « Prix et financement ».) */
+    for (const g of visible) {
+        if (GROUPES_DE_LIGNE.has(g.group)) continue;
+        for (const t of (g.tokens || [])) offerts.add(t.key);
+    }
+    for (const cg of TOKEN_CATALOG) {
+        for (const t of (cg.tokens || [])) {
+            if (offerts.has(t.key) || ANCIENS_NOMS.has(t.key) || OFFERTS_PAR_L_EDITEUR.has(t.key)) continue;
+            if (JUMEAUX[t.key] && offerts.has(`field:${JUMEAUX[t.key]}`)) continue;
+            if (FACTURE_SEULEMENT.has(t.key) && docType && docType !== 'FACTURE') continue;
+            const nom = groupeEnPalette(t.key, cg.group);
+            if (masques && masques.has(nom)) continue;
+            let g = visible.find((x) => x.group === nom);
+            if (!g) { g = { group: nom, tokens: [] }; visible.push(g); }
+            g.tokens.push({ key: t.key, label: t.label, sample: echantillon(t), ...(t.desc ? { desc: t.desc } : {}) });
+            offerts.add(t.key);
+        }
+    }
+    return offerts;
+}
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
@@ -570,36 +745,31 @@ const getTokens = async (req, res) => {
             }
         }
         const groups = await fieldTokenGroups(orgId);
-        /* LA DATE DE NAISSANCE N'Y ÉTAIT PAS — signalé par l'école le 2026-09-22. Le groupe
-           « Stagiaire » se construit depuis les Champs documents, et ceux-ci écartent les colonnes
-           DATE (`sqlToType`, lib/conditions.js) : {D_Naissance} se remplissait si on le TAPAIT, et
-           restait introuvable dans la palette. Le jeton nommé rejoint donc le groupe où l'on cherche
-           une donnée du stagiaire, déjà mise en forme (JJ/MM/AAAA) par `resolveTokens`. */
-        let stagiaire = groups.find((g) => g.group === 'Stagiaire');
-        if (!stagiaire) { stagiaire = { group: 'Stagiaire', tokens: [] }; groups.push(stagiaire); }
-        stagiaire.tokens.push(...catalogGroup('Stagiaire').tokens.filter((t) => STAGIAIRE_NOMMES.includes(t.key)));
-        /* LA DATE DE SIGNATURE DE L'ENTREPRISE — un jeton NOMMÉ, résolu depuis le cadre
-           `representant` (document_signature), PAS une colonne de la fiche : les Champs documents,
-           d'où vient le groupe « Entreprise », ne savent pas l'offrir. Comme {D_Naissance} ci-dessus,
-           il rejoint donc À LA MAIN le groupe où l'on cherche une donnée de l'entreprise — sans quoi
-           il se résout si on le TAPE et reste INTROUVABLE dans la palette (le défaut que ce fichier
-           paie en boucle : évaluation, examen, {Nombre stagiaires}…). */
-        let entreprise = groups.find((g) => g.group === 'Entreprise');
-        if (!entreprise) { entreprise = { group: 'Entreprise', tokens: [] }; groups.push(entreprise); }
-        entreprise.tokens.push(...catalogGroup('Entreprise').tokens.filter((t) => t.key === 'Date signature entreprise'));
-        // (Le groupe « Organisme » — dont la signature — vient des Champs documents.)
+        /* L'ORGANISME S'ILLUSTRE PAR SES VRAIES VALEURS, dans la palette comme à l'aperçu : ses jetons
+           composent le papier à en-tête, et « 12 rue des Fours » en exemple de sa propre adresse ne
+           montrait rien. Une colonne vide garde l'exemple générique. */
+        let org = {};
+        try { org = (await loadOrgRow(orgId)) || {}; } catch { /* organisme illisible : exemples génériques */ }
+        const reels = resolveTokens({ org });
+        const orgNomme = new Set(((TOKEN_CATALOG.find((g) => g.group === 'Organisme') || {}).tokens || []).map((t) => t.key));
+        const echantillon = (t) => (orgNomme.has(t.key) && reels[t.key] ? reels[t.key] : (t.sample || ''));
+        for (const g of groups) {
+            for (const t of g.tokens) {
+                const col = t.key.startsWith('field:organization.') ? t.key.slice('field:organization.'.length) : null;
+                if (col && org[col] != null && org[col] !== '' && typeof org[col] !== 'object') t.sample = String(org[col]);
+            }
+        }
+        // Les champs « Calculé » (conditions virtuelles : certifiante, évaluation réussie…) rejoignent
+        // la date du jour : des valeurs déduites du dossier, qu'on ne saisit nulle part.
+        for (const g of groups) if (g.group === 'Calculé') g.group = 'Dates et valeurs calculées';
         groups.push({ group: 'Lieu de formation', tokens: LOCATION_FIELDS.map(([col, label, sample]) => ({ key: `field:location.${col}`, label, sample })) });
-        groups.push(computedGroup());
         groups.push(groupTokensGroup());
-        // Jetons NOMMÉS de l'organisme/émetteur ({Organisme}, {Forme juridique organisme}…) : sur
-        // une facture ils reprennent l'identité de l'entité émettrice. Distincts des « Champs
-        // documents » (field:organization.*), qui viennent de la fiche organisme.
-        groups.push(catalogGroup('Organisme', 'Émetteur (identité)'));
         /* ÉVALUATION PRATIQUE : le résultat du stagiaire sur la grille de sa formation.
            SANS CETTE LIGNE, LES JETONS EXISTENT MAIS PERSONNE NE PEUT LES INSÉRER — la palette
            n'est pas le catalogue, elle en est une composition choisie. Mesuré en production
            juste après la mise en ligne : {NoteTotale} se résolvait correctement si on le tapait
-           à la main, et n'apparaissait nulle part dans l'éditeur. */
+           à la main, et n'apparaissait nulle part dans l'éditeur. (La complétion, plus bas, les
+           rattraperait désormais ; ces groupes gardent leur ordre choisi.) */
         groups.push(catalogGroup('Évaluation pratique'));
         groups.push(catalogGroup('Jury'));
         /* EXAMEN : le procès-verbal de la commission. Le groupe existait au catalogue depuis la
@@ -617,7 +787,7 @@ const getTokens = async (req, res) => {
         // field:company.*) et se remplissent avec les valeurs de l'acheteur ; on les REGROUPE ici,
         // à portée de main sous « Facture ». Chaque jeton garde la COULEUR de son origine
         // (Entreprise / Stagiaire) via `origin`, pour qu'on voie d'où il vient.
-        if (!docType || ['FACTURE', 'ACOMPTE', 'AVOIR', 'DEVIS'].includes(docType)) {
+        if (!docType || TYPES_FACTURE.includes(docType)) {
             groups.push(acheteurFactureGroup());
         }
         groups.push(articleTokensGroup());
@@ -631,8 +801,11 @@ const getTokens = async (req, res) => {
            modèle puis lancer un aperçu pour découvrir ce qu'il donne. Or un jeton personnalisé
            n'est qu'une COMPOSITION d'autres jetons — on la résout donc contre leurs exemples, et
            l'aperçu se lit dans la palette. `resolveCustomTokens` est la même fonction qui les
-           calcule à la génération : le même moteur, donc le même résultat. */
+           calcule à la génération : le même moteur, donc le même résultat. Les exemples viennent
+           de TOUT le catalogue, pas des seuls jetons déjà rangés : {Jour1} n'entre dans la palette
+           qu'à la complétion, et « Du {Jour1} jusqu'au {endDate} » s'afficherait vide. */
         const echantillons = {};
+        for (const cg of TOKEN_CATALOG) for (const t of (cg.tokens || [])) echantillons[t.key] = echantillon(t);
         for (const g of groups) for (const t of (g.tokens || [])) if (t.sample) echantillons[t.key] = t.sample;
         const resolus = resolveCustomTokens(defs, echantillons);
         for (const d of defs) {
@@ -642,42 +815,39 @@ const getTokens = async (req, res) => {
             g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: resolus[`custom:${d.token_key}`] || '' });
         }
 
-        // Réorganisation : ordre de groupes canonique + tri alphabétique des jetons
-        // (hors groupes curatés) + suppression des groupes vides.
-        // « Calculé » n'avait qu'UN jeton et vivait a cote de « Calculé / dates » : deux noms
-        // presque identiques pour une seule idee, et un groupe d'un element qui n'apprend rien.
-        // On les reunit sous un intitule qui dit ce qu'ils SONT — des valeurs deduites du
-        // dossier, qu'on ne saisit nulle part.
-        const calcDates = groups.find((g) => g.group === 'Calculé / dates');
-        const calc = groups.find((g) => g.group === 'Calculé');
-        if (calcDates && calc) {
-            calcDates.tokens = [...calcDates.tokens, ...calc.tokens];
-            groups.splice(groups.indexOf(calc), 1);
-        }
-        for (const g of groups) if (g.group === 'Calculé / dates') g.group = 'Dates et valeurs calculées';
+        // Filtrage selon le type de document (si connu), PUIS complétion : un jeton ne se range pas
+        // dans un groupe masqué, et son jumeau ne compte que s'il est réellement proposé.
+        const hidden = companyLevel === 1 ? HIDDEN_FOR_COMPANY : companyLevel === 0 ? HIDDEN_FOR_LEARNER : null;
+        const visible = hidden ? groups.filter((g) => !hidden.has(g.group)) : groups;
+        const offerts = completerLaPalette(visible, { masques: hidden, docType, echantillon });
 
+        // Ordre de groupes canonique + tri alphabétique des jetons (hors groupes curatés).
         const rank = (g) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? GROUP_ORDER.length : i; };
-        groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
-        for (const g of groups) {
+        visible.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group, 'fr'));
+        for (const g of visible) {
             if (!CURATED_GROUPS.has(g.group) && Array.isArray(g.tokens)) {
                 g.tokens.sort((x, y) => String(x.label || '').localeCompare(String(y.label || ''), 'fr'));
             }
         }
-        // Filtrage selon le type de document (si connu).
-        const hidden = companyLevel === 1 ? HIDDEN_FOR_COMPANY : companyLevel === 0 ? HIDDEN_FOR_LEARNER : null;
-        const visible = hidden ? groups.filter((g) => !hidden.has(g.group)) : groups;
-        /* LES JETONS CONNUS MAIS PAS PROPOSÉS — {Date}, doublon de {Today} ; {Formation}, {Civilité}…,
-           que les Champs documents remplacent. Ils s'impriment toujours, mais l'éditeur tire la
-           catégorie (la couleur) d'une puce de la PALETTE : absents d'elle, ceux d'un modèle ancien
-           paraissaient inconnus — « pourquoi ce jeton n'est-il pas enregistré ? », 2026-09-26. On les
-           déclare ici, à part, pour qu'ils soient reconnus sans revenir en double dans la palette. */
-        const offerts = new Set();
-        for (const g of visible) for (const t of (g.tokens || [])) offerts.add(t.key);
-        const connus = TOKEN_CATALOG
-            .map((g) => ({ group: NOM_EN_PALETTE[g.group] || g.group,
-                tokens: (g.tokens || []).filter((t) => !offerts.has(t.key)).map((t) => ({ key: t.key, label: t.label })) }))
-            .filter((g) => g.tokens.length);
-        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length), connus });
+        /* LES JETONS CONNUS MAIS PAS PROPOSÉS — {Date}, ancien nom de {Today} ; {Formation}, {Civilité}…,
+           dont le champ jumeau est proposé ; ceux d'un groupe masqué pour ce type de document. Ils
+           s'impriment toujours, mais l'éditeur tire la catégorie (la couleur) d'une puce de la PALETTE :
+           absents d'elle, ceux d'un modèle ancien paraissaient inconnus — « pourquoi ce jeton n'est-il
+           pas enregistré ? », 2026-09-26. On les déclare ici, à part, pour qu'ils soient reconnus sans
+           revenir en double dans la palette. */
+        const parGroupe = new Map();
+        // Une clé proposée N'IMPORTE OÙ — groupes de ligne compris — n'est pas « connue à part ».
+        const proposes = new Set(offerts);
+        for (const g of visible) for (const t of (g.tokens || [])) proposes.add(t.key);
+        const connaitre = (groupe, key, label) => {
+            if (proposes.has(key)) return;
+            if (!parGroupe.has(groupe)) parGroupe.set(groupe, []);
+            if (!parGroupe.get(groupe).some((t) => t.key === key)) parGroupe.get(groupe).push({ key, label });
+        };
+        for (const cg of TOKEN_CATALOG) for (const t of (cg.tokens || [])) connaitre(groupeEnPalette(t.key, cg.group), t.key, t.label);
+        for (const [key, groupe] of Object.entries(ALIAS_EN_PALETTE)) connaitre(groupe, key, key);
+        const connus = [...parGroupe].map(([group, tokens]) => ({ group, tokens }));
+        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length), connus, anciens: ANCIENS_LIBELLES });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -739,6 +909,13 @@ async function sampleTokenValues(orgId, graine) {
             const col = k.slice('field:organization.'.length);
             if (org[col] != null && org[col] !== '') m[k] = String(org[col]);
         }
+        /* LES JETONS NOMMÉS DE L'ORGANISME AUSSI ({Siret organisme}, {Adresse organisme}…) : ils
+           gardaient les exemples du catalogue — un SIRET inventé à côté du vrai, dans le même aperçu,
+           selon que le modèle employait le jeton ou le champ. */
+        const reels = resolveTokens({ org });
+        for (const t of ((TOKEN_CATALOG.find((g) => g.group === 'Organisme') || {}).tokens || [])) {
+            if (reels[t.key]) m[t.key] = reels[t.key];
+        }
         // Signature de l'organisme : vraie image si enregistrée, sinon emplacement.
         if (org.signature_image) m['Signature organisme'] = signatureBox(decrypt(org.signature_image), "Signature de l'organisme");
     } catch { /* organisme indisponible */ }
@@ -753,6 +930,33 @@ const getCustomTokens = async (req, res) => {
     try { res.json({ data: await loadCustomTokens(req.user.organization_id) }); }
     catch (e) { console.error('Erreur lecture jetons personnalisés :', e); res.status(500).json({ error: 'Internal Server Error' }); }
 };
+
+/**
+ * Les modèles qui emploient chacun de ces jetons personnalisés — en puce (`data-token="custom:X"`) ou
+ * en texte (`{custom:X}`, `{custom:X|…}`) — et les jetons personnalisés `autres` qui les citent.
+ * Rend [{ cle, ou: [intitulé…] }], sans les jetons que personne n'emploie.
+ */
+async function emploisDesJetonsPerso(conn, orgId, cles, autres = []) {
+    if (!cles.length) return [];
+    let modeles = [];
+    try {
+        [modeles] = await conn.query(
+            'SELECT slug, label, body_html, header_html, footer_html FROM document_template WHERE organization_id = ? AND deleted = 0',
+            [orgId]);
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+    const cite = (texte, cle) => {
+        const s = String(texte || '');
+        return s.includes(`data-token="custom:${cle}"`) || s.includes(`{custom:${cle}}`) || s.includes(`{custom:${cle}|`);
+    };
+    return cles.map((cle) => ({
+        cle,
+        ou: [
+            ...modeles.filter((m) => [m.body_html, m.header_html, m.footer_html].some((h) => cite(h, cle)))
+                .map((m) => m.label || m.slug),
+            ...autres.filter((t) => t.token_key !== cle && cite(t.template, cle)).map((t) => `le jeton « ${t.label} »`),
+        ],
+    })).filter((e) => e.ou.length);
+}
 
 /** PUT /api/templates/custom-tokens — remplace la liste { tokens: [{ token_key, label, template }] }. */
 const saveCustomTokens = async (req, res) => {
@@ -769,6 +973,25 @@ const saveCustomTokens = async (req, res) => {
             seen.add(key);
             const category = String(t.category || '').trim().slice(0, 80) || null;
             clean.push({ token_key: key, label: String(t.label || key).slice(0, 120), category, template: String(t.template || '').slice(0, 2000), sort_order: i * 10 });
+        }
+        /* UN JETON EMPLOYÉ NE DISPARAÎT PAS EN SILENCE (2026-09-26). La liste est remplacée d'un bloc :
+           une clé absente de la nouvelle liste — supprimée, ou RENOMMÉE, ce qui revient au même — laissait
+           ses puces pointer vers rien, et le document imprimait un BLANC à leur place, sans une erreur.
+           C'est arrivé en production : « Acomtpe », corrigé en « Acompte » dans cette fenêtre, et le
+           montant de l'acompte a disparu du devis, de la convention et du contrat. La clé est un
+           identifiant, comme le slug d'un modèle : on la choisit à la création, et l'on change le
+           LIBELLÉ à volonté. On refuse donc de retirer une clé que quelque chose emploie encore. */
+        const avant = await loadCustomTokens(orgId);
+        const retirees = avant.map((t) => t.token_key).filter((k) => !seen.has(k));
+        const employes = await emploisDesJetonsPerso(conn, orgId, retirees, clean);
+        if (employes.length) {
+            const detail = employes.map((e) => `{custom:${e.cle}} — ${e.ou.join(', ')}`).join(' ; ');
+            return res.status(409).json({
+                message: `Enregistrement refusé : ${employes.length > 1 ? 'ces jetons sont employés' : 'ce jeton est employé'} `
+                    + `(${detail}). Le retirer ou changer sa clé laisserait un blanc dans ces documents : `
+                    + 'remplacez-le d\'abord dans les modèles, ou changez seulement son libellé.',
+                employes,
+            });
         }
         try {
             await conn.query('DELETE FROM custom_token WHERE organization_id = ?', [orgId]);
@@ -1140,4 +1363,6 @@ module.exports = {
     listTemplates, saveTemplate, uploadTemplate, downloadTemplate, resetTemplate, duplicateTemplate,
     getTokens, getTemplateBody, reorderTemplates, previewPdf, pageMetrics,
     loadCustomTokens, getCustomTokens, saveCustomTokens, poserModelesJury,
+    // Les règles de la palette complète, pour que les tests éprouvent chaque exception (palette-complete.test.js).
+    REGLES_PALETTE: { JUMEAUX, ANCIENS_NOMS, OFFERTS_PAR_L_EDITEUR, FACTURE_SEULEMENT, ANCIENS_LIBELLES, groupeEnPalette },
 };

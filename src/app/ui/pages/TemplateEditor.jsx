@@ -8,7 +8,7 @@ import { getTokenCatalog, getTemplateBody, saveTemplateBody, templatePreviewPdfU
 import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
-import { categoryChipStyle, categoryAccent, registerTokenGroups } from "../lib/categoryColors.js";
+import { categoryChipStyle, categoryAccent, registerTokenGroups, registerAnciensLibelles, jetonsInconnus } from "../lib/categoryColors.js";
 import { aUnCadreStagiaire } from "../lib/signatures.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
@@ -50,17 +50,23 @@ const BLOC_STAGIAIRES = `{#Stagiaires}${pill('N°')}. ${pill('Personne')}, ${pil
 
 // Jetons résolus PAR STAGIAIRE à l'intérieur d'un bloc {#Stagiaires}…{/Stagiaires}
 // (documents de groupe / entreprise). Insérés en TEXTE brut.
+/* LA MÊME IDENTITÉ D'EXEMPLE que la palette (M. Jean DUPONT, BORDEAUX en capitales, AKTO), et TOUT ce
+   que la ligne sait remplir (stagiaireRowTokens, src/api/lib/tokens.js) : l'adresse, le code postal et
+   le lieu de naissance s'y remplissaient sans pouvoir s'insérer (relevé le 2026-09-26). */
 const GROUP_ROW_TOKENS = [
   { key: "N°", label: "N°", sample: "1" },
-  { key: "Personne", label: "Civilité + Nom complet", sample: "M. Jean DUPONT" },
+  { key: "Personne", label: "Nom complet", sample: "M. Jean DUPONT" },
   { key: "Civilité", label: "Civilité", sample: "M." },
   { key: "Prénom", label: "Prénom", sample: "Jean" },
   { key: "Nom", label: "Nom", sample: "DUPONT" },
-  { key: "Email", label: "E-mail", sample: "jean@exemple.fr" },
+  { key: "Email", label: "E-mail", sample: "jean.dupont@email.fr" },
   { key: "Téléphone", label: "Téléphone", sample: "06 12 34 56 78" },
-  { key: "OPCO", label: "OPCO", sample: "OCAPIAT" },
-  { key: "Ville", label: "Ville", sample: "Bordeaux" },
-  { key: "D_Naissance", label: "Date de naissance", sample: "12/05/1990" },
+  { key: "OPCO", label: "OPCO", sample: "AKTO" },
+  { key: "Adresse", label: "Adresse complète", sample: "12 rue des Fours, 33000 BORDEAUX" },
+  { key: "CP", label: "Code postal", sample: "33000" },
+  { key: "Ville", label: "Ville", sample: "BORDEAUX" },
+  { key: "D_Naissance", label: "Date de naissance", sample: "15/04/1990" },
+  { key: "Lieu naissance", label: "Lieu de naissance", sample: "TOULOUSE" },
 ];
 
 /* L'info-bulle d'un jeton « par stagiaire ». Elle dit OÙ il fonctionne — c'est la seule chose qui
@@ -92,6 +98,14 @@ const SIG_STAGIAIRE = { key: "Signature stagiaire", label: "Signature du stagiai
    remplace le bloc nommé « Intervenant » d'autrefois, proposé sur tous les modèles alors que
    personne ne signe un modèle où « Externe » n'est pas coché. */
 const SIG_INTERVENANT = { key: "sig:intervenant", label: "Signature de l'intervenant" };
+
+/* Le registre des puces (couleur, libellé, jeton connu ou non — lib/categoryColors.js), rempli depuis
+   la réponse de la palette. Les jetons CONNUS mais non proposés (un modèle ancien en porte) y entrent
+   aussi : reconnus, pas « inconnus » ; et les libellés RETIRÉS, que l'éditeur remplace à l'affichage. */
+function enregistrerCatalogue(cat) {
+  registerTokenGroups([...(cat.data || []), ...(cat.connus || [])]);
+  registerAnciensLibelles(cat.anciens || {});
+}
 
 // Bascule « bord à bord » (sans marge) d'une zone.
 function BleedToggle({ on, onChange }) {
@@ -174,8 +188,7 @@ function TemplateEditor() {
         setCatalog(cat.data || []);
         // Enregistre clé→catégorie AVANT d'insérer le contenu : les puces se colorent alors
         // par catégorie dès leur premier rendu (cf. TokenView / categoryColors).
-        // … et les jetons CONNUS mais non proposés (un modèle ancien en porte) : reconnus, pas « inconnus ».
-        registerTokenGroups([...(cat.data || []), ...(cat.connus || [])]);
+        enregistrerCatalogue(cat);
         // Premier groupe ouvert par défaut — ET « Entreprise » quand le représentant signe : le
         // cadre « Cachet de l'entreprise » y vit désormais, autant qu'il se voie sans déplier.
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0 || (entrepriseSigneD && g.group === "Entreprise")])));
@@ -310,6 +323,10 @@ function TemplateEditor() {
       .filter((g) => g.tokens.length);
   }, [catalog, rechJeton]);
 
+  // Les puces dont la clé n'est ni proposée ni reconnue — recalculé à chaque rendu, comme l'avertissement
+  // du cadre de signature (l'éditeur se re-rend à chaque frappe, cf. `force`).
+  const inconnus = catalog.length ? jetonsInconnus([header?.getHTML(), body?.getHTML(), footer?.getHTML()].join("")) : [];
+
   function insertToken(t) {
     target?.chain().focus().insertToken({ token: t.key, label: t.label }).run();
   }
@@ -349,8 +366,9 @@ function TemplateEditor() {
     return cat;
   }, [catalog]);
 
-  // Recharge la palette (les champs proposés = ceux activés dans Champs documents).
-  const reloadCatalog = () => getTokenCatalog(slug).then((cat) => setCatalog(cat.data || [])).catch(() => {});
+  // Recharge la palette (les champs proposés = ceux activés dans Champs documents). Le registre
+  // suit : un champ qu'on vient d'activer ne doit pas s'insérer en puce « inconnue ».
+  const reloadCatalog = () => getTokenCatalog(slug).then((cat) => { enregistrerCatalogue(cat); setCatalog(cat.data || []); }).catch(() => {});
 
   async function save() {
     if (!body) return;
@@ -385,6 +403,16 @@ function TemplateEditor() {
         </div>
 
         <StatusMessage status={status} />
+        {/* DES PUCES QUI NE DÉSIGNENT PLUS RIEN s'imprimeraient VIDES, sans une erreur : c'était le cas de
+            l'acompte dans le devis, la convention et le contrat de production (2026-09-26). */}
+        {inconnus.length > 0 && (
+          <p className="tpl-propose attention" role="note">
+            <Icon name="alert-triangle" size={15} aria-hidden="true" />
+            <span><b>{inconnus.length > 1 ? `${inconnus.length} jetons de ce modèle n'existent plus` : "Un jeton de ce modèle n'existe plus"}</b> :{" "}
+              {inconnus.map((j) => `« ${j.libelle || j.cle} » ({${j.cle}})`).join(", ")}.
+              {" "}{inconnus.length > 1 ? "Ils s'impriment" : "Il s'imprime"} <b>vide</b>. Supprimez la puce barrée et insérez le bon champ depuis la palette, puis enregistrez.</span>
+          </p>
+        )}
         {/* LE STAGIAIRE SIGNE CE MODÈLE, MAIS RIEN NE PORTE SA SIGNATURE : elle ne s'imprimerait nulle part
             sur le document signé. C'était le cas du « Contrat » de production le 2026-09-25 — rien ne le
             disait, ni ici ni à la signature. */}

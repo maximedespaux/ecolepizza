@@ -110,8 +110,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-25** :
-**2022 tests — 2015 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
+**2041 tests — 2034 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -162,9 +162,37 @@ jamais directement dans un `<tbody>` (il serait remonté hors du tableau).
 **Jetons** : les jetons s'insèrent en **puces** `<span data-token="Clé">`, jamais en `{Clé}` brut
 (sauf les marqueurs de bloc `{#Articles}` / `{#Stagiaires}`, qui sont des délimiteurs).
 
+**La palette est complète PAR CONSTRUCTION (2026-09-26)** : tout jeton de `TOKEN_CATALOG` y est proposé
+dans son groupe (`completerLaPalette`, template.controller.js) — plus de second geste à oublier. Les seules
+exceptions sont écrites : un JUMEAU proposé (le Champ document qui imprime la même valeur, `JUMEAUX` —
+égalités éprouvées une à une par `palette-complete.test.js`), un ancien nom (`{Date}`, `{PrixFormation}`), un
+cadre du bloc Signatures, un groupe masqué, une donnée de facture seulement. Ce qui n'est pas proposé reste
+RECONNU (`connus`). Un jeton nommé qui a un champ équivalent : l'ajouter à `JUMEAUX`, jamais le cacher à la main.
+Une colonne ajoutée aux tables du dossier doit recevoir un libellé français (`FR_LABELS`, lib/conditions.js) ou
+être écartée : le test lit `schema.sql` et toutes les migrations, et rougit sinon.
+**La clé d'un jeton personnalisé est un IDENTIFIANT**, comme un slug : la fenêtre ne la laisse plus modifier une
+fois enregistrée, et le serveur refuse (409) de retirer une clé qu'un modèle ou un autre jeton emploie — la
+corriger (« Acomtpe » → « Acompte ») avait laissé un blanc à la place de l'acompte dans quatre modèles.
+L'éditeur barre et nomme toute puce qui ne désigne plus rien, et affiche le libellé ACTUEL d'une puce figée sous
+un libellé périmé (`libelleAffiche`, `ANCIENS_LIBELLES`).
+
 ---
 
-## 4. Migrations — **toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-25)**
+## 4. Migrations — **la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)**
+
+**183 est À JOUER** (`183_jeton_acompte.sql`, migration de DONNÉES — l'acompte revient dans le devis, la
+convention et le contrat). Relevé le 2026-09-26 par l'API : quatre modèles de production (`devis-particulier`,
+`devis-professionnel-copie`, `convention`, `contrat`) portent une puce `{custom:Acomtpe}`, alors que le jeton
+personnalisé s'appelle `Acompte` — sa clé avait été corrigée dans la fenêtre des jetons perso, et rien n'avait
+suivi. Une puce qui ne désigne plus rien s'imprime VIDE, sans erreur : « votre règlement de  € », « un paiement
+de  € ». La migration fait pointer ces puces (corps, en-tête, pied ; forme en texte comprise) vers `custom:Acompte`,
+seulement dans un organisme qui a un jeton `Acompte` et plus de jeton `Acomtpe`. Le code l'empêche désormais (clé
+figée, refus 409). Sans elle, rien ne casse de plus qu'aujourd'hui : l'éditeur montre la puce BARRÉE et la nomme
+en tête du modèle. **Elle se vérifie dans l'éditeur** (Modèles → Convention : plus de bandeau « jeton qui n'existe
+plus », la puce n'est plus barrée, l'aperçu imprime le montant), ou par une requête qui doit rendre 0 :
+`SELECT COUNT(*) FROM document_template WHERE CONCAT_WS(' ', body_html, header_html, footer_html) LIKE '%custom:Acomtpe%';`
+Son revert ne fait rien (`DO 0`), et l'explique : revenir, ce serait remettre un blanc dans le contrat. ⚠️ Les
+documents déjà SIGNÉS gardent leur PDF figé, sans l'acompte ; les autres se rendent depuis le modèle.
 
 **176, 178, 179, 180, 181 et 182 sont jouées — constaté le 2026-09-25 par l'API, sans SQL :** `GET /api/memos`
 rend une liste (176) ; `GET /api/mailing/modeles` rend `disponible: true` et un texte `perso: true` (178) ;
