@@ -55,8 +55,15 @@ const TREE_ENTREPRISE = JSON.stringify({ folders: [{ name: '{Année}', items: []
     children: [{ name: '{Entreprise}', items: [], children: [{ name: '{Stagiaire}', per_learner: true, items: [],
         children: [{ name: 'Évaluations', items: [{ type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Mardi' }], children: [] }] }] }] }] }] }] });
 const scenario = { entreprise: false };
-// Les modèles de l'organisme sont ceux du socle (aucune ligne à elle) : le livret d'accueil en est.
+// Les modèles de l'organisme sont ceux du socle — le livret d'accueil en est —, plus le sien :
 const PROGRAMMES = [{ id: 'p1', code: 'RS7404', title: 'Fabriquer des pizzas', company_steps: null, sort_order: 1 }];
+/* le « Contrat Hygiène », signé par l'intervenant externe (« Externe » coché) : un document de SESSION,
+   hors de tout parcours (parcours_defaut 0), comme en production. */
+const MODELES = [{ slug: 'contrat-hygiene', label: 'Contrat Hygiène', doc_type: 'CONTRAT', signers: '["EXTERNAL","ORG"]',
+    active: 1, parcours_defaut: 0, company_level: 0 }];
+const SESS = [{ ...base, doc_id: 'sh1', title: 'Contrat Hygiène', type: 'CONTRAT', status: 'SIGNE', quiz_id: null, quiz_title: null,
+    scope: 'SESSION', source: 'gen', slug: 'contrat-hygiene', learner_id: null, first_name: '', last_name: '', company_id: null,
+    company_name: null, enrollment_id: null, enr_company_id: null, enr_company_name: null, session_id: 's1', signed_at: '2026-09-15 12:00' }];
 const COMP = [{ ...base, doc_id: 'c1', title: 'Convention de formation', status: 'SIGNE', scope: 'COMPANY', source: 'gen', company_id: 'co1',
     company_name: 'LES ARCADES', last_name: 'LES ARCADES', first_name: '', slug: 'convention', session_id: 's1', signed_at: '2026-09-15 09:00' }];
 const ARCH = [
@@ -77,7 +84,8 @@ const connexion = {
         if (/information_schema\.columns/.test(S)) return [COLONNES.has(`${p[0]}.${p[1]}`) ? [{ 1: 1 }] : []];
         if (/FROM generated_document gd\s+JOIN learner l/.test(S)) return [scenario.entreprise ? [...GEN, ...GEN_ENTREPRISE] : GEN];
         if (/gd\.scope = 'COMPANY'/.test(S)) return [COMP];
-        if (/gd\.scope = 'SESSION'/.test(S)) return [[]];
+        if (/gd\.scope = 'SESSION'/.test(S)) return [SESS];
+        if (/FROM document_template WHERE organization_id = \?\s*$/.test(S)) return [MODELES];
         if (/FROM archive_document ad/.test(S)) return [ARCH.map((a) => ({ ...a }))];
         if (/FROM piece_fichier pf\s+JOIN piece_depot d ON d\.id = pf\.depot_id\s+JOIN piece_type/.test(S)) return [PIECES];
         if (/FROM training_session s\s+LEFT JOIN training_program p/.test(S)) {
@@ -140,11 +148,11 @@ test('l\'archive d\'une session : rangée selon l\'arborescence, sans ce qu\'ell
     const sommaire = z.file('_sommaire.txt').asText();
     assert.match(sommaire, /Archive Impastio — Session RS7404 — semaine 38 de 2026/);
     assert.match(sommaire, /4 document\(s\) inclus :/);
-    /* LE LIVRET D'ACCUEIL est proposé par le parcours de RS7404 et l'arborescence ne le range pas : il
-       reste DEHORS, par choix — nommé comme tel, et jamais rendu pour rien. Le QCM du jeudi, lui, n'est
-       pas proposé (aucun QCM dans ce parcours) : il garde sa place par défaut, et manque parce qu'il
-       n'est pas rempli. */
-    assert.match(sommaire, /1 document\(s\) du coffre laissés hors de l'archive : l'arborescence d'archivage ne les range pas[^\r]*\r\n {2}Livret d'accueil\r\n/);
+    /* LE LIVRET D'ACCUEIL est proposé par le parcours de RS7404, le CONTRAT HYGIÈNE par la session, et
+       l'arborescence ne range ni l'un ni l'autre : ils restent DEHORS, par choix — nommés comme tels, et
+       jamais rendus pour rien. Le QCM du jeudi, lui, n'est pas proposé (aucun QCM dans ce parcours) : il
+       garde sa place par défaut, et manque parce qu'il n'est pas rempli. */
+    assert.match(sommaire, /2 document\(s\) du coffre laissés hors de l'archive : l'arborescence d'archivage ne les range pas[^\r]*\r\n {2}Contrat Hygiène\r\n {2}Livret d'accueil\r\n/);
     assert.match(sommaire, /1 document\(s\) du coffre NON inclus :\r\n {2}Évaluation Formative du Jeudi — BEYNEY David : QCM envoyé, pas encore rempli/);
     assert.doesNotMatch(sommaire, /Document introuvable/, 'un document laissé dehors n\'est pas rendu');
     // L'import et la convention de l'entreprise, que l'école ne peut pas placer ici, gardent leur place par défaut, et c'est dit.
@@ -157,8 +165,8 @@ test('l\'archive d\'une session : rangée selon l\'arborescence, sans ce qu\'ell
 test('compter d\'abord : ce que l\'archive contiendrait, sans l\'écrire', async () => {
     const res = reponse();
     await exporterArchive(requete({ session: 's1', compter: '1' }), res);
-    assert.deepStrictEqual(res.corps, { data: { documents: 5, nom: 'archive RS7404 2026 S38.zip', hors_arborescence: 1 } },
-        'six documents du coffre concernent la session : cinq à écrire (dont un que le sommaire dira manquant), un laissé dehors');
+    assert.deepStrictEqual(res.corps, { data: { documents: 5, nom: 'archive RS7404 2026 S38.zip', hors_arborescence: 2 } },
+        'sept documents du coffre concernent la session : cinq à écrire (dont un que le sommaire dira manquant), deux laissés dehors');
     assert.strictEqual(res.entetes['content-type'], undefined, 'aucun octet de ZIP');
 });
 

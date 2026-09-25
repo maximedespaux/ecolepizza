@@ -598,6 +598,9 @@ const getFormationSteps = async (req, res) => {
  * volet entreprise (`company_steps`, lu par le `SELECT *` ; sans lui, un document réservé aux
  * entreprises n'était proposé nulle part, cf. Arbo.paletteDesFormations).
  *
+ * Plus les DOCUMENTS DE SESSION, qu'aucun parcours ne porte (« Contrat Hygiène ») : ceux que la page
+ * d'une session propose d'envoyer — la même fonction qui les y liste, pour qu'ils ne divergent pas.
+ *
  * DEUX LECTEURS, UNE FONCTION : l'éditeur de l'arborescence, qui en tire sa liste et son aperçu, et
  * l'archive ZIP (suivi.controller.js), qui laisse dehors ce qu'une formation propose sans que
  * l'arborescence le range. Calculés deux fois, l'aperçu et l'archive finiraient par ne plus dire la
@@ -619,7 +622,8 @@ async function paletteDeLOrganisme(conn, orgId) {
         }
         entrees.push({ id: p.id, code: p.code, title: p.title, etapes, volet: p.company_steps });
     }
-    return { programmes, tousLesSlugs, libelles, ...Arbo.paletteDesFormations(entrees) };
+    const { modelesExternes } = require('./documentSession.controller.js');
+    return { programmes, tousLesSlugs, libelles, ...Arbo.paletteDesFormations(entrees, await modelesExternes(orgId)) };
 }
 
 /**

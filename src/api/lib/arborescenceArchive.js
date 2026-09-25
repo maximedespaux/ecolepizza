@@ -474,15 +474,22 @@ function lireVolet(v) {
  * non ; et si le volet est vide, ou ne désigne que des étapes disparues (NIV1 ne cite plus que
  * « devis-entreprise », un modèle supprimé), le parcours du dossier — c'est là qu'il retombe.
  *
+ * ET LES DOCUMENTS DE SESSION, qu'aucun parcours ne porte : « Contrat Hygiène », signé par
+ * l'intervenant externe, s'envoie depuis la page de la session (documentSession.controller.js,
+ * modelesExternes) — un par session, pour n'importe quelle formation. Relevé en production le même
+ * jour : le coffre en avait un, et la liste ne le proposait pas. Chaque formation les a donc tous
+ * (`documents_session`).
+ *
  * @param entrees [{ id, code, title, etapes, volet }] — `etapes` : toutes les étapes candidates de la
  *        formation, avec `active` (formationSteps) ; `volet` : ses company_steps, dans l'ordre.
+ * @param documentsDeSession [{ slug, label, doc_type }] — les modèles qu'on envoie depuis une session
  * @returns {{ documents, formations }}
- *   documents  [{ cle, slug | titre_qcm, label, company_level, doc_type, formations, formations_entreprise }] :
+ *   documents  [{ cle, slug | titre_qcm, label, company_level, doc_type, formations, formations_entreprise, session? }] :
  *              `formations`, celles qui l'ont dans le parcours du dossier ; `formations_entreprise`,
- *              celles qui l'ont à l'arrivée par entreprise ;
- *   formations [{ id, code, title, documents, documents_entreprise }], en clés.
+ *              celles qui l'ont à l'arrivée par entreprise ; `session`, un document de session ;
+ *   formations [{ id, code, title, documents, documents_entreprise, documents_session }], en clés.
  */
-function paletteDesFormations(entrees) {
+function paletteDesFormations(entrees, documentsDeSession = []) {
     const palette = new Map();
     const formations = [];
     const entree = (s) => {
@@ -495,6 +502,13 @@ function paletteDesFormations(entrees) {
         return palette.get(cle);
     };
     const ajouter = (liste, code) => { if (!liste.includes(code)) liste.push(code); };
+    const deSession = [];
+    for (const m of documentsDeSession || []) {
+        if (!m || !m.slug) continue;
+        const e = entree({ slug: m.slug, label: m.label || m.slug, doc_type: m.doc_type, quiz_id: null, company_level: false });
+        e.session = true;
+        if (!deSession.includes(e.cle)) deSession.push(e.cle);
+    }
     for (const f of entrees || []) {
         const etapes = Array.isArray(f.etapes) ? f.etapes : [];
         const actives = etapes.filter((s) => s.active);
@@ -507,17 +521,20 @@ function paletteDesFormations(entrees) {
             id: f.id, code: f.code, title: f.title,
             documents: [...new Set(actives.map(cleEtape))],
             documents_entreprise: [...new Set(parEntreprise.map(cleEtape))],
+            documents_session: deSession,
         });
     }
-    return { documents: [...palette.values()], formations };
+    /* Les documents des formations d'abord, dans l'ordre des parcours ; ceux de session ensuite. */
+    const rang = (d) => (d.formations.length || d.formations_entreprise.length ? 0 : 1);
+    return { documents: [...palette.values()].sort((a, b) => rang(a) - rang(b)), formations };
 }
 
 /**
  * CE QUE CHAQUE FORMATION PROPOSE DE RANGER, arbre par arbre — la liste même que l'aperçu de
  * l'arborescence dit « non rangée » (src/app/ui/lib/arborescence.js, formationDansLArbre), pour que
  * l'archive exclue exactement ce que l'écran a annoncé :
- *   · stagiaire : tout ce qu'ont ses dossiers, inscrits seuls ou par une entreprise — sauf les
- *     documents de groupe (🏢), qui ne se rangent pas côté stagiaire ;
+ *   · stagiaire : tout ce qu'ont ses dossiers, inscrits seuls ou par une entreprise, et ses documents
+ *     de session — sauf les documents de groupe (🏢), qui ne se rangent pas côté stagiaire ;
  *   · entreprise : ses documents de groupe. Ceux de ses stagiaires n'y sont que des copies, facultatives.
  * @param palette le résultat de paletteDesFormations
  * @returns Map code de formation → { stagiaire: Set, entreprise: Set } (des clés, cf. clesDuDocument)
@@ -526,7 +543,8 @@ function offertsDesFormations(palette) {
     const deGroupe = new Set(((palette && palette.documents) || []).filter((d) => d.company_level).map((d) => d.cle));
     return new Map(((palette && palette.formations) || []).map((f) => {
         const tous = [...new Set([...(f.documents || []), ...(f.documents_entreprise || [])])];
-        return [f.code, { stagiaire: new Set(tous.filter((c) => !deGroupe.has(c))), entreprise: new Set(tous.filter((c) => deGroupe.has(c))) }];
+        const stagiaire = [...new Set([...tous, ...(f.documents_session || [])])].filter((c) => !deGroupe.has(c));
+        return [f.code, { stagiaire: new Set(stagiaire), entreprise: new Set(tous.filter((c) => deGroupe.has(c))) }];
     }));
 }
 

@@ -557,6 +557,10 @@ const PARCOURS = [
         etape('convention', 'Convention de formation', false, GROUPE), etape('accord-prise-en-charge', 'Accord de prise en charge', false),
         QCM_MARDI('b804')] },
 ];
+/* « Contrat Hygiène », signé par l'intervenant externe : le seul modèle de production dont la case
+   « Externe » est cochée, donc le seul qu'une session propose d'envoyer (modelesExternes). */
+const DE_SESSION = [{ slug: 'contrat-hygiene', label: 'Contrat Hygiène', doc_type: 'CONTRAT' }];
+
 
 test('la palette lit AUSSI le volet entreprise : le devis professionnel se range enfin — le cas relevé en production', () => {
     /* « Je n'ai pas accès au devis particulier / entreprise pour les répartir » : l'école avait supprimé
@@ -593,7 +597,7 @@ test('l\'archive laisse dehors EXACTEMENT ce que l\'aperçu annonce, arbre par a
     /* Deux calculs de la même règle — l'écran dit « ne sera pas dans l'archive », le serveur exclut —
        finissent par diverger. Ils sont confrontés ici sur les parcours de production. */
     const ecran = await import('../../app/ui/lib/arborescence.js');
-    const palette = Arbo.paletteDesFormations(PARCOURS);
+    const palette = Arbo.paletteDesFormations(PARCOURS, DE_SESSION);
     const offerts = Arbo.offertsDesFormations(palette);
     const vide = { folders: [] };
     for (const f of palette.formations) {
@@ -633,11 +637,11 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     assert.deepStrictEqual(ent.find((x) => x.cle === 'ref:devis-particulier').formations, ['NIV1', 'NIV1H']);
     /* Ce que l'arbre stagiaire ne propose pas se DIT dans sa liste, avec où aller : chercher « devis »
        côté stagiaire ne trouvait pas le devis professionnel, et rien ne disait pourquoi. */
-    assert.deepStrictEqual(ecran.horsArbreStagiaire(documents).map((x) => x.cle), ['ref:convention', 'ref:devis-professionnel-copie']);
+    assert.deepStrictEqual(ecran.horsDeLArbre(documents, 'stagiaire').map((x) => x.cle), ['ref:convention', 'ref:devis-professionnel-copie']);
     const EDITEUR = lireUi('components/ArborescenceCommune.jsx');
     assert.match(EDITEUR, /const docs = useMemo\(\(\) => paletteDeLArbre\(documents, kind\), \[documents, kind\]\);/);
     assert.match(EDITEUR, /const formationVue = formationDansLArbre\(formation, kind, documents\);/);
-    assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{isEnt \? null : ailleurs\}/);
+    assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{ailleurs\[kind\]\}/);
     assert.match(EDITEUR, /<b>Ce qui n'est rangé nulle part n'est pas archivé\.<\/b>/);
     const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
     assert.match(OUTIL, /const ap = formation \? apercuFormation\(tree, formation\.documents, groupes, formation\.aRanger\) : null;/);
@@ -647,4 +651,49 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     const PAGE = lireUi('pages/Formations.jsx');
     assert.match(PAGE, /const formation = f && formationDansLArbre\(\{ \.\.\.f, code: form\.code \|\| f\.code, title: form\.title \|\| f\.title \}, kind, documents\);/);
     assert.match(PAGE, /docs=\{paletteDeLArbre\(documents, kind\)\}/);
+});
+
+/* ─── Les documents de session (2026-09-25) ─────────────────────────────────────────────────── */
+
+test('un document de SESSION se range aussi — le « Contrat Hygiène » que la liste ne proposait pas', async () => {
+    /* « Le contrat hygiène n'apparaît pas dans les choix, pourquoi ? » : il n'est dans le parcours
+       d'aucun stagiaire. Il s'envoie depuis la page de la session, un par session, pour n'importe
+       quelle formation — le coffre de production en avait un (NIV1H, 2026) que rien ne permettait
+       de placer. */
+    const palette = Arbo.paletteDesFormations(PARCOURS, DE_SESSION);
+    const hyg = palette.documents.find((x) => x.cle === 'ref:contrat-hygiene');
+    assert.deepStrictEqual([hyg.session, hyg.formations, hyg.formations_entreprise, hyg.company_level], [true, [], [], false]);
+    assert.strictEqual(palette.documents[palette.documents.length - 1], hyg, 'après les documents des formations');
+    for (const f of palette.formations) assert.deepStrictEqual(f.documents_session, ['ref:contrat-hygiene'], `${f.code} : toute session peut l'avoir`);
+    // Proposé côté stagiaire, pour toute formation : non rangé, il reste hors de l'archive — la même règle.
+    const offerts = Arbo.offertsDesFormations(palette);
+    for (const [code, o] of offerts) {
+        assert.ok(o.stagiaire.has('ref:contrat-hygiene'), code);
+        assert.ok(!o.entreprise.has('ref:contrat-hygiene'), `${code} : un document de session n'a pas d'entreprise`);
+    }
+    const contrat = { scope: 'SESSION', year: 2026, week: 42, program_code: 'NIV1H', slug: 'contrat-hygiene', title: 'Contrat Hygiène' };
+    assert.deepStrictEqual(chemins(COMMUNE, contrat, GROUPES, offerts.get('NIV1H')), [], 'proposé, non rangé : dehors');
+    const avecSession = squelette(d('{Stagiaire}', [], [], true));
+    avecSession.folders[0].children[0].children[0].children.unshift(d('Session', [ref('contrat-hygiene', 'Contrat Hygiène')]));
+    assert.deepStrictEqual(chemins({ stagiaire: avecSession }, contrat, GROUPES, offerts.get('NIV1H')), ['2026/S42/NIV1H/Session/Contrat Hygiène']);
+
+    // L'écran : dans la liste STAGIAIRE, à part ; pas dans celle de l'entreprise, qui le dit.
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    assert.ok(ecran.paletteDeLArbre(palette.documents, 'stagiaire').some((x) => x.cle === 'ref:contrat-hygiene'));
+    assert.ok(!ecran.paletteDeLArbre(palette.documents, 'entreprise').some((x) => x.cle === 'ref:contrat-hygiene'));
+    assert.deepStrictEqual(ecran.horsDeLArbre(palette.documents, 'entreprise').map((x) => x.cle), ['ref:contrat-hygiene']);
+    const niv1h = ecran.formationDansLArbre(palette.formations.find((f) => f.code === 'NIV1H'), 'stagiaire', palette.documents);
+    assert.ok(niv1h.aRanger.includes('ref:contrat-hygiene'), 'l\'aperçu le dit non rangé, comme l\'archive le laisse dehors');
+    // Ni lui ni un document de groupe ne vont dans un dossier « un par stagiaire » : ils n'y auraient aucun nom.
+    const entree = (cle) => ecran.paletteDeLArbre(palette.documents, 'entreprise').concat(ecran.paletteDeLArbre(palette.documents, 'stagiaire'))
+        .find((x) => x.cle === cle);
+    assert.deepStrictEqual(['ref:contrat-hygiene', 'ref:convention', 'ref:devis-particulier'].map((c) => ecran.sansStagiaire(entree(c))), [true, true, false]);
+    const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
+    assert.match(OUTIL, /\["Documents de session", vus\.filter\(\(o\) => o\.session\)\]/);
+    assert.match(OUTIL, /const horsLieu = !ici && sousStagiaire && o\.sansStagiaire;/);
+    assert.match(OUTIL, /disabled=\{ici \|\| !!couvert \|\| horsLieu\}/);
+    assert.match(OUTIL, /const cibles = o && o\.sansStagiaire \? cheminsDossiers\.filter\(\(p\) => !p\.sousStagiaire\) : cheminsDossiers;/);
+    // Le serveur les liste par la fonction même de la page de la session.
+    assert.match(lire('controllers/formationProgram.controller.js'),
+        /return \{ programmes, tousLesSlugs, libelles, \.\.\.Arbo\.paletteDesFormations\(entrees, await modelesExternes\(orgId\)\) \};/);
 });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
-import { cleItem, apercuFormation, clesCouvertes, normaliserTitre, transformerDossiers as transformer, placerDocument } from "../lib/arborescence.js";
+import { cleItem, apercuFormation, clesCouvertes, normaliserTitre, transformerDossiers as transformer, placerDocument, sansStagiaire } from "../lib/arborescence.js";
 
 /*
  * L'ARBORESCENCE D'ARCHIVAGE, DESSINÉE COMME ELLE SERA RANGÉE (2026-09-25).
@@ -75,7 +75,7 @@ function buildOptions(docs, eqMap) {
   const union = (listes) => [...new Set(listes.flat())];
   for (const d of docs) {
     if (d.titre_qcm) {
-      options.push({ key: d.cle, type: "quiz", titre: d.titre_qcm, label: d.label, company_level: false, formations: d.formations || [] });
+      options.push({ key: d.cle, type: "quiz", titre: d.titre_qcm, label: d.label, company_level: false, formations: d.formations || [], sansStagiaire: false });
       continue;
     }
     const gk = groupKeyOf(d);
@@ -88,9 +88,12 @@ function buildOptions(docs, eqMap) {
         label: members.map((m) => m.label).join(" / "), type: "model",
         company_level: members.some((m) => m.company_level),
         formations: union(members.map((m) => m.formations || [])),
+        sansStagiaire: members.every(sansStagiaire),
       });
     } else {
-      options.push({ key: `ref:${d.slug}`, ref: d.slug, label: d.label, type: "model", company_level: !!d.company_level, formations: d.formations || [] });
+      options.push({ key: `ref:${d.slug}`, ref: d.slug, label: d.label, type: "model", company_level: !!d.company_level, formations: d.formations || [],
+        // Un document de SESSION seulement (« Contrat Hygiène ») : aucune formation ne l'a dans un parcours.
+        session: !!d.session && !(d.formations || []).length, sansStagiaire: sansStagiaire(d) });
     }
   }
   return options;
@@ -153,7 +156,7 @@ function Bulle({ ancre, onClose, children, className = "" }) {
 
 /* La liste des documents à placer : on tape pour filtrer. Ce qui est déjà ailleurs se DÉPLACE ici ;
    ce qu'un choix « OU » contient déjà se dit, et ne se place pas une seconde fois. */
-function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, onClose, ailleurs }) {
+function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, onClose, ailleurs, sousStagiaire }) {
   const [q, setQ] = useState("");
   const champ = useRef(null);
   useEffect(() => { champ.current?.focus(); }, []);
@@ -161,7 +164,8 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
   const vus = options.filter((o) => !n || normaliserTitre(o.label).includes(n));
   const autres = ailleurs ? ailleurs.docs.filter((o) => !n || normaliserTitre(o.label).includes(n)) : [];
   const groupes = [
-    ["Documents", vus.filter((o) => o.type !== "quiz" && !o.group)],
+    ["Documents", vus.filter((o) => o.type !== "quiz" && !o.group && !o.session)],
+    ["Documents de session", vus.filter((o) => o.session)],
     ["Choix « OU »", vus.filter((o) => o.group)],
     ["QCM", vus.filter((o) => o.type === "quiz")],
   ].filter(([, l]) => l.length);
@@ -183,15 +187,20 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
               const ou = placeDe.get(o.key);
               const ici = ou && ou.id === dossierId;
               const couvert = !ou && o.ref && placeDe.get(`ref:${o.ref}`); // compris dans un « OU » placé
+              /* PAS DE STAGIAIRE, PAS DE DOSSIER DE STAGIAIRE : une convention de groupe, un contrat de
+                 session n'y prendraient aucun nom — l'archive les remonterait d'un cran, sans le dire. */
+              const horsLieu = !ici && sousStagiaire && o.sansStagiaire;
               const qui = pourQui(o.formations, nbFormations);
               return (
-                <button key={o.key} type="button" role="option" aria-selected={!!ici} disabled={ici || !!couvert}
+                <button key={o.key} type="button" role="option" aria-selected={!!ici} disabled={ici || !!couvert || horsLieu}
                   className={"arbo-opt" + (ou ? " place" : "")}
                   onClick={() => { onChoisir(o); onClose(); }}
-                  title={couvert ? `Déjà rangé par le choix « OU » placé dans « ${couvert.chemin.map((d) => nomLisible(d.name)).join(" › ")} »` : undefined}>
+                  title={couvert ? `Déjà rangé par le choix « OU » placé dans « ${couvert.chemin.map((d) => nomLisible(d.name)).join(" › ")} »`
+                    : horsLieu ? `${o.session ? "Document de session" : "Document de groupe"} : il n'a pas de stagiaire. Rangez-le au-dessus des dossiers de stagiaires.` : undefined}>
                   <Icon name={iconeDoc(o)} size={14} aria-hidden="true" />
                   <span className="arbo-opt-l">{o.company_level ? "🏢 " : ""}{o.label}</span>
                   {ici ? <span className="arbo-opt-ou">déjà ici</span>
+                    : horsLieu ? <span className="arbo-opt-qui">pas dans un dossier de stagiaire</span>
                     : ou ? <span className="arbo-opt-ou">déplacer depuis « {nomLisible(ou.chemin[ou.chemin.length - 1].name)} »</span>
                     : couvert ? <span className="arbo-opt-ou">dans un « OU »</span>
                     : qui ? <span className="arbo-opt-qui">{qui}</span> : null}
@@ -201,13 +210,14 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
           </div>
         ))}
       </div>
-      {/* UN DOCUMENT DE GROUPE CHERCHÉ ICI (la convention 🏢) ne s'y trouve pas : « aucun document ne
-          correspond » laissait chercher. On dit où il se range, et on y mène. */}
+      {/* UN DOCUMENT CHERCHÉ ICI QUI SE RANGE DANS L'AUTRE ARBRE (la convention de groupe côté stagiaire,
+          le contrat de session côté entreprise) : « aucun document ne correspond » laissait chercher.
+          On dit où il se range, et on y mène. */}
       {autres.length > 0 && (
         <div className="arbo-bulle-ailleurs">
-          <Icon name="building" size={14} aria-hidden="true" />
+          <Icon name={ailleurs.arbre === "entreprise" ? "building" : "user"} size={14} aria-hidden="true" />
           <span>
-            {autres.map((o) => o.label).join(", ")} : {autres.length > 1 ? "documents de groupe, ils se rangent" : "document de groupe, il se range"} dans l'arborescence entreprise.
+            {autres.map((o) => o.label).join(", ")} : {autres.length > 1 ? `documents ${ailleurs.nature}, ils se rangent` : `document ${ailleurs.nature}, il se range`} dans l'arborescence {ailleurs.arbre}.
             {ailleurs.ouvrir && <>{" "}<button type="button" className="lien-nu" onClick={() => { onClose(); ailleurs.ouvrir(); }}>Y aller</button></>}
           </span>
         </div>
@@ -217,13 +227,14 @@ function ChoixDocument({ options, placeDe, dossierId, nbFormations, onChoisir, o
 }
 
 /* ─── Un dossier ────────────────────────────────────────────────────────────────────────────── */
-function Dossier({ d, ctx, profondeur }) {
+function Dossier({ d, ctx, profondeur, sousStagiaire = false }) {
   const { lectureSeule, ex, concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition, ailleurs } = ctx;
   const [bulle, setBulle] = useState(null); // { genre: "doc" | "menu", ancre }
   const edite = !lectureSeule && enEdition === d.id;
   const champ = useRef(null);
   useEffect(() => { if (edite) champ.current?.focus(); }, [edite]);
   const exemple = resoudre(d.name, ex);
+  const iciSousStagiaire = sousStagiaire || !!d.per_learner; // ce dossier est, ou est dans, un dossier « un par stagiaire »
   const vide = !(d.items || []).length && !(d.children || []).length;
   const fermer = () => setBulle(null);
 
@@ -285,7 +296,7 @@ function Dossier({ d, ctx, profondeur }) {
             const cle = cleItem(it);
             const saute = concerne && !concerne(it);
             const opt = options.find((o) => o.key === cle);
-            const qui = opt ? pourQui(opt.formations, nbFormations) : "";
+            const qui = opt ? (opt.session ? "document de session" : pourQui(opt.formations, nbFormations)) : "";
             return (
               <li key={cle} className={"arbo-doc" + (saute ? " saute" : "")}
                 title={saute ? `Pas dans le parcours de ${formation.code} : sauté pour cette formation` : undefined}>
@@ -305,14 +316,14 @@ function Dossier({ d, ctx, profondeur }) {
           {!lectureSeule && vide && (
             <li className="arbo-vide">Dossier vide — <button type="button" className="lien-nu" onClick={(e) => setBulle({ genre: "doc", ancre: e.currentTarget })}>placer un document</button></li>
           )}
-          {(d.children || []).map((c) => <Dossier key={c.id} d={c} ctx={ctx} profondeur={profondeur + 1} />)}
+          {(d.children || []).map((c) => <Dossier key={c.id} d={c} ctx={ctx} profondeur={profondeur + 1} sousStagiaire={iciSousStagiaire} />)}
         </ul>
       )}
 
       {bulle && bulle.genre === "doc" && (
         <Bulle ancre={bulle.ancre} onClose={fermer} className="large">
           <ChoixDocument options={options} placeDe={placeDe} dossierId={d.id} nbFormations={nbFormations}
-            onChoisir={(o) => op.placer(d.id, o)} onClose={fermer} ailleurs={ailleurs} />
+            onChoisir={(o) => op.placer(d.id, o)} onClose={fermer} ailleurs={ailleurs} sousStagiaire={iciSousStagiaire} />
         </Bulle>
       )}
       {bulle && bulle.genre === "menu" && (
@@ -351,8 +362,8 @@ const standardTree = () => ({
  *   `formation` ({ code, title, documents, aRanger }) : l'aperçu POUR elle — barré ce qu'elle n'a pas,
  *               et la liste de ce que l'arborescence ne range pas, qui ne sera pas archivé ;
  *   `groupes`   les « OU » d'aujourd'hui (clé → membres), `palette` (clé → libellé) ;
- *   `arbre`     « stagiaire » ou « entreprise », pour le dire ; `ailleurs` : { docs, ouvrir } — ce qui se
- *               range dans l'autre arbre, et de quoi y aller.
+ *   `arbre`     « stagiaire » ou « entreprise », pour le dire ; `ailleurs` : { docs, nature, arbre, ouvrir } —
+ *               ce qui se range dans l'autre arbre (« de groupe », « de session »), et de quoi y aller.
  */
 export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nbFormations = 0, formation = null,
   palette = null, groupes = null, lectureSeule = false, arbre = "stagiaire", ailleurs = null }) {
@@ -402,12 +413,13 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
   /* Où placer un document que l'arborescence ne nomme pas : chaque dossier, par son chemin lisible. */
   const cheminsDossiers = useMemo(() => {
     const out = [];
-    const parcourir = (fs, chemin) => (fs || []).forEach((f) => {
+    const parcourir = (fs, chemin, sous) => (fs || []).forEach((f) => {
       const ici = [...chemin, nomLisible(f.name)];
-      out.push({ id: f.id, libelle: ici.join(" › ") + (f.per_learner ? " (un par stagiaire)" : "") });
-      parcourir(f.children, ici);
+      const sousStagiaire = sous || !!f.per_learner;
+      out.push({ id: f.id, libelle: ici.join(" › ") + (f.per_learner ? " (un par stagiaire)" : ""), sousStagiaire });
+      parcourir(f.children, ici, sousStagiaire);
     });
-    parcourir(folders, []);
+    parcourir(folders, [], false);
     return out;
   }, [folders]);
 
@@ -446,15 +458,17 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
           <ul>
             {ap.nonPlaces.map((c) => {
               const o = options.find((x) => x.key === c || (x.group && clesCouvertes(itemDe(x), groupes).includes(c)));
+              // Un document sans stagiaire ne se propose pas dans un dossier « un par stagiaire » (cf. ChoixDocument).
+              const cibles = o && o.sansStagiaire ? cheminsDossiers.filter((p) => !p.sousStagiaire) : cheminsDossiers;
               return (
                 <li key={c}>
                   <Icon name={c.startsWith("qcm:") ? "help" : "file-text"} size={14} aria-hidden="true" />
                   <span className="arbo-doc-l">{(palette && palette.get(c)) || c}</span>
-                  {!lectureSeule && o && cheminsDossiers.length > 0 && (
+                  {!lectureSeule && o && cibles.length > 0 && (
                     <select value="" aria-label={`Placer ${(palette && palette.get(c)) || c}`}
                       onChange={(e) => { if (e.target.value) op.placer(e.target.value, o); }}>
                       <option value="">Placer dans…</option>
-                      {cheminsDossiers.map((p) => <option key={p.id} value={p.id}>{p.libelle}</option>)}
+                      {cibles.map((p) => <option key={p.id} value={p.id}>{p.libelle}</option>)}
                     </select>
                   )}
                 </li>
