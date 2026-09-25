@@ -174,7 +174,8 @@ function TemplateEditor() {
         setCatalog(cat.data || []);
         // Enregistre clé→catégorie AVANT d'insérer le contenu : les puces se colorent alors
         // par catégorie dès leur premier rendu (cf. TokenView / categoryColors).
-        registerTokenGroups(cat.data || []);
+        // … et les jetons CONNUS mais non proposés (un modèle ancien en porte) : reconnus, pas « inconnus ».
+        registerTokenGroups([...(cat.data || []), ...(cat.connus || [])]);
         // Premier groupe ouvert par défaut — ET « Entreprise » quand le représentant signe : le
         // cadre « Cachet de l'entreprise » y vit désormais, autant qu'il se voie sans déplier.
         setOpenGroups(Object.fromEntries((cat.data || []).map((g, i) => [g.group, i === 0 || (entrepriseSigneD && g.group === "Entreprise")])));
