@@ -9,6 +9,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
 import { categoryChipStyle, categoryAccent, registerTokenGroups } from "../lib/categoryColors.js";
+import { aUnCadreStagiaire } from "../lib/signatures.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
 const clean = (html) => (EMPTY.test(html || "") ? "" : html);
@@ -80,6 +81,12 @@ const SIG_ENTREPRISE = { key: "sig:representant", label: "Cachet de l'entreprise
    le groupe Organisme — et seulement si le champ était activé dans Champs documents : le seul
    signataire sans bloc dans « Signatures ». */
 const SIG_ORGANISME = { key: "Signature organisme", label: "Signature de l'organisme" };
+/* LE CADRE DU STAGIAIRE : le jeton intégré « Signature stagiaire », rempli quand il signe depuis son
+   espace. Relevé le 2026-09-25 : depuis que les blocs nommés « Stagiaire 1…4 » ne s'offrent plus que
+   sur un modèle « Externe » (commit 483a06e7), la signature du stagiaire n'était plus qu'une puce du
+   groupe « Signature », replié — et le modèle « Contrat », que le stagiaire signe, n'avait AUCUN cadre
+   pour elle : le contrat signé sortait sans sa signature visible. */
+const SIG_STAGIAIRE = { key: "Signature stagiaire", label: "Signature du stagiaire" };
 /* Le cadre de l'intervenant — du signataire EXTERNE : clé FIXE, celle que remplissent l'espace de
    l'intervenant et le lien « externe » (cf. CRENEAU_INTERVENANT, documentSession.controller). Il
    remplace le bloc nommé « Intervenant » d'autrefois, proposé sur tous les modèles alors que
@@ -117,6 +124,7 @@ function TemplateEditor() {
   const [modeleEntreprise, setModeleEntreprise] = useState(false); // company_level : document de GROUPE (signé par le représentant)
   const [entrepriseSigne, setEntrepriseSigne] = useState(false); // « Entreprise » signataire : le représentant signe AUSSI un document de stagiaire
   const [signeParExterne, setSigneParExterne] = useState(false); // « Externe » coché : cadre « Signature de l'intervenant »
+  const [signeParStagiaire, setSigneParStagiaire] = useState(false); // « Stagiaire » coché : son cadre doit figurer au modèle
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
@@ -180,6 +188,7 @@ function TemplateEditor() {
         setModeleEntreprise(!!d.company_level);
         setEntrepriseSigne(Array.isArray(d.signers) && d.signers.includes("ENTREPRISE"));
         setSigneParExterne(Array.isArray(d.signers) && d.signers.includes("EXTERNAL"));
+        setSigneParStagiaire(Array.isArray(d.signers) && d.signers.includes("STAGIAIRE"));
       } catch (e) { if (alive) setStatus({ type: "error", message: e.message }); }
     })();
     return () => { alive = false; };
@@ -375,6 +384,17 @@ function TemplateEditor() {
         </div>
 
         <StatusMessage status={status} />
+        {/* LE STAGIAIRE SIGNE CE MODÈLE, MAIS RIEN NE PORTE SA SIGNATURE : elle ne s'imprimerait nulle part
+            sur le document signé. C'était le cas du « Contrat » de production le 2026-09-25 — rien ne le
+            disait, ni ici ni à la signature. */}
+        {signeParStagiaire && !modeleEntreprise
+          && !aUnCadreStagiaire([header?.getHTML(), body?.getHTML(), footer?.getHTML()].join("")) && (
+          <p className="tpl-propose attention" role="note">
+            <Icon name="pencil" size={15} aria-hidden="true" />
+            <span><b>Le stagiaire signe ce modèle, mais aucun cadre ne porte sa signature</b> : elle n'apparaîtra pas
+              sur le document signé. Placez « {SIG_STAGIAIRE.label} » (bloc Signatures), puis enregistrez.</span>
+          </p>
+        )}
         {propose && (
           <p className="tpl-propose" role="note">
             <Icon name="file-text" size={15} aria-hidden="true" />
@@ -449,6 +469,15 @@ function TemplateEditor() {
                 onClick={() => target?.chain().focus().insertToken({ token: SIG_ORGANISME.key, label: SIG_ORGANISME.label }).run()}>
                 <Icon name="pencil" size={13} /> {SIG_ORGANISME.label}
               </button>
+              {/* Le stagiaire signe tout document de son dossier ; un document de GROUPE (🏢), non. */}
+              {!modeleEntreprise && (
+                <button className="tok-chip" draggable
+                  title={"Cadre vide jusqu'à ce que le stagiaire signe, depuis son espace : sa signature s'y dessine. Cliquer ou glisser."}
+                  onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify(SIG_STAGIAIRE))}
+                  onClick={() => target?.chain().focus().insertToken({ token: SIG_STAGIAIRE.key, label: SIG_STAGIAIRE.label }).run()}>
+                  <Icon name="pencil" size={13} /> {SIG_STAGIAIRE.label}
+                </button>
+              )}
               {signeParExterne && (
                 <button className="tok-chip" draggable
                   title={"Cadre vide jusqu'à la signature de l'intervenant : depuis son espace, ou par le lien externe (tuteur, financeur…). Cliquer ou glisser."}
@@ -509,11 +538,11 @@ function TemplateEditor() {
               </button>
               {(rechJeton.trim() || openGroups[g.group]) && (
                 <div className="tok-list">
-                  {/* « Signature de l'organisme » est déjà offerte en CADRE, en haut (bloc
-                      Signatures) : on ne la répète pas ici en jeton brut. Deux entrées identiques
-                      pour la même signature semaient le doute. Le jeton reste connu du moteur —
-                      seule la puce en double disparaît de la palette. */}
-                  {g.tokens.filter((t) => !(g.group === "Signature" && t.key === "Signature organisme")).map((t) => (
+                  {/* Les signatures de l'organisme et du stagiaire sont offertes en CADRES, en haut
+                      (bloc Signatures) : on ne les répète pas ici en jetons bruts. Deux entrées
+                      identiques pour la même signature semaient le doute. Les jetons restent connus
+                      du moteur — seules les puces en double disparaissent de la palette. */}
+                  {g.tokens.filter((t) => !(g.group === "Signature" && (t.key === "Signature organisme" || t.key === "Signature stagiaire"))).map((t) => (
                     <button key={t.key} className="tok-chip" style={categoryChipStyle(t.origin || g.group)}
                       onMouseEnter={(e) => montrerTip(e, t, g.group)} onMouseLeave={cacherTip} onFocus={(e) => montrerTip(e, t, g.group)} onBlur={cacherTip}
                       draggable

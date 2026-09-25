@@ -5182,6 +5182,9 @@ a.memo-lien:hover{color:var(--text);border-color:var(--ember1)}
 .tpl-propose{display:flex;align-items:flex-start;gap:8px;margin:8px 0;padding:10px 13px;font-size:13px;line-height:1.5;
   border-radius:10px;background:color-mix(in srgb,var(--blue) 9%,transparent);border:1px solid color-mix(in srgb,var(--blue) 25%,transparent)}
 .tpl-propose svg{flex-shrink:0;margin-top:2px}
+/* Un défaut du modèle à corriger avant qu'il ne serve (une signature sans cadre) : le ton de l'alerte. */
+.tpl-propose.attention{background:var(--amber-bg);border-color:color-mix(in srgb,var(--orange) 35%,transparent)}
+.tpl-propose.attention svg{color:var(--orange)}
 
 /* Le chemin du retour, dans le profil. */
 .consent-bloc{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
