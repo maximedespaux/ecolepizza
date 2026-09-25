@@ -54,14 +54,17 @@ export function clesRangees(tree, groupes) {
  * @param documents les clés de ce que la formation a dans cet arbre (formationDansLArbre)
  * @param aRanger   celles dont l'absence se signale — par défaut toutes ; côté entreprise, les seuls
  *                  documents de groupe : ceux des stagiaires n'y sont que des copies, facultatives
+ * @param aCopier   côté entreprise, ces copies facultatives : les documents de ses stagiaires
  */
-export function apercuFormation(tree, documents, groupes, aRanger = documents) {
+export function apercuFormation(tree, documents, groupes, aRanger = documents, aCopier = []) {
   const siens = new Set(documents || []);
   const ranges = clesRangees(tree, groupes);
   return {
     /** L'item concerne-t-il cette formation ? Sinon il est simplement sauté pour elle. */
     concerne: (it) => clesCouvertes(it, groupes).some((c) => siens.has(c)),
     nonPlaces: [...new Set(aRanger || [])].filter((c) => !ranges.has(c)),
+    /** Les documents de stagiaire SANS COPIE pour l'entreprise : dits sans alarme, avec de quoi en faire une. */
+    sansCopie: [...new Set(aCopier || [])].filter((c) => !ranges.has(c)),
   };
 }
 
@@ -100,14 +103,16 @@ export function horsDeLArbre(documents, kind) {
  * pas archivé (`aRanger`) — la liste même que le serveur exclut (offertsDesFormations) :
  *   · stagiaire : tout ce qu'ont ses dossiers, seuls ou par une entreprise, et ses documents de
  *     session — sauf le groupe ;
- *   · entreprise : ce qu'a son arrivée par entreprise ; seuls ses documents de groupe se signalent.
+ *   · entreprise : ce qu'a son arrivée par entreprise ; seuls ses documents de groupe se signalent, et
+ *     ceux de ses stagiaires se proposent en copie (`aCopier`).
  */
 export function formationDansLArbre(formation, kind, documents) {
   if (!formation) return null;
   const deGroupe = new Set((documents || []).filter((d) => d.company_level).map((d) => d.cle));
   const tous = union(formation.documents, formation.documents_entreprise);
   if (kind === "entreprise") {
-    return { ...formation, documents: formation.documents_entreprise || formation.documents || [], aRanger: tous.filter((c) => deGroupe.has(c)) };
+    const arrivee = formation.documents_entreprise || formation.documents || [];
+    return { ...formation, documents: arrivee, aRanger: tous.filter((c) => deGroupe.has(c)), aCopier: arrivee.filter((c) => !deGroupe.has(c)) };
   }
   const siens = union(tous, formation.documents_session).filter((c) => !deGroupe.has(c));
   return { ...formation, documents: siens, aRanger: siens };

@@ -364,7 +364,7 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
   const [enEdition, setEnEdition] = useState(null);
   const options = useMemo(() => buildOptions(docs, eqMap), [docs, eqMap]);
   const ex = exemples(formation);
-  const ap = formation ? apercuFormation(tree, formation.documents, groupes, formation.aRanger) : null;
+  const ap = formation ? apercuFormation(tree, formation.documents, groupes, formation.aRanger, formation.aCopier) : null;
 
   /* Où chaque document est déjà rangé (clé → dossier et chemin) — et ce qu'un « OU » placé couvre. */
   const placeDe = useMemo(() => {
@@ -402,6 +402,26 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
     placer: (id, o) => set(placerDocument(folders, id, itemDe(o), groupes)),
   };
   const ctx = { lectureSeule, ex, concerne: ap && ap.concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition, ailleurs };
+
+  /* Une ligne des listes du bas : le document, et « Placer dans… » les dossiers qui peuvent le recevoir. */
+  const ligneAPlacer = (c) => {
+    const o = options.find((x) => x.key === c || (x.group && clesCouvertes(itemDe(x), groupes).includes(c)));
+    // Un document sans stagiaire ne se propose pas dans un dossier « un par stagiaire » (cf. ChoixDocument).
+    const cibles = o && o.sansStagiaire ? cheminsDossiers.filter((p) => !p.sousStagiaire) : cheminsDossiers;
+    return (
+      <li key={c}>
+        <Icon name="file-text" size={14} aria-hidden="true" />
+        <span className="arbo-doc-l">{(palette && palette.get(c)) || c}</span>
+        {!lectureSeule && o && cibles.length > 0 && (
+          <select value="" aria-label={`Placer ${(palette && palette.get(c)) || c}`}
+            onChange={(e) => { if (e.target.value) op.placer(e.target.value, o); }}>
+            <option value="">Placer dans…</option>
+            {cibles.map((p) => <option key={p.id} value={p.id}>{p.libelle}</option>)}
+          </select>
+        )}
+      </li>
+    );
+  };
 
   /* Où placer un document que l'arborescence ne nomme pas : chaque dossier, par son chemin lisible. */
   const cheminsDossiers = useMemo(() => {
@@ -448,26 +468,22 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
             <Icon name="info" size={15} aria-hidden="true" />
             <span><b>{ap.nonPlaces.length} document{ap.nonPlaces.length > 1 ? "s" : ""}{arbre === "entreprise" ? " de groupe" : ""} de {formation.code}</b> ne {ap.nonPlaces.length > 1 ? "sont rangés" : "est rangé"} nulle part : {ap.nonPlaces.length > 1 ? "ils ne seront" : "il ne sera"} pas dans l'archive.</span>
           </div>
-          <ul>
-            {ap.nonPlaces.map((c) => {
-              const o = options.find((x) => x.key === c || (x.group && clesCouvertes(itemDe(x), groupes).includes(c)));
-              // Un document sans stagiaire ne se propose pas dans un dossier « un par stagiaire » (cf. ChoixDocument).
-              const cibles = o && o.sansStagiaire ? cheminsDossiers.filter((p) => !p.sousStagiaire) : cheminsDossiers;
-              return (
-                <li key={c}>
-                  <Icon name="file-text" size={14} aria-hidden="true" />
-                  <span className="arbo-doc-l">{(palette && palette.get(c)) || c}</span>
-                  {!lectureSeule && o && cibles.length > 0 && (
-                    <select value="" aria-label={`Placer ${(palette && palette.get(c)) || c}`}
-                      onChange={(e) => { if (e.target.value) op.placer(e.target.value, o); }}>
-                      <option value="">Placer dans…</option>
-                      {cibles.map((p) => <option key={p.id} value={p.id}>{p.libelle}</option>)}
-                    </select>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <ul>{ap.nonPlaces.map(ligneAPlacer)}</ul>
+        </div>
+      )}
+
+      {/* CÔTÉ ENTREPRISE, LES COPIES QU'ON N'A PAS FAITES — demandé le 2026-09-25 : « pourquoi la partie du
+          bas de l'archivage stagiaire n'est pas dans l'archivage entreprise ? ». Elle n'y listait que les
+          documents de groupe, seuls à se perdre ; ceux des stagiaires n'y paraissaient pas, et « Placer
+          dans… » avec eux. Ils y sont, SANS ALARME : pas de copie, c'est un choix — le document reste dans
+          l'archive stagiaire. */}
+      {arbre === "entreprise" && ap && ap.sansCopie.length > 0 && (
+        <div className="arbo-non-places copies">
+          <div className="arbo-non-places-t">
+            <Icon name="copy" size={15} aria-hidden="true" />
+            <span><b>{ap.sansCopie.length} document{ap.sansCopie.length > 1 ? "s" : ""} de {formation.code}</b> {ap.sansCopie.length > 1 ? "n'ont" : "n'a"} pas de copie pour l'entreprise. Une copie s'ajoute, pour les stagiaires qu'elle inscrit, à leur dossier de l'archivage stagiaire.</span>
+          </div>
+          <ul>{ap.sansCopie.map(ligneAPlacer)}</ul>
         </div>
       )}
     </div>
