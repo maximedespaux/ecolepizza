@@ -539,8 +539,13 @@ const CURATED_GROUPS = new Set(['Évaluation pratique', 'Jury', 'Examen', 'Dates
    aucun dossier à lire et sortiraient vides. */
 const HIDDEN_FOR_COMPANY = new Set(['Stagiaire', 'Autorisations', 'Inscription', 'Évaluation pratique', 'Jury']);
 const HIDDEN_FOR_LEARNER = new Set(['Groupe entreprise']);
-/* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens). */
-const STAGIAIRE_NOMMES = ['D_Naissance'];
+/* Les jetons NOMMÉS du stagiaire que les Champs documents ne savent pas offrir (cf. getTokens).
+   « Nom complet » (civilité, prénom, NOM) et « Adresse complète » (rue, code postal, ville, sur une
+   ligne) n'ont AUCUN champ équivalent : relevé le 2026-09-26 sur le devis RS7404, qui les emploie, ils
+   s'imprimaient mais ne se trouvaient plus dans la palette — ni pour les insérer, ni pour les colorer. */
+const STAGIAIRE_NOMMES = ['Personne', 'Adresse', 'D_Naissance'];
+/* Le nom, dans la palette, d'un groupe du catalogue qui y porte un autre nom. */
+const NOM_EN_PALETTE = { Dates: 'Dates et valeurs calculées' };
 
 /** GET /api/templates/tokens?slug= — jetons de la palette, filtrés selon le type de document. */
 const getTokens = async (req, res) => {
@@ -661,7 +666,18 @@ const getTokens = async (req, res) => {
         // Filtrage selon le type de document (si connu).
         const hidden = companyLevel === 1 ? HIDDEN_FOR_COMPANY : companyLevel === 0 ? HIDDEN_FOR_LEARNER : null;
         const visible = hidden ? groups.filter((g) => !hidden.has(g.group)) : groups;
-        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length) });
+        /* LES JETONS CONNUS MAIS PAS PROPOSÉS — {Date}, doublon de {Today} ; {Formation}, {Civilité}…,
+           que les Champs documents remplacent. Ils s'impriment toujours, mais l'éditeur tire la
+           catégorie (la couleur) d'une puce de la PALETTE : absents d'elle, ceux d'un modèle ancien
+           paraissaient inconnus — « pourquoi ce jeton n'est-il pas enregistré ? », 2026-09-26. On les
+           déclare ici, à part, pour qu'ils soient reconnus sans revenir en double dans la palette. */
+        const offerts = new Set();
+        for (const g of visible) for (const t of (g.tokens || [])) offerts.add(t.key);
+        const connus = TOKEN_CATALOG
+            .map((g) => ({ group: NOM_EN_PALETTE[g.group] || g.group,
+                tokens: (g.tokens || []).filter((t) => !offerts.has(t.key)).map((t) => ({ key: t.key, label: t.label })) }))
+            .filter((g) => g.tokens.length);
+        res.json({ data: visible.filter((g) => g.tokens && g.tokens.length), connus });
     } catch (e) {
         console.error('Erreur jetons palette :', e);
         res.status(500).json({ error: 'Internal Server Error' });
