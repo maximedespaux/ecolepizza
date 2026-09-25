@@ -10,6 +10,7 @@ const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBl
 const { resolveCustomTokens } = require('./customtokens.js');
 const { CASE_STAGIAIRE } = require('./documents.js');
 const { JETONS_A_FORME, aUneForme, texteEnLignes, texteEnBlocs } = require('./texteStructure.js');
+const { nombreChamp } = require('./montants.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -36,8 +37,9 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // intégrés pour que les modèles existants continuent de fonctionner.
     if (ctx && ctx.fields) {
         values = { ...values };
+        // Un nombre s'écrit à la française (« 1 750 », « 82,5 ») : cf. `nombreChamp`, lib/montants.js.
         for (const [k, v] of Object.entries(ctx.fields)) {
-            values['field:' + k] = v == null ? '' : (v === true ? 'Oui' : v === false ? 'Non' : String(v));
+            values['field:' + k] = v == null ? '' : (v === true ? 'Oui' : v === false ? 'Non' : nombreChamp(k, v));
         }
     }
     // Jetons personnalisés (calculés à partir des autres) : jetons custom:<clé>.

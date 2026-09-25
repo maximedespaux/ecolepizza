@@ -166,7 +166,10 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
                 p.horaires,   /* {HorairesJours} : les plages par journée (colonne de la migration 056) */
                 ${await colonneOuNull(conn, 'training_program', 'prerequisites', 'p.')},
-                s.year, s.week,
+                /* s.trainer : {Formateur}. Il n'était lu NULLE PART — le jeton, proposé dans la palette,
+                   sortait vide sur tout document (relevé le 2026-09-26). La colonne reflète les
+                   formateurs de la session, recopiés à chaque affectation (session.controller). */
+                s.year, s.week, s.trainer,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                 e.financing, e.price AS enroll_price, e.acompte, e.company_id
@@ -200,7 +203,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                             p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
                             p.horaires,
                             ${await colonneOuNull(conn, 'training_program', 'prerequisites', 'p.')},
-                            s.year, s.week,
+                            s.year, s.week, s.trainer,
                             DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                             DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                             NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id

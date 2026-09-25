@@ -21,11 +21,16 @@ const path = require('path');
 
 /* Une base factice : la fiche `learner` telle que l'introspection la voit, et des Champs documents
    activés comme en production. Tout le reste répond vide. */
-const col = (c, dt, ct = dt) => ({ t: 'learner', c, dt, ct, cm: '' });
+const col = (c, dt, ct = dt, t = 'learner') => ({ t, c, dt, ct, cm: '' });
+/* L'intitulé de la formation est activé, comme en production : {Formation} a alors son JUMEAU dans
+   la palette (le champ « Intitulé de la formation »), et n'y revient pas en double. Champ décoché,
+   il y reviendrait — c'est la règle de la palette complète (palette-complete.test.js). */
 const colonnes = [col('civility', 'varchar', 'varchar(10)'), col('first_name', 'varchar', 'varchar(80)'),
-    col('last_name', 'varchar', 'varchar(80)'), col('address', 'varchar', 'varchar(255)'), col('email', 'varchar', 'varchar(160)')];
-const reglages = ['civility', 'first_name', 'last_name', 'address', 'email'].map((c) => ({
-    source_table: 'learner', column_name: c, enabled: 1, enabled_condition: 1, label: null }));
+    col('last_name', 'varchar', 'varchar(80)'), col('address', 'varchar', 'varchar(255)'), col('email', 'varchar', 'varchar(160)'),
+    col('title', 'varchar', 'varchar(255)', 'training_program')];
+const reglages = [...['civility', 'first_name', 'last_name', 'address', 'email'].map((c) => ({
+    source_table: 'learner', column_name: c, enabled: 1, enabled_condition: 1, label: null })),
+{ source_table: 'training_program', column_name: 'title', enabled: 1, enabled_condition: 1, label: null }];
 const faux = {
     promise: () => ({
         query: async (sql) => {
