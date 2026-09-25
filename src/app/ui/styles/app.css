@@ -1267,6 +1267,9 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 .arbo-non-places li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px;font-size:13px}
 .arbo-non-places li > svg{flex:none;color:var(--dim)}
 .arbo-non-places select{width:auto;max-width:300px;margin-left:auto;padding:4px 8px;font-size:12.5px}
+/* Les copies pour l'entreprise qu'on n'a pas faites : une information, pas une alerte — le ton neutre le dit. */
+.arbo-non-places.copies{border-color:var(--border);background:var(--surface2)}
+.arbo-non-places.copies .arbo-non-places-t > svg{color:var(--dim)}
 /* SANS SURVOL (téléphone, tablette), les actions restent visibles : cachées, elles seraient introuvables. */
 @media (hover:none){.arbo-actions,.arbo-retirer{opacity:1}}
 @media (max-width:640px){

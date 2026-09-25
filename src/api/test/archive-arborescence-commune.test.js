@@ -644,7 +644,7 @@ test('chaque arbre propose ce qu\'il range : le dossier de chaque stagiaire d\'u
     assert.match(EDITEUR, /arbre=\{kind\} ailleurs=\{ailleurs\[kind\]\}/);
     assert.match(EDITEUR, /<b>Ce qui n'est rangé nulle part n'est pas archivé\.<\/b>/);
     const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
-    assert.match(OUTIL, /const ap = formation \? apercuFormation\(tree, formation\.documents, groupes, formation\.aRanger\) : null;/);
+    assert.match(OUTIL, /const ap = formation \? apercuFormation\(tree, formation\.documents, groupes, formation\.aRanger, formation\.aCopier\) : null;/);
     assert.match(OUTIL, /\{ap\.nonPlaces\.length > 1 \? "ils ne seront" : "il ne sera"\} pas dans l'archive\./);
     assert.doesNotMatch(OUTIL, /ils iront|il ira/, 'plus de promesse d\'un rangement par défaut');
     // L'onglet de la formation lit la même règle.
@@ -730,4 +730,29 @@ test('les évaluations ne s\'archivent plus : leurs places sortent de l\'arbores
     assert.match(EDITEUR, /\{etat\.evaluations_retirees\?\.length > 0 && \(/);
     assert.match(EDITEUR, /<b>Les évaluations \(QCM\) ne s'archivent plus<\/b>/);
     assert.match(lireUi('pages/Formations.jsx'), /etat\.evaluations_retirees\?\.length > 0 \? " Les évaluations \(QCM\) n'y sont plus rangées/);
+});
+
+test('côté entreprise, la partie du bas dit aussi les copies qu\'on n\'a pas faites — sans alarme, avec « Placer dans… »', async () => {
+    /* « Pourquoi la partie du bas de l'archivage stagiaire n'est-elle pas dans l'archivage entreprise ? » :
+       elle n'y listait que les documents de groupe, seuls à se perdre. Ceux des stagiaires n'y paraissaient
+       pas — pas de copie, c'est un choix —, et « Placer dans… » disparaissait avec eux : pour copier le
+       droit à l'image pour l'entreprise, il fallait passer par la liste « Document » de chaque dossier. */
+    const ecran = await import('../../app/ui/lib/arborescence.js');
+    const palette = Arbo.paletteDesFormations(PARCOURS, DE_SESSION);
+    const niv1h = palette.formations.find((f) => f.code === 'NIV1H');
+    const vue = ecran.formationDansLArbre(niv1h, 'entreprise', palette.documents);
+    assert.deepStrictEqual(vue.aCopier, ['ref:accord-prise-en-charge'], 'ce qu\'ont ses stagiaires arrivés par une entreprise — ni le groupe, ni la session');
+    assert.deepStrictEqual(vue.aRanger.sort(), ['ref:convention', 'ref:devis-professionnel-copie'], 'le groupe, lui, reste signalé comme avant');
+    const vide = { folders: [d('{Entreprise}', [], [d('{Stagiaire}', [], [], true)])] };
+    const ap = ecran.apercuFormation(vide, vue.documents, new Map(), vue.aRanger, vue.aCopier);
+    assert.deepStrictEqual(ap.sansCopie, ['ref:accord-prise-en-charge']);
+    const copie = { folders: [d('{Entreprise}', [], [d('{Stagiaire}', [ref('accord-prise-en-charge')], [], true)])] };
+    assert.deepStrictEqual(ecran.apercuFormation(copie, vue.documents, new Map(), vue.aRanger, vue.aCopier).sansCopie, [], 'copiée : plus rien à dire');
+    // Côté stagiaire, rien ne change : pas de copie à y faire.
+    assert.strictEqual(ecran.formationDansLArbre(niv1h, 'stagiaire', palette.documents).aCopier, undefined);
+    const OUTIL = lireUi('components/ArchiveTreeEditor.jsx');
+    assert.match(OUTIL, /\{arbre === "entreprise" && ap && ap\.sansCopie\.length > 0 && \(/);
+    assert.match(OUTIL, /pas de copie pour l'entreprise\. Une copie s'ajoute, pour les stagiaires qu'elle inscrit, à leur dossier de l'archivage stagiaire\./);
+    assert.match(OUTIL, /<ul>\{ap\.sansCopie\.map\(ligneAPlacer\)\}<\/ul>/, 'avec « Placer dans… », comme la liste du stagiaire');
+    assert.match(OUTIL, /<ul>\{ap\.nonPlaces\.map\(ligneAPlacer\)\}<\/ul>/);
 });
