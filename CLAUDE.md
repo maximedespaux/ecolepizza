@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
-**2041 tests — 2034 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2055 tests — 2048 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -176,9 +176,26 @@ corriger (« Acomtpe » → « Acompte ») avait laissé un blanc à la place de
 L'éditeur barre et nomme toute puce qui ne désigne plus rien, et affiche le libellé ACTUEL d'une puce figée sous
 un libellé périmé (`libelleAffiche`, `ANCIENS_LIBELLES`).
 
+**Un onglet d'éditeur resté ouvert RÉÉCRIT l'ancienne version** : l'éditeur enregistre ce qu'il a chargé, sans
+regarder si le modèle a changé depuis. Le 2026-09-26, le devis RS7404 retravaillé (00 h 10–00 h 17) a été remplacé
+une heure plus tard par l'ancienne mise en forme, depuis un onglet ouvert avant. Avant toute écriture de modèles
+hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « Modèles → éditeur ».
+
 ---
 
-## 4. Migrations — **la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)**
+## 4. Migrations — **la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)** — et l'outil `harmoniser-modeles.js` à lancer
+
+**L'OUTIL `database/tools/harmoniser-modeles.js` EST À LANCER** (la charte des documents, demandée le 2026-09-26 :
+« comme le devis RS7404 retravaillé, fais tous les autres »). Il applique `lib/charteDocuments.js` à DIX modèles —
+les trois devis, la convention, le contrat, le contrat d'hygiène, les CGV, l'invitation, le droit à l'image,
+l'attestation d'hygiène : Arial, titres bleus, texte en 9 pt (CGV 8 pt), avertissements rouges gardés. Les six
+modèles imposés (AGEFICE, certificat de réalisation, jury, factures) s'impriment déjà en Arial : non touchés.
+Chaque modèle a été rendu avant/après et relu page à page ; l'outil porte l'EMPREINTE des versions relues et
+n'écrit que celles-là (un modèle modifié depuis est ignoré, et nommé). Essai par défaut, sauvegarde avant
+écriture, `UPDATE` gardé par le contenu lu, `--restaurer`. Fermer les onglets d'éditeur de modèles AVANT
+`--appliquer` (cf. § 3). **Il se vérifie en relançant l'essai** : les dix lignes disent « déjà harmonisé ».
+Seul changement de charpente : deux sauts de page retirés (CGV, contrat d'hygiène) et un posé (CGV), nommés
+dans les profils. La 183 peut être jouée avant ou après : les deux états sont connus.
 
 **183 est À JOUER** (`183_jeton_acompte.sql`, migration de DONNÉES — l'acompte revient dans le devis, la
 convention et le contrat). Relevé le 2026-09-26 par l'API : quatre modèles de production (`devis-particulier`,
