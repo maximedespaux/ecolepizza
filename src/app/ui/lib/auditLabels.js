@@ -54,6 +54,7 @@ const ACTION_LABEL = {
     // Émargements
     'attendance.generate': ['Émargement généré', B],
     'attendance.sign': ['Émargement signé', G],
+    'attendance.rattrapage': ['Présence rattrapée par l\'école (émargement)', A],
     'emargement.regenerate': ['Émargement régénéré', A],
     'intervenant.emargement.sign': ['Émargement signé (intervenant)', G],
     'emargement_template.create': ['Modèle d\'émargement créé', G],
@@ -305,6 +306,7 @@ const ENTITY_LABEL = {
     ConditionField: ['Champ de document', 'm'],
     EmargementTemplate: ['Modèle d\'émargement', 'm'],
     AttendanceSheet: ['Feuille d\'émargement', 'f'],
+    AttendanceRecord: ['Présence (émargement)', 'f'],
     TrainingSession: ['Session de formation', 'f'],
     Quiz: ['QCM', 'm'],
     QuizResponse: ['Réponse QCM', 'f'],

@@ -12,7 +12,7 @@ const { loadOrgSteps } = require('./template.controller.js');
 const PointDeRupture = require('../lib/pointDeRupture.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { champsDesConditions, loadDossierFactsMap } = require('../lib/conditions.js');
-const { regenEmargement } = require('../lib/emargement.js');
+const { regenEmargement, fenetreSignature, calendrierSession, horaireDuJour } = require('../lib/emargement.js');
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
 const { encrypt, encryptBytes, decryptBytes } = require('../lib/crypto.js');
@@ -833,16 +833,16 @@ const getMyFormation = async (req, res) => {
         marquerSignataires(steps, documents);
 
         // Émargement de la session (demi-journées à signer par le stagiaire).
-        const [emargement] = e.session_id ? await conn.query(
+        const emargement = e.session_id ? await avecFenetres(conn, await lireAvecRattrapage(conn,
             `SELECT ar.id AS record_id, (ar.signature_data IS NOT NULL) AS signed,
                     DATE_FORMAT(ar.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
-                    DATE_FORMAT(sh.date, '%Y-%m-%d') AS date, sh.slot
+                    DATE_FORMAT(sh.date, '%Y-%m-%d') AS date, sh.slot, sh.session_id/*RATTRAPAGE*/
              FROM attendance_record ar
              JOIN attendance_sheet sh ON sh.id = ar.sheet_id
              WHERE ar.learner_id = ? AND sh.session_id = ?
              ORDER BY sh.date, FIELD(sh.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
             [learner.id, e.session_id]
-        ) : [[]];
+        )) : [];
 
         res.json({
             data: {
@@ -864,6 +864,34 @@ const getMyFormation = async (req, res) => {
 };
 
 /**
+ * L'ÉTAT DE CHAQUE DEMI-JOURNÉE DU STAGIAIRE, à cet instant : `etat` ('a_venir' | 'pas_encore' |
+ * 'ouverte' | 'close') et `ouvre_a` (« 13:00 »). L'écran n'offre « Signer » que sur une demi-journée
+ * OUVERTE — la règle que `signMyEmargement` applique (lib/emargement.js, `fenetreSignature`) :
+ * un bouton que le serveur refuse ne ferait qu'essuyer un refus.
+ * `rattrapee` : l'école a enregistré la présence (migration 184) — lue si la colonne existe.
+ */
+async function avecFenetres(conn, records) {
+    const calendriers = new Map();
+    for (const r of records) {
+        if (!calendriers.has(r.session_id)) calendriers.set(r.session_id, await calendrierSession(conn, r.session_id));
+        const { horaires, jours } = calendriers.get(r.session_id);
+        const f = fenetreSignature({ date: r.date, slot: r.slot, horaire: horaireDuJour(horaires, jours, r.date) });
+        r.etat = f.etat;
+        r.ouvre_a = f.ouvreA == null ? null : `${String(Math.floor(f.ouvreA / 60)).padStart(2, '0')}:${String(f.ouvreA % 60).padStart(2, '0')}`;
+        r.rattrapee = !!r.rattrapee;
+    }
+    return records;
+}
+/** Une requête des demi-journées, relue sans la colonne du rattrapage si la migration 184 manque. */
+async function lireAvecRattrapage(conn, sql, params) {
+    try { return (await conn.query(sql.replace('/*RATTRAPAGE*/', ', (ar.rattrapage_motif IS NOT NULL) AS rattrapee'), params))[0]; }
+    catch (err) {
+        if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err;
+        return (await conn.query(sql.replace('/*RATTRAPAGE*/', ''), params))[0];
+    }
+}
+
+/**
  * GET /api/mon-espace/emargement — demi-journées d'émargement du stagiaire
  * (ses sessions), avec l'état de sa signature.
  */
@@ -872,12 +900,12 @@ const getMyEmargement = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: "Aucune fiche stagiaire liée à ce compte." });
-        const [rows] = await conn.query(
+        const rows = await lireAvecRattrapage(conn,
             `SELECT ar.id AS record_id, ar.present,
                     (ar.signature_data IS NOT NULL) AS signed, ar.signer_name,
                     DATE_FORMAT(ar.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
                     DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot, s.session_id,
-                    p.code AS program_code, p.title AS program_title
+                    p.code AS program_code, p.title AS program_title/*RATTRAPAGE*/
              FROM attendance_record ar
              JOIN attendance_sheet s ON s.id = ar.sheet_id
              JOIN training_session ts ON ts.id = s.session_id
@@ -886,7 +914,7 @@ const getMyEmargement = async (req, res) => {
              ORDER BY s.date, FIELD(s.slot, 'MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL')`,
             [learner.id]
         );
-        res.json({ data: { today: todayISO(), records: rows } });
+        res.json({ data: { today: todayISO(), records: await avecFenetres(conn, rows) } });
     } catch (err) {
         console.error('Erreur émargement stagiaire :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -903,21 +931,39 @@ const signMyEmargement = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Fiche stagiaire introuvable.' });
-        const [[rec]] = await conn.query(
-            `SELECT ar.id, s.session_id, DATE_FORMAT(s.date, '%Y-%m-%d') AS date
+        const [rec] = await lireAvecRattrapage(conn,
+            `SELECT ar.id, (ar.signature_data IS NOT NULL) AS signee, s.session_id,
+                    DATE_FORMAT(s.date, '%Y-%m-%d') AS date, s.slot/*RATTRAPAGE*/
              FROM attendance_record ar JOIN attendance_sheet s ON s.id = ar.sheet_id
              WHERE ar.id = ? AND ar.learner_id = ?`,
             [req.params.recordId, learner.id]
         );
         if (!rec) return res.status(404).json({ message: 'Émargement introuvable.' });
-        if (rec.date > todayISO()) return res.status(400).json({ message: 'Impossible de signer une demi-journée à venir.' });
+        /* UNE SIGNATURE NE SE REMPLACE PAS : la seconde écrasait la première, date comprise. */
+        if (rec.signee) return res.status(409).json({ message: 'Cette demi-journée est déjà signée.' });
+        if (rec.rattrapee) return res.status(409).json({ message: 'Votre présence a déjà été enregistrée par l\'école.' });
+        /* LA FENÊTRE (décidée par l'école le 2026-09-26, lib/emargement.js) : pendant la
+           demi-journée, de son heure de début à minuit. Avant, seules les dates futures étaient
+           refusées — l'après-midi se signait dès l'arrivée du matin, et la veille le lendemain. */
+        const { horaires, jours } = await calendrierSession(conn, rec.session_id);
+        const f = fenetreSignature({ date: rec.date, slot: rec.slot, horaire: horaireDuJour(horaires, jours, rec.date) });
+        if (f.etat === 'a_venir') return res.status(400).json({ message: 'Impossible de signer une demi-journée à venir.' });
+        if (f.etat === 'pas_encore') {
+            const h = `${Math.floor(f.ouvreA / 60)}h${String(f.ouvreA % 60).padStart(2, '0')}`;
+            return res.status(409).json({ message: `Cette demi-journée commence à ${h} : vous pourrez la signer à partir de ${h}.` });
+        }
+        if (f.etat === 'close') {
+            return res.status(409).json({ message: 'Cette demi-journée est terminée : seule l\'école peut désormais enregistrer votre présence.' });
+        }
         const name = (signer_name && signer_name.trim()) || `${learner.first_name || ''} ${learner.last_name || ''}`.trim();
         const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || req.socket?.remoteAddress || null;
         const ua = (req.headers['user-agent'] || '').slice(0, 400);
-        await conn.query(
-            'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ? WHERE id = ?',
+        const [maj] = await conn.query(
+            'UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ?, signer_ip = ?, signer_user_agent = ? WHERE id = ? AND signature_data IS NULL',
             [name, encrypt(signature_data || null), encrypt(ip), encrypt(ua), req.params.recordId]
         );
+        // Deux envois de la même signature (double appui, réseau lent) : le second ne réécrit rien.
+        if (!maj || !maj.affectedRows) return res.status(409).json({ message: 'Cette demi-journée est déjà signée.' });
         res.json({ success: true, message: 'Émargement signé.' });
 
         // Met à jour la feuille d'émargement archivée du dossier (non bloquant).

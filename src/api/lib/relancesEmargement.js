@@ -24,33 +24,15 @@
  * deux sessions en parallèle, c'est quatre alertes par jour et par formateur — quatre e-mails
  * quotidiens pour un geste qui se fait dans l'application, sur place.
  */
-const { FUSEAU } = require('./fuseau.js');
-const { parseDaySchedules } = require('./emargement.js');
+const { FUSEAU, maintenantA } = require('./fuseau.js');
+/* L'OUVERTURE d'une demi-journée vit avec la feuille (lib/emargement.js) : la même règle fait
+   partir cette alerte, ouvre la signature du stagiaire et range les plages de la feuille imprimée
+   (« 17h00 - 19h00 » est un après-midi). Deux lectures feraient sonner l'alerte à une heure où le
+   stagiaire ne peut pas encore signer. */
+const { parseDaySchedules, ouverture, OUVERTURE_DEFAUT } = require('./emargement.js');
 const { colonneOuNull } = require('./colonnes.js');
 
-/* Début d'une demi-journée quand la formation n'a pas d'horaires lisibles (minutes depuis 0h). */
-const OUVERTURE_DEFAUT = { MATIN: 8 * 60 + 30, APRES_MIDI: 13 * 60 + 30 };
 const DEMI_JOURNEE = { MATIN: 'Matin', APRES_MIDI: 'Après-midi' };
-
-/**
- * Le jour (AAAA-MM-JJ) et l'heure (en minutes) dans le fuseau de l'organisme.
- * LE SERVEUR TOURNE EN UTC : `new Date().getHours()` y rend deux heures de moins qu'à Lannemezan
- * l'été, et la date de la veille entre minuit et deux heures.
- */
-function maintenantA(zone = FUSEAU, instant = new Date()) {
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    }).formatToParts(instant).map((x) => [x.type, x.value]));
-    return { jour: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
-}
-
-/** Minute où la demi-journée commence ce jour-là — `null` si elle n'a pas lieu. */
-function ouverture(slot, horaire) {
-    if (!horaire) return OUVERTURE_DEFAUT[slot] ?? null;
-    const plage = slot === 'MATIN' ? horaire.matin : slot === 'APRES_MIDI' ? horaire.aprem : null;
-    return plage ? plage[0] : null;
-}
 
 /**
  * Le lien de l'alerte : la session, et la feuille visée (l'écran s'y place et la surligne).

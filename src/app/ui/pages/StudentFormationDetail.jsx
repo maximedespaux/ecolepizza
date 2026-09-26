@@ -15,6 +15,7 @@ import { dateHeure } from "../lib/format.js";
 import { etatPourLeStagiaire } from "../lib/documentsDossier.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
+import { etatEmargement, aSignerMaintenant } from "../lib/emargementEtat.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -161,7 +162,7 @@ function StudentFormationDetail() {
   const parcoursAFaire = etapes.filter((e) => e.etat === "todo" || e.etat === "refused").length;
   const emgGate = data?.emargement_gate || {};
   const emargAFaire = emgGate.locked ? 0
-    : (data?.emargement || []).filter((r) => !r.signed && r.date <= (data?.today || "")).length;
+    : (data?.emargement || []).filter((r) => aSignerMaintenant(r, data?.today || "")).length;
 
   return (
     <>
@@ -384,21 +385,23 @@ function StudentFormationDetail() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {data.emargement.map((r) => {
-                const future = r.date > (data.today || "");
+                const etat = etatEmargement(r, data.today || "");
                 return (
                   <div key={r.record_id} className="stu-row">
-                    <span style={{ color: r.signed ? "var(--green)" : "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="calendar" size={16} /></span>
+                    <span style={{ color: r.signed || r.rattrapee ? "var(--green)" : "var(--blue)", display: "inline-flex", flex: "none" }}><Icon name="calendar" size={16} /></span>
                     <span className="stu-row-t">
                       <b style={{ textTransform: "capitalize" }}>{frDate(r.date)}, {SLOT[r.slot] || r.slot}</b>
                     </span>
-                    {r.signed ? (
+                    {etat.cle === "signee" ? (
                       <Badge tone="g">Signé{r.signed_at ? ` · ${dateHeure(r.signed_at)}` : ""}</Badge>
+                    ) : etat.cle === "rattrapee" ? (
+                      <Badge tone="g">{etat.texte}</Badge>
                     ) : locked ? (
                       <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="lock" size={13} /> Documents requis</span>
-                    ) : future ? (
-                      <span className="hint">À venir</span>
-                    ) : (
+                    ) : etat.cle === "ouverte" ? (
                       <button className="btn sm primary" onClick={() => setSigning(r)}>Signer</button>
+                    ) : (
+                      <span className="hint">{etat.texte}</span>
                     )}
                   </div>
                 );

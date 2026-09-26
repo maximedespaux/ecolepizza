@@ -8,6 +8,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import { dateHeure } from "../lib/format.js";
+import { etatEmargement, aSignerMaintenant } from "../lib/emargementEtat.js";
 
 const SLOT = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
 const frDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" }) : "");
@@ -34,12 +35,12 @@ function EmargementStagiaire() {
   }
 
   const recs = data.records || [];
-  const pending = recs.filter((r) => !r.signed && r.date <= data.today).length;
+  const pending = recs.filter((r) => aSignerMaintenant(r, data.today)).length;
 
   return (
     <>
       <PageHead eyebrow="Émargement" title="Ma feuille de présence"
-        lead="Signez votre présence pour chaque demi-journée de formation. Une signature par matin et après-midi." />
+        lead="Signez votre présence pendant chaque demi-journée de formation : le matin à partir du début du cours, l'après-midi à partir de sa reprise, jusqu'à minuit. Une demi-journée manquée se voit avec l'école." />
       <StatusMessage status={status} />
 
       {recs.length === 0 ? (
@@ -48,7 +49,7 @@ function EmargementStagiaire() {
         <Card title={pending ? `${pending} demi-journée(s) à signer` : "Présences"}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {recs.map((r) => {
-              const future = r.date > data.today;
+              const etat = etatEmargement(r, data.today);
               return (
                 <div key={r.record_id} className="stu-row" style={{ padding: "10px 4px" }}>
                   <span className="stu-row-t">
@@ -57,12 +58,14 @@ function EmargementStagiaire() {
                       {r.program_code ? `${r.program_code} · ` : ""}{r.program_title || ""}
                     </span>
                   </span>
-                  {r.signed ? (
+                  {etat.cle === "signee" ? (
                     <Badge tone="g">Signé{r.signed_at ? ` · ${dateHeure(r.signed_at)}` : ""}</Badge>
-                  ) : future ? (
-                    <span className="hint">À venir</span>
-                  ) : (
+                  ) : etat.cle === "rattrapee" ? (
+                    <Badge tone="g">{etat.texte}</Badge>
+                  ) : etat.cle === "ouverte" ? (
                     <button className="btn sm primary" onClick={() => setSigning(r)}>Signer</button>
+                  ) : (
+                    <span className="hint">{etat.texte}</span>
                   )}
                 </div>
               );

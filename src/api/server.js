@@ -248,6 +248,17 @@ app.listen(port, () => {
     setTimeout(relancer, 30 * 1000).unref?.();
     setInterval(relancer, 5 * 60 * 1000).unref?.();
 
+    /* LA VEILLE SE CLÔT — une case d'émargement vide ne s'imprime « Non signé » qu'une fois son jour
+       passé, et la feuille archivée ne se refait qu'à chaque signature : sans ce passage, le coffre
+       gardait les cases blanches du dernier jour d'une session (lib/emargement.js, `cloreLaVeille`).
+       Toutes les heures ; la fonction ne travaille qu'une fois par veille. */
+    const { cloreLaVeille } = require('./lib/emargement.js');
+    const clore = () => cloreLaVeille({ conn: require('./config/database.js').promise() })
+        .then((n) => { if (n) console.log(`[émargement] ${n} feuille(s) de la veille close(s)`); })
+        .catch((err) => console.error('Clôture de la veille :', err.message));
+    setTimeout(clore, 2 * 60 * 1000).unref?.();
+    setInterval(clore, 60 * 60 * 1000).unref?.();
+
     /* « FORMATION À VALIDER » — un dossier à 100 %, session terminée, dont la formation n'est
        pas encore marquée terminée (lib/relancesFinFormation.js). TOUTES LES SIX HEURES : la
        question ne change qu'une fois par jour, et une alerte posée reste jusqu'à ce qu'on la

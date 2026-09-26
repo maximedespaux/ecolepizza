@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
-**2055 tests — 2048 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2082 tests — 2075 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -183,7 +183,28 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)** — et l'outil `harmoniser-modeles.js` à lancer
+## 4. Migrations — **la 184 et la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)** — et l'outil `harmoniser-modeles.js` à lancer
+
+**184 est À JOUER, ET AVANT DE DÉPLOYER LE CODE** (`184_emargement_rattrapage.sql`, le rattrapage d'une demi-journée
+d'émargement par l'école — revue des feuilles d'émargement du 2026-09-26). Trois colonnes sur `attendance_record` :
+`rattrapage_motif`, `rattrapage_par`, `rattrapage_le`. **Décidé par l'école le même jour : le stagiaire ne signe plus
+que PENDANT la demi-journée**, de son heure de début (horaires de la formation ; 8h30 / 13h30 à défaut) jusqu'à minuit
+(`fenetreSignature`, lib/emargement.js) — relevé sur les deux sessions du 14/09 : sept après-midi signés dès 8h40, et
+quinze signatures sur cinquante faites le lendemain ; une signature ne se remplace plus. Une demi-journée manquée se
+RATTRAPE par le personnel (Sessions → Émargement, « Rattraper »), avec un motif imprimé dans la case et le nom de qui
+l'a enregistrée ; le stagiaire peut signer sur le poste de l'école, sinon la présence est attestée sans signature.
+POURQUOI AVANT : la fenêtre, elle, est dans le code — déployé sans la 184, un oubli ne se rattrape pas (503) tant qu'elle
+n'est pas jouée. Jouée avant, elle ne gêne pas l'ancien code (colonnes nulles, que personne ne lit). **Elle se vérifie
+par l'API** : rattraper une demi-journée, puis `GET /api/attendance/:sessionId` — la présence porte `rattrapage_motif`.
+Ou une requête, qui doit rendre 3 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='attendance_record' AND column_name IN ('rattrapage_motif','rattrapage_par','rattrapage_le');`
+⚠️ Son revert efface motifs et auteurs ; une présence attestée sans signature redevient une case vide sur les feuilles
+régénérées. Le reste de la revue est dans le code, sans migration : les demi-journées suivent les HORAIRES (« 17h00 -
+19h00 » est un après-midi ; « Mettre à jour les feuilles » retire une demi-journée hors horaires si elle ne porte ni
+signature ni intervenant) ; la feuille imprime le lieu de la SESSION, la déclaration d'activité, l'employeur, « Non
+signé » dans une case vide d'un jour clos, un total d'heures, et se date de sa dernière signature ; la veille se clôt
+chaque nuit (`cloreLaVeille`, server.js) ; `PATCH /attendance/record/:id` (présent sans signature ni motif) est retiré.
+Tests : `emargement-feuille.test.js`.
 
 **L'OUTIL `database/tools/harmoniser-modeles.js` EST À LANCER** (la charte des documents, demandée le 2026-09-26 :
 « comme le devis RS7404 retravaillé, fais tous les autres »). Il applique `lib/charteDocuments.js` à DIX modèles —
