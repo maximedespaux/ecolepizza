@@ -47,7 +47,7 @@ test('le canevas s\'affiche dans ses propres proportions, et la fenêtre convert
     const ratio = /aspectRatio: "(\d+) \/ (\d+)"/.exec(modale);
     assert.ok(ratio, 'aspect-ratio affiché');
     /* Les MÊMES proportions : sinon le tracé serait étiré dans un seul sens, et la signature
-       enregistrée — que le rendu PDF étire encore dans son cadre — sortirait déformée. */
+       enregistrée sortirait déformée — sur l'écran comme dans chaque PDF. */
     assert.deepStrictEqual([Number(ratio[1]), Number(ratio[2])], [w, h]);
     assert.match(modale, /height: "auto"/);
     assert.match(modale, /versCanevas\(e\.touches \? e\.touches\[0\] : e, mesuresCanevas\(c\)\)/);

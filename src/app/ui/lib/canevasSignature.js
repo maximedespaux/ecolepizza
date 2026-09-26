@@ -10,9 +10,8 @@
  *
  * On convertit donc — et avec le MÊME rapport en largeur et en hauteur, parce que l'affichage
  * garde les proportions du canevas (cf. SignatureModal) : l'image enregistrée reste un 520 × 150
- * où la signature a la forme tracée. Le rendu PDF étire l'image dans son cadre sans respecter ses
- * proportions ; changer les dimensions du canevas selon l'écran aurait déformé les signatures
- * faites sur téléphone.
+ * où la signature a la forme tracée, quel que soit l'écran. (Le rendu PDF, lui, étirait en plus
+ * l'image dans son cadre ; il garde ses proportions depuis le 2026-09-26 — lib/imagesPdf.js.)
  *
  * La bordure du canevas est retirée avant la mise à l'échelle : la zone de dessin commence à
  * l'intérieur du trait.

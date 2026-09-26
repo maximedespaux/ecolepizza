@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { imagesLisiblesParLibreOffice } = require('./imagesPdf.js');
 
 let cachedBin;
 function findSoffice() {
@@ -88,7 +89,9 @@ function docxToPdf(docxBuffer) {
  * @param {boolean} [pdfa] exporter en PDF/A-3 — réservé aux factures, cf. FILTRE_PDFA3
  */
 function htmlToPdf(html, pdfa) {
-    return convertToPdf(Buffer.from(html, 'utf8'), 'html', pdfa);
+    /* LibreOffice n'ouvre pas une image WebP en `data:` — il imprime une icône cassée — mais l'ouvre
+       dans un SVG : on l'y enveloppe ici, porte unique de tous les PDF (lib/imagesPdf.js). */
+    return convertToPdf(Buffer.from(imagesLisiblesParLibreOffice(html), 'utf8'), 'html', pdfa);
 }
 
 module.exports = { docxToPdf, htmlToPdf, convertToPdf, findSoffice };
