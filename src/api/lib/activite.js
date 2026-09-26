@@ -37,6 +37,9 @@ const SECTION_PAR_ENTITE = {
     RemiseDocument: '/stagiaires',
     Company: '/entreprises',
     TrainingSession: '/sessions', AttendanceSheet: '/sessions',
+    /* Le rattrapage d'une présence se fait dans la grille d'émargement de la session : la rubrique
+       suit le GESTE. Son `entity_id` est la PRÉSENCE — pas de lien de détail (DETAIL_PAR_ENTITE). */
+    AttendanceRecord: '/sessions',
     Invoice: '/factures', BillingProfile: '/reglages-facturation',
     AccountingSettings: '/comptabilite', Expense: '/comptabilite', RevenueExtra: '/comptabilite',
     MaterialSale: '/ventes', InventoryItem: '/ventes',

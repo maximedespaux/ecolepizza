@@ -32,9 +32,11 @@ test('la pastille compte ce qui attend une action, par onglet', () => {
     /* Parcours : à fournir (todo) ou à renvoyer (refused) — même règle que « en cours ». */
     assert.match(page, /const parcoursAFaire = etapes\.filter\(\(e\) => e\.etat === "todo" \|\| e\.etat === "refused"\)\.length;/);
     /* Émargement : signable MAINTENANT — ni signé, ni à venir, ni verrouillé. Verrouillé → 0,
-       parce que les documents à signer d'abord sont déjà comptés côté parcours. */
+       parce que les documents à signer d'abord sont déjà comptés côté parcours. Depuis le
+       2026-09-26, « maintenant » est la fenêtre du serveur (lib/emargementEtat.js) : une
+       demi-journée passée n'est plus signable par le stagiaire, elle ne compte donc plus. */
     assert.match(page, /const emargAFaire = emgGate\.locked \? 0/);
-    assert.match(page, /\.filter\(\(r\) => !r\.signed && r\.date <= \(data\?\.today \|\| ""\)\)\.length/);
+    assert.match(page, /\.filter\(\(r\) => aSignerMaintenant\(r, data\?\.today \|\| ""\)\)\.length/);
     /* La pastille ne s'affiche qu'au-delà de zéro : un onglet sans rien à faire n'en porte pas. */
     assert.match(page, /\{t\.n > 0 && <span className="tab-bulle"/);
     /* La bulle a un libellé accessible : un simple nombre ne dit rien à qui l'écoute. */

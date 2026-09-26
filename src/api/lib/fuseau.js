@@ -37,4 +37,20 @@ function decalageCourant(zone = FUSEAU) {
     return `${signe}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
 }
 
-module.exports = { FUSEAU, decalageCourant };
+/**
+ * Le jour (AAAA-MM-JJ) et l'heure (en minutes) dans le fuseau de l'organisme.
+ * LE SERVEUR TOURNE EN UTC : `new Date().getHours()` y rend deux heures de moins qu'à Lannemezan
+ * l'été, et la date de la veille entre minuit et deux heures.
+ *
+ * Vivait dans lib/relancesEmargement.js ; elle sert désormais aussi à la fenêtre de signature du
+ * stagiaire et à la feuille imprimée (lib/emargement.js), qui ne peuvent pas dépendre des relances.
+ */
+function maintenantA(zone = FUSEAU, instant = new Date()) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(instant).map((x) => [x.type, x.value]));
+    return { jour: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+}
+
+module.exports = { FUSEAU, decalageCourant, maintenantA };

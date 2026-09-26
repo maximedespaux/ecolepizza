@@ -51,7 +51,7 @@ test('une plage se lit en entier, ou pas du tout', () => {
 
 test('la feuille imprime les heures AU-DESSUS de la signature, et l\'aperçu fait pareil', () => {
     const E = lire('lib/emargement.js');
-    assert.match(E, /const cell = \(dataUrl, applies, heures\) =>/);
+    assert.match(E, /const cell = \(dataUrl, applies, heures, etat = \{\}\) =>/);
     assert.match(E, /const h = heures \? `<div class="hr">\$\{esc\(heures\)\}<\/div>` : '';/);
     /* AU-DESSUS, PAS À CÔTÉ : une colonne de demi-journée fait 12 à 20 mm, deux informations
        côte à côte n'y tiendraient pas. */
@@ -62,8 +62,12 @@ test('la feuille imprime les heures AU-DESSUS de la signature, et l\'aperçu fai
 
     /* UNE SEULE REQUÊTE POUR LES DEUX CHEMINS. Elle vivait en double — la feuille archivée et son
        aperçu — et n'ajouter les heures qu'à l'une aurait donné un aperçu qui ne ressemble pas au
-       PDF : le défaut le plus coûteux ici, puisqu'on ne le voit qu'une fois le document signé. */
-    assert.strictEqual((E.match(/chargerIntervenants\(conn, e\.session_id\)/g) || []).length, 2);
+       PDF : le défaut le plus coûteux ici, puisqu'on ne le voit qu'une fois le document signé.
+       Depuis le 2026-09-26, TOUT le chargement est commun (`chargerFeuille`) : les intervenants n'y
+       sont plus lus qu'une fois, et les deux chemins passent par lui. */
+    assert.strictEqual((E.match(/chargerIntervenants\(conn, e\.session_id\)/g) || []).length, 1);
+    assert.strictEqual((E.match(/await chargerFeuille\(conn, orgId, enrollmentId\)/g) || []).length, 2,
+        'la feuille archivée ET le document signé lisent la même feuille');
     assert.strictEqual((E.match(/JOIN session_intervenant_slot sis ON sis\.session_intervenant_id = si\.id/g) || []).length, 1,
         'la requête des intervenants ne doit plus exister qu’en un exemplaire');
     assert.match(E, /heuresDe: \(k\) => iv\.heures\[k\] \|\| '',/);

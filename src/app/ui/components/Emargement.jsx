@@ -6,6 +6,7 @@ import { UserContext } from "../context/UserContext.jsx";
 import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
+import RattrapageModal from "./RattrapageModal.jsx";
 import { initials, dateHeure } from "../lib/format.js";
 
 const SLOT_SHORT = { MATIN: "Matin", APRES_MIDI: "Après-m.", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
@@ -24,6 +25,7 @@ function Emargement({ sessionId, feuilleVisee = null }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [signSheetRec, setSignSheetRec] = useState(null); // feuille que le formateur signe
+  const [rattrapage, setRattrapage] = useState(null); // { rec, sheet, learner } : présence à rattraper
   const carteRef = useRef(null);
   const dejaPlace = useRef(null); // la feuille vers laquelle on a déjà défilé (une seule fois)
 
@@ -80,7 +82,10 @@ function Emargement({ sessionId, feuilleVisee = null }) {
     setBusy(true);
     setStatus(null);
     try {
-      await generateAttendance(sessionId);
+      /* Le serveur dit ce qu'il a fait : demi-journées ajoutées, retirées (hors des horaires de la
+         formation), ou gardées parce qu'elles portent déjà une signature. */
+      const r = await generateAttendance(sessionId);
+      if (r && r.message) setStatus({ type: "success", message: r.message });
       await load();
     } catch (e) {
       setStatus({ type: "error", message: e.message });
@@ -147,6 +152,7 @@ function Emargement({ sessionId, feuilleVisee = null }) {
                     {s.date.slice(8, 10)}/{s.date.slice(5, 7)}<br /><span style={{ fontWeight: 400, textTransform: "none" }}>{SLOT_SHORT[s.slot]}</span>
                   </th>
                 ))}
+                <th style={{ textAlign: "center" }} title="Demi-journées signées ou rattrapées, sur le total">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -158,21 +164,40 @@ function Emargement({ sessionId, feuilleVisee = null }) {
                   </td>
                   {sheets.map((s) => {
                     const rec = byKey[`${l.id}|${s.id}`];
+                    /* RATTRAPÉE par l'école (migration 184) : une coche d'une autre couleur, le motif au
+                       survol — c'est ce que la feuille imprime dans la case. */
+                    const motif = rec && rec.rattrapage_motif
+                      ? `Rattrapage : ${rec.rattrapage_motif}${rec.rattrapage_par ? ` (${rec.rattrapage_par})` : ""}` : null;
                     return (
                       <td key={s.id} style={{ textAlign: "center" }}>
-                        {!rec ? "-" : rec.has_signature ? (
+                        {!rec ? "-" : motif ? (
+                          <span title={`${motif}${rec.has_signature ? " · signé sur le poste de l'école" : " · présence attestée sans signature"}`} style={{ color: "#c07a1a", fontSize: 15 }}><Icon name="check" size={15} /></span>
+                        ) : rec.has_signature ? (
                           <span title={`Signé par ${rec.signer_name || l.last_name}${rec.signed_at ? ` · ${dateHeure(rec.signed_at)}` : ""}`} style={{ color: "#2e9e5b", fontSize: 15 }}><Icon name="check" size={15} /></span>
+                        ) : s.etat === "close" ? (
+                          /* LA DEMI-JOURNÉE EST CLOSE : le stagiaire ne peut plus la signer (décidé par
+                             l'école le 2026-09-26). Seule l'école la rattrape, avec un motif. */
+                          <button className="btn sm ghost" title="Demi-journée terminée sans signature : enregistrer la présence, avec un motif"
+                            onClick={() => setRattrapage({ rec, sheet: s, learner: l })}>Rattraper</button>
+                        ) : s.etat === "ouverte" ? (
+                          <button className="btn sm ghost" style={{ padding: "2px 6px" }}
+                            title="En cours : le stagiaire peut signer lui-même jusqu'à minuit. Sans appareil ? Enregistrez sa présence ici."
+                            aria-label={`Enregistrer la présence de ${l.last_name} ${l.first_name}`}
+                            onClick={() => setRattrapage({ rec, sheet: s, learner: l })}><Icon name="pencil" size={13} /></button>
                         ) : (
-                          <span title="En attente de la signature du stagiaire" style={{ color: "var(--dim)" }}>-</span>
+                          <span title={s.etat === "pas_encore" && s.ouvre_a ? `Signature ouverte à partir de ${s.ouvre_a}` : "À venir"} style={{ color: "var(--dim)" }}>-</span>
                         )}
                       </td>
                     );
                   })}
+                  <td style={{ textAlign: "center", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {sheets.filter((s) => { const r = byKey[`${l.id}|${s.id}`]; return r && (r.has_signature || r.rattrapage_motif); }).length}/{sheets.length}
+                  </td>
                 </tr>
               ))}
               {/* Séparateur : section formateur(s), distincte des stagiaires */}
               <tr>
-                <td colSpan={sheets.length + 1}
+                <td colSpan={sheets.length + 2}
                   style={{ padding: "12px 0 4px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderTop: "2px solid var(--border-soft)" }}>
                   Formateur{trainers.length > 1 ? "s" : ""}
                 </td>
@@ -180,7 +205,7 @@ function Emargement({ sessionId, feuilleVisee = null }) {
               {/* Une ligne de signature par formateur affecté à la session */}
               {trainers.length === 0 ? (
                 <tr>
-                  <td colSpan={sheets.length + 1} style={{ color: "var(--dim)", fontSize: 12, padding: "8px 0" }}>
+                  <td colSpan={sheets.length + 2} style={{ color: "var(--dim)", fontSize: 12, padding: "8px 0" }}>
                     Aucun formateur affecté. Ajoutez-en dans la section « Formateurs » ci-dessus.
                   </td>
                 </tr>
@@ -204,13 +229,14 @@ function Emargement({ sessionId, feuilleVisee = null }) {
                       </td>
                     );
                   })}
+                  <td />
                 </tr>
               ))}
 
               {/* Section intervenants externes (une ligne chacun, sur leurs demi-journées) */}
               {intervenants.length > 0 && (
                 <tr>
-                  <td colSpan={sheets.length + 1}
+                  <td colSpan={sheets.length + 2}
                     style={{ padding: "12px 0 4px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderTop: "2px solid var(--border-soft)" }}>
                     Intervenant{intervenants.length > 1 ? "s" : ""} externe{intervenants.length > 1 ? "s" : ""}
                   </td>
@@ -239,12 +265,23 @@ function Emargement({ sessionId, feuilleVisee = null }) {
                         </td>
                       );
                     })}
+                    <td />
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {rattrapage && (
+        <RattrapageModal
+          record={rattrapage.rec}
+          stagiaire={`${rattrapage.learner.last_name || ""} ${rattrapage.learner.first_name || ""}`.trim()}
+          demiJournee={`${rattrapage.sheet.date.slice(8, 10)}/${rattrapage.sheet.date.slice(5, 7)} ${SLOT_SHORT[rattrapage.sheet.slot] || ""}`}
+          onDone={(message) => { setRattrapage(null); setStatus({ type: "success", message }); load(); }}
+          onClose={() => setRattrapage(null)}
+        />
       )}
 
       {signSheetRec && (

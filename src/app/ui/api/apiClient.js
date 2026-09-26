@@ -202,6 +202,10 @@ export function setSessionTrainers(id, user_ids) {
 export function signAttendanceSheet(sheetId, payload) {
   return request(`/attendance/sheet/${sheetId}/sign`, { method: "POST", body: JSON.stringify(payload) });
 }
+// Rattrapage d'une demi-journée non signée par le stagiaire : { motif, signature_data? } (migration 184).
+export function rattraperEmargement(recordId, payload) {
+  return request(`/attendance/record/${recordId}/rattrapage`, { method: "POST", body: JSON.stringify(payload) });
+}
 // Émargement du stagiaire (espace) : liste + signature d'une demi-journée.
 export function getMyEmargement() {
   return request("/mon-espace/emargement");
