@@ -12,6 +12,8 @@
 const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
 const { montantFr, pourcentFr } = require('./montants.js');
 const { parseDaySchedules, fmtHM } = require('./emargement.js');
+const { cadrer } = require('./imagesPdf.js');
+const { rognerSignatureEnCache } = require('./rognerSignature.js');
 /* Le barème RETRADUIT la mesure pour le tableau de détail : « 100 » seul ne dirait pas s'il
    s'agit de secondes, de points ou d'un index de niveau. Même source que la saisie. */
 const { pointsPour, maximumExercice } = require('./bareme.js');
@@ -1165,7 +1167,18 @@ const SPACER_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALA
 // Cadre de signature dimensionné par les attributs width/height d'une <img> (seule
 // forme respectée au rendu PDF). `w`/`h` (px) facultatifs — défaut SIG_W × SIG_H.
 // Empreinte identique que le cadre soit signé ou vide (la mise en page ne bouge pas).
+/* L'IMAGE GARDE SES PROPORTIONS (2026-09-26). LibreOffice ignore `object-fit` : l'image prenait la
+   boîte du cadre, et un cachet de 226 × 93 s'imprimait élargi d'un tiers dans les 200 × 64 par
+   défaut — un cachet rond devenait un ovale plat, et dans un cadre haut, le texte du cachet sortait
+   tassé. L'image reçoit désormais la boîte de SES proportions (`cadrer`, lib/imagesPdf.js), et
+   `hspace` / `vspace` comblent l'écart : l'encombrement reste celui du cadre, au pixel près — éprouvé
+   au rendu, attribut par attribut. Le vide autour du trait est retiré d'abord, comme sur la feuille
+   d'émargement (lib/rognerSignature.js : PNG seulement, jamais plus de quatre fois plus grand) ; la
+   signature enregistrée n'est pas touchée. */
 function signatureBox(dataUrl, label, w, h) {
+    return cadreDeSignature(dataUrl, label, w, h, true);
+}
+function cadreDeSignature(dataUrl, label, w, h, rogner) {
     const bw = Number(w) || SIG_W, bh = Number(h) || SIG_H; // dimensions FORCÉES en nombre (jamais injectables)
     /* #2 XSS — ces jetons sont RAW (non échappés par htmlfill), et une « signature » est une donnée
        fournie par l'utilisateur. On échappe donc pour le CONTEXTE ATTRIBUT (dont `"`) : sinon un
@@ -1174,11 +1187,31 @@ function signatureBox(dataUrl, label, w, h) {
        validation à l'écriture (signDocument / signRepDocument / setRepStamp / submitSign). */
     const a = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     if (dataUrl && /^data:image\//.test(dataUrl)) {
-        return `<img src="${a(dataUrl)}" alt="${a(label)}" width="${bw}" height="${bh}" `
+        const src = rogner ? rognerSignatureEnCache(dataUrl) : dataUrl;
+        const c = cadrer(src, bw, bh);
+        return `<img src="${a(src)}" alt="${a(label)}" width="${c.largeur}" height="${c.hauteur}"`
+            + `${c.hspace ? ` hspace="${c.hspace}"` : ''}${c.vspace ? ` vspace="${c.vspace}"` : ''} `
             + `style="max-width:100%;object-fit:contain;vertical-align:middle" />`;
     }
     return `<img src="${SPACER_GIF}" alt="${a(label)}" width="${bw}" height="${bh}" `
         + `style="max-width:100%;border:1px dashed #b0b0b0;border-radius:6px;vertical-align:middle" />`;
+}
+
+/**
+ * UN CADRE DÉJÀ RENDU, À UNE AUTRE TAILLE. La taille choisie sur la puce (data-w / data-h) n'arrive
+ * qu'APRÈS le rendu du jeton (lib/htmlfill.js). Elle se posait en remplaçant les attributs width /
+ * height : l'image reprenait la boîte du cadre, et ses proportions étaient perdues. On relit donc
+ * l'image et le libellé, et l'on RE-REND le cadre à sa taille. Pas un cadre de signature : null.
+ *
+ * SANS LA ROGNER UNE SECONDE FOIS : elle l'a été au premier rendu, et le plafond de grossissement
+ * (quatre fois l'image d'origine) se cumulerait — un point minuscule, quatre fois, puis seize.
+ */
+function recadrerSignature(html, w, h) {
+    const m = /^<img src="([^"]*)" alt="([^"]*)" width="\d+" height="\d+"(?: hspace="\d+")?(?: vspace="\d+")? style="[^"]*" \/>$/.exec(String(html || '').trim());
+    if (!m) return null;
+    const lu = (v) => v.replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+    const src = lu(m[1]);
+    return cadreDeSignature(src === SPACER_GIF ? null : src, lu(m[2]), w, h, false);
 }
 
 // Alias historiques : clés supplémentaires produites par le moteur pour que les
@@ -1522,4 +1555,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay, horairesParJour};
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay, horairesParJour};

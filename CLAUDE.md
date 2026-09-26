@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
-**2099 tests — 2092 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2112 tests — 2105 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -156,7 +156,13 @@ la commande.
   logique que la largeur — sans l'attribut, le contenu reste centré dans une cellule haute) ;
 - **`object-fit` est ignoré** : une image prend EXACTEMENT la boîte de ses attributs `width`/`height`.
   Toutes les signatures de la feuille d'émargement sortaient écrasées (un tracé de 520 × 150 dans une
-  case presque carrée). La boîte se calcule aux proportions de l'image (`ajuster`, lib/emargement.js) ;
+  case presque carrée), et le cachet de l'école élargi d'un tiers dans les cadres de 200 × 64 des
+  documents — un cachet rond en ovale. La boîte se calcule aux proportions de l'image
+  (`ajuster` / `cadrer`, lib/imagesPdf.js), et **`hspace` / `vspace` sont honorés** : ils rendent au
+  cadre son encombrement exact (mesuré au rendu), la mise en page ne bouge pas ;
+- **une image WebP en `data:` ne s'ouvre pas** : icône d'image cassée dans le PDF — or le navigateur
+  réduit en WebP les cachets, logos et signatures déposés (lib/image.js, depuis le 2026-09-23). Le même
+  WebP s'ouvre en fichier, ou DANS UN SVG : `htmlToPdf` l'y enveloppe (`imagesLisiblesParLibreOffice`) ;
 - un `<th>` met en gras **tout** son contenu, classes comprises → `<td>` et `<b>` sur le seul intitulé ;
 - un `<p>` d'espacement juste avant un tableau reste **attaché** à ce tableau : il a fait passer un pied
   de page entier en page 2, la place restant libre. L'air se donne par les cellules ;

@@ -9,6 +9,9 @@ const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est c
 const { FUSEAU, maintenantA } = require('./fuseau.js');
 const { colonneOuNull } = require('./colonnes.js');
 const { rognerSignature } = require('./rognerSignature.js');
+/* Les proportions d'une image : lues par lib/imagesPdf.js, partagé avec les cadres de signature des
+   documents (lib/tokens.js). Réexportées plus bas, pour les tests qui les lisent ici. */
+const { dimensionsImage, ajuster } = require('./imagesPdf.js');
 
 const SLOT = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -202,52 +205,6 @@ function mergeEmargConfig(raw) {
 
 // 1 mm ≈ 3.7795 px (96 dpi) — pour les attributs width/height des images.
 const MM = 3.7795;
-
-/**
- * LES DIMENSIONS D'UNE IMAGE `data:` (PNG, JPEG, SVG), lues dans ses premiers octets → { w, h } ou null.
- *
- * POURQUOI : LibreOffice ignore `object-fit` — une image prend EXACTEMENT la boîte que ses attributs
- * `width`/`height` lui donnent. Les signatures se tracent sur un canevas de 520 × 150
- * (SignatureModal) et s'imprimaient dans une case presque carrée : chaque signature de chaque
- * feuille sortait écrasée de moitié en largeur, étirée en hauteur. Le cachet et le logo, de
- * proportions quelconques, pareil. On calcule donc la boîte « contenue » nous-mêmes (`ajuster`).
- */
-function dimensionsImage(dataUrl) {
-    const m = /^data:image\/([a-z+]+);base64,(.*)$/i.exec(String(dataUrl || ''));
-    if (!m) return null;
-    const type = m[1].toLowerCase();
-    try {
-        if (type === 'png') {
-            const b = Buffer.from(m[2].slice(0, 44), 'base64'); // l'en-tête IHDR tient dans les 33 premiers octets
-            return b.length >= 24 ? { w: b.readUInt32BE(16), h: b.readUInt32BE(20) } : null;
-        }
-        if (type === 'svg+xml') {
-            const svg = Buffer.from(m[2], 'base64').toString('utf8');
-            const vb = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(svg);
-            if (vb) return { w: Number(vb[1]), h: Number(vb[2]) };
-            const w = /\bwidth="([\d.]+)/.exec(svg); const h = /\bheight="([\d.]+)/.exec(svg);
-            return w && h ? { w: Number(w[1]), h: Number(h[1]) } : null;
-        }
-        if (type === 'jpeg' || type === 'jpg') {
-            const b = Buffer.from(m[2], 'base64');
-            for (let i = 2; i + 9 < b.length;) {
-                if (b[i] !== 0xff) return null;
-                const marqueur = b[i + 1];
-                // SOF0 à SOF15, sauf DHT (C4), JPG (C8) et DAC (CC) : la hauteur puis la largeur.
-                if (marqueur >= 0xc0 && marqueur <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marqueur)) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
-                i += 2 + b.readUInt16BE(i + 2);
-            }
-        }
-    } catch { /* image illisible : la boîte entière */ }
-    return null;
-}
-/** La plus grande boîte aux proportions de l'image qui tient dans `largeur` × `hauteur` (en mm). */
-function ajuster(dataUrl, largeur, hauteur) {
-    const d = dimensionsImage(dataUrl);
-    if (!d || !d.w || !d.h) return { largeur, hauteur };
-    const k = Math.min(largeur / d.w, hauteur / d.h);
-    return { largeur: d.w * k, hauteur: d.h * k };
-}
 
 /**
  * LES INTERVENANTS D'UNE SESSION, avec leurs demi-journées ET leurs heures (migration 181).

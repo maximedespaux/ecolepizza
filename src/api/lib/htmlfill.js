@@ -6,7 +6,7 @@
 // Union des deux branches : `paiementRowTokens` vient de la facturation (gui), `SIG_W`/`SIG_H`
 // du dimensionnement des cadres de signature. Les quatre servent dans ce fichier, et `tokens.js`
 // les exporte tous — n'en garder qu'un jeu casserait l'autre fonctionnalité en silence.
-const { resolveTokens, RAW_TOKENS, signatureBox, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, SIG_W, SIG_H } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, recadrerSignature, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 const { CASE_STAGIAIRE } = require('./documents.js');
 const { JETONS_A_FORME, aUneForme, texteEnLignes, texteEnBlocs } = require('./texteStructure.js');
@@ -104,8 +104,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         return { w: wm ? parseInt(wm[1], 10) : SIG_W, h: hm ? parseInt(hm[1], 10) : SIG_H };
     };
     // Le cadre de signature est une <img> avec attributs width/height (défaut
-    // SIG_W × SIG_H) ; on remplace ces attributs par la taille choisie sur le jeton.
-    const resizeSig = (html, size) => String(html)
+    // SIG_W × SIG_H) ; la taille choisie sur le jeton le RE-REND (`recadrerSignature`) : remplacer
+    // ses attributs rendait à l'image la boîte du cadre, et un cachet sortait déformé. Le
+    // remplacement ne sert plus qu'à un jeton RAW qui ne serait pas un cadre de signature.
+    const resizeSig = (html, size) => recadrerSignature(html, size.w, size.h) || String(html)
         .replace(/\bwidth="\d+"/, `width="${size.w}"`)
         .replace(/\bheight="\d+"/, `height="${size.h}"`);
 

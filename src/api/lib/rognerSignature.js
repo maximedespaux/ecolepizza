@@ -2,10 +2,10 @@
  * LE VIDE AUTOUR D'UNE SIGNATURE, RETIRÉ À L'IMPRESSION.
  *
  * Une signature se trace sur un canevas de 520 × 150 (SignatureModal) et s'enregistre entière : le
- * trait, et tout ce que le doigt n'a pas touché. Sur la feuille d'émargement, l'image garde ses
- * proportions (`ajuster`, lib/emargement.js) dans une colonne de 14 à 22 mm : une signature tracée
- * au milieu du cadre n'en occupait que la moitié, l'encre sortait à quelques millimètres — et le
- * vide s'imprimait en grand.
+ * trait, et tout ce que le doigt n'a pas touché. Imprimée à ses proportions (lib/imagesPdf.js) — dans
+ * une colonne de 14 à 22 mm sur la feuille d'émargement, dans un cadre de 200 × 64 sur un document
+ * (lib/tokens.js) —, une signature tracée au milieu du canevas n'en occupait que la moitié : l'encre
+ * sortait à quelques millimètres, et le vide s'imprimait en grand.
  *
  * On rogne donc l'image au rectangle de son encre, plus une marge, AU MOMENT DU RENDU. La signature
  * enregistrée n'est pas touchée — c'est elle qui fait foi — et aucun trait ne change : seul le
@@ -155,4 +155,24 @@ function rognerSignature(dataUrl) {
     }
 }
 
-module.exports = { rognerSignature, lirePng, rectangleEncre, elargir, PIXELS_MAX, MARGE, GROSSISSEMENT_MAX };
+/* LE MÊME ROGNAGE, GARDÉ EN MÉMOIRE : les jetons d'un document se calculent TOUS à chaque rendu —
+   la signature du stagiaire et le cachet de l'organisme compris, que le modèle les emploie ou non
+   (lib/tokens.js, `resolveTokens`). Le cachet est le même pour tous les documents : on ne le
+   relit pas cent fois pour une liste. Clé : l'image elle-même ; les plus anciennes sortent. */
+const CACHE_MAX = 32;
+const cache = new Map();
+function rognerSignatureEnCache(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return dataUrl;
+    if (cache.has(dataUrl)) {
+        const v = cache.get(dataUrl);
+        cache.delete(dataUrl); // la plus récemment servie repasse en queue
+        cache.set(dataUrl, v);
+        return v;
+    }
+    const v = rognerSignature(dataUrl);
+    cache.set(dataUrl, v);
+    if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+    return v;
+}
+
+module.exports = { rognerSignature, rognerSignatureEnCache, lirePng, rectangleEncre, elargir, PIXELS_MAX, MARGE, GROSSISSEMENT_MAX, CACHE_MAX };

@@ -55,7 +55,9 @@ export const PROFILS = {
   piece: { maxPx: 2200, maxKo: 1500, maxDur: 2800, fond: '#fff', qualiteMin: 0.72 },
   /* Portrait de stagiaire : affiché en 40 px, jamais en grand. */
   avatar: { maxPx: 640, maxKo: 220, maxDur: 290, fond: '#fff', qualiteMin: 0.5 },
-  /* Logo et cachet de l'organisme : la transparence fait tout leur intérêt. */
+  /* Logo et cachet de l'organisme : la transparence fait tout leur intérêt. Ils partent souvent en
+     WebP, que LibreOffice n'ouvre pas tel quel (icône cassée dans le PDF) : le serveur les enveloppe
+     d'un SVG avant chaque PDF — lib/imagesPdf.js. Ne pas retirer l'un sans l'autre. */
   marque: { maxPx: 900, maxKo: 320, maxDur: 900, fond: null, qualiteMin: 0.6 },
   /* Image glissée dans un e-mail : elle voyage en pièce jointe avec chaque message. */
   mail: { maxPx: 1200, maxKo: 400, maxDur: 590, fond: '#fff', qualiteMin: 0.45 },
