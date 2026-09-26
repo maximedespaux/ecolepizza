@@ -8,17 +8,17 @@ const { plageFr } = require('./plageHoraire.js');
 const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est chiffré au repos
 const { FUSEAU, maintenantA } = require('./fuseau.js');
 const { colonneOuNull } = require('./colonnes.js');
+const { rognerSignature } = require('./rognerSignature.js');
 
 const SLOT = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/* LA SOURCE D'UNE IMAGE, ÉCHAPPÉE POUR L'ATTRIBUT — `"` compris. Une signature est une donnée fournie
+   par le stagiaire : glissée telle quelle dans `src="…"`, un `"` fermait l'attribut, et la suite
+   s'écrivait dans la feuille (même défaut, même remède que `signatureBox`, lib/tokens.js). Les
+   chemins d'écriture valident aussi le format (`estSignatureValide`) ; ceci est la défense au rendu. */
+const attr = (s) => esc(s).replace(/"/g, '&quot;');
 
-// Date FR courte : « Lun. 06/07 ». Date FR longue : « 06/07/2026 ».
-const DOW = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
-function frDay(iso) {
-    const d = new Date(`${iso}T12:00:00`);
-    if (Number.isNaN(d.getTime())) return iso;
-    return `${DOW[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+// Date FR longue : « 06/07/2026 ». (Le jour d'une colonne s'écrit en toutes lettres : `jourLong`.)
 function frDate(iso) {
     const d = new Date(`${iso}T12:00:00`);
     if (Number.isNaN(d.getTime())) return iso || '';
@@ -204,6 +204,52 @@ function mergeEmargConfig(raw) {
 const MM = 3.7795;
 
 /**
+ * LES DIMENSIONS D'UNE IMAGE `data:` (PNG, JPEG, SVG), lues dans ses premiers octets → { w, h } ou null.
+ *
+ * POURQUOI : LibreOffice ignore `object-fit` — une image prend EXACTEMENT la boîte que ses attributs
+ * `width`/`height` lui donnent. Les signatures se tracent sur un canevas de 520 × 150
+ * (SignatureModal) et s'imprimaient dans une case presque carrée : chaque signature de chaque
+ * feuille sortait écrasée de moitié en largeur, étirée en hauteur. Le cachet et le logo, de
+ * proportions quelconques, pareil. On calcule donc la boîte « contenue » nous-mêmes (`ajuster`).
+ */
+function dimensionsImage(dataUrl) {
+    const m = /^data:image\/([a-z+]+);base64,(.*)$/i.exec(String(dataUrl || ''));
+    if (!m) return null;
+    const type = m[1].toLowerCase();
+    try {
+        if (type === 'png') {
+            const b = Buffer.from(m[2].slice(0, 44), 'base64'); // l'en-tête IHDR tient dans les 33 premiers octets
+            return b.length >= 24 ? { w: b.readUInt32BE(16), h: b.readUInt32BE(20) } : null;
+        }
+        if (type === 'svg+xml') {
+            const svg = Buffer.from(m[2], 'base64').toString('utf8');
+            const vb = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(svg);
+            if (vb) return { w: Number(vb[1]), h: Number(vb[2]) };
+            const w = /\bwidth="([\d.]+)/.exec(svg); const h = /\bheight="([\d.]+)/.exec(svg);
+            return w && h ? { w: Number(w[1]), h: Number(h[1]) } : null;
+        }
+        if (type === 'jpeg' || type === 'jpg') {
+            const b = Buffer.from(m[2], 'base64');
+            for (let i = 2; i + 9 < b.length;) {
+                if (b[i] !== 0xff) return null;
+                const marqueur = b[i + 1];
+                // SOF0 à SOF15, sauf DHT (C4), JPG (C8) et DAC (CC) : la hauteur puis la largeur.
+                if (marqueur >= 0xc0 && marqueur <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marqueur)) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+                i += 2 + b.readUInt16BE(i + 2);
+            }
+        }
+    } catch { /* image illisible : la boîte entière */ }
+    return null;
+}
+/** La plus grande boîte aux proportions de l'image qui tient dans `largeur` × `hauteur` (en mm). */
+function ajuster(dataUrl, largeur, hauteur) {
+    const d = dimensionsImage(dataUrl);
+    if (!d || !d.w || !d.h) return { largeur, hauteur };
+    const k = Math.min(largeur / d.w, hauteur / d.h);
+    return { largeur: d.w * k, hauteur: d.h * k };
+}
+
+/**
  * LES INTERVENANTS D'UNE SESSION, avec leurs demi-journées ET leurs heures (migration 181).
  *
  * UNE SEULE DÉFINITION POUR LES DEUX CHEMINS. La même requête vivait en double — la feuille
@@ -300,7 +346,14 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
 
     const orgAddr = [org && org.address, [org && org.zip_code, org && org.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const lieuTexte = lieu || orgAddr;
-    const orgSig = cfg.show_stamp ? decrypt(org && org.signature_image) : null;
+    // Chaque image rognée une fois par feuille : le cachet revient sur chaque demi-journée de la ligne « organisme ».
+    const rognees = new Map();
+    const rogner = (v) => {
+        if (!v) return v;
+        if (!rognees.has(v)) rognees.set(v, rognerSignature(v));
+        return rognees.get(v);
+    };
+    const orgSig = cfg.show_stamp ? rogner(decrypt(org && org.signature_image)) : null;
     const orgLogo = cfg.show_logo ? (org && org.logo_image) || null : null;
 
     // ── Dimensionnement automatique (en mm) pour tenir sur UNE page ────────────
@@ -312,7 +365,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const contentW = pageW - 2 * margin;
     const contentH = pageH - 2 * margin;
     const nameW = Math.min(45, Math.max(28, contentW * 0.16)); // colonne « Nom et prénom »
-    const totalW = 16;                                          // colonne « Total »
+    const totalW = 17;                                          // colonne « Total »
     const nCols = cols.length || 1;
     // Colonnes personnalisées (avant / après la grille) : on réserve leur largeur.
     const extraCols = cfg.extra_columns || [];
@@ -331,34 +384,57 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     if (cfg.show_organization) {
         shown.push({ role: 'organisme', name: (org && org.legal_name) || 'Organisme de formation', sigOf: () => (org && org.signature_image) || null, appliesTo: () => true });
     }
+    const stagiaires = shown.filter((p) => p.role === 'stagiaire');
+    const equipe = shown.filter((p) => p.role !== 'stagiaire');
 
-    // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
     /* LES HORAIRES EN TOUTES LETTRES NE S'IMPRIMENT QUE SI LA GRILLE NE LES MONTRE PAS : le texte
        libre de la formation (« Jour 1 : 8h45 - 12h00 / … », puis « 8h00 - 12h00 / 13h00 - 16h30 »
-       sans dire pour quels jours) répétait, moins lisiblement, la ligne « Horaires » du tableau. */
+       sans dire pour quels jours) répétait, moins lisiblement, les horaires des colonnes. */
     const horairesTexte = cfg.show_horaires && e.program_horaires && !hasSched;
-    const horairesLines = horairesTexte ? String(e.program_horaires).split(/\r?\n/).length : 0;
+    const horairesLines = horairesTexte ? 1 : 0;
     const noteLines = cfg.header_note ? String(cfg.header_note).split(/\r?\n/).length : 0;
-    const lieuLines = (cfg.show_lieu && lieuTexte) ? 1 : 0;
-    const entrepriseLines = entreprise ? 1 : 0;
-    const metaLines = 2 + horairesLines + noteLines + lieuLines + entrepriseLines; // intitulé + dates + …
-    const headerH = 16 + metaLines * 4.7;                 // en-tête (titre, organisme, méta)
-    const footerH = (orgSig ? 24 : 12) + 6;               // pied (mention + cachet)
-    const theadH = 16;                                    // 2 lignes d'en-tête de tableau
-    const infoRowsH = hasSched ? 15 : 0;                  // 2 lignes récap (horaires + volume)
-    const availBody = Math.max(18, contentH - headerH - footerH - theadH - infoRowsH - 14); // marge de sécurité anti-débordement
+    // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
+    const headerH = 34 + (horairesLines + noteLines) * 4; // titre + organisme, filet, bandeau d'informations
+    const footerH = (orgSig ? 34 : 18) + 4;               // « Fait à », mention, cadre du cachet
+    const theadH = hasSched ? 17 : 10;                    // jours, demi-journées (et leurs horaires)
+    const sectionH = equipe.length ? 6 : 0;               // intertitre « Équipe pédagogique »
+    const availBody = Math.max(18, contentH - headerH - footerH - theadH - sectionH - 12); // marge de sécurité anti-débordement
     const nRows = Math.max(1, shown.length);
-    const rowH = Math.max(9, Math.min(26, availBody / nRows)); // borne haute/basse raisonnable
+    /* Borne haute : 26 mm en paysage ; en portrait, la page est haute et les colonnes étroites —
+       une case plus haute y garde une signature lisible au lieu de laisser le bas de page vide. */
+    const rowH = Math.max(9, Math.min(cfg.orientation === 'portrait' ? 34 : 26, availBody / nRows));
     const sigW = Math.max(6, colW - 3);
     const sigH = Math.max(6, rowH - 3);
     const px = (mm) => Math.round(mm * MM);
 
-    const colWpx = px(colW), nameWpx = px(nameW), rowHpx = px(rowH);
+    const colWpx = px(colW), nameWpx = px(nameW), rowHpx = px(rowH), totWpx = px(totalW);
+
+    /* ── LA MISE EN PAGE, refaite le 2026-09-26 (« améliore l'affichage de la feuille ») ──────────
+       · un EN-TÊTE en deux colonnes — le titre et la formation à gauche, l'organisme à droite (sa
+         déclaration d'activité, son adresse, son logo) — puis un BANDEAU d'informations qui se lit
+         d'un coup d'œil (stagiaire, dates, durée, lieu, entreprise), au lieu de cinq lignes grises ;
+       · les HORAIRES DANS L'EN-TÊTE DES COLONNES : chaque demi-journée porte sa plage et sa durée
+         sous « Matin » / « Après-midi ». Les lignes « Horaires » et « Volume horaire » qui
+         s'intercalaient entre les signatures disparaissent ; le total prévu coiffe la colonne
+         « Total » ;
+       · LES JOURS SE LISENT : un filet marqué ouvre chaque jour, et un jour sur deux est
+         légèrement teinté — dix colonnes de signatures ne se confondent plus ;
+       · le STAGIAIRE d'abord, puis l'ÉQUIPE PÉDAGOGIQUE sous un intertitre ;
+       · le PIED : « Fait à … » et une mention de l'émargement électronique à gauche, le cachet de
+         l'organisme dans un cadre à droite.
+       LibreOffice (CLAUDE.md § 3) : largeurs, fonds et alignements en ATTRIBUTS ; bordures en style EN
+       LIGNE, côté par côté (éprouvé : le filet gauche de 1,2 pt d'une cellule se rend). */
+    const T = { encre: '#1e2140', doux: '#6b7280', filet: '#c9ccd3', jour: '#7b8496', tete: '#eef1f5', teteJour: '#e2e7ee', teinte: '#f6f8fb', nc: '#eceff3', bandeau: '#f4f6f9' };
+    const bord = `border:0.5pt solid ${T.filet}`;
+    const debutsJour = new Set(cols.filter((c, i) => i === 0 || cols[i - 1].date !== c.date).map((c) => `${c.date}|${c.slot}`));
+    const pair = (d) => dates.indexOf(d) % 2 === 1;
+    const styleCol = (c) => `${bord}${debutsJour.has(`${c.date}|${c.slot}`) ? `;border-left:1.2pt solid ${T.jour}` : ''}`;
+
     // Cellule signature : image dimensionnée à la case, case vide, ou grisée (non concerné).
     // LibreOffice respecte mieux les attributs HTML (width/height/bgcolor) que le CSS.
     /* LES HEURES AU-DESSUS DE LA SIGNATURE (migration 181). Un intervenant externe ne suit pas
-       les horaires des stagiaires — l'expert hygiène passe de 10 h à 12 h 30 —, si bien que la
-       ligne « Horaires » du haut ne parle pas de lui. Sa case portait donc une signature muette :
+       les horaires des stagiaires — l'expert hygiène passe de 10 h à 12 h 30 —, si bien que les
+       horaires des colonnes ne parlent pas de lui. Sa case portait donc une signature muette :
        on savait QU'il était là, jamais QUAND. La plage se glisse au-dessus de l'image, et non
        à côté : la colonne fait 12 à 20 mm, deux informations côte à côte n'y tiendraient pas.
        Sans heures (cas de toutes les demi-journées d'avant la 181), rien ne s'ajoute. */
@@ -367,123 +443,169 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
        condition que l'école a posée en fermant la signature tardive au stagiaire.
        « NON SIGNÉ » dans une case vide d'un jour clos : blanche, elle se remplissait au stylo. */
     const cell = (dataUrl, applies, heures, etat = {}) => {
-        if (!applies) return `<td width="${colWpx}" height="${rowHpx}" bgcolor="#f4f4f6"></td>`;
+        const c = etat.colonne;
+        const deco = c ? ` style="${styleCol(c)}"` : '';
+        if (!applies) return `<td width="${colWpx}" height="${rowHpx}" bgcolor="${T.nc}"${deco}></td>`;
+        const att = `width="${colWpx}" height="${rowHpx}" align="center"${c && pair(c.date) ? ` bgcolor="${T.teinte}"` : ''}${deco}`;
         const h = heures ? `<div class="hr">${esc(heures)}</div>` : '';
-        const note = etat.note ? `<div class="nt">${esc(etat.note)}</div>` : '';
-        const v = decrypt(dataUrl);
+        const note = etat.note ? `<div class="nt">${esc(etat.note).replace(/\n/g, '<br/>')}</div>` : '';
+        const v = rogner(decrypt(dataUrl)); // le vide autour du trait retiré (lib/rognerSignature.js)
         /* L'IMAGE PERD LA HAUTEUR DE LA LIGNE D'HEURES, sinon la case grandit et la feuille ne
            tient plus sur une page — LibreOffice n'honore aucune hauteur de tableau (CLAUDE.md § 3),
            c'est le CONTENU qui la fait. */
         const imgH = heures ? Math.max(4, sigH - dens.sub * 0.4) : sigH;
         const imgHNote = etat.note ? Math.max(4, imgH - dens.sub * 0.8) : imgH; // …et celle du motif
-        if (v) return `<td width="${colWpx}" height="${rowHpx}">${h}<img src="${v}" width="${px(sigW)}" height="${px(imgHNote)}" style="object-fit:contain"/>${note}</td>`;
-        if (note) return `<td width="${colWpx}" height="${rowHpx}">${h}${note}</td>`;
-        if (etat.close) return `<td width="${colWpx}" height="${rowHpx}">${h}<div class="ns">Non signé</div></td>`;
-        return `<td width="${colWpx}" height="${rowHpx}">${h}</td>`;
+        const boite = ajuster(v, sigW, imgHNote); // les proportions de la signature, pas celles de la case
+        if (v) return `<td ${att}>${h}<img src="${attr(v)}" width="${px(boite.largeur)}" height="${px(boite.hauteur)}" style="object-fit:contain"/>${note}</td>`;
+        if (note) return `<td ${att}>${h}${note}</td>`;
+        if (etat.close) return `<td ${att}>${h}<div class="ns">Non signé</div></td>`;
+        return `<td ${att}>${h}</td>`;
     };
     // Cellules des colonnes personnalisées : texte fixe répété, ou case vide à remplir.
-    const exFilled = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}" height="${rowHpx}">${esc(x.text || '')}</td>`).join('');
-    const exEmpty = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}"></td>`).join('');
+    const exFilled = (arr) => arr.map((x) => `<td width="${px(x.width_mm)}" height="${rowHpx}" align="center" style="${bord}">${esc(x.text || '')}</td>`).join('');
     /* `align="left"` ET NON le CSS : LibreOffice ignore `text-align` sur une cellule (CLAUDE.md § 3,
        même famille que `width` et `valign`) — les noms sortaient centrés sous « Nom et prénom »,
-       aligné à gauche. Le formateur porte désormais son rôle, comme les autres lignes. */
+       aligné à gauche. Le nom en gras par la balise, pour la même raison. */
     const roleSub = (r) => r === 'stagiaire' ? 'Stagiaire' : r === 'formateur' ? 'Formateur' : r === 'intervenant' ? 'Intervenant' : r === 'organisme' ? 'Organisme de formation' : '';
-    const totWpx = px(totalW);
     const rowFor = (p) => `<tr>
-        <td class="nm" align="left" width="${nameWpx}" height="${rowHpx}">${esc(p.name || '')}${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${roleSub(p.role) ? `<div class="sub">${roleSub(p.role)}</div>` : ''}</td>
-        ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k), p.heuresDe ? p.heuresDe(k) : '', { note: p.noteDe ? p.noteDe(k) : '', close: close(c) }); }).join('')}${exFilled(afterEx)}
-        <td class="tot" width="${totWpx}">${esc(totalDe(p))}</td>
+        <td class="nm" align="left" width="${nameWpx}" height="${rowHpx}" style="${bord}"><b>${esc(p.name || '')}</b>${p.specialty ? `<div class="sub">${esc(p.specialty)}</div>` : ''}${roleSub(p.role) ? `<div class="sub">${roleSub(p.role)}</div>` : ''}</td>
+        ${exFilled(beforeEx)}${cols.map((c) => { const k = `${c.date}|${c.slot}`; return cell(p.sigOf(k), p.appliesTo(k), p.heuresDe ? p.heuresDe(k) : '', { note: p.noteDe ? p.noteDe(k) : '', close: close(c), colonne: c }); }).join('')}${exFilled(afterEx)}
+        <td class="tot" align="center" width="${totWpx}" style="${bord}">${esc(totalDe(p))}</td>
     </tr>`;
+    const nbColonnes = 1 + beforeEx.length + cols.length + afterEx.length + 1;
+    const intertitre = (t) => `<tr><td colspan="${nbColonnes}" align="left" valign="middle" bgcolor="${T.tete}" style="${bord}"><div class="sec">${t}</div></td></tr>`;
+    const tbodyHtml = [
+        ...stagiaires.map(rowFor),
+        ...(equipe.length ? [intertitre('Équipe pédagogique'), ...equipe.map(rowFor)] : []),
+    ].join('');
 
-    // Lignes récap (horaires / volume) : plage horaire et durée par demi-journée.
-    const infoRow = (label, fn, total = '') => `<tr class="info">
-        <td class="nm ilabel" align="left" width="${nameWpx}">${esc(label)}</td>
-        ${exEmpty(beforeEx)}${cols.map((c) => `<td width="${colWpx}">${esc(fn(c))}</td>`).join('')}${exEmpty(afterEx)}
-        <td width="${totWpx}">${esc(total)}</td>
-    </tr>`;
-    const timeCell = (c) => { const r = rangeFor(c); return r ? `${fmtHM(r[0])} - ${fmtHM(r[1])}` : ''; };
-    const volCell = (c) => { const r = rangeFor(c); return r ? fmtDur(r[1] - r[0]) : ''; };
-
-    // Assemblage : ligne « Horaires » au-dessus du stagiaire, ligne « Volume horaire » au-dessus du 1er formateur.
-    const bodyParts = [];
-    if (hasSched) bodyParts.push(infoRow('Horaires', timeCell));
-    let volDone = false;
-    for (const p of shown) {
-        if (hasSched && !volDone && p.role === 'formateur') { bodyParts.push(infoRow('Volume horaire', volCell, totalPrevu != null ? fmtDur(totalPrevu) : '')); volDone = true; }
-        bodyParts.push(rowFor(p));
-    }
-    const tbodyHtml = bodyParts.join('');
+    // L'en-tête du tableau : le jour, puis chaque demi-journée avec sa plage et sa durée.
+    const JOURS_LONGS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    const jourLong = (iso) => {
+        const d = new Date(`${iso}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return iso;
+        return `${JOURS_LONGS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+    /* DES <td> ET NON DES <th> : LibreOffice met en gras TOUT le contenu d'un <th>, classes
+       comprises — la plage et la durée sortaient aussi grasses que « Matin ». Le gras se pose à la
+       balise, sur le seul intitulé. */
+    const exTete = (arr) => arr.map((x) => `<td class="tete" rowspan="2" align="center" width="${px(x.width_mm)}" bgcolor="${T.tete}" style="${bord}"><b>${esc(x.label)}</b></td>`).join('');
+    const theadHtml = `<tr>
+            <td class="tete" rowspan="2" align="left" valign="bottom" width="${nameWpx}" bgcolor="${T.tete}" style="${bord}"><b>Nom et prénom</b></td>${exTete(beforeEx)}${dates.map((d) => `<td class="tete" colspan="${daySlots[d].length}" align="center" bgcolor="${pair(d) ? T.teteJour : T.tete}" style="${bord};border-left:1.2pt solid ${T.jour}"><b>${esc(jourLong(d))}</b></td>`).join('')}${exTete(afterEx)}
+            <td class="tete" rowspan="2" align="center" width="${totWpx}" bgcolor="${T.tete}" style="${bord}"><b>Total</b>${totalPrevu != null ? `<div class="hs">${fmtDur(totalPrevu)} prévues</div>` : ''}</td>
+        </tr>
+        <tr>${cols.map((c) => {
+            const r = rangeFor(c);
+            const plage = r ? `<div class="hs">${fmtHM(r[0])} - ${fmtHM(r[1])}</div><div class="hs">${fmtDur(r[1] - r[0])}</div>` : '';
+            return `<td class="tete" align="center" width="${colWpx}" bgcolor="${pair(c.date) ? T.teteJour : T.tete}" style="${styleCol(c)}"><b>${SLOT[c.slot] || esc(c.slot)}</b>${plage}</td>`;
+        }).join('')}</tr>`;
 
     const today = frDate(new Date().toISOString().slice(0, 10));
     const pageSize = cfg.orientation === 'portrait' ? '210mm 297mm' : '297mm 210mm';
-    const durText = [e.program_days ? `${e.program_days} jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours} h` : ''].filter(Boolean).join(' · ');
-    const dureeFrag = (cfg.show_duration && durText) ? ` · Durée : ${esc(durText)}` : '';
-    const horairesFrag = horairesTexte
-        ? `Horaires : ${esc(e.program_horaires).replace(/\r?\n/g, '<br/>')}<br/>` : '';
-    const lieuFrag = (cfg.show_lieu && lieuTexte) ? `Lieu : ${esc(lieuTexte)}` : '';
-    const entrepriseFrag = entreprise ? `${lieuFrag ? '<br/>' : ''}Entreprise : <b>${esc(entreprise)}</b>` : '';
-    const noteFrag = cfg.header_note ? `${esc(cfg.header_note).replace(/\r?\n/g, '<br/>')}<br/>` : '';
+    // Espaces insécables : « 35 h » se coupait en fin de ligne dans le bandeau d'une feuille en portrait.
+    const durText = [e.program_days ? `${e.program_days}\u00a0jour${e.program_days > 1 ? 's' : ''}` : '', e.program_hours ? `${e.program_hours}\u00a0h` : ''].filter(Boolean).join(' · ');
     const footLeft = cfg.footer_left
         ? esc(cfg.footer_left).replace(/\r?\n/g, '<br/>')
         : `Fait à ${esc(org && org.town || '')}, le ${esc(dateFeuille ? frDate(dateFeuille) : today)}`;
 
+    // L'en-tête : le titre et la formation à gauche, l'identité de l'organisme à droite.
+    const identite = [
+        orgLogo ? (() => { const b = ajuster(orgLogo, 38, 13); return `<img src="${attr(orgLogo)}" width="${px(b.largeur)}" height="${px(b.hauteur)}" style="object-fit:contain"/>`; })() : '',
+        `<div class="org">${esc(org && org.legal_name || '')}</div>`,
+        org && org.nda ? `<div class="petit">Déclaration d'activité n° ${esc(org.nda)}</div>` : '',
+        orgAddr ? `<div class="petit">${esc(orgAddr)}</div>` : '',
+    ].join('');
+    const titre = String(cfg.title || '').toLocaleUpperCase('fr-FR');
+    // Le bandeau : ce qu'on cherche d'abord sur une feuille d'émargement.
+    const infos = [
+        stagiaires[0] ? ['Stagiaire', stagiaires[0].name] : null,
+        ['Dates', `du ${frDate(e.start_date)} au ${frDate(e.end_date)}`, e.week ? `Semaine ${e.week}` : ''],
+        cfg.show_duration && durText ? ['Durée', durText] : null,
+        cfg.show_lieu && lieuTexte ? ['Lieu', lieuTexte] : null,
+        entreprise ? ['Entreprise', entreprise] : null,
+    ].filter(Boolean);
+    const bandeauSuite = [
+        horairesTexte ? `<div class="petit"><b>Horaires :</b> ${esc(e.program_horaires).replace(/\r?\n/g, ' · ')}</div>` : '',
+        cfg.header_note ? `<div class="petit">${esc(cfg.header_note).replace(/\r?\n/g, '<br/>')}</div>` : '',
+    ].join('');
+    const legende = 'Émargement électronique : chaque signature est tracée sur écran, horodatée et conservée par l\'organisme de formation.';
+
+    /* DEUX PIÈGES ÉPROUVÉS AU RENDU, dans le gabarit ci-dessous :
+       · le filet d'accent est la bordure BASSE des deux cellules de l'en-tête — un `<hr color>` noir se
+         rendait en double filet gris, et une « barre » de cellule prenait la hauteur d'une ligne ;
+       · PAS de paragraphe d'espacement avant le pied : LibreOffice le garde avec le tableau qui suit,
+         et le pied ENTIER passait en page 2 alors que la place restait. L'air vient des cellules. */
+
     return `<!doctype html><html><head><meta charset="utf-8"><style>
         @page{size:${pageSize};margin:${margin}mm}
         *{box-sizing:border-box}
-        body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:${dens.base}px;color:#1e2140;margin:0}
-        h1{font-size:15px;margin:0 0 3px;color:${cfg.accent};letter-spacing:.03em;text-transform:uppercase}
-        .head{position:relative;margin-bottom:2px}
-        .rule{border:none;border-top:2px solid ${cfg.accent};height:0;margin:5px 0 8px}
-        .logo{position:absolute;top:0;right:0;max-height:52px;max-width:180px}
-        .org{font-weight:700;font-size:11px}
-        .meta{color:#444;font-size:9.5px;line-height:1.5;margin-top:2px}
-        .meta b{color:#1e2140}
+        body{font-family:Arial,'Helvetica Neue',sans-serif;font-size:${dens.base}px;color:${T.encre};margin:0}
         table{border-collapse:collapse}
-        th,td{text-align:center;vertical-align:middle;font-size:${dens.base}px}
-        thead th{background:#f5f3f0;text-transform:uppercase;color:#555;font-size:${dens.head}px}
-        td.nm{text-align:left;font-weight:600;font-size:${dens.name}px}
-        td.nm .sub{font-weight:400;font-size:${dens.sub}px;color:#8a8f99}
-        tr.info td{background:#faf7f2;font-size:${dens.sub}px;color:#555;padding:1px 3px}
-        tr.info td.ilabel{font-weight:600;color:#333;text-align:left}
+        .titre{font-size:17px;font-weight:bold}
+        .formation{font-size:12px;font-weight:bold;margin-top:2px}
+        .code{font-weight:normal;color:${T.doux}}
+        .org{font-size:10.5px;font-weight:bold}
+        .petit{font-size:8px;color:${T.doux}}
+        .lbl{font-size:7.5px;color:${T.doux};font-variant:small-caps}
+        .val{font-size:9.5px;font-weight:bold}
+        td.tete{font-size:${dens.head}px;color:#3d4354}
+        td .hs{font-size:${dens.sub}px;color:${T.doux}}
+        td{font-size:${dens.base}px}
+        td.nm{font-size:${dens.name}px}
+        td .sub{font-size:${dens.sub}px;color:#8a8f99}
         td .hr{font-size:${dens.sub}px;color:#555;line-height:1.1;white-space:nowrap}
         td .nt{font-size:${Math.max(6.5, dens.sub - 1.5)}px;color:#555;line-height:1.05}
         td .ns{font-size:${dens.sub}px;color:#8a8f99;font-style:italic}
-        td.tot{font-weight:600}
-        .nda{font-weight:400;color:#555}
-        .foot{margin-top:10px;font-size:10px}
-        .foot td{vertical-align:bottom}
-        .stamp{text-align:center}
-        .stamp img{max-height:56px;max-width:190px;display:block;margin:0 auto 2px}
-        .stamp .cap{font-size:9px;color:#555}
+        td.tot{font-size:${dens.name}px;font-weight:bold}
+        .sec{font-size:${dens.sub}px;color:#3d4354;font-weight:bold;font-variant:small-caps;margin:0}
+        .fait{font-size:9.5px}
+        .legende{font-size:7px;color:${T.doux};margin-top:2px}
+        .cap{font-size:8px;color:#555}
     </style></head><body>
-        <div class="head">
-            ${orgLogo ? `<img class="logo" src="${orgLogo}" width="${px(40)}" height="${px(14)}" style="object-fit:contain" />` : ''}
-            <h1>${esc(cfg.title)}</h1>
-            <div class="org">${esc(org && org.legal_name || '')}${org && org.nda ? ` <span class="nda">· Déclaration d'activité n° ${esc(org.nda)}</span>` : ''}</div>
-            <div class="meta">
-                Intitulé de l'action de formation : <b>${esc(e.program_title || '')}</b> (${esc(e.program_code || '')})<br/>
-                Date(s) : <b>du ${esc(frDate(e.start_date))} au ${esc(frDate(e.end_date))}</b> — Semaine ${esc(e.week)}/${esc(e.year)}${dureeFrag}<br/>
-                ${horairesFrag}${noteFrag}${lieuFrag}${entrepriseFrag}
-            </div>
-        </div>
-        <hr class="rule" />
+        <table width="${px(tableW)}" cellspacing="0" cellpadding="${px(0.8)}" border="0"><tr>
+            <td valign="bottom" align="left" style="border-bottom:1.5pt solid ${cfg.accent}">
+                <div class="titre" style="color:${cfg.accent}">${esc(titre)}</div>
+                <div class="formation">${esc(e.program_title || '')}${e.program_code ? ` <span class="code">${esc(e.program_code)}</span>` : ''}</div>
+            </td>
+            <td valign="bottom" align="right" width="${px(Math.min(95, tableW * 0.38))}" style="border-bottom:1.5pt solid ${cfg.accent}">${identite}</td>
+        </tr></table>
+        <p style="margin:0;font-size:5px">&nbsp;</p>
+        <table width="${px(tableW)}" cellspacing="0" cellpadding="${px(1.6)}" border="0" bgcolor="${T.bandeau}"><tr>
+            ${infos.map(([l, v, s]) => `<td valign="top" align="left"><div class="lbl">${esc(l)}</div><div class="val">${esc(v)}</div>${s ? `<div class="petit">${esc(s)}</div>` : ''}</td>`).join('')}
+        </tr>${bandeauSuite ? `<tr><td colspan="${infos.length}" align="left">${bandeauSuite}</td></tr>` : ''}</table>
+        <p style="margin:0;font-size:5px">&nbsp;</p>
 
-        <table border="1" bordercolor="#c9ccd3" cellspacing="0" cellpadding="2" width="${px(tableW)}">
-            <thead>
-                <tr><th class="nm" rowspan="2" width="${nameWpx}" bgcolor="#f5f3f0" style="text-align:left">Nom et prénom</th>${beforeEx.map((x) => `<th rowspan="2" width="${px(x.width_mm)}" bgcolor="#f5f3f0">${esc(x.label)}</th>`).join('')}${dates.map((d) => `<th colspan="${daySlots[d].length}" bgcolor="#f5f3f0">${esc(frDay(d))}</th>`).join('')}${afterEx.map((x) => `<th rowspan="2" width="${px(x.width_mm)}" bgcolor="#f5f3f0">${esc(x.label)}</th>`).join('')}<th rowspan="2" width="${totWpx}" bgcolor="#f5f3f0">Total</th></tr>
-                <tr>${cols.map((c) => `<th width="${colWpx}" bgcolor="#f5f3f0">${SLOT[c.slot] || esc(c.slot)}</th>`).join('')}</tr>
-            </thead>
+        <table border="0" cellspacing="0" cellpadding="${px(0.6)}" width="${px(tableW)}">
+            <thead>${theadHtml}</thead>
             <tbody>${tbodyHtml}</tbody>
         </table>
 
-        <table cellspacing="0" cellpadding="0" width="${px(tableW)}" class="foot"><tr>
-            <td style="text-align:left">${footLeft}</td>
-            <td class="stamp" width="${px(Math.min(70, tableW * 0.35))}">
-                ${orgSig ? `<img src="${orgSig}" width="${px(44)}" height="${px(16)}" style="object-fit:contain" />` : ''}
-                ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
+        <table width="${px(tableW)}" cellspacing="${px(1.2)}" cellpadding="${px(1.8)}" border="0"><tr>
+            <td valign="top" align="left">
+                <div class="fait">${footLeft}</div>
+                <div class="legende">${esc(legende)}</div>
             </td>
+            ${orgSig || cfg.footer_caption ? `<td valign="top" align="center" width="${px(78)}" style="${bord}">
+                ${orgSig ? (() => { const b = ajuster(orgSig, 46, 17); return `<img src="${attr(orgSig)}" width="${px(b.largeur)}" height="${px(b.hauteur)}" style="object-fit:contain"/>`; })() : '<p style="margin:0">&nbsp;</p><p style="margin:0">&nbsp;</p>'}
+                ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
+            </td>` : ''}
         </tr></table>
     </body></html>`;
+}
+
+/**
+ * « Jean-Jacques DESPAUX » → « J.-J. DESPAUX » : le nom de qui a rattrapé une demi-journée tient
+ * dans une case de 20 mm. Les mots en capitales sont le nom de famille et restent entiers ; sans
+ * capitales, le dernier mot fait office de nom. Une adresse e-mail (compte sans nom) reste telle quelle.
+ */
+function initiales(nom) {
+    const mots = String(nom || '').trim().split(/\s+/).filter(Boolean);
+    if (mots.length < 2 || mots.some((m) => m.includes('@'))) return mots.join(' ');
+    const capitales = (m) => m === m.toLocaleUpperCase('fr-FR') && /[A-ZÀ-Ý]/.test(m);
+    const famille = mots.some(capitales) ? mots.filter(capitales) : [mots[mots.length - 1]];
+    const prenoms = mots.filter((m) => !famille.includes(m));
+    const court = prenoms.map((p) => p.split('-').map((x) => `${x[0].toLocaleUpperCase('fr-FR')}.`).join('-')).join(' ');
+    return [court, ...famille].filter(Boolean).join(' ');
 }
 
 /**
@@ -579,7 +701,11 @@ async function chargerFeuille(conn, orgId, enrollmentId, { instant = new Date(),
     for (const r of rows) {
         const k = `${r.date}|${r.slot}`;
         if (r.signature_data) learnerSig[k] = r.signature_data;
-        if (r.rattrapage_motif) rattrapage[k] = `Rattrapage : ${r.rattrapage_motif}${r.rattrapage_par ? ` (${r.rattrapage_par})` : ''}`;
+        /* « Rattrapage » SUR SA PROPRE LIGNE, puis le motif. Coupé dans une colonne de 14 mm,
+           « Rattrapage : Sans téléphone » faisait commencer une ligne par « : » — et une insécable
+           devant le « : » rendait « Rattrapage : » plus large que la colonne : LibreOffice élargissait
+           alors la colonne entière, et serrait toutes les autres. */
+        if (r.rattrapage_motif) rattrapage[k] = `Rattrapage\n${r.rattrapage_motif}${r.rattrapage_par ? ` (${initiales(r.rattrapage_par)})` : ''}`;
     }
     const trSig = {}; const ivSig = {};
     for (const t of tsigns) {
@@ -746,6 +872,56 @@ async function buildEmargementDocHtml(conn, orgId, enrollmentId, opts = {}) {
 }
 
 /**
+ * L'APERÇU D'UN MODÈLE DE FEUILLE (Modèles → Feuille d'émargement) : une feuille d'EXEMPLE, rendue
+ * par le MÊME moteur que les vraies.
+ *
+ * L'aperçu était une imitation en React, une seconde mise en page qui ne suivait pas la première :
+ * ce qu'on réglait n'était pas ce qu'on imprimait — et la refonte du 2026-09-26 l'aurait rendu faux
+ * de bout en bout. L'ORGANISME est le vrai (nom, déclaration d'activité, adresse, logo, cachet) ; le
+ * stagiaire, l'équipe et les signatures sont FICTIFS. La semaine est celle de `aujourdHui`, vue le
+ * jeudi : trois jours clos — dont un après-midi « Non signé » et un matin rattrapé —, le jeudi matin
+ * signé, le reste à venir. Chaque état de case se voit donc d'un coup d'œil.
+ */
+const GRIBOUILLIS = [
+    'M5 30 C 15 5, 25 5, 30 25 S 45 40, 55 15 S 70 5, 80 28 S 100 35, 115 10 M12 33 L 95 18',
+    'M6 22 C 12 6, 20 6, 24 22 S 34 36, 40 18 S 52 4, 60 24 S 76 34, 84 14 S 104 8, 114 26 M20 30 L 108 24',
+    'M8 26 C 18 10, 28 34, 38 16 S 58 8, 64 26 S 84 36, 92 14 L 112 20 M14 12 L 60 12',
+];
+function signatureExemple(n) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40" preserveAspectRatio="xMidYMid meet"><path d="${GRIBOUILLIS[n % GRIBOUILLIS.length]}" fill="none" stroke="#1e2a6e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+function feuilleExemple({ org, config, aujourdHui = maintenantA().jour }) {
+    const base = new Date(`${aujourdHui}T12:00:00Z`);
+    const lundi = new Date(base);
+    lundi.setUTCDate(base.getUTCDate() - ((base.getUTCDay() + 6) % 7));
+    const jours = [0, 1, 2, 3, 4].map((i) => { const d = new Date(lundi); d.setUTCDate(lundi.getUTCDate() + i); return d.toISOString().slice(0, 10); });
+    const jeudi = jours[3];
+    const rows = jours.flatMap((date) => ['MATIN', 'APRES_MIDI'].map((slot) => ({ date, slot })));
+    const cle = (r) => `${r.date}|${r.slot}`;
+    const passees = new Set(rows.filter((r) => r.date < jeudi || (r.date === jeudi && r.slot === 'MATIN')).map(cle));
+    const manquee = `${jours[1]}|APRES_MIDI`;
+    const rattrapee = `${jours[2]}|MATIN`;
+    const intervenant = new Set([`${jours[0]}|APRES_MIDI`, `${jours[2]}|APRES_MIDI`]);
+    const participants = [
+        {
+            role: 'stagiaire', name: 'LEFEBVRE Camille', appliesTo: () => true,
+            sigOf: (k) => (passees.has(k) && k !== manquee && k !== rattrapee ? signatureExemple(0) : null),
+            noteDe: (k) => (k === rattrapee ? 'Rattrapage\nOubli de signature (J. MOREAU)' : ''),
+            presentDe: (k) => (passees.has(k) && k !== manquee),
+        },
+        { role: 'formateur', name: 'MOREAU Julien', appliesTo: () => true, sigOf: (k) => (passees.has(k) ? signatureExemple(1) : null) },
+        {
+            role: 'intervenant', name: 'GIRARD Sophie', specialty: 'Hygiène (HACCP)', appliesTo: (k) => intervenant.has(k),
+            sigOf: (k) => (intervenant.has(k) && passees.has(k) ? signatureExemple(2) : null), heuresDe: (k) => (intervenant.has(k) ? '14h00 - 16h00' : ''),
+        },
+    ];
+    const e = { program_title: "Formation d'exemple", program_code: 'EXEMPLE', start_date: jours[0], end_date: jours[4],
+        program_days: 5, program_hours: 35, program_horaires: '9h00 - 12h30 / 13h30 - 17h00' };
+    return { org: org || {}, e, rows, participants, config, lieu: null, entreprise: null, dateFeuille: jeudi, aujourdHui: jeudi };
+}
+
+/**
  * LA VEILLE SE CLÔT APRÈS MINUIT. Une case vide ne s'imprime « Non signé » qu'une fois son jour
  * clos, et la feuille archivée ne se refait qu'à chaque signature : la dernière de la veille
  * tombait AVANT minuit, et le coffre gardait des cases blanches jusqu'à la signature suivante —
@@ -771,7 +947,7 @@ async function cloreLaVeille({ conn, instant = new Date(), zone = FUSEAU, regene
 
 module.exports = {
     regenEmargement, buildEmargementDocHtml, DEFAULT_EMARG_CONFIG, mergeEmargConfig,
-    chargerFeuille, renderEmargementHtml, cloreLaVeille,
+    chargerFeuille, renderEmargementHtml, cloreLaVeille, feuilleExemple, initiales, dimensionsImage, ajuster,
     // Les demi-journées et la fenêtre de signature : UNE règle pour la feuille, les relances,
     // la signature du stagiaire et la création des feuilles.
     demiJourneesDuJour, ouverture, OUVERTURE_DEFAUT, horaireDuJour, fenetreSignature, calendrierSession,

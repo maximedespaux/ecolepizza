@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate } from "react-router-dom";
-import { getEmargementTemplates, updateEmargementTemplate, getOrganisation, updateOrganisation } from "../api/apiClient.js";
+import { getEmargementTemplates, updateEmargementTemplate, getOrganisation, updateOrganisation, emargementPreviewPdfUrl } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -17,7 +17,6 @@ export const EMARG_DEFAULTS = {
 };
 const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
 const SLOT_LABEL = { MATIN: "Matin", APRES_MIDI: "Après-midi", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
-const DENSITY_PX = { compact: { base: 8.5, name: 8.5, sub: 7.5, row: 30 }, normal: { base: 9, name: 9.5, sub: 8, row: 38 }, large: { base: 10.5, name: 11, sub: 9, row: 46 } };
 
 // Éditeur de mise en page d'un modèle de feuille d'émargement (route /modeles/emargement/:id).
 export default function EmargementEditor() {
@@ -88,7 +87,7 @@ export default function EmargementEditor() {
   return (
     <>
       <PageHead eyebrow="Modèles" title={`Feuille d'émargement, ${name || "…"}`}
-        lead="Mise en page du modèle. Les colonnes s'adaptent au nombre de jours ; la feuille tient sur une page."
+        lead="Mise en page du modèle. Les colonnes s'adaptent au nombre de jours ; la feuille tient sur une page. L'aperçu est la feuille elle-même, rendue sur un exemple."
         actions={<button className="btn ghost" onClick={() => navigate("/modeles")}><Icon name="chevron-left" size={14} aria-hidden="true" /> Retour aux documents</button>} />
       <StatusMessage status={status} />
 
@@ -128,8 +127,8 @@ export default function EmargementEditor() {
           <div className="field"><label>En-tête</label>
             <div style={{ display: "grid", gap: 8 }}>
               <Toggle k="show_duration" label="Afficher la durée (jours · heures)" />
-              <Toggle k="show_horaires" label="Afficher les horaires de la formation" />
-              <Toggle k="show_lieu" label="Afficher le lieu (adresse organisme)" />
+              <Toggle k="show_horaires" label="Horaires en toutes lettres, quand les colonnes ne les portent pas" />
+              <Toggle k="show_lieu" label="Afficher le lieu de la session" />
             </div></div>
 
           <div className="field"><label>Note d'en-tête (optionnel)</label>
@@ -167,7 +166,7 @@ export default function EmargementEditor() {
               <Toggle k="show_formateurs" label="Ligne(s) formateur(s)" />
               <Toggle k="show_intervenants" label="Ligne(s) intervenant(s) externe(s)" />
               <Toggle k="show_organization" label="Ligne organisme (signature de l'organisme)" />
-              <Toggle k="show_hours" label="Lignes récap horaires + volume" />
+              <Toggle k="show_hours" label="Horaires et durées en tête des colonnes" />
             </div></div>
 
           <div className="row2">
@@ -201,112 +200,48 @@ export default function EmargementEditor() {
         </Card>
 
         <Card title="Aperçu">
-          <EmargementPreview cfg={cfg} org={org} />
+          <ApercuPdf cfg={cfg} />
         </Card>
       </div>
     </>
   );
 }
 
-// Aperçu HTML mimant le rendu PDF avec des données d'exemple.
-export function EmargementPreview({ cfg, org }) {
-  const accent = /^#[0-9a-fA-F]{6}$/.test(cfg.accent) ? cfg.accent : "#c0392b";
-  const dens = DENSITY_PX[cfg.density] || DENSITY_PX.normal;
-  const orgAddr = [org.address, [org.zip_code, org.town].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  const today = new Date().toLocaleDateString("fr-FR");
-  const exDays = [{ label: "Lun. 06/07" }, { label: "Mar. 07/07" }];
-  const activeSlots = SLOT_ORDER.filter((s) => cfg.slots.includes(s)).filter((s) => s === "MATIN" || s === "APRES_MIDI");
-  const shownSlots = activeSlots.length ? activeSlots : ["MATIN"];
-  const cols = exDays.flatMap((d, di) => shownSlots.map((s) => ({ d: d.label, s, di })));
-  const sampleSched = [
-    { MATIN: ["8h45", "12h00"], APRES_MIDI: ["13h00", "17h15"] },
-    { MATIN: ["8h00", "12h00"], APRES_MIDI: ["13h00", "16h30"] },
-  ];
-  const toM = (t) => { const m = t.match(/(\d+)h(\d*)/); return +m[1] * 60 + (m[2] ? +m[2] : 0); };
-  const sTime = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; return r ? `${r[0]} - ${r[1]}` : ""; };
-  const sVol = (c) => { const r = sampleSched[c.di] && sampleSched[c.di][c.s]; if (!r) return ""; const d = toM(r[1]) - toM(r[0]); return `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`; };
-
-  const cell = (i, on) => on ? (
-    <td key={i} style={{ border: "1px solid #cfd2d8", height: dens.row }}>
-      {i % 2 === 0 ? <span style={{ fontFamily: "'Segoe Script','Brush Script MT',cursive", fontSize: 15, color: "#2b2f45" }}>Signé</span> : null}
-    </td>
-  ) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />;
-
-  const rows = [{ name: "LEFEBVRE Camille", sub: "Stagiaire", on: () => true }];
-  if (cfg.show_formateurs) rows.push({ name: "MOREAU Julien", sub: "Formateur", on: () => true });
-  if (cfg.show_intervenants) rows.push({ name: "GIRARD Sophie", sub: "Hygiène (HACCP)", on: (i) => i >= shownSlots.length });
-  if (cfg.show_organization) rows.push({ name: org.legal_name || "Organisme de formation", sub: "Organisme de formation", on: () => true });
-
-  const pageW = cfg.orientation === "portrait" ? 500 : 720;
-  const extra = cfg.extra_columns || [];
-  const beforeEx = extra.filter((x) => x.side !== "after");
-  const afterEx = extra.filter((x) => x.side === "after");
-  const exHead = (arr) => arr.map((x, j) => <th key={"eh" + x.side + j} rowSpan={2} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{x.label}</th>);
-  const exBody = (arr, info) => arr.map((x, j) => <td key={"eb" + x.side + j} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", padding: "2px 4px", background: info ? "#faf7f2" : undefined }}>{info ? "" : (x.text || "")}</td>);
-
+/**
+ * L'APERÇU EST LA FEUILLE ELLE-MÊME : le PDF d'une feuille d'exemple, rendu par le moteur des vraies
+ * feuilles (LibreOffice compris) avec la mise en page en cours de réglage. Il remplace une imitation
+ * en React qui suivait sa propre mise en page : ce qu'on réglait n'était pas ce qu'on imprimait.
+ * Rechargé une fraction de seconde après la dernière modification — un rendu PDF prend un instant,
+ * pas un par touche frappée.
+ */
+function ApercuPdf({ cfg }) {
+  const [url, setUrl] = useState(null);
+  const [erreur, setErreur] = useState(null);
+  const [charge, setCharge] = useState(false);
+  const cle = JSON.stringify(cfg);
+  useEffect(() => {
+    let vivant = true;
+    let cree = null;
+    const minuteur = setTimeout(() => {
+      setCharge(true);
+      setErreur(null);
+      emargementPreviewPdfUrl(JSON.parse(cle))
+        .then((u) => { if (!vivant) { URL.revokeObjectURL(u); return; } cree = u; setUrl(u); })
+        .catch((e) => { if (vivant) setErreur(e.message); })
+        .finally(() => { if (vivant) setCharge(false); });
+    }, 600);
+    return () => { vivant = false; clearTimeout(minuteur); if (cree) URL.revokeObjectURL(cree); };
+  }, [cle]);
+  const portrait = cfg.orientation === "portrait";
   return (
-    <div style={{ overflowX: "auto" }}>
-      <div style={{ background: "#fff", color: "#1e2140", padding: 16, border: "1px solid var(--border-soft)", borderRadius: 8, fontFamily: "'Helvetica Neue',Arial,sans-serif", fontSize: dens.base + 1, width: pageW }}>
-        <div style={{ position: "relative", borderBottom: `2px solid ${accent}`, paddingBottom: 8, marginBottom: 10 }}>
-          {cfg.show_logo && org.logo_image ? <img src={org.logo_image} alt="" style={{ position: "absolute", top: 0, right: 0, maxHeight: 44, maxWidth: 140, objectFit: "contain" }} /> : null}
-          <div style={{ fontSize: 16, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".03em", color: accent }}>{cfg.title || "Feuille d'émargement"}</div>
-          <div style={{ fontWeight: 700, marginTop: 2 }}>{org.legal_name}</div>
-          <div style={{ color: "#444", lineHeight: 1.5, marginTop: 3 }}>
-            Intitulé de l'action de formation : <b>Pizzaïolo Niveau I</b> (NIV1)<br />
-            Date(s) : <b>du 06/07/2026 au 07/07/2026</b>Semaine 28/2026{cfg.show_duration ? " · Durée : 2 jours · 14 h" : ""}<br />
-            {cfg.show_horaires ? <>Horaires : 9h00 - 12h30 / 13h30 - 17h00<br /></> : null}
-            {cfg.header_note ? <>{cfg.header_note}<br /></> : null}
-            {cfg.show_lieu && orgAddr ? `Lieu : ${orgAddr}` : null}
-          </div>
-        </div>
-
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead>
-            <tr>
-              <th rowSpan={2} style={{ width: 130, textAlign: "left", border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>Nom et prénom</th>
-              {exHead(beforeEx)}
-              {exDays.map((d) => (<th key={d.label} colSpan={shownSlots.length} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", textTransform: "uppercase", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{d.label}</th>))}
-              {exHead(afterEx)}
-            </tr>
-            <tr>{cols.map((c, i) => (<th key={i} style={{ border: "1px solid #cfd2d8", background: "#f5f3f0", fontSize: dens.base, color: "#555", padding: "3px 4px" }}>{SLOT_LABEL[c.s]}</th>))}</tr>
-          </thead>
-          <tbody>
-            {(() => {
-              const infoTr = (label, fn, key) => (
-                <tr key={key}>
-                  <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.sub, color: "#333", background: "#faf7f2", padding: "2px 4px" }}>{label}</td>
-                  {exBody(beforeEx, true)}
-                  {cols.map((c, i) => <td key={i} style={{ border: "1px solid #cfd2d8", fontSize: dens.sub, color: "#555", background: "#faf7f2", padding: "2px 4px" }}>{fn(c)}</td>)}
-                  {exBody(afterEx, true)}
-                </tr>
-              );
-              const out = [];
-              if (cfg.show_hours) out.push(infoTr("Horaires", sTime, "hr"));
-              let volDone = false;
-              rows.forEach((r, ri) => {
-                if (cfg.show_hours && !volDone && r.sub === "Formateur") { out.push(infoTr("Volume horaire", sVol, "vol")); volDone = true; }
-                out.push(
-                  <tr key={ri}>
-                    <td style={{ border: "1px solid #cfd2d8", textAlign: "left", fontWeight: 600, fontSize: dens.name, padding: "3px 4px" }}>{r.name}<div style={{ fontWeight: 400, fontSize: dens.sub, color: "#8a8f99" }}>{r.sub}</div></td>
-                    {exBody(beforeEx, false)}
-                    {cols.map((c, i) => r.on(i) ? cell(i, true) : <td key={i} style={{ border: "1px solid #cfd2d8", background: "#f4f4f6" }} />)}
-                    {exBody(afterEx, false)}
-                  </tr>
-                );
-              });
-              return out;
-            })()}
-          </tbody>
-        </table>
-
-        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div>{cfg.footer_left ? cfg.footer_left : `Fait à ${org.town}, le ${today}`}</div>
-          <div style={{ textAlign: "center" }}>
-            {cfg.show_stamp ? <div style={{ width: 120, height: 34, border: "1px dashed #cbd0d8", borderRadius: 4, margin: "0 auto 2px", display: "grid", placeItems: "center", color: "#aab", fontSize: 9 }}>cachet</div> : null}
-            {cfg.footer_caption ? <div style={{ fontSize: 9, color: "#555" }}>{cfg.footer_caption}</div> : null}
-          </div>
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: "var(--dim)" }}>Aperçu {cfg.orientation === "portrait" ? "portrait" : "paysage"} · marge {cfg.margin_mm} mm</div>
+    <div>
+      {erreur ? <p className="hint" style={{ color: "var(--danger, #c0392b)" }}>{erreur}</p> : null}
+      {url ? (
+        <iframe title="Aperçu de la feuille d'émargement" src={`${url}#toolbar=0&navpanes=0&view=FitH`}
+          style={{ width: "100%", aspectRatio: portrait ? "210 / 297" : "297 / 210", border: "1px solid var(--border-soft)", borderRadius: 8, background: "#fff" }} />
+      ) : !erreur ? <p className="hint">Préparation de l'aperçu…</p> : null}
+      <div style={{ marginTop: 8, fontSize: 11, color: "var(--dim)" }}>
+        {charge ? "Mise à jour de l'aperçu… · " : ""}Exemple fictif · {portrait ? "portrait" : "paysage"} · marge {cfg.margin_mm} mm
       </div>
     </div>
   );

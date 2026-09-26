@@ -107,6 +107,21 @@ export function createEmargementTemplate(payload) {
 export function updateEmargementTemplate(id, payload) {
   return request(`/emargement-templates/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
+/* L'aperçu FIDÈLE d'une mise en page de feuille d'émargement : le PDF d'une feuille d'exemple rendu
+   par le moteur des vraies feuilles (la mise en page en cours de réglage, pas encore enregistrée). */
+export async function emargementPreviewPdfUrl(config) {
+  const res = await fetch(`${API_BASE_URL}/emargement-templates/preview-pdf`, {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) {
+    let m = "Aperçu PDF impossible";
+    try { m = (await res.json()).message || m; } catch { /* ignore */ }
+    throw new Error(m);
+  }
+  return URL.createObjectURL(await res.blob());
+}
 export function deleteEmargementTemplate(id) {
   return request(`/emargement-templates/${id}`, { method: "DELETE" });
 }

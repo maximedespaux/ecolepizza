@@ -4,6 +4,7 @@ const { logAudit } = require('../lib/audit.js');
 const { regenEmargement, parseDaySchedules, demiJourneesDuJour, fenetreSignature, calendrierSession, horaireDuJour } = require('../lib/emargement.js');
 const { encrypt } = require('../lib/crypto.js');
 const { lienEmargement } = require('../lib/relancesEmargement.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI'];
 const hhmm = (min) => (min == null ? null : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`);
@@ -277,7 +278,9 @@ const rattraperPresence = async (req, res) => {
     const signature = (req.body && req.body.signature_data) || null;
     if (!motif) return res.status(422).json({ message: 'Le motif est obligatoire : il s\'imprime sur la feuille d\'émargement.' });
     if (motif.length > MOTIF_MAX) return res.status(422).json({ message: `Motif trop long (${MOTIF_MAX} caractères au plus) : il doit tenir dans la case.` });
-    if (signature && !/^data:image\/png;base64,/.test(signature)) return res.status(422).json({ message: 'Signature illisible.' });
+    /* Le motif ANCRÉ de lib/signatures.js, pas un simple préfixe : `data:image/png;base64,AA"…`
+       passait le préfixe, et la suite s'écrivait dans la feuille d'émargement. */
+    if (signature && !estSignatureValide(signature)) return res.status(422).json({ message: 'Signature invalide (image attendue).' });
     try {
         const conn = db.promise();
         const [[r]] = await conn.query(
@@ -332,6 +335,8 @@ const rattraperPresence = async (req, res) => {
  */
 const signSheet = async (req, res) => {
     const { signature_data, signer_name } = req.body || {};
+    // Une image, et rien d'autre : elle s'imprime dans la feuille d'émargement (cf. lib/signatures.js).
+    if (signature_data && !estSignatureValide(signature_data)) return res.status(422).json({ message: 'Signature invalide (image attendue).' });
     try {
         const conn = db.promise();
         const [[sheet]] = await conn.query(

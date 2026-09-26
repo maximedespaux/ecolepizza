@@ -16,6 +16,7 @@ const { regenEmargement, fenetreSignature, calendrierSession, horaireDuJour } = 
 const { resolveUnlocked, buildGraph } = require('../lib/questgraph.js');
 const { cadresQuest, possedeCadreQuest, parseCadre: parseCadreQuest, PALIER_IDS, EXPLOIT_IDS } = require('../lib/cadresQuest.js');
 const { encrypt, encryptBytes, decryptBytes } = require('../lib/crypto.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
@@ -927,6 +928,10 @@ const getMyEmargement = async (req, res) => {
  */
 const signMyEmargement = async (req, res) => {
     const { signature_data, signer_name } = req.body || {};
+    /* UNE IMAGE, ET RIEN D'AUTRE. Ce chemin enregistrait n'importe quelle chaîne, que la feuille
+       d'émargement imprimait ensuite dans un `src="…"` : un `"` y ouvrait la balise, et un stagiaire
+       pouvait écrire ce qu'il voulait sur la feuille. Même motif que les documents (lib/signatures.js). */
+    if (signature_data && !estSignatureValide(signature_data)) return res.status(422).json({ message: 'Signature invalide (image attendue).' });
     try {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
