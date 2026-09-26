@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
-**2082 tests — 2075 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2099 tests — 2092 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -153,7 +153,17 @@ la commande.
   fait la hauteur** → pour réserver de la place, on ajoute des lignes `&nbsp;<br>`
   (`lignesVides`, cf. tableau à hauteur réservée) ;
 - alignement vertical : **l'attribut** `valign="top"`, **pas** `vertical-align` en CSS (même
-  logique que la largeur — sans l'attribut, le contenu reste centré dans une cellule haute).
+  logique que la largeur — sans l'attribut, le contenu reste centré dans une cellule haute) ;
+- **`object-fit` est ignoré** : une image prend EXACTEMENT la boîte de ses attributs `width`/`height`.
+  Toutes les signatures de la feuille d'émargement sortaient écrasées (un tracé de 520 × 150 dans une
+  case presque carrée). La boîte se calcule aux proportions de l'image (`ajuster`, lib/emargement.js) ;
+- un `<th>` met en gras **tout** son contenu, classes comprises → `<td>` et `<b>` sur le seul intitulé ;
+- un `<p>` d'espacement juste avant un tableau reste **attaché** à ce tableau : il a fait passer un pied
+  de page entier en page 2, la place restant libre. L'air se donne par les cellules ;
+- `<hr color>` sort en double filet gris → une bordure basse de cellule ;
+- une espace insécable rend son groupe **insécable en largeur** : « Rattrapage : » (14 mm) a fait
+  élargir une colonne entière, et serrer toutes les autres. Dans une colonne étroite, préférer un
+  retour à la ligne.
 
 **Éditeur (Tiptap/ProseMirror)** : ne conserve que les attributs `data-*` sur les tableaux (d'où
 `data-border` / `data-width`). Un marqueur de bloc (`{#Articles}`) doit vivre **dans une cellule**,

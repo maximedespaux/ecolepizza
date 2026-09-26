@@ -55,7 +55,7 @@ test('la feuille imprime les heures AU-DESSUS de la signature, et l\'aperçu fai
     assert.match(E, /const h = heures \? `<div class="hr">\$\{esc\(heures\)\}<\/div>` : '';/);
     /* AU-DESSUS, PAS À CÔTÉ : une colonne de demi-journée fait 12 à 20 mm, deux informations
        côte à côte n'y tiendraient pas. */
-    assert.match(E, /\$\{h\}<img src="\$\{v\}"/, 'les heures précèdent l’image de signature');
+    assert.match(E, /\$\{h\}<img src="\$\{attr\(v\)\}"/, 'les heures précèdent l’image de signature');
     /* ET LA CASE NE GRANDIT PAS : LibreOffice n'honore aucune hauteur de tableau, c'est le
        CONTENU qui la fait — une ligne de plus et la feuille passe sur deux pages. */
     assert.match(E, /const imgH = heures \? Math\.max\(4, sigH - dens\.sub \* 0\.4\) : sigH;/);

@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { mergeEmargConfig } = require('../lib/emargement.js');
+const { mergeEmargConfig, renderEmargementHtml, feuilleExemple } = require('../lib/emargement.js');
+const { htmlToPdf } = require('../lib/docxpdf.js');
 
 const MIGRATION_HINT = 'Migration requise (058_emargement_template).';
 
@@ -155,4 +156,34 @@ const reorderTemplates = async (req, res) => {
     }
 };
 
-module.exports = { listTemplates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates };
+/**
+ * POST /api/emargement-templates/preview-pdf — l'aperçu FIDÈLE d'une mise en page : une feuille
+ * d'exemple rendue par le moteur des vraies feuilles, LibreOffice compris (lib/emargement.js,
+ * `feuilleExemple`). Corps : { config } — la mise en page en cours de réglage, pas encore
+ * enregistrée. L'organisme est le vrai ; personne d'autre ne l'est.
+ */
+const previewPdf = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[org]] = await conn.query('SELECT legal_name, nda, address, zip_code, town, signature_image FROM organization WHERE id = ?', [orgId]);
+        const organisme = org || {};
+        // Logo d'organisme (colonne 058) — tolérant à l'absence.
+        try {
+            const [[lg]] = await conn.query('SELECT logo_image FROM organization WHERE id = ?', [orgId]);
+            organisme.logo_image = lg ? lg.logo_image : null;
+        } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+        const html = renderEmargementHtml(feuilleExemple({ org: organisme, config: mergeEmargConfig(req.body && req.body.config) }));
+        const pdf = htmlToPdf(html);
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', 'inline; filename="apercu-emargement.pdf"');
+        res.set('Cache-Control', 'no-store');
+        res.send(pdf);
+    } catch (err) {
+        if (err && err.code === 'NO_SOFFICE') return res.status(503).json({ message: "Aperçu indisponible : LibreOffice n'est pas installé sur ce serveur." });
+        console.error('Erreur aperçu émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { listTemplates, createTemplate, updateTemplate, deleteTemplate, reorderTemplates, previewPdf };
