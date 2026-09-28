@@ -31,8 +31,9 @@ router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deleteType);
    Ces routes NE PASSENT PAS par `authorizeRoles` : le stagiaire est le premier concerné, et il
    n'est dans aucune liste de personnel. Le contrôle est fait DANS le contrôleur, sur la
    propriété du dossier — « ce dossier est-il le mien ? » — ce qu'un filtre par rôle ne sait pas
-   exprimer. Il faut donc lire `deposer`, `servirFichier` et `supprimerFichier` pour voir la
-   garde ; elle y est, et elle est plus stricte qu'un rôle. */
+   exprimer. Il faut donc lire `listDossier`, `deposer`, `servirFichier` et `supprimerFichier`
+   pour voir la garde. Le bureau, qui passe outre la propriété, y est NOMMÉ (`ROLES_PERSONNEL`) :
+   tout autre compte — ENTREPRISE, FINANCEUR — n'y a que son propre dossier. */
 router.get('/dossier/:enrollmentId', listDossier);
 router.post('/dossier/:enrollmentId/:pieceTypeId', depot.single('fichier'), deposer);
 router.get('/fichier/:id', servirFichier);
