@@ -28,7 +28,6 @@ function listeCategories(v) {
     const src = lire('lib/format.js');
     const bloc = src.slice(src.indexOf('export function listeCategories'));
     const corps = bloc.slice(0, bloc.indexOf('\n}\n') + 3).replace('export function', 'function');
-    // eslint-disable-next-line no-new-func
     return new Function(`${corps}\nreturn listeCategories(${JSON.stringify(v)});`)();
 }
 

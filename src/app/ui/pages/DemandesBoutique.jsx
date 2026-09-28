@@ -363,7 +363,7 @@ function DemandesBoutique() {
   // regarder la liste qu'il commentait.
   const [statut, setStatut] = useState(null);
   const load = () => getShopRequests(filter || undefined).then((r) => setRows(r.data || [])).catch(() => setRows([]));
-  useEffect(() => { setRows(null); load(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => { setRows(null); load(); }, [filter]);
 
   // PURGE TOTALE : supprime toutes les demandes, quel que soit leur statut. Double
   // confirmation (dont une saisie) car l'action est irréversible.

@@ -13,7 +13,6 @@ const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
 const UNITES = ["mois", "année(s)"];
 const CONTRATS = ["CDI", "CDD", "Intérim", "Saisonnier", "Apprentissage", "Indépendant / Gérant", "Fonctionnaire", "Autre"];
-const STATUTS_ENTREPRISE = ["SARL", "SAS", "SASU", "EURL", "EI", "Auto-entrepreneur", "EIRL", "SA", "Autre"];
 /* DEUX CHAMPS LIBRES PASSÉS EN LISTES. Saisis à la main, ils accumulaient « mail », « Mail »,
    « e-mail », « tel », « Tél. », « bac+2 », « Bac + 2 » : impossible de compter d'où viennent les
    contacts, ni de filtrer sur un niveau. Une liste tranche la question à la saisie. */

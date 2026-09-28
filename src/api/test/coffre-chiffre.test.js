@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { aRanger, aServir, empreinteClaire } = require('../lib/coffre.js');
+const { aRanger, aServir } = require('../lib/coffre.js');
 const outil = require('../../../database/tools/chiffrer-coffre.js');
 
 const LIRE = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');

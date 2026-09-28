@@ -180,7 +180,7 @@ export function QuestionModal({ id, moi, cadreDe, onClose, onProfil, onChange })
   useEchap(onClose);
 
   const charger = () => getPost(id).then((r) => setP(r.data)).catch(() => setP(null));
-  useEffect(() => { charger(); /* eslint-disable-next-line */ }, [id]);
+  useEffect(() => { charger(); }, [id]);
 
   async function repondre() {
     const body = reponse.trim();

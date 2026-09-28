@@ -10,8 +10,8 @@ import { PizzaDisc } from "../components/LivePizza.jsx";
 import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import { euro } from "../lib/format.js";
-import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
-import { computeBuild, gfmt } from "../lib/dough.js";
+import { getMyRecipes, createRecipe, updateRecipe, deleteRecipe } from "../api/apiClient.js";
+import { computeBuild } from "../lib/dough.js";
 import { num, SERVICES, FOURS, COOK_EXTRA, svcLabel, fourLabel, garnitureCost, garnitureItems, realisationAxes } from "../lib/garnitures.js";
 
 /**
@@ -113,7 +113,6 @@ export default function RealisationWizard() {
   }
   const shared = r.visibility === "SHARED";
   const cur = STEPS[step];
-  const ghostWhite = { background: "transparent", color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.35)" };
 
   const Picker = ({ list, sel, onPick, kindLabel, createTo }) => (
     list.length === 0 ? (

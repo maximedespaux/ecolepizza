@@ -69,12 +69,6 @@ const QUESTIONS = {
   },
 };
 
-/** Échappement CSV : une virgule ou un guillemet dans un nom casserait la colonne suivante. */
-const csvCell = (v) => {
-  const t = String(v ?? "");
-  return /[",;\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-};
-
 function SessionConsentements({ sessionId, canEdit, finalite = "partenaires" }) {
   const question = QUESTIONS[finalite] || QUESTIONS.partenaires;
   const [data, setData] = useState(null);

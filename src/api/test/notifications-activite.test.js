@@ -16,7 +16,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const {
-    SECTION_PAR_ENTITE, sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu, estEvenement } = require('../lib/activite.js');
+    sectionDeLEntite, sectionsVisibles, entitesVisibles, estLu, estEvenement } = require('../lib/activite.js');
 
 const CTRL = path.join(__dirname, '..', 'controllers');
 const NOTIF = fs.readFileSync(path.join(CTRL, 'notification.controller.js'), 'utf8');

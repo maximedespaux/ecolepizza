@@ -1,5 +1,4 @@
 import { useContext, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
@@ -11,13 +10,13 @@ import { Icon } from "../components/Icon.jsx";
 import SaveToast from "../components/SaveToast.jsx";
 import WGauge from "../components/WGauge.jsx";
 import { euro } from "../lib/format.js";
-import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
+import { getMyRecipes, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import {
   num, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, W_MIN, W_MAX,
   hydraMinForW, maxTotalForW, wUsage, NAPO_SPECS, napoSpecOf, DP_DEFAULT,
   gfmt, LEVURE_TYPES, recoLevureFull, yeastLabel, ADJONCTIONS, SUBSTITUTIONS, subOf, TIPOS, tipoOf,
-  LEVURE_STORAGE, levStorageOf, compWaterPct, computeBuild, tempFarine,
+  LEVURE_STORAGE, compWaterPct, computeBuild, tempFarine,
 } from "../lib/dough.js";
 
 /**
@@ -39,7 +38,6 @@ const parseDP = (v) => { if (!v) return {}; if (typeof v === "object") return v;
 const subsArr = (d) => (Array.isArray(d.substitutions) ? d.substitutions : (d.substitution ? [d.substitution] : []));
 
 export default function PateWizard() {
-  const nav = useNavigate();
   const [r, setR] = useState(NEW);
   const [step, setStep] = useState(0);
   const [tab, setTab] = useState("hub"); // hub | create | mine
@@ -144,7 +142,7 @@ export default function PateWizard() {
 
   // Décomposition, coût & fermentation — calcul partagé (computeBuild) avec la fiche récap.
   const patonG = Math.max(1, num(r.paton_g));
-  const { dpMode, totalDough, effNb, reste, subTotal, subBassReco, dough, prices, costLines, totalCost, costPerPaton, costPerKg, ferment } = computeBuild(r);
+  const { dpMode, totalDough, effNb, reste, dough, prices, costLines, totalCost, costPerPaton, costPerKg, ferment } = computeBuild(r);
   const setPrice = (k, v) => { if (k === "farine") setR((p) => ({ ...p, flour_price: v })); else setR((p) => ({ ...p, dough_params: { ...p.dough_params, prices: { ...(p.dough_params.prices || {}), [k]: v } } })); };
   const curSubs = subsArr(dp);
   const curAdj = dp.adjonctions || [];
@@ -712,19 +710,6 @@ function Slider({ label, val, min, max, step, set }) {
         <span className="chiffres" style={{ fontWeight: 700, color: "var(--blue)" }}>{val} %</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={val} onChange={(e) => set(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--ember1)" }} />
-    </div>
-  );
-}
-
-// Bloc de stockage/fermentation : température + temps.
-function StorageBlock({ label, ic, temp, time, setTemp, setTime, phT }) {
-  return (
-    <div style={{ padding: "11px 13px", border: "1px solid var(--border-soft)", borderRadius: 10, marginBottom: 10 }}>
-      <b style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}><Icon name={ic} size={14} /> {label}</b>
-      <div className="grid cols-2" style={{ gap: 10, marginTop: 9 }}>
-        <div className="field" style={{ marginBottom: 0 }}><label>Température (°C)</label><input className="inp" type="number" value={temp ?? ""} onChange={(e) => setTemp(e.target.value)} placeholder={phT} /></div>
-        <div className="field" style={{ marginBottom: 0 }}><label>Temps (h)</label><input className="inp" type="number" min="0" value={time ?? ""} onChange={(e) => setTime(e.target.value)} placeholder="ex. 24" /></div>
-      </div>
     </div>
   );
 }

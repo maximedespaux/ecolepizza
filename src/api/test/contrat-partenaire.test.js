@@ -40,7 +40,6 @@ function chargerFront() {
         .replace(/^export const /gm, 'const ')
         .replace(/^export function /gm, 'function ');
     const mod = {};
-    // eslint-disable-next-line no-new-func
     new Function('module', `${src}\nmodule.exports = { ajouterMois, finISO, etatContrat, frISO };`)(mod);
     return mod.exports;
 }

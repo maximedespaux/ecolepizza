@@ -1,22 +1,8 @@
 const db = require('../config/database.js');
 const { companyStepSlugs } = require('../lib/parcours.js');
 const { formationSteps } = require('./formationProgram.controller.js');
-const { parseApplies } = require('../lib/documents.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { avancementDossiers } = require('../lib/avancement.js');
-
-// Deux étapes sont des « variantes » du même jalon si elles ne peuvent JAMAIS
-// s'appliquer au même dossier (conditions incompatibles : financement, RS, hygiène
-// ou durée) ET qu'elles relèvent du même jalon (même type de document ou même rang).
-// Ex. Devis particulier / Devis entreprise / Devis RS → une seule colonne « Devis ».
-function areExclusiveVariants(a, b) {
-    if (a.quiz_id || b.quiz_id) return false;
-    // Conditions incompatibles (jamais le même dossier) — MÊME de types différents
-    // (ex. Contrat particulier / Convention entreprise) : une seule colonne « OU ».
-    const A = parseApplies(a.applies_when), B = parseApplies(b.applies_when);
-    const conflicts = (k) => A[k] != null && B[k] != null && A[k] !== B[k];
-    return conflicts('financing') || conflicts('rs') || conflicts('hygiene') || conflicts('jours');
-}
 
 // Libellé générique d'une colonne fusionnée : préfixe commun tronqué à la limite
 // d'un mot (« Devis particulier »/« Devis entreprise » → « Devis »), sinon jonction.
@@ -28,18 +14,6 @@ function mergedLabel(labels) {
     if (cut <= 0) return [...new Set(labels)].join(' / ');
     return p.slice(0, cut).trim().replace(/[\s\-–—:,/]+$/, '').trim();
 }
-
-// Libellé court par type de document (colonnes du tableau de session).
-const DOC_LABELS = {
-    FICHE_SEMAINE: "Fiche d'expression", DEVIS: 'Devis', CGV: 'CGV',
-    CONTRAT: 'Contrat', CONVENTION: 'Convention', INVITATION: 'Invitation',
-    CONVOCATION: 'Convocation', LIVRET_ACCUEIL: "Livret d'accueil",
-    TEST_POSITIONNEMENT: 'Test position.', DROIT_IMAGE: "Droit à l'image",
-    EMARGEMENT: 'Émargement', ATTESTATION_HYGIENE: 'Att. hygiène',
-    CERTIFICAT_REALISATION: 'Certificat', ATTESTATION_ASSIDUITE: "Att. assiduité",
-    DIPLOME: 'Diplôme', EVALUATION_SATISFACTION: 'Éval. satisfaction', PROGRAMME: 'Programme',
-};
-const DONE_STATUSES = ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'];
 
 // --- Utilitaires de dates (jours ouvrés + semaine ISO) ---------------------
 

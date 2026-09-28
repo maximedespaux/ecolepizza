@@ -4,7 +4,6 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import { getInventory, createItem, adjustItem, deleteItem, updateItem } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
-import Kpi from "../components/Kpi.jsx";
 import Badge from "../components/Badge.jsx";
 import { Field, SelectField } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";

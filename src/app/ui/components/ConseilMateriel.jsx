@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 import {
-  TYPES_PIZZA, ENERGIES, PETRINS,
-  energiesPour, petrinsPour, tempRequise, kgPateDepuisPizzas,
+  TYPES_PIZZA,
+  energiesPour, petrinsPour, tempRequise,
 } from "../lib/materiel.js";
 
 /**

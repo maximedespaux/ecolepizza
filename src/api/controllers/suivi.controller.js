@@ -1,10 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { avancementDossiers } = require('../lib/avancement.js');
-const { getEnabledFields, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
-const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
-const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
+const { loadEquivalences } = require('../lib/equivalence.js');
 const { logAudit } = require('../lib/audit.js');
 const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // coffre chiffré AU REPOS
 const { colonneExiste } = require('../lib/colonnes.js');

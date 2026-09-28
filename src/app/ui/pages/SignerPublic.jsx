@@ -20,7 +20,7 @@ export default function SignerPublic() {
   const [busy, setBusy] = useState(false);
 
   const load = () => getPublicSignDoc(token).then((r) => { setData(r.data); setError(null); }).catch((e) => setError(e.message));
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => { load(); }, [token]);
 
   async function onSign({ signer_name, signature_data }) {
     setBusy(true);

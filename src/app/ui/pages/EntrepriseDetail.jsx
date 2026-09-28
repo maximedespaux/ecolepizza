@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount,
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
   importDocumentFile, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
@@ -13,7 +13,6 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
-import { Requis } from "../components/Field.jsx";
 import { dateHeure, dateFr } from "../lib/format.js";
 import { documentsDeLEtape, documentsEntrepriseHorsParcours, cibleImportGroupe, signeDansLApplication } from "../lib/documentsDossier.js";
 import { ACCEPT_DOCUMENT, ACCEPT_PIECE, refusDocumentRecu } from "../lib/formatsDepot.js";
@@ -263,14 +262,6 @@ export default function EntrepriseDetail() {
     try {
       if (d.importe_le) await downloadDocumentImporte(d.id, d.fichier_nom);
       else await downloadDocumentPdf(d.id, `${d.title || "document"}.pdf`);
-    } catch (e) { setStatus({ type: "error", message: e.message }); }
-  }
-  async function companySignLink(docId) {
-    try {
-      const r = await createSignLink(docId, {});
-      const url = `${window.location.origin}/signer/${r.data.token}`;
-      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
-      setStatus({ type: "success", message: `Lien de signature du représentant copié : ${url}` });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   // Lien de signature d'un document STAGIAIRE : le représentant signe à la place du stagiaire.
