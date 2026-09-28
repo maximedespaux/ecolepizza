@@ -30,3 +30,27 @@ export const ACCEPT_PIECE = "application/pdf,image/jpeg,image/png,image/webp,.pd
  */
 export const ACCEPT_DOCUMENT = `${ACCEPT_PIECE},.doc,.docx`
   + ",application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * LES TYPES ET LE POIDS QU'ADMET LE SERVEUR pour un document reçu (`MIMES_IMPORT`,
+ * `MAX_IMPORT_OCTETS`, document.controller.js — un test les confronte). Pas pour remplacer sa garde :
+ * pour VÉRIFIER un fichier AVANT un geste qui ne se défait pas seul. Sur la fiche entreprise, une
+ * étape jamais préparée l'est avant l'import ; un fichier refusé ensuite laisserait derrière lui un
+ * document préparé que personne n'a demandé.
+ */
+export const TYPES_DOCUMENT = [
+  "application/pdf", "image/png", "image/jpeg", "image/webp",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword",
+];
+export const MAX_DOCUMENT_OCTETS = 20 * 1024 * 1024;
+
+/** Le motif de refus d'un document reçu, dans les mots du serveur — ou `null` s'il passera. */
+export function refusDocumentRecu(file) {
+  if (!file) return "Aucun fichier reçu.";
+  if (!TYPES_DOCUMENT.includes(file.type)) return "Format refusé : PDF, image (PNG, JPEG, WebP) ou document Word.";
+  // Une image est réduite avant l'envoi (`reduireSiImage`) : son poids d'origine ne dit rien.
+  if (!file.type.startsWith("image/") && file.size > MAX_DOCUMENT_OCTETS) {
+    return `Fichier trop lourd (${MAX_DOCUMENT_OCTETS / 1024 / 1024} Mo maximum).`;
+  }
+  return null;
+}

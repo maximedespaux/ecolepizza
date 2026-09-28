@@ -540,14 +540,23 @@ const listCompanyDocuments = async (req, res) => {
         const conn = db.promise();
         const orgId = req.user.organization_id;
         const params = [orgId, req.params.id];
-        let where = "organization_id = ? AND company_id = ? AND scope = 'COMPANY'";
-        if (req.query.session_id) { where += ' AND session_id = ?'; params.push(req.query.session_id); }
+        let where = "d.organization_id = ? AND d.company_id = ? AND d.scope = 'COMPANY'";
+        if (req.query.session_id) { where += ' AND d.session_id = ?'; params.push(req.query.session_id); }
+        /* LE DOCUMENT REÇU, quand il y en a un (migration 145) : son nom et sa date, jamais ses octets.
+           La fiche entreprise en a besoin depuis qu'on y importe l'exemplaire signé renvoyé par
+           l'entreprise (2026-09-28) — pour le dire (« importé le … »), et pour que « Télécharger »
+           rende CE fichier, qui fait foi, et non un PDF recomposé depuis le modèle. */
+        const importe = await colonneExiste(conn, 'document_fichier', 'document_id');
         const [rows] = await conn.query(
-            `SELECT id, type, template_slug, title, status, session_id,
-                    DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at,
-                    DATE_FORMAT(sent_at, '%Y-%m-%d %H:%i') AS sent_at,
-                    DATE_FORMAT(signed_at, '%Y-%m-%d %H:%i') AS signed_at
-             FROM generated_document WHERE ${where} ORDER BY created_at DESC`, params);
+            `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.session_id,
+                    DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS created_at,
+                    DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
+                    DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    ${importe ? "fi.nom AS fichier_nom, DATE_FORMAT(fi.importe_le, '%Y-%m-%d %H:%i') AS importe_le"
+                        : 'NULL AS fichier_nom, NULL AS importe_le'}
+             FROM generated_document d
+             ${importe ? 'LEFT JOIN document_fichier fi ON fi.document_id = d.id' : ''}
+             WHERE ${where} ORDER BY d.created_at DESC`, params);
         res.json({ data: rows });
     } catch (err) {
         if (isMissingSchema(err)) return res.json({ data: [] }); // migration 077 non jouée

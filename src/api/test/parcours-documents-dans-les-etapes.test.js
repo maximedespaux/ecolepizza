@@ -161,17 +161,21 @@ test('ENTREPRISE : les cartes portent les gestes, le formulaire s\'ouvre dans l\
     assert.match(ENTREPRISE, /onChange=\{\(e\) => \{ setViewSessionId\(e\.target\.value\); setSlugsEtapes\(null\); \}\}/);
 });
 
-test('ENTREPRISE : l\'étape de groupe n\'offre toujours que « Préparer le document »', () => {
+test('ENTREPRISE : l\'action de l\'étape de groupe reste « Préparer le document », et l\'import s\'y ajoute', () => {
     /* Décision de l'école du 2026-07-15 (f041f830) : ni « Regénérer », ni lien de signature sur
        l'étape — préparer à nouveau remplace la version non signée (nettoyage côté serveur). Les
-       gestes du document vivent sur la carte ; l'action de l'étape, elle, ne change pas. */
+       gestes du document vivent sur la carte ; l'action de l'étape, elle, ne change pas.
+       Demandé le 2026-09-28 : « Importer un document reçu », comme sur la fiche stagiaire — l'exemplaire
+       signé que l'entreprise renvoie par e-mail. Il S'AJOUTE à l'action, il ne la remplace pas. */
     assert.match(PARCOURS, /if \(s\.company_level\) return \{ label: "Préparer le document", kind: "prepare" \};/);
     assert.doesNotMatch(appelParcours, /onSignLink/);
+    assert.match(appelParcours, /onImport=\{demanderImportGroupe\}/);
 });
 
 test('ENTREPRISE : la liste des documents de groupe rend la date de signature', () => {
     /* « signé le … » sur la carte : sans la colonne dans la réponse, la trace s'arrêtait à l'envoi. */
     const CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
     const liste = CTRL.slice(CTRL.indexOf('const listCompanyDocuments'), CTRL.indexOf('const createCompanyDocument'));
-    assert.match(liste, /DATE_FORMAT\(signed_at, '%Y-%m-%d %H:%i'\) AS signed_at/);
+    // Préfixée depuis la jointure du document reçu (2026-09-28) : même colonne, même promesse.
+    assert.match(liste, /DATE_FORMAT\(d\.signed_at, '%Y-%m-%d %H:%i'\) AS signed_at/);
 });
