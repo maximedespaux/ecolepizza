@@ -17,10 +17,18 @@ l'**état de reprise**. Pour le détail (audits, dette, plan de refonte), lire `
 > manuelle.** Ce n'est plus un choix d'attente, c'est la règle.
 >
 > **Ce que ça veut dire concrètement** : aucune purge n'est écrite, `piece_depot.purge_at` reste
-> NULL partout, et un fichier ne disparaît que si quelqu'un clique sur « Supprimer » — le
-> stagiaire tant que sa pièce n'est pas validée, le personnel à tout moment (cf.
-> `supprimerFichier`, qui EST la purge manuelle). Les copies sont chiffrées au repos
-> (AES-256-GCM) et n'apparaissent en clair dans aucune sauvegarde.
+> NULL partout, et rien ne s'efface avec le temps. Un fichier ne disparaît que par un geste humain :
+> - le **retrait**, fichier par fichier, par l'école — à tout moment, pièce validée comprise : la
+>   corbeille de la revue des pièces, sur la fiche stagiaire (`supprimerFichier`, qui EST la
+>   purge manuelle) ;
+> - le **refus** de la pièce, qui efface ses fichiers et ne garde que le statut et le motif
+>   (`verifier`, depuis le 2026-09-02) ;
+> - la **suppression du dossier**, que ses pièces suivent par cascade (migration 127).
+>
+> Le stagiaire n'a **pas** de corbeille (décidé par l'école le 2026-09-28) : le serveur le laisse
+> encore retirer son propre fichier tant que la pièce n'est pas validée, mais aucun écran ne le lui
+> propose. Les copies sont chiffrées au repos (AES-256-GCM) et n'apparaissent en clair dans aucune
+> sauvegarde.
 >
 > **Ce qui reste vrai, dit une fois et pas davantage** : le principe de minimisation demande
 > qu'une donnée serve à quelque chose. Une copie conservée après vérification ne sert plus à
