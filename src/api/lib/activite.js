@@ -40,7 +40,7 @@ const SECTION_PAR_ENTITE = {
     /* Le rattrapage d'une présence se fait dans la grille d'émargement de la session : la rubrique
        suit le GESTE. Son `entity_id` est la PRÉSENCE — pas de lien de détail (DETAIL_PAR_ENTITE). */
     AttendanceRecord: '/sessions',
-    Invoice: '/factures', BillingProfile: '/reglages-facturation', MoyenPaiement: '/reglages-facturation',
+    Invoice: '/factures', BillingProfile: '/reglages-facturation',
     AccountingSettings: '/comptabilite', Expense: '/comptabilite', RevenueExtra: '/comptabilite',
     MaterialSale: '/ventes', InventoryItem: '/ventes',
     DocumentTemplate: '/modeles', DocumentCondition: '/modeles', DocumentEquivalence: '/modeles',
@@ -102,8 +102,6 @@ const ENTITES_REGLAGE = new Set([
     'partner_category',
     // Paramétrage de la maison : facturation, comptabilité, rôles, équipe, financeurs.
     'BillingProfile', 'AccountingSettings', 'Opco', 'Organization', 'AccessProfile', 'User',
-    // La liste des moyens de paiement et leur modèle de facture (migration 187) : un réglage.
-    'MoyenPaiement',
     /* LE MAILING, LES DEUX : réécrire un e-mail automatique est un réglage, et un envoi à un
        groupe n'appelle aucun geste d'un collègue — c'est fait, et ça se retrouve au journal.
        Une cloche qui sonne chez tout le personnel à chaque message envoyé aux stagiaires

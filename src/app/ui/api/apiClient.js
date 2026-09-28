@@ -195,25 +195,6 @@ export function deleteEmitter(id) {
   return request(`/emetteurs/${id}`, { method: "DELETE" });
 }
 
-// --- Moyens de paiement (Paramètres → Facturation, migration 187) ---
-/* La liste de l'école, chacun avec le modèle de facture qu'il pré-sélectionne. `disponible` faux
-   tant que la migration n'est pas jouée : la liste est alors celle d'avant, sans modèle. */
-export function getMoyensPaiement() {
-  return request("/moyens-paiement");
-}
-export function createMoyenPaiement(payload) {
-  return request("/moyens-paiement", { method: "POST", body: JSON.stringify(payload) });
-}
-export function updateMoyenPaiement(id, payload) {
-  return request(`/moyens-paiement/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-}
-export function deleteMoyenPaiement(id) {
-  return request(`/moyens-paiement/${id}`, { method: "DELETE" });
-}
-export function ordonnerMoyensPaiement(ids) {
-  return request("/moyens-paiement/ordre", { method: "PUT", body: JSON.stringify({ ids }) });
-}
-
 // --- Émargement ---
 export function getAttendance(sessionId) {
   return request(`/attendance/${sessionId}`);
