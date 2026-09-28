@@ -4,7 +4,8 @@ import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
-  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl, telechargerArchive } from "../api/apiClient.js";
+  importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl, telechargerArchive,
+  ajouterAuDossierArchives, remiseFichierUrl } from "../api/apiClient.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
@@ -19,12 +20,20 @@ import { tableauxDuSuivi, etatCase } from "../lib/grilleSuivi.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { colorOf, dateHeure } from "../lib/format.js";
+import { rangerDansLeDossier, dossierDeLaFeuille, extensionDuCoffre } from "../lib/rangementCoffre.js";
+import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 /* Les états d'une PIÈCE ne sont pas ceux d'un document : elle n'est ni envoyée ni signée,
    elle est déposée puis vérifiée. Sans ces deux entrées, le coffre affichait « VALIDEE » brut
    en gris, au milieu de libellés soignés. */
 const DOC_STATUS = { ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"],
-  VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"] };
+  VALIDEE: ["Validée", "g"], DEPOSEE: ["À vérifier", "a"],
+  // Un document REMIS (2026-09-28) : déposé par l'école, puis reçu par son destinataire.
+  REMISE: ["Remis", "b"], RECUE: ["Reçu", "g"] };
+/* Une pièce déposée ou un document remis vit dans le DOSSIER du stagiaire : il s'y ouvre, et ne se
+   supprime ni ne se télécharge d'ici — son effacement appartient au dossier. */
+const duDossier = (d) => d.source === "piece" || d.source === "remise";
 
 /* L'état d'une case de la grille. Les classes ne s'appellent PAS comme les états (`progress`…) :
    `.progress` est déjà la barre d'avancement de l'application (9 px, fond gris, débordement
@@ -377,6 +386,9 @@ function ArchivesView({ onError, onInfo }) {
   const [nouveauClasseur, setNouveauClasseur] = useState("");
   const classeurRef = useRef(null);
   const cibleClasseur = useRef(null);
+  // « Ajouter des fichiers » au dossier d'un stagiaire : le sélecteur, et la feuille visée (une ref, même raison).
+  const dossierRef = useRef(null);
+  const cibleDossier = useRef(null);
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -420,6 +432,50 @@ function ArchivesView({ onError, onInfo }) {
     finally { setBusy(false); }
   }
 
+  /* AJOUTER DES FICHIERS AU DOSSIER D'UN STAGIAIRE (demandé le 2026-09-28). Une feuille qui connaît son
+     dossier (l'inscription) y rattache PDF et images : ils se rangent avec ses autres documents, et
+     partent dans l'archive de son dossier. Une feuille faite des seuls PDF importés à l'ancienne,
+     rattachés par un NOM, reçoit des PDF par le chemin de l'import, rangés sous ce même nom. */
+  function ajouterDans(cible) {
+    cibleDossier.current = cible;
+    if (dossierRef.current) dossierRef.current.accept = cible.enrollmentId ? ACCEPT_PIECE : "application/pdf,.pdf";
+    dossierRef.current?.click();
+  }
+  async function onPickDossier(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ""; // sinon réajouter le MÊME fichier ne déclencherait aucun `change`
+    const cible = cibleDossier.current;
+    cibleDossier.current = null;
+    if (!files.length || !cible) return;
+    setBusy(true);
+    try {
+      if (cible.enrollmentId) {
+        /* Un scan photographié se réduit, un PDF passe intact ; le NOM d'origine part à part — une
+           photo réduite revient sans nom, et c'est lui qui titre le document. */
+        const prets = await Promise.all(files.map(async (f) => ({ fichier: await reduireSiImage(f, PROFILS.piece), nom: f.name })));
+        const { data } = await ajouterAuDossierArchives(cible.enrollmentId, prets);
+        onInfo?.(`${messageAjout(data)} Dossier de ${cible.nom}.`);
+      } else {
+        const { data } = await importArchives(files, files.map((f) => `${cible.chemin}/${f.name}`));
+        onInfo?.(`${messageImport(data)} Dossier de ${cible.nom}.`);
+      }
+      load();
+    } catch (err) { onError?.(err.message); }
+    finally { setBusy(false); }
+  }
+  // Le compte rendu d'un ajout : ce qui est entré, et ce qui ne l'est pas — NOMMÉ.
+  function messageAjout(data) {
+    const parts = [`${data.imported} fichier(s) ajouté(s)`];
+    const nommer = (n, noms, texte) => {
+      const cinq = (noms || []).slice(0, 5).join(", ");
+      parts.push(`${n} ${texte}${cinq ? ` : ${cinq}${n > 5 ? "…" : ""}` : ""}`);
+    };
+    if (data.doublons) nommer(data.doublons, data.noms_doublons, "déjà présent(s), non ajouté(s)");
+    if (data.skipped) nommer(data.skipped, data.noms_refuses, "refusé(s), PDF ou image seulement");
+    if (data.vides) nommer(data.vides, data.noms_vides, "vide(s), non ajouté(s)");
+    return `${parts.join(", ")}.`;
+  }
+
   /* LE COMPTE RENDU D'UN IMPORT, au même endroit pour les deux chemins — l'arbre des sessions
      et les classeurs. Il tenait dans `onPick`, et un classeur qui aurait recopié ses quinze
      lignes aurait fini par ne plus dire la même chose qu'elles.
@@ -454,17 +510,17 @@ function ArchivesView({ onError, onInfo }) {
        laisserait croire qu'un « supprimer tout le stagiaire » a tout emporté, alors que les
        scans d'identité resteraient en base — exactement l'inverse de ce qu'on croit avoir fait.
        Leur effacement appartient au dossier, où il passe par la purge prévue. */
-    const pieces = docs.filter((d) => d.source === "piece").length;
+    const pieces = docs.filter(duDossier).length;
     if (!total) {
       onError?.(pieces
-        ? `Rien à supprimer ici : ${pieces} pièce(s) justificative(s), qui s'effacent depuis le dossier du stagiaire.`
+        ? `Rien à supprimer ici : ${pieces} pièce(s) justificative(s) ou document(s) remis, qui s'effacent depuis le dossier du stagiaire.`
         : "Aucun document à supprimer ici.");
       return false;
     }
     const detail = document_ids.length && archive_ids.length
       ? ` (${document_ids.length} généré(s), ${archive_ids.length} archivé(s))`
       : "";
-    const garde = pieces ? `\n${pieces} pièce(s) justificative(s) ne seront PAS supprimées : elles s'effacent depuis le dossier du stagiaire.` : "";
+    const garde = pieces ? `\n${pieces} pièce(s) justificative(s) ou document(s) remis ne seront PAS supprimés : ils s'effacent depuis le dossier du stagiaire.` : "";
     if (!window.confirm(`Supprimer définitivement ${total} document(s)${what ? `, ${what}` : ""}${detail} ?\nCette action est irréversible et les supprime de la base.${garde}`)) return false;
     try {
       const { deleted } = await bulkDeleteArchives(archive_ids, document_ids);
@@ -503,29 +559,59 @@ function ArchivesView({ onError, onInfo }) {
           <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
             {d.source === "piece"
               ? (d.sent_at ? `déposée le ${dateHeure(d.sent_at)}` : "")
-              : d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
+              : d.source === "remise"
+                ? (d.signed_at ? `remis, reçu le ${dateHeure(d.signed_at)}` : d.sent_at ? `remis le ${dateHeure(d.sent_at)}` : "")
+                : d.signed_at ? `signé le ${dateHeure(d.signed_at)}` : d.sent_at ? `envoyé le ${dateHeure(d.sent_at)}` : ""}
           </span>
         </span>
         <Badge tone={tone}>{lab}</Badge>
         <button className="iconbtn" title="Aperçu" aria-label={`Aperçu de ${d.title}`}
           onClick={() => d.source === "piece" ? window.open(pieceFichierUrl(d.doc_id), "_blank", "noopener")
+            : d.source === "remise" ? window.open(remiseFichierUrl(d.doc_id), "_blank", "noopener")
             : d.source === "archive" ? window.open(archiveFileUrl(d.doc_id), "_blank", "noopener") : setViewId(d.doc_id)}><Icon name="eye" size={16} /></button>
         {/* NI TÉLÉCHARGEMENT NI SUPPRESSION SUR UNE PIÈCE. Le fichier n'est pas forcément un
             PDF (une photo de carte d'identité, le plus souvent) et s'ouvre déjà en ligne — d'où
             on l'enregistre. Surtout, l'effacer appartient au dossier, où il passe par la purge
             prévue : un scan d'identité supprimé doit l'être avec son dépôt, pas isolément
             depuis un coffre qui range par formation. */}
-        {d.source !== "piece" && (
-          <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger le PDF de ${d.title}`}
-            onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}.pdf`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
+        {!duDossier(d) && (
+          <button className="iconbtn" title="Télécharger" aria-label={`Télécharger ${d.title}`}
+            onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}${extensionDuCoffre(d.mime)}`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
         )}
-        {peutModifier && d.source !== "piece" && (
+        {peutModifier && !duDossier(d) && (
           <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
         )}
       </div>
     );
   };
 
+
+  /* LES DOCUMENTS D'UNE FEUILLE, RANGÉS COMME L'ARCHIVE LES RANGE (2026-09-28) : à la racine de son
+     dossier, puis dans les sous-dossiers de l'arborescence d'archivage (« Justificatifs »), puis ce
+     qu'elle range ailleurs ou laisse dehors — dit ici, pour qu'on sache AVANT de télécharger ce que
+     l'archive contiendra. Même rangement que l'archive ZIP : le serveur calcule l'un et l'autre. */
+  const DocsDuDossier = ({ docs }) => {
+    const r = rangerDansLeDossier(docs);
+    const ligne = (d) => <DocLigne key={d.doc_id} d={d} />;
+    const bloc = (cle, titre, liste, note) => liste.length > 0 && (
+      <div key={cle} className="arch-sous">
+        <div className="arch-sous-titre">{titre}<span className="arch-count">{liste.length}</span></div>
+        {note && <p className="arch-sous-note">{note}</p>}
+        {liste.map(ligne)}
+      </div>
+    );
+    return (
+      <div className="arch-docs">
+        {r.racine.map(ligne)}
+        {r.dossiers.map((D) => bloc(`d:${D.nom}`, <><Icon name="folder" size={13} /> {D.nom}</>, D.docs))}
+        {bloc("entreprise", <><Icon name="building" size={13} /> Dans le dossier de l'entreprise</>, r.entreprise,
+          "L'arborescence d'archivage range ces documents chez l'entreprise.")}
+        {bloc("ailleurs", "Plus haut dans l'archive", r.ailleurs)}
+        {bloc("hors", "Hors de l'archive", r.hors,
+          "L'arborescence d'archivage ne les range pas : l'archive ZIP ne les emporte pas (Formations → Arborescence d'archivage).")}
+      </div>
+    );
+  };
 
   /* UN CLASSEUR N'EST PAS UNE TABLE : comme l'année, la semaine et la formation, il existe
      parce que des documents s'y trouvent, et disparaît avec son dernier document. Rien à
@@ -587,6 +673,8 @@ function ArchivesView({ onError, onInfo }) {
         <input ref={classeurRef} type="file" multiple accept="application/pdf,.pdf"
           style={{ display: "none" }} onChange={onPickClasseur} />
       )}
+      {/* Le sélecteur des dossiers de stagiaires : `accept` est posé par `ajouterDans`, selon la feuille. */}
+      {peutModifier && <input ref={dossierRef} type="file" multiple style={{ display: "none" }} onChange={onPickDossier} />}
 
       {/* CLASSEURS — ce qui n'appartient à aucune session. Placés AVANT l'arbre : ils sont peu
           nombreux et concernent l'organisme entier, quand l'arbre concerne les promotions. */}
@@ -671,11 +759,21 @@ function ArchivesView({ onError, onInfo }) {
                                   {L.company && <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />}
                                   {L.session && <Icon name="calendar" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--dim)" }} />}
                                   {L.name} <span className="arch-count">{L.docs.length}</span>
+                                  {peutModifier && !L.company && !L.session && (() => {
+                                    const enrollmentId = dossierDeLaFeuille(L.docs);
+                                    const chemin = /^\d{4}$/.test(Y.label) && W.week ? `${Y.label}/S${W.week}/${F.code}/${L.name.replace(/\//g, "-")}` : null;
+                                    if (!enrollmentId && !chemin) return null;
+                                    return (
+                                      <button type="button" className="iconbtn" disabled={busy}
+                                        title={enrollmentId ? "Ajouter des fichiers au dossier de ce stagiaire (PDF ou image)" : "Ajouter des PDF au dossier de ce stagiaire"}
+                                        aria-label={`Ajouter des fichiers au dossier de ${L.name}`}
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); ajouterDans({ enrollmentId, chemin, nom: L.name }); }}
+                                        style={{ marginLeft: 8 }}><Icon name="plus" size={15} /></button>
+                                    );
+                                  })()}
                                   {peutModifier && <DelBtn title={L.company ? "Supprimer cette entreprise" : L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
                                 </summary>
-                                <div className="arch-docs">
-                                  {L.docs.map((d) => <DocLigne key={d.doc_id} d={d} />)}
-                                </div>
+                                <DocsDuDossier docs={L.docs} />
                               </details>
                             ))}
                           </div>

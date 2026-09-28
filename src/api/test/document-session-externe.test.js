@@ -152,7 +152,8 @@ const UI_SUIVI = sansCommentaires(
     fs.readFileSync(path.join(API, '..', 'app', 'ui/pages/Suivi.jsx'), 'utf8'));
 
 test('LE COFFRE A UNE CINQUIÈME SOURCE', () => {
-    assert.match(SUIVI_CTRL, /res\.json\(\{ data: \[\.\.\.gen, \.\.\.comp, \.\.\.sess, \.\.\.arch, \.\.\.pieces\] \}\)/);
+    // Et une SIXIÈME depuis le 2026-09-28 : les documents remis.
+    assert.match(SUIVI_CTRL, /const lignes = \[\.\.\.gen, \.\.\.comp, \.\.\.sess, \.\.\.arch, \.\.\.pieces, \.\.\.remises\];/);
     assert.match(SUIVI_CTRL, /gd\.scope = 'SESSION' AND gd\.status IN \(\?\)/,
         'même filtre de partage que les autres documents : on ne montre pas un brouillon');
     /* JOINTURE INTERNE SUR LA SESSION : un document de session sans session n'a ni année, ni

@@ -958,6 +958,24 @@ export async function importArchives(files, paths, dossier) {
   }
 }
 
+/* DES FICHIERS AJOUTÉS AU DOSSIER D'UN STAGIAIRE, depuis Suivi Qualiopi → Archives (2026-09-28).
+   `fichiers` : [{ fichier, nom }] — le nom d'origine part à part : une photo réduite revient en Blob
+   sans nom, et c'est lui qui titre le document. */
+export async function ajouterAuDossierArchives(enrollmentId, fichiers) {
+  const fd = new FormData();
+  for (const { fichier, nom } of fichiers) fd.append("files", fichier, nom);
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/suivi/archives/dossier/${enrollmentId}`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Ajout échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
+
 /**
  * Rattache un document REÇU (courriel, scan) à une étape du dossier.
  *

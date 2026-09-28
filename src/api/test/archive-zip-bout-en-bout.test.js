@@ -61,7 +61,15 @@ const GEN_ENTREPRISE = [{ ...base, doc_id: 'g5', title: "Droit à l'image", type
 const TREE_ENTREPRISE = JSON.stringify({ folders: [{ name: '{Année}', items: [], children: [{ name: '{Semaine}', items: [], children: [{ name: '{Code}', items: [],
     children: [{ name: '{Entreprise}', items: [], children: [{ name: '{Stagiaire}', per_learner: true, items: [{ type: 'model', ref: 'droit-image', label: "Droit à l'image" }],
         children: [{ name: 'Évaluations', items: [{ type: 'quiz', titre: 'Évaluation Formative du Mardi', label: 'Mardi' }], children: [] }] }] }] }] }] }] });
-const scenario = { entreprise: false };
+const scenario = { entreprise: false, ajouts: false };
+/* LE DOSSIER DE BEYNEY David, COMPLÉTÉ (2026-09-28) : un scan ajouté depuis Suivi Qualiopi → Archives
+   (« fichier:<dossier>:… », la base simulée rend la ligne telle que la jointure la résout), et un
+   document REMIS — l'AGEFICE. Ne servent qu'au scénario qui les active. */
+const ARCH_AJOUT = { ...base, doc_id: 'a3', title: 'Scan diplôme', status: 'ARCHIVE', scope: 'LEARNER', source: 'archive', learner_id: 'l1',
+    last_name: 'BEYNEY', first_name: 'David', ref: 'fichier:e1:0123456789ab', enrollment_id: 'e1', session_id: 's1', mime: 'application/pdf' };
+const REMISES = [{ ...base, doc_id: 'rf1', fichier_nom: 'agefice.pdf', sort_order: 0, remise_label: 'AGEFICE', remise_id: 'r1', statut: 'RECUE',
+    remise_type_id: 'agefice', remis_le: '2026-09-15 10:00', accuse_le: '2026-09-16 09:00', learner_id: 'l1', first_name: 'David',
+    last_name: 'BEYNEY', enrollment_id: 'e1', enr_company_id: null, enr_company_name: null, session_id: 's1' }];
 // Les modèles de l'organisme sont ceux du socle — le livret d'accueil en est —, plus le sien :
 const PROGRAMMES = [{ id: 'p1', code: 'RS7404', title: 'Fabriquer des pizzas', company_steps: null, sort_order: 1 }];
 /* le « Contrat Hygiène », signé par l'intervenant externe (« Externe » coché) : un document de SESSION,
@@ -96,7 +104,11 @@ const connexion = {
         if (/gd\.scope = 'COMPANY'/.test(S)) return [COMP];
         if (/gd\.scope = 'SESSION'/.test(S)) return [SESS];
         if (/FROM document_template WHERE organization_id = \?\s*$/.test(S)) return [MODELES];
-        if (/FROM archive_document ad/.test(S)) return [ARCH.map((a) => ({ ...a }))];
+        if (/FROM archive_document ad/.test(S)) return [[...ARCH, ...(scenario.ajouts ? [ARCH_AJOUT] : [])].map((a) => ({ ...a }))];
+        if (/FROM remise_fichier rf\s+JOIN remise_document r ON r\.id = rf\.remise_id\s+JOIN remise_type/.test(S)) return [scenario.ajouts ? REMISES : []];
+        if (/SELECT rf\.mime, rf\.bytes, rf\.nom FROM remise_fichier rf JOIN remise_document r/.test(S)) {
+            return [[{ mime: 'application/pdf', bytes: Buffer.from('%PDF-1.4 agefice'), nom: 'agefice.pdf' }]];
+        }
         if (/FROM piece_fichier pf\s+JOIN piece_depot d ON d\.id = pf\.depot_id\s+JOIN piece_type/.test(S)) return [PIECES];
         if (/FROM training_session s\s+LEFT JOIN training_program p/.test(S)) {
             return [p[0] === 's1' ? [{ id: 's1', year: 2026, week: 38, code: 'RS7404' }] : p[0] === 's3' ? [{ id: 's3', year: 2026, week: 39, code: 'RS7404' }] : []];
@@ -241,5 +253,26 @@ test('une sélection dont tout est laissé dehors : un message qui dit pourquoi,
         assert.strictEqual(res.code, 404);
         assert.strictEqual(res.corps.message, "Rien à archiver : le document de cette sélection n'est rangé nulle part dans l'arborescence d'archivage.");
         assert.strictEqual(res.entetes['content-type'], undefined, 'aucun octet de ZIP');
+    }
+});
+
+test('le dossier complété : un fichier ajouté depuis les Archives et un document REMIS partent dans l\'archive de sa session', async () => {
+    /* LES DEUX NOUVEAUX VENUS DU COFFRE (2026-09-28), de bout en bout. L'arborescence de ce test ne les
+       nomme pas, et la formation ne les propose pas : ils gardent leur place par défaut — le dossier du
+       stagiaire —, et le sommaire le dit. Sans eux, le document remis n'existait nulle part dans
+       l'archive, et le scan ajouté n'avait aucun moyen d'y entrer. */
+    scenario.ajouts = true;
+    try {
+        const res = reponse();
+        await exporterArchive(requete({ session: 's1' }), res);
+        const PizZip = require('pizzip');
+        const z = new PizZip(res.octets(), { checkCRC32: true });
+        assert.strictEqual(z.file('2026/S38/RS7404/BEYNEY David/AGEFICE.pdf').asText(), '%PDF-1.4 agefice', 'le document remis, déchiffré');
+        assert.strictEqual(z.file('2026/S38/RS7404/BEYNEY David/Scan diplôme.pdf').asText(), '%PDF-1.4 importé', 'le fichier ajouté, dans SON dossier');
+        const sommaire = z.file('_sommaire.txt').asText();
+        assert.match(sommaire, /2026\/S38\/RS7404\/BEYNEY David\/AGEFICE\.pdf {2}\[remis, réception confirmée\]/);
+        assert.match(sommaire, /rangés par défaut[\s\S]*BEYNEY David\/Scan diplôme\.pdf/);
+    } finally {
+        scenario.ajouts = false;
     }
 });
