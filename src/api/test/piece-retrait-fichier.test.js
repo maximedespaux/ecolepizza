@@ -41,8 +41,11 @@ test('le serveur supprime un seul fichier et rend la pièce « à fournir » qua
     const fn = ctrl.slice(ctrl.indexOf('const supprimerFichier'), ctrl.indexOf('const supprimerFichier') + 2200);
     /* UN fichier par son id, pas le dépôt. */
     assert.match(fn, /DELETE FROM piece_fichier WHERE id = \?/);
-    /* Le personnel peut retirer à tout moment ; le stagiaire seulement tant que non validée. */
-    assert.match(fn, /const staff = req\.user\.role !== 'STAGIAIRE' && req\.user\.role !== 'INTERVENANT';/);
+    /* Le personnel peut retirer à tout moment ; le stagiaire seulement tant que non validée.
+       LE PERSONNEL EST NOMMÉ (2026-09-28). Ce test gelait « tout sauf STAGIAIRE et INTERVENANT »,
+       qui laissait un compte ENTREPRISE effacer les pièces d'un dossier qui n'est pas le sien.
+       `piece-garde-personnel.test.js` l'éprouve sur les quatre routes, rôle par rôle. */
+    assert.match(fn, /const staff = estPersonnel\(req\.user\);/);
     assert.match(fn, /if \(f\.statut === 'VALIDEE'\) return res\.status\(409\)/);
     /* Plus aucun fichier → la pièce redevient « à fournir », elle ne promet pas une pièce absente. */
     assert.match(fn, /if \(!n\.n\) \{[\s\S]*?statut = 'ATTENDUE'/);

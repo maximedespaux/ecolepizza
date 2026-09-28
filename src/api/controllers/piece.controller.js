@@ -187,6 +187,20 @@ const deleteType = async (req, res) => {
 
 /* ────────────────────────────── Dépôts : ce qu'un dossier doit ────────────────────────────── */
 
+/* LE PERSONNEL EST NOMMÉ, IL NE SE DÉDUIT PAS (2026-09-28). Les quatre routes des dossiers —
+   lister, déposer, servir, retirer — n'ont que `authenticateToken` (le stagiaire doit pouvoir y
+   déposer) : c'est cette liste qui décide qui y agit POUR L'ÉCOLE. La garde disait « tout sauf
+   STAGIAIRE et INTERVENANT », et un compte ENTREPRISE (le représentant qui signe les documents de
+   son entreprise) passait donc pour le bureau. Pour peu qu'il en ait les identifiants, il listait
+   les pièces de n'importe quel dossier de l'organisme, téléchargeait les copies DÉCHIFFRÉES des
+   pièces d'identité, déposait des fichiers validés d'office (« un dépôt fait par l'école vaut
+   vérification ») et en effaçait. FINANCEUR de même. Une liste de refus ne couvre que les rôles
+   auxquels on a pensé : un rôle ajouté demain serait tombé du même côté. Hors de cette liste, un
+   compte n'a que ce que la PROPRIÉTÉ du dossier lui donne — le sien, sinon un 403. AUDITEUR en
+   est : il consulte le suivi Qualiopi, qui montre les pièces. */
+const ROLES_PERSONNEL = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const estPersonnel = (u) => ROLES_PERSONNEL.includes(u?.role);
+
 /**
  * Les pièces EXIGÉES par la formation d'un dossier, avec l'état de chacune.
  *
@@ -233,7 +247,7 @@ const listDossier = async (req, res) => {
            personne) — donnée sensible RGPD. Les octets restaient protégés (servirFichier re-vérifie). */
         const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
         if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        const staff = estPersonnel(req.user);
         if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: "Dossier d'un autre stagiaire." });
         res.json({ data: await piecesDuDossier(conn, req.user.organization_id, req.params.enrollmentId) });
     } catch (err) {
@@ -291,7 +305,7 @@ const deposer = async (req, res) => {
         }
         const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
         if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        const staff = estPersonnel(req.user);
         if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: 'Dossier d\'un autre stagiaire.' });
 
         /* LE PLAFOND EST APPLIQUÉ ICI, pas seulement affiché. Le refus nomme le nombre attendu :
@@ -375,7 +389,7 @@ const servirFichier = async (req, res) => {
               WHERE pf.id = ?`,
             [req.params.id]);
         if (!f || f.organization_id !== req.user.organization_id) return res.status(404).end();
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        const staff = estPersonnel(req.user);
         if (f.user_id !== req.user.id && !staff) return res.status(403).end();
         const clair = decryptBytes(f.bytes); // déchiffré à la lecture ; jamais renvoyé/stocké en clair ailleurs
         if (clair === null) return res.status(500).json({ error: 'Pièce illisible (déchiffrement — clé ?).' });
@@ -410,7 +424,7 @@ const supprimerFichier = async (req, res) => {
               WHERE pf.id = ?`,
             [req.params.id]);
         if (!f || f.organization_id !== req.user.organization_id) return res.status(404).json({ message: 'Fichier introuvable.' });
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        const staff = estPersonnel(req.user);
         if (!staff) {
             if (f.user_id !== req.user.id) return res.status(403).json({ message: 'Pièce d\'un autre stagiaire.' });
             if (f.statut === 'VALIDEE') return res.status(409).json({ message: 'Pièce déjà validée : demandez à l\'école de la retirer.' });
