@@ -47,7 +47,6 @@ const JURY3 = [
     { nom: 'Rossi Paul', qualite: 'membre du jury', externe: true, na_pas_forme: true },
     { nom: 'Fabre Léa', qualite: 'membre du jury', externe: true, na_pas_forme: true },
 ];
-const conn = faux.promise();
 function reponse() {
     const r = { code: 200, corps: null };
     r.status = (c) => { r.code = c; return r; };

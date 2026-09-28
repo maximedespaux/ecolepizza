@@ -117,7 +117,7 @@ export default function QuestBankEditor({ programs, difficulties, onStatus }) {
   const reload = () => getQuestContent(programId || undefined)
     .then((r) => setBank(r.data || { chapters: [], questions: [], options: [] }))
     .catch((e) => { onStatus({ type: "error", message: e.message }); setBank({ chapters: [], questions: [], options: [] }); });
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [programId]);
+  useEffect(() => { reload(); }, [programId]);
 
   async function run(fn, ok) {
     onStatus(null);

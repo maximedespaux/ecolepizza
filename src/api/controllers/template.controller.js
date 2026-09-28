@@ -1063,7 +1063,7 @@ const previewPdf = async (req, res) => {
  */
 const pageMetrics = async (req, res) => {
     try {
-        const { body_html, header_html, footer_html, layout } = req.body || {};
+        const { header_html, footer_html, layout } = req.body || {};
         const [[org]] = await db.promise().query('SELECT * FROM organization WHERE id = ?', [req.user.organization_id]);
         const m = computeReserves({
             headerHtml: header_html, footerHtml: footer_html,

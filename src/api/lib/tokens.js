@@ -1297,7 +1297,6 @@ function findMissingTokens(htmlParts, ctx) {
  */
 function invoiceTokens(inv = {}) {
     if (!inv || !inv.number) return {};
-    const v = inv.tva || {};
     return {
         'Numéro facture': inv.number || '',
         'Type facture': inv.typeLabel || 'Facture',

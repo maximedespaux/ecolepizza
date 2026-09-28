@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 /** Charge le module UI (ESM) dans ce contexte CommonJS. */
-const { auditLabel, entityLabel, ACTION_LABEL, ENTITY_LABEL } = (() => {
+const { auditLabel, ACTION_LABEL, ENTITY_LABEL } = (() => {
     const p = path.join(__dirname, '..', '..', 'app/ui/lib/auditLabels.js');
     const src = fs.readFileSync(p, 'utf8')
         .replace(/export \{[^}]*\};\s*$/, 'module.exports = { auditLabel, entityLabel, ACTION_LABEL, ENTITY_LABEL };');

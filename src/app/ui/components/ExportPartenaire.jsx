@@ -64,7 +64,6 @@ function ExportPartenaire({ partenaires, onErreur }) {
      comprend pas la cause se lit comme une panne. */
   const eligibles = (partenaires || []).filter(
     (p) => Number(p.recoit_coordonnees) === 1 && etatContrat(p).actif !== false);
-  const partenaire = eligibles.find((p) => p.id === choisi) || null;
 
   /* Le journal se charge dès qu'un partenaire est choisi : savoir ce qu'on lui a déjà envoyé
      évite le double envoi, et c'est l'information la plus utile avant de fixer une période. */

@@ -138,7 +138,7 @@ export default function ProfileModal({ onClose }) {
     }).catch(() => {});
   }, []);
 
-  const [choisi, setChoisi] = useState(() => getCadreChoisi(uid));
+  const [, setChoisi] = useState(() => getCadreChoisi(uid));
   /* QUAND L'ÉCOLE RECOLORE UNE FORMATION, le cadre porté garde l'ancienne teinte — et la teinte
      fait partie de la possession (sinon on porterait la couleur d'une formation jamais jouée).
      Le cadre devenait donc orphelin : plus surligné dans la liste, et refusé par le serveur à la

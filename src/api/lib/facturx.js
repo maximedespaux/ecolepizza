@@ -6,7 +6,7 @@
 //  buildCII(data)     -> chaîne XML Cross-Industry Invoice (à valider EN16931)
 //  attacherFacturX()  -> attache factur-x.xml a un PDF deja construit
 // ============================================================================
-const { PDFDocument, StandardFonts, rgb, PDFName, PDFString, PDFHexString, PDFRawStream } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFString, PDFHexString, PDFRawStream } = require('pdf-lib');
 
 const pdfDate = (d) => `D:${d.toISOString().replace(/[-:]/g, '').slice(0, 14)}+00'00'`;
 
@@ -142,9 +142,6 @@ function buildCII(d) {
     const exo = d.tvaExoneree;
     const v = ventilerTva(d);
     const net = v.base, tax = v.taxe, grand = v.grand;
-    // Taux de repli pour les LIGNES qui n'en portent pas : celui du premier groupe.
-    const cat = v.groupes[0].cat;
-    const rate = v.groupes[0].taux.toFixed(2);
     const typeCode = TYPE_CODE[d.type] || '380';
 
     // Une ou plusieurs lignes (plusieurs dossiers/formations sur une facture).

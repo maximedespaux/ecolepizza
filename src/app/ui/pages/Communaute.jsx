@@ -12,8 +12,8 @@ import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
 import { QuestionCard, QuestionModal, QuestionForm, AnnonceCard } from "../components/QuestionPost.jsx";
-import { garnitureItems, garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
-import { cadreFor, cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
+import { garnitureCost, realisationAxes, svcLabel, fourLabel } from "../lib/garnitures.js";
+import { cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } from "../lib/cadres.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
@@ -161,22 +161,6 @@ function PostHead({ id, name, avatar, cadre, date, onOpen, children }) {
       </span>
       {children}
     </div>
-  );
-}
-
-// Petite pastille cliquable « auteur » (avatar + nom) → ouvre son profil.
-// Le `cadre` est résolu par le parent (cf. `cadreDe`) : lui seul sait qui est l'utilisateur
-// courant, et lui seul est rerendu quand ce dernier change de cadre.
-function AuthorChip({ id, name, avatar, cadre, onOpen }) {
-  const av = avatar ? parseAvatar(avatar) : null;
-  return (
-    <button className="author-chip" title={`Voir le profil${cadre.id !== "aucun" ? ` · cadre ${cadre.nom}` : ""}`}
-      onClick={(e) => { e.stopPropagation(); if (id) onOpen(id); }}>
-      <span className={`author-ava ${cadreClass(cadre.valeur || cadre.id)}`}
-        style={{ ...cadreStyle(cadre.valeur), ...(av ? { background: av.color, color: "#fff", fontSize: 11 } : null) }}>
-        {av ? av.emoji : <Icon name="user" size={11} />}
-      </span>{name || "Stagiaire"}
-    </button>
   );
 }
 

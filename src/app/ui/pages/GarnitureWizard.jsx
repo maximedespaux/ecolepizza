@@ -10,8 +10,8 @@ import WizDock from "../components/WizDock.jsx";
 import IntroGuide, { GUIDE_KEY } from "../components/IntroGuide.jsx";
 import Mercuriale from "../components/Mercuriale.jsx";
 import { euro } from "../lib/format.js";
-import { getMyRecipes, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMercuriale } from "../api/apiClient.js";
-import { num, GARN_BASES, GARN_PRODUITS, GARN_DAIRY, GARN_TIPS, prodOf, pairSuggestions, garnitureItems, garnitureCost, lineCost, baseModesOf, unitShort, qtyUnit, qtyStep, perWeightUnit } from "../lib/garnitures.js";
+import { getMyRecipes, createRecipe, updateRecipe, deleteRecipe, getMercuriale } from "../api/apiClient.js";
+import { num, GARN_BASES, GARN_PRODUITS, GARN_DAIRY, GARN_TIPS, prodOf, pairSuggestions, garnitureCost, lineCost, baseModesOf, unitShort, qtyUnit, qtyStep, perWeightUnit } from "../lib/garnitures.js";
 
 /**
  * Assistant « Créer une garniture » (kind PREPARATION) — base → produits (+ food-pairing) → laitier.
@@ -68,7 +68,6 @@ export default function GarnitureWizard() {
   const toggleDairy = (key) => setGarn(dairyKeys.includes(key)
     ? { dairy: garn.dairy.filter((d) => d.key !== key) }
     : { dairy: [...(garn.dairy || []), { key, qty: (GARN_DAIRY.find((x) => x.key === key) || {}).qty, price: (GARN_DAIRY.find((x) => x.key === key) || {}).price }] });
-  const setDairy = (key, patch) => setGarn({ dairy: garn.dairy.map((d) => (d.key === key ? { ...d, ...patch } : d)) });
 
   const suggestions = pairSuggestions([...prodKeys, ...dairyKeys], garn.base);
   const { items, total } = garnitureCost(garn);
@@ -127,7 +126,6 @@ export default function GarnitureWizard() {
   }
   const shared = r.visibility === "SHARED";
   const cur = STEPS[step];
-  const ghostWhite = { background: "transparent", color: "rgba(255,255,255,.85)", borderColor: "rgba(255,255,255,.35)" };
 
   return (
     <>

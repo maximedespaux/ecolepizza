@@ -16,7 +16,6 @@ const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // images ch
 
 // Migration 114 non jouée : les tables n'existent pas encore. Même garde que partout ailleurs.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
-const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 const nomDe = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
 
 /* Les deux règles vivent dans `lib/moderation.js` : `estStaff` pour ce qui ENGAGE l'école —

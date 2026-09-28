@@ -14,8 +14,6 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
 const { identiteExemple, PERSONNES, ENTREPRISES } = require('../lib/echantillons.js');
 
 /** Retire les accents, pour comparer un prénom à la partie locale d'un e-mail. */

@@ -85,7 +85,7 @@ const createOpco = async (req, res) => {
 
 /** PATCH /api/opcos/:id — met à jour un OPCO. */
 const updateOpco = async (req, res) => {
-    const sets = [], vals = [];
+    const sets = [];
     for (const f of FIELDS) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];

@@ -57,7 +57,6 @@ export default function PriseDePhoto({ onPhoto, onClose }) {
       }
     })();
     return () => { annule = true; arreter(); };
-    // eslint-disable-next-line
   }, []);
 
   /** Idempotent : appelé au démontage, à la fermeture et après la capture. */

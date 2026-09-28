@@ -5,7 +5,7 @@ import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
 import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
-import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, LEVURE_TABLE, recoLevure, yeastLabel } from "../lib/dough.js";
+import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel } from "../lib/dough.js";
 
 /**
  * Fiche technique — trois types composables :
@@ -17,11 +17,6 @@ import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT,
  * une préparation peut être « importée » dans une réalisation comme ingrédient, à son coût unitaire.
  */
 const TYPES = ["Classique", "Contemporaine", "Napolitaine", "Teglia", "Pala"];
-const KINDS = [
-  { k: "PATE", label: "Pâte", icon: "settings", hint: "Un empâtement, rendement en pâtons" },
-  { k: "PREPARATION", label: "Préparation", icon: "list-checks", hint: "Sauce, base… avec un rendement" },
-  { k: "RECETTE", label: "Recette", icon: "pizza", hint: "Pizza complète : pâte + préparations + garnitures" },
-];
 const YIELD_UNITS = ["g", "kg", "ml", "l", "piece"];
 const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 };
 // Constantes & helpers de calcul d'empâtement (W, presets, cahiers napolitains, levure, TB50…)
@@ -35,7 +30,6 @@ const NEW = () => ({
 
 // Chaque page (mode) est verrouillée sur un type de fiche — trois builders distincts.
 const MODE_KIND = { empatement: "PATE", garniture: "PREPARATION", realisation: "RECETTE" };
-const KIND_NOUN = { PATE: "empâtement", PREPARATION: "garniture", RECETTE: "réalisation" };
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
 const SAVED_TITLE = { PATE: "Mes empâtements enregistrés", PREPARATION: "Mes garnitures enregistrées", RECETTE: "Mes réalisations enregistrées" };
 const SAVED_EMPTY = { PATE: "Aucun empâtement enregistré pour l'instant.", PREPARATION: "Aucune garniture enregistrée pour l'instant.", RECETTE: "Aucune réalisation enregistrée pour l'instant." };

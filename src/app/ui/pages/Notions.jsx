@@ -3,7 +3,7 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { TIPOS } from "../lib/dough.js";
-import { FICHES, GESTION, LEXIQUE, A_VALIDER, EXEMPLES } from "../lib/notions.js";
+import { FICHES, GESTION, LEXIQUE, EXEMPLES } from "../lib/notions.js";
 import { SCHEMAS } from "../components/Schemas.jsx";
 
 /**
@@ -103,42 +103,6 @@ function FicheNav({ list, sel, setSel }) {
         </button>
       ))}
     </div>
-  );
-}
-
-// Une proposition à valider : ce qu'on affiche / ce que dit la source / pourquoi ça compte.
-const KIND = { conflit: { l: "Contradiction", c: "var(--ember1)" }, ajout: { l: "Manque", c: "var(--blue)" }, precision: { l: "Précision", c: "var(--gold)" } };
-function ValiderCard({ v }) {
-  const k = KIND[v.kind] || KIND.precision;
-  const bloc = (t, txt, color) => (
-    <div>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: color || "var(--dim)", marginBottom: 3 }}>{t}</div>
-      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--muted)" }}>{txt}</p>
-    </div>
-  );
-  return (
-    <Card style={{ marginBottom: 14, borderLeft: `3px solid ${k.c}` }}
-      title={<span className="card-ttl" style={{ flexWrap: "wrap" }}>
-        <span className="badge n" style={{ background: k.c, color: "#fff", borderColor: "transparent" }}>{k.l}</span> {v.fiche}
-      </span>}>
-      <div style={{ display: "grid", gap: 12 }}>
-        {bloc("Aujourd'hui dans l'app", v.now)}
-        {bloc("Ce que dit la source", v.found, k.c)}
-        {bloc("Pourquoi ça compte", v.why)}
-        {v.srcs && v.srcs.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--dim)", marginBottom: 5 }}>Sources</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {v.srcs.map((s) => (
-                <a key={s.u} href={s.u} target="_blank" rel="noreferrer" className="chip" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  <Icon name="book-open" size={11} /> {s.l}
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </Card>
   );
 }
 

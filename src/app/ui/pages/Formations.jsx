@@ -306,7 +306,6 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
   const setPieceCondition = (slug, aw) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, applies_when: aw } : s)));
   // Retirer une variante d'un choix : pièce → dégroupe (local) ; document → équivalence d'organisme.
   const retirerVariante = (slug) => {
-    const st = steps.find((s) => s.slug === slug);
     return removeOuVariant(slug);
   };
 

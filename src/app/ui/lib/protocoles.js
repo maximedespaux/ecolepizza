@@ -30,7 +30,6 @@
    Un critère `elim: true` est éliminatoire : non coché, le bloc tombe quel que soit le total.
    ──────────────────────────────────────────────────────────────────────────────────────── */
 
-const OUI_NON = [{ v: null, l: 'Conforme' }, { v: 0, l: 'Non conforme' }];
 const TEXTURE = [{ v: 4, l: 'Souple et homogène' }, { v: 0, l: 'Granuleuse ou loupée' }];
 const TEMP_PATE = [{ v: 4, l: 'de 20 à 24 °C' }, { v: 0, l: 'au-delà de 24 °C' }];
 

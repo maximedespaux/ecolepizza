@@ -10,7 +10,6 @@ import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
 import DataTable from "../components/DataTable.jsx";
-import { Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import Inventaire from "./Inventaire.jsx";
@@ -38,8 +37,6 @@ function Ventes() {
     downloadFacturX(id, numero).catch((e) => setStatus({ type: "error", message: e.message }));
 
   // Panier / caisse
-  const [pick, setPick] = useState("");
-  const [qty, setQty] = useState(1);
   const [cart, setCart] = useState([]);
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState(null);
@@ -101,12 +98,6 @@ function Ventes() {
     [selectedEmitter, settings]
   );
 
-  const grouped = useMemo(() => {
-    const g = {};
-    for (const it of inventory) { const c = it.category || "Autre"; (g[c] = g[c] || []).push(it); }
-    return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [inventory]);
-
   // « Boutique » importée dans la caisse : catalogue des articles à prix (mêmes articles
   // que la boutique du stagiaire — inventory_item avec un prix), en grille cliquable.
   const [posCat, setPosCat] = useState("");
@@ -135,17 +126,6 @@ function Ventes() {
     setAttachLearner(false);
   }
 
-  function addToCart() {
-    const it = inventory.find((i) => i.id === pick);
-    if (!it) return;
-    const n = Math.max(1, parseInt(qty, 10) || 1);
-    setCart((c) => {
-      const ex = c.find((l) => l.item_id === it.id);
-      if (ex) return c.map((l) => (l.item_id === it.id ? { ...l, quantity: l.quantity + n } : l));
-      return [...c, { item_id: it.id, name: it.name, quantity: n, unit_price: Number(it.unit_price || 0), tax_rate: Number(it.tax_rate || 0), disc: "", stock: it.quantity }];
-    });
-    setPick(""); setQty(1);
-  }
   // Ajoute un article de la boutique au panier (une unité par clic), SANS dépasser le stock.
   function addItem(it) {
     const stock = Number(it.quantity) || 0;

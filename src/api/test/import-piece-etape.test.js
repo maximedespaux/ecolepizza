@@ -27,7 +27,6 @@ const fs = require('fs');
 const path = require('path');
 
 const RACINE = path.join(__dirname, '..', '..');
-const PARCOURS = fs.readFileSync(path.join(__dirname, '..', 'lib/parcours.js'), 'utf8');
 const FICHE = fs.readFileSync(path.join(RACINE, 'app/ui/pages/StagiaireDetail.jsx'), 'utf8');
 const ETAPES = fs.readFileSync(path.join(RACINE, 'app/ui/components/EnrollmentParcours.jsx'), 'utf8');
 const REVUE = fs.readFileSync(path.join(RACINE, 'app/ui/components/PiecesReview.jsx'), 'utf8');

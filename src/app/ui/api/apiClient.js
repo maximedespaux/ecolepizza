@@ -598,10 +598,11 @@ export function detachCompanyLearner(id, learnerId) {
 export function getCompanyParcours(id, sessionId) {
   return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
 }
-// Génère (et envoie) un document du parcours pour tout le groupe.
-export function generateGroupDocuments(id, payload) {
-  return request(`/companies/${id}/group-documents`, { method: "POST", body: JSON.stringify(payload) });
-}
+// `generateGroupDocuments` (POST /companies/:id/group-documents) a été RETIRÉ du client : la
+// préparation d'un document de GROUPE passe désormais par `createCompanyDocument`, étape par
+// étape (cf. EntrepriseDetail, « Préparer le document »). Son seul vestige était un import mort
+// dans EntrepriseDetail, sans appel — le balayage `portes-manquantes` le laissait passer. La
+// route serveur subsiste, sans appelant côté écran : à retirer aussi le jour où on la juge morte.
 // Documents des stagiaires du groupe à signer par le représentant (à leur place).
 export function getCompanyLearnerDocuments(id, sessionId) {
   return request(`/companies/${id}/learner-documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });

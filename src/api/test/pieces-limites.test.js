@@ -12,7 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { champsType, parseMimes, MIMES_CONNUS, MAX_OCTETS } = require('../controllers/piece.controller.js');
+const { champsType, parseMimes, MIMES_CONNUS } = require('../controllers/piece.controller.js');
 
 const MO = 1024 * 1024;
 
