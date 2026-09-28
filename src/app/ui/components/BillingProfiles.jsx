@@ -21,7 +21,7 @@ const VIDE = {
   label: "", legal_name: "", legal_status: "", capital: "", rcs: "", siret: "", vat_number: "",
   naf_ape: "", nda: "", address: "", zip_code: "", town: "", email: "", phone: "",
   iban: "", bic: "", bank_name: "",
-  number_format: "", tva_applies: 1, next_number: 1,
+  number_format: "", tva_applies: 1, payment_methods: "", next_number: 1,
 };
 
 /**
@@ -52,10 +52,46 @@ function Champ({ label, k, form, set, ph, wide }) {
 
 // Les jetons du numéro, chacun avec un exemple parlant. Insérés en un clic — on ne tape plus les
 // accolades à la main. {SEQ} d'abord : c'est le seul obligatoire, il doit sauter aux yeux.
-/* LES MOYENS DE PAIEMENT NE SONT PLUS ICI (migration 187, 2026-09-28) : une seule liste pour
-   l'école, dans la carte « Moyens de paiement » de cette même page, avec le modèle de facture de
-   chacun. La colonne `payment_methods` reste sur l'entité, lue seulement pour semer cette liste
-   et tant que la migration n'est pas jouée. */
+// Moyens de paiement courants, proposés en cases à cocher. La valeur reste une liste séparée
+// par des virgules — les cases ne font que la composer, pour ne plus la taper à la main.
+const PAIEMENTS_STD = ["Espèces", "CB", "Virement", "Chèque"];
+
+function PaiementPicker({ value, onChange }) {
+  const choisis = String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // On affiche les standards PLUS tout mode déjà enregistré hors standard, pour ne rien perdre
+  // d'une saisie antérieure.
+  const options = [...PAIEMENTS_STD, ...choisis.filter((c) => !PAIEMENTS_STD.includes(c))];
+  const [autre, setAutre] = useState("");
+
+  const toggle = (m) => {
+    const next = choisis.includes(m) ? choisis.filter((x) => x !== m) : [...choisis, m];
+    onChange(next.join(","));
+  };
+  const ajouter = () => {
+    const m = autre.trim();
+    if (m && !choisis.includes(m)) onChange([...choisis, m].join(","));
+    setAutre("");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {options.map((m) => (
+          <label key={m} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={choisis.includes(m)} onChange={() => toggle(m)} /> {m}
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <input className="inp" style={{ maxWidth: 200 }} value={autre} placeholder="Autre moyen…"
+          onChange={(e) => setAutre(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); ajouter(); } }} />
+        <button type="button" className="btn ghost sm" onClick={ajouter} disabled={!autre.trim()}>Ajouter</button>
+      </div>
+    </div>
+  );
+}
+
 const JETONS_NUMERO = [
   ["{SEQ}", "N° 0001"],
   ["{SEQ:5}", "N° 00001"],
@@ -102,6 +138,10 @@ function EmitterForm({ initial, onCancel, onSave, saving }) {
         <Champ label="IBAN" k="iban" form={form} set={set} />
         <Champ label="BIC" k="bic" form={form} set={set} />
         <Champ label="Banque" k="bank_name" form={form} set={set} />
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Moyens de paiement (caisse)</label>
+          <PaiementPicker value={form.payment_methods} onChange={(v) => set("payment_methods", v)} />
+        </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Format du numéro de facture</label>
           <input ref={fmtRef} className="inp mono" value={form.number_format || ""}

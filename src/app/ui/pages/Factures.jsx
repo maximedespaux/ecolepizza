@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { Icon } from "../components/Icon.jsx";
 import InfosManquantes from "../components/InfosManquantes.jsx";
-import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl } from "../api/apiClient.js";
+import { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getEnrollments, getCompanies, downloadFacturX, downloadInvoiceXml, facturXUrl, getTemplates, getEmitters } from "../api/apiClient.js";
+import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
+// Le TTC comme le PDF le calcule : le règlement doit tomber dessus au centime.
+import { ttcDe } from "../lib/ttc.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Kpi from "../components/Kpi.jsx";
@@ -23,7 +26,20 @@ const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: [
 const RANG_STATUT = { IMPAYEE: 0, EMISE: 1, BROUILLON: 2, PAYEE: 3, ANNULEE: 4 };
 
 const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
-const makeEmpty = () => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", lines: [emptyLine()] });
+const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", template_slug: modele, lines: [emptyLine()] });
+
+const MOYENS_DEFAUT = "Espèces,CB,Virement,Chèque";
+
+/* Le règlement DÉJÀ posé sur un brouillon → les lignes de PaiementSplit. La ventilation s'il y en a
+   une (le dernier montant, lui, se recalcule toujours), sinon le moyen seul, sinon le premier moyen. */
+function lignesDuReglement(inv, moyens) {
+  let parts;
+  try { parts = JSON.parse(inv.payment_split || "[]"); } catch { parts = []; }
+  if (Array.isArray(parts) && parts.length) {
+    return parts.map((p) => ({ method: p.method || "", amount: String(p.amount ?? ""), bank: p.bank || "", cheque_number: p.cheque_number || "" }));
+  }
+  return [{ method: inv.payment_method || moyens[0] || "", amount: "" }];
+}
 
 function Factures() {
   // `null` et non `[]` : c'est ce qui distingue « on charge » de « c'est vide ». À `[]`, la
@@ -37,6 +53,15 @@ function Factures() {
   // Informations à compléter renvoyées par un refus d'émission (422), + de quoi forcer.
   const [manques, setManques] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  /* LE MODÈLE ET LE RÈGLEMENT (2026-09-28). « Nouveau document » ne les demandait pas : le modèle
+     se devinait au moment du PDF, et le règlement restait vide — un modèle qui imprime « Moyens et
+     montants réglés » refusait alors l'édition, sans que rien ne permette de le compléter. */
+  const [modeles, setModeles] = useState([]);   // modèles FACTURE actifs
+  const [moyens, setMoyens] = useState([]);     // moyens de paiement de l'entité par défaut
+  const [paiements, setPaiements] = useState([{ method: "", amount: "" }]);
+  // Brouillon en cours de complément : { inv, modele, paiements } — ou null.
+  const [complement, setComplement] = useState(null);
+  const refComplement = useRef(null);
 
   async function load() {
     try {
@@ -50,7 +75,30 @@ function Factures() {
     load();
     getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
     getCompanies().then((r) => setCompanies(r.data)).catch(() => {});
+    getTemplates().then((r) => {
+      const l = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE" && t.active !== false && t.active !== 0);
+      setModeles(l);
+      // Un seul modèle : rien à choisir, il est pré-sélectionné.
+      if (l.length === 1) setForm((p) => (p.template_slug ? p : { ...p, template_slug: l[0].slug }));
+    }).catch(() => {});
+    /* LES MOYENS DE L'ENTITÉ PAR DÉFAUT — celle sous laquelle ce document sortira —, comme à la
+       caisse. Ils se règlent dans Paramètres → Facturation (« Autre moyen… » en ajoute un). */
+    const poser = (liste) => {
+      const l = String(liste || MOYENS_DEFAUT).split(",").map((x) => x.trim()).filter(Boolean);
+      setMoyens(l);
+      setPaiements([{ method: l[0] || "", amount: "" }]);
+    };
+    getEmitters().then((r) => {
+      const l = r.data || [];
+      poser((l.find((e) => e.is_default) || l[0] || {}).payment_methods);
+    }).catch(() => poser(null));
   }, []);
+
+  // Le formulaire de complément s'ouvre au-dessus de la liste : on l'amène sous les yeux.
+  const idComplement = complement ? complement.inv.id : null;
+  useEffect(() => {
+    if (idComplement) refComplement.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [idComplement]);
 
   const lignes = useMemo(() => {
     if (!invoices) return null;
@@ -62,17 +110,25 @@ function Factures() {
   const addLine = () => setForm((p) => ({ ...p, lines: [...p.lines, emptyLine()] }));
   const delLine = (i) => setForm((p) => ({ ...p, lines: p.lines.length > 1 ? p.lines.filter((_, j) => j !== i) : p.lines }));
   const formTotal = form.lines.reduce((s, l) => s + (Number(l.amount_net) || 0), 0);
+  const formTtc = ttcDe(formTotal, form.tva_exoneree);
+  const modeleUnique = modeles.length === 1 ? modeles[0].slug : "";
 
   async function add(e) {
     e.preventDefault();
     setStatus(null);
+    // Le dernier moyen prend le solde ; une répartition qui DÉPASSE le total ne part pas.
+    const { parts, valid } = resolvePayments(paiements, formTtc);
+    if (!valid) { setStatus({ type: "error", message: "La répartition du règlement dépasse le total à régler." }); return; }
     try {
       const r = await createInvoice({
         type: form.type, company_id: form.company_id || null,
         tva_exoneree: form.tva_exoneree, due_date: form.due_date || null,
         lines: form.lines,
+        template_slug: form.template_slug || null,
+        payments: parts,
       });
-      setForm(makeEmpty());
+      setForm(makeEmpty(modeleUnique));
+      setPaiements([{ method: moyens[0] || "", amount: "" }]);
       setShowForm(false);
       setStatus({ type: "success", message: `Créé : ${r.number}` });
       load();
@@ -93,6 +149,26 @@ function Factures() {
       load();
     } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
+  /* COMPLÉTER UN BROUILLON : son modèle et son règlement, avant de l'émettre. C'est ce qui débloque
+     un brouillon créé sans eux (« Facture non générée … Moyens et montants réglés »). Pré-rempli
+     avec ce qu'il porte déjà. Un document émis ne se modifie plus : le serveur refuse. */
+  function ouvrirComplement(inv) {
+    // Le refus qui a mené ici est traité par ce formulaire : il ne reste pas affiché au-dessus.
+    setManques(null); setStatus(null);
+    setComplement({ inv, modele: inv.template_slug || "", paiements: lignesDuReglement(inv, moyens) });
+  }
+  async function enregistrerComplement() {
+    const ttc = ttcDe(complement.inv.amount_net, complement.inv.tva_exoneree);
+    const { parts, valid } = resolvePayments(complement.paiements, ttc);
+    if (!valid) { setStatus({ type: "error", message: "La répartition du règlement dépasse le total à régler." }); return; }
+    try {
+      await updateInvoice(complement.inv.id, { template_slug: complement.modele || null, payments: parts });
+      setStatus({ type: "success", message: `${complement.inv.number} complété : il peut être émis et édité.` });
+      setComplement(null);
+      load();
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
+
   async function remove(id) {
     if (!window.confirm("Supprimer ce document ?")) return;
     try { await deleteInvoice(id); load(); } catch (err) { setStatus({ type: "error", message: err.message }); }
@@ -106,7 +182,7 @@ function Factures() {
     try { await fn(i.id, i.number, force); }
     catch (err) {
       setStatus({ type: "error", message: err.message });
-      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => dl(fn, i, true) });
+      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => dl(fn, i, true), facture: i });
     }
   }
   async function preview(i, force) {
@@ -118,7 +194,7 @@ function Factures() {
     } catch (err) {
       if (w) w.close();
       setStatus({ type: "error", message: err.message });
-      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => preview(i, true) });
+      if (err.missing) setManques({ liste: err.missing, forcable: !!err.forcable, refaire: () => preview(i, true), facture: i });
     }
   }
 
@@ -136,6 +212,13 @@ function Factures() {
           <InfosManquantes missing={manques.liste} titre="Facture non générée">
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               <button type="button" className="btn sm ghost" onClick={() => setManques(null)}>Fermer</button>
+              {/* Ce qui manque est souvent le règlement ou le modèle d'un BROUILLON : on ouvre de
+                  quoi les poser, au lieu de laisser chercher où. */}
+              {manques.facture?.status === "BROUILLON" && (
+                <button type="button" className="btn sm primary" onClick={() => ouvrirComplement(manques.facture)}>
+                  Compléter le modèle et le règlement
+                </button>
+              )}
               {manques.forcable && (
                 <button type="button" className="btn sm ghost danger"
                   title="Émet le document malgré les informations manquantes : il ne sera pas conforme."
@@ -196,10 +279,54 @@ function Factures() {
               <input type="checkbox" checked={!!form.tva_exoneree} onChange={(e) => setForm((p) => ({ ...p, tva_exoneree: e.target.checked ? 1 : 0 }))} />
               TVA exonérée (art. 261-4-4° du CGI)
             </label>
+
+            {/* LE MODÈLE ET LE RÈGLEMENT. Le modèle met le document en page ; « automatique » garde la
+                règle d'avant (selon l'acheteur). Le règlement remplit « Moyens et montants réglés » :
+                plusieurs moyens se répartissent le total, le dernier prenant le solde. */}
+            <div className="grid cols-2" style={{ gap: 14, alignItems: "start", marginBottom: 12 }}>
+              <SelectField label="Modèle de facture" value={form.template_slug} onChange={set("template_slug")}>
+                <option value="">Choisir automatiquement (selon l'acheteur)</option>
+                {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>)}
+              </SelectField>
+              <div>
+                <PaiementSplit options={moyens} total={formTtc} rows={paiements} onChange={setPaiements} />
+                <p className="hint" style={{ margin: "2px 0 0" }}>
+                  Total à régler : <b>{euro(formTtc)}</b>{Number(form.tva_exoneree) ? "" : " TTC"}.
+                </p>
+              </div>
+            </div>
             <button type="submit" className="btn primary" disabled={formTotal <= 0}>Créer</button>
           </form>
         </Card>
       )}
+
+      {complement && (() => {
+        const ttc = ttcDe(complement.inv.amount_net, complement.inv.tva_exoneree);
+        // Un moyen déjà posé qui n'est plus dans la liste reste proposé : sinon le menu l'effacerait.
+        const options = [...new Set([...moyens, ...complement.paiements.map((p) => p.method).filter(Boolean)])];
+        return (
+          <div ref={refComplement}>
+            <Card title={`Compléter ${complement.inv.number}`} className="fade" style={{ marginBottom: 16 }}>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Le modèle qui mettra ce brouillon en page, et son règlement ({euro(ttc)}). Un document émis ne se modifie plus.
+              </p>
+              <div className="grid cols-2" style={{ gap: 14, alignItems: "start" }}>
+                <SelectField label="Modèle de facture" value={complement.modele}
+                  onChange={(e) => setComplement((c) => ({ ...c, modele: e.target.value }))}>
+                  <option value="">Choisir automatiquement (selon l'acheteur)</option>
+                  {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>)}
+                </SelectField>
+                <PaiementSplit options={options} total={ttc} rows={complement.paiements}
+                  onChange={(rows) => setComplement((c) => ({ ...c, paiements: rows }))} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button type="button" className="btn ghost" onClick={() => setComplement(null)}>Annuler</button>
+                <button type="button" className="btn primary" onClick={enregistrerComplement}>Enregistrer</button>
+              </div>
+            </Card>
+          </div>
+        );
+      })()}
 
       <Card title={`Documents${invoices ? ` (${invoices.length})` : ""}`}>
           <DataTable
@@ -251,6 +378,9 @@ function Factures() {
                       <MenuActions label={`Autres actions pour ${i.number}`}>
                         {i.status !== "BROUILLON" && !encaissable ? null : (
                           <button type="button" onClick={() => preview(i)}><Icon name="eye" size={15} /> Aperçu</button>
+                        )}
+                        {i.status === "BROUILLON" && (
+                          <button type="button" onClick={() => ouvrirComplement(i)}><Icon name="edit" size={15} /> Modèle et règlement</button>
                         )}
                         <button type="button" onClick={() => dl(downloadFacturX, i)}><Icon name="file-text" size={15} /> Factur-X (PDF)</button>
                         <button type="button" onClick={() => dl(downloadInvoiceXml, i)}><Icon name="download" size={15} /> XML seul</button>

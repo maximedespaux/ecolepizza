@@ -10,6 +10,7 @@ const { decrypt } = require('../lib/crypto.js'); // identifiant France Travail d
 const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
@@ -19,6 +20,77 @@ const MAX_AMOUNT = 100000000; // 100 M€ garde-fou
 function validAmount(v) {
     const n = Number(v);
     return Number.isFinite(n) && n >= 0 && n <= MAX_AMOUNT ? n : null;
+}
+
+/**
+ * LE MODÈLE ET LE RÈGLEMENT D'UN DOCUMENT DE /factures — demandé le 2026-09-28.
+ *
+ * LE DÉFAUT. « Nouveau document » ne demandait ni le modèle de facture ni le règlement. Le modèle
+ * était deviné au moment du PDF (pickInvoiceTemplate) ; le règlement restait VIDE — et un modèle
+ * qui imprime {Détail règlement} (« Moyens et montants réglés ») refusait alors l'édition :
+ * « Facture non générée : 1 information(s) attendue(s) par le modèle sont vides », sans aucun
+ * moyen de la compléter depuis l'écran. La facture FACT-2026-0004 est restée bloquée ainsi.
+ *
+ * Les deux s'enregistrent là où la caisse et les demandes boutique les écrivaient déjà —
+ * `template_slug` (121), `payment_method` et `payment_split` (116) — et le PDF les lit sans rien
+ * changer : `templateSlug` prime sur la sélection automatique, la ventilation remplit
+ * {Règlement}, {Détail règlement} et {Règlements}.
+ */
+
+/** Un modèle FACTURE actif de l'organisme, ou une erreur à dire. Vide = « automatique ». */
+async function modeleFactureChoisi(orgId, valeur) {
+    const slug = String(valeur == null ? '' : valeur).trim();
+    if (!slug) return { slug: null };
+    const step = (await loadOrgSteps(orgId)).find((x) => x.slug === slug);
+    if (!step) return { erreur: 'Modèle de facture introuvable.' };
+    const nom = step.label || step.slug;
+    if (String(step.doc_type || '').toUpperCase() !== 'FACTURE') return { erreur: `« ${nom} » n'est pas un modèle de facture.` };
+    // Un modèle désactivé serait ignoré à l'édition, en silence : on le refuse ici, en le disant.
+    if (!step.active) return { erreur: `« ${nom} » est désactivé : réactivez-le dans Modèles de documents.` };
+    return { slug: step.slug };
+}
+
+/**
+ * LE RÈGLEMENT reçu, mis au propre — même forme qu'à la caisse : des parts `{ method, amount }`
+ * (banque et numéro pour un chèque), le résumé « A + B » pour `payment_method`, le détail JSON pour
+ * `payment_split`. LA SOMME DOIT TOMBER SUR LE TTC, calculé par `ventilerTva` — la fonction même
+ * qui fait le total du PDF : sinon le document imprimerait des montants réglés qui ne bouclent pas.
+ * Aucune part : rien n'est écrit (un devis peut n'en avoir aucune).
+ */
+function reglementDe(body, ttc) {
+    const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
+    const parts = (Array.isArray(body && body.payments) ? body.payments : [])
+        .map((p) => {
+            const part = { method: String((p && p.method) || '').trim().slice(0, 40), amount: Math.round(Number(p && p.amount) * 100) / 100 };
+            if (estCheque(part.method)) {
+                if (String((p && p.bank) || '').trim()) part.bank = String(p.bank).trim().slice(0, 120);
+                if (String((p && p.cheque_number) || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
+            }
+            return part;
+        })
+        .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+    if (!parts.length) return { vide: true };
+    const somme = Math.round(parts.reduce((t, p) => t + p.amount, 0) * 100) / 100;
+    if (Math.abs(somme - ttc) > 0.01) {
+        return { erreur: `La répartition des paiements (${montantFr(somme)}) ne correspond pas au total à régler (${montantFr(ttc)}).` };
+    }
+    return { resume: parts.map((p) => p.method).join(' + ').slice(0, 30), ventilation: JSON.stringify(parts) };
+}
+
+/**
+ * Écrit le modèle et le règlement d'un document. `payment_method` est une colonne de base ;
+ * `payment_split` (116) et `template_slug` (121) sont sondées — sans elles, le reste s'écrit.
+ */
+async function ecrireModeleEtReglement(conn, orgId, id, { modele, reglement }) {
+    if (reglement && !reglement.vide) {
+        await conn.query('UPDATE invoice SET payment_method = ? WHERE id = ? AND organization_id = ?', [reglement.resume, id, orgId]);
+        if (await colonneExiste(conn, 'invoice', 'payment_split')) {
+            await conn.query('UPDATE invoice SET payment_split = ? WHERE id = ? AND organization_id = ?', [reglement.ventilation, id, orgId]);
+        }
+    }
+    if (modele && await colonneExiste(conn, 'invoice', 'template_slug')) {
+        await conn.query('UPDATE invoice SET template_slug = ? WHERE id = ? AND organization_id = ?', [modele.slug, id, orgId]);
+    }
 }
 
 // Vérifie qu'un id référencé (entreprise, dossier) appartient bien à l'organisme.
@@ -195,7 +267,10 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
  */
 const getInvoices = (req, res) => {
     db.query(
-        `SELECT i.id, i.type, i.number, i.amount_net, i.tva_exoneree, i.status,
+        /* `i.*` : le modèle et le règlement d'un brouillon (template_slug, payment_method,
+           payment_split) pré-remplissent « Modèle et règlement » — des colonnes arrivées par migration,
+           qu'une liste nommée ferait échouer tant qu'elles manquent. Aucune n'est un fichier. */
+        `SELECT i.*, i.id, i.type, i.number, i.amount_net, i.tva_exoneree, i.status,
                 DATE_FORMAT(i.due_date, '%Y-%m-%d') AS due_date,
                 DATE_FORMAT(i.created_at, '%Y-%m-%d') AS created_at,
                 i.enrollment_id, i.company_id,
@@ -257,6 +332,17 @@ const createInvoice = async (req, res) => {
 
     try {
         const conn = db.promise();
+        /* LE MODÈLE ET LE RÈGLEMENT, vérifiés AVANT toute écriture : un refus ne doit pas laisser un
+           document à moitié créé, ni consommer un numéro de la séquence. Le TTC vient de
+           `ventilerTva`, comme sur le PDF (TVA à 20 % sauf exonération, cf. tax_rate NULL). */
+        const ttc = ventilerTva({
+            amountNet: total, tvaExoneree: !!tva_exoneree, taxRate: null,
+            lines: hasLines ? cleanLines.map((l) => ({ amount: l.amount_net })) : [],
+        }).grand;
+        const reglement = reglementDe(req.body, ttc);
+        if (reglement.erreur) return res.status(422).json({ error: reglement.erreur });
+        const modele = await modeleFactureChoisi(req.user.organization_id, req.body.template_slug);
+        if (modele.erreur) return res.status(422).json({ error: modele.erreur });
         // Cloisonnement : les références client/dossier doivent être du même organisme.
         if (!await belongsToOrg(conn, 'company', company_id, req.user.organization_id)) {
             return res.status(422).json({ error: 'Entreprise inconnue.' });
@@ -312,6 +398,8 @@ const createInvoice = async (req, res) => {
                 );
             }
         }
+        // « Automatique » à la création : la colonne est déjà vide, rien à écrire.
+        await ecrireModeleEtReglement(conn, req.user.organization_id, invoiceId, { modele: modele.slug ? modele : null, reglement });
         logAudit(req, 'invoice.create', 'Invoice', invoiceId);
         res.status(201).json({ message: 'Document créé', number });
     } catch (err) {
@@ -321,9 +409,40 @@ const createInvoice = async (req, res) => {
 };
 
 /**
- * PATCH /api/factures/:id — met à jour le statut.
+ * COMPLÉTER UN BROUILLON : son modèle et son règlement (2026-09-28). C'est le seul moyen de
+ * débloquer un brouillon créé sans eux — FACT-2026-0004 attendait « Moyens et montants réglés ».
+ * UN DOCUMENT ÉMIS NE SE MODIFIE PLUS : il a pu partir chez le client, et sa présentation fait
+ * foi. Le TTC est celui du PDF (loadInvoiceData + ventilerTva), lignes et taux compris.
+ */
+async function completerBrouillon(req, res) {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[inv]] = await conn.query('SELECT id, status FROM invoice WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!inv) return res.status(404).json({ message: 'Document introuvable.' });
+        if (inv.status !== 'BROUILLON') {
+            return res.status(409).json({ message: 'Seul un brouillon se complète : un document émis ne se modifie plus.' });
+        }
+        const data = await loadInvoiceData(conn, orgId, inv.id);
+        const reglement = reglementDe(req.body, ventilerTva(data).grand);
+        if (reglement.erreur) return res.status(422).json({ message: reglement.erreur });
+        const modele = req.body.template_slug !== undefined ? await modeleFactureChoisi(orgId, req.body.template_slug) : null;
+        if (modele && modele.erreur) return res.status(422).json({ message: modele.erreur });
+        await ecrireModeleEtReglement(conn, orgId, inv.id, { modele, reglement });
+        logAudit(req, 'invoice.completer', 'Invoice', inv.id);
+        res.json({ success: true, message: 'Modèle et règlement enregistrés.' });
+    } catch (err) {
+        console.error('Erreur complément facture :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
+
+/**
+ * PATCH /api/factures/:id — met à jour le statut ; ou, avec `template_slug` / `payments`,
+ * complète un brouillon (cf. completerBrouillon).
  */
 const updateInvoice = (req, res) => {
+    if (req.body.template_slug !== undefined || req.body.payments !== undefined) return completerBrouillon(req, res);
     const status = req.body.status;
     const allowed = ['BROUILLON', 'EMISE', 'PAYEE', 'IMPAYEE', 'ANNULEE'];
     if (!allowed.includes(status)) return res.status(422).json({ error: 'Statut invalide' });

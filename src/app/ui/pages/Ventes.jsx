@@ -4,7 +4,7 @@ import ImageLien from "../components/ImageLien.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import {
   getSales, deleteSale, getInventory, getStagiaires, checkoutSale,
-  getShopSettings, downloadFacturX, getCompanies, getEmitters, getTemplates, getMoyensPaiement } from "../api/apiClient.js";
+  getShopSettings, downloadFacturX, getCompanies, getEmitters, getTemplates } from "../api/apiClient.js";
 import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -60,8 +60,6 @@ function Ventes() {
   // Modèle de facture choisi à la vente (OBLIGATOIRE) : la facture sort sous ce modèle.
   const [factureTemplates, setFactureTemplates] = useState([]);
   const [factureSlug, setFactureSlug] = useState("");
-  // Les moyens de paiement de l'école, chacun avec son modèle (Facturation → Moyens de paiement).
-  const [moyens, setMoyens] = useState([]);
   const [discount, setDiscount] = useState(""); // % remise globale
   const [dueDate, setDueDate] = useState(""); // échéance de règlement (vide = à réception)
   // Répartition du règlement : une ligne par moyen, la dernière prenant le solde. Une seule
@@ -86,7 +84,6 @@ function Ventes() {
       setEmitterId((list.find((e) => e.is_default) || {}).id || ""); // présélectionne le défaut
     }).catch(() => {});
     getShopSettings().then((r) => setSettings(r.data)).catch(() => {});
-    getMoyensPaiement().then((r) => setMoyens(r.data || [])).catch(() => {});
     // Modèles de FACTURE actifs : le vendeur choisit lequel utiliser pour cette vente.
     getTemplates().then((r) => {
       const list = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE" && t.active !== false && t.active !== 0);
@@ -95,28 +92,14 @@ function Ventes() {
     }).catch(() => {});
   }, []);
 
-  // L'émettrice choisie porte la TVA ; à défaut, on retombe sur les réglages boutique.
+  // L'émettrice choisie porte désormais TVA et moyens de paiement ; à défaut, on retombe sur les
+  // réglages boutique, puis sur des valeurs par défaut. La caisse suit donc l'entité sélectionnée.
   const selectedEmitter = useMemo(() => emitters.find((e) => e.id === emitterId) || null, [emitters, emitterId]);
-  /* LES MOYENS VIENNENT DE LA LISTE DE L'ÉCOLE (Facturation → Moyens de paiement, migration 187),
-     plus de l'entité : un moyen ajouté là-bas apparaît ici comme en facturant une demande. Le repli
-     sur l'entité ne sert qu'à une interface déployée avant son API. */
   const payOptions = useMemo(
-    () => (moyens.length ? moyens.map((m) => m.libelle)
-      : (selectedEmitter?.payment_methods || settings?.payment_methods || "Espèces,CB,Virement,Chèque")
-        .split(",").map((s) => s.trim()).filter(Boolean)),
-    [moyens, selectedEmitter, settings]
+    () => (selectedEmitter?.payment_methods || settings?.payment_methods || "Espèces,CB,Virement,Chèque")
+      .split(",").map((s) => s.trim()).filter(Boolean),
+    [selectedEmitter, settings]
   );
-  /* LE MOYEN PRÉ-SÉLECTIONNE SON MODÈLE — décidé par l'école le 2026-09-28. C'est le PREMIER moyen
-     du règlement qui décide (un règlement ventilé en a plusieurs) ; son modèle n'est retenu que s'il
-     est un modèle FACTURE actif, sinon rien ne bouge. L'effet ne dépend que de CE modèle : saisir un
-     montant ne défait pas un choix fait à la main, changer de moyen le propose de nouveau. */
-  const methodePrincipale = payments[0]?.method || "";
-  const modeleDuMoyen = useMemo(() => {
-    const m = moyens.find((x) => x.libelle === methodePrincipale);
-    const slug = (m && m.template_slug) || "";
-    return slug && factureTemplates.some((t) => t.slug === slug) ? slug : "";
-  }, [moyens, methodePrincipale, factureTemplates]);
-  useEffect(() => { if (modeleDuMoyen) setFactureSlug(modeleDuMoyen); }, [modeleDuMoyen]);
 
   const grouped = useMemo(() => {
     const g = {};
@@ -438,13 +421,6 @@ function Ventes() {
                 {factureTemplates.length === 0 && (
                   <p className="hint" style={{ margin: "4px 0 0", fontSize: 12, color: "var(--ember1)" }}>
                     Aucun modèle de type FACTURE. Créez-en un dans Modèles de documents.
-                  </p>
-                )}
-                {/* D'où vient le choix : sans cette ligne, un modèle qui change seul quand on change
-                    de moyen ressemblerait à une erreur. */}
-                {modeleDuMoyen && factureSlug === modeleDuMoyen && (
-                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 12 }}>
-                    Choisi d'après le moyen de paiement « {methodePrincipale} ».
                   </p>
                 )}
               </div>

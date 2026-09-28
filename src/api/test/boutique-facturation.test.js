@@ -80,9 +80,7 @@ test('une entité émettrice donne SON numéro, sinon on garde le compteur BQ', 
 test('le modèle de facture est enregistré au lieu d\'être deviné', () => {
     assert.match(srcShop, /const slugChoisi = req\.body\?\.template_slug \|\| null/,
         'le modèle vient du choix fait à l\'émission');
-    /* Figé sur la facture (migration 121). Sans choix (« Automatique »), c'est le modèle du PREMIER
-       moyen de paiement (Facturation → Moyens de paiement, 187) — la même règle qu'à la caisse. */
-    assert.match(srcShop, /ajouter\('template_slug', slugChoisi \|\| await modeleDuReglement\(conn, orgId, parts, req\.body\?\.payment_method\)\)/,
+    assert.match(srcShop, /ajouter\('template_slug', slugChoisi\)/,
         'le slug doit être figé sur la facture (migration 121)');
 });
 
@@ -145,7 +143,7 @@ test('le règlement se ventile en PLUSIEURS moyens, avec leurs montants', () => 
      * divergeraient sur le solde de la dernière ligne ou la saisie d'un chèque. */
     assert.match(srcOrg, /import PaiementSplit, \{ resolvePayments \} from "\.\.\/components\/PaiementSplit\.jsx"/,
         'le composant de la caisse doit être réutilisé, pas recopié');
-    assert.match(srcOrg, /<PaiementSplit options=\{moyens\.map\(\(m\) => m\.libelle\)\} total=\{totalTtc\}/,
+    assert.match(srcOrg, /<PaiementSplit options=\{moyens\} total=\{totalTtc\}/,
         'la ventilation doit porter sur le total réellement encaissé');
     assert.match(srcOrg, /payments: resolvePayments\(paiements, totalTtc\)\.parts/,
         'le solde doit être résolu comme à la caisse avant envoi');
@@ -165,12 +163,8 @@ test('la modale propose l\'échéance du jour et les moyens de l\'organisme', ()
     assert.match(srcOrg, /<label>Date d'échéance<\/label>/);
     assert.match(srcOrg, /useState\(\(\) => new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\)/,
         'l\'échéance doit être pré-remplie au jour même');
-    /* LA LISTE DE L'ÉCOLE (Facturation → Moyens de paiement, 187), la même que la caisse. Elle se
-       lisait dans les anciens réglages boutique, que plus aucun écran ne modifie : un moyen ajouté
-       sur une entité n'apparaissait jamais ici. */
-    assert.match(srcOrg, /getMoyensPaiement\(\)/,
-        'les moyens doivent venir de la liste de l\'école, pas d\'une liste recopiée');
-    assert.doesNotMatch(srcOrg, /getShopSettings/, 'plus de lecture des anciens réglages boutique');
+    assert.match(srcOrg, /getShopSettings\(\)/,
+        'les moyens doivent venir des réglages de l\'organisme, pas d\'une liste recopiée');
 });
 
 test('l\'organisme choisit avant d\'émettre, il ne subit plus', () => {

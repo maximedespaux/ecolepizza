@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-28** :
-**2168 tests — 2161 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2163 tests — 2156 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -199,24 +199,7 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 186 et la 187 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
-
-**187 est À JOUER** (`187_moyens_paiement.sql`, les MOYENS DE PAIEMENT en une liste, chacun avec SON modèle de facture —
-demandé le 2026-09-28). Une table `moyen_paiement` : libellé (30 caractères, la taille de `invoice.payment_method` ; unique
-dans l'organisme, casse et accents confondus), `template_slug` (NULL = « Automatique », la règle de l'acheteur d'avant) et
-ordre. Elle naît VIDE : la PREMIÈRE LECTURE la sème avec les moyens déjà en usage — entité par défaut, autres entités,
-réglages boutique, sans doublon — ou les quatre habituels (`lib/moyensPaiement.js` ; découper les listes à virgules en SQL
-ne s'éprouvait pas hors de la production). **Décidé par l'école le même jour** : une seule liste, dans Paramètres →
-Facturation (les entités n'ont plus la leur ; leur colonne `payment_methods` ne sert plus qu'à semer et au repli) ; à la
-caisse ET en facturant une demande boutique, le moyen PRÉ-SÉLECTIONNE son modèle, qui reste modifiable ; un règlement
-ventilé suit sa PREMIÈRE ligne ; le serveur tient la même règle quand aucun modèle n'est envoyé (`modeleDuReglement`).
-Le dernier moyen ne se retire pas (une caisse sans moyen n'encaisserait plus). Renommer ne récrit aucune facture émise.
-Sans la migration, rien ne casse : la caisse et les demandes proposent les moyens d'avant, réunis, sans modèle, et la carte
-de Facturation le dit sans rien offrir de modifier. **Elle se vérifie par l'API, sans SQL** : ouvrir Paramètres →
-Facturation, puis `GET /api/moyens-paiement` rend `disponible: true`. Ou une requête, qui doit rendre 1 :
-`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='moyen_paiement';`
-⚠️ Son revert supprime la liste et les modèles attachés : la caisse revient aux listes d'avant, restées sur les entités.
-Tests : `moyens-paiement.test.js`.
+## 4. Migrations — **la 186 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
 **186 est À JOUER, de préférence AVANT de déployer le code** (`186_audit_precisions.sql`, ce que désigne une ligne du
 journal — demandé le 2026-09-28 : « Document signé ×2 » ne disait pas LESQUELS). La cloche (Alertes, Activité de l'équipe),
