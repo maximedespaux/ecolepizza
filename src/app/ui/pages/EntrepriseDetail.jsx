@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
-  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount } from "../api/apiClient.js";
+  detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount,
+  importDocumentFile, downloadDocumentImporte } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
@@ -14,7 +15,9 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { dateHeure, dateFr } from "../lib/format.js";
-import { documentsDeLEtape, documentsEntrepriseHorsParcours } from "../lib/documentsDossier.js";
+import { documentsDeLEtape, documentsEntrepriseHorsParcours, cibleImportGroupe, signeDansLApplication } from "../lib/documentsDossier.js";
+import { ACCEPT_DOCUMENT, refusDocumentRecu } from "../lib/formatsDepot.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
 const REP_ROLES = ["Gérant(e)", "Président(e)", "Directeur / Directrice", "Directeur général / Directrice générale", "Chef(fe) d'entreprise", "Responsable formation", "Responsable RH / DRH", "Responsable administratif", "Associé(e)", "Autre"];
@@ -87,6 +90,11 @@ export default function EntrepriseDetail() {
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
+  /* Import d'un exemplaire signé reçu : le sélecteur caché, et le document (ou l'étape) visé. UNE
+     RÉFÉRENCE, pas un état : la cible doit être connue au moment où le fichier arrive, sans attendre
+     un nouveau rendu — et rien ne l'affiche. */
+  const fichierRef = useRef(null);
+  const cibleImport = useRef(null);
   const [learnerDocs, setLearnerDocs] = useState([]); // docs stagiaires à signer par le représentant
   const [repCreds, setRepCreds] = useState(null); // { email, password } du compte représentant
   // Rattacher un stagiaire existant à l'entreprise
@@ -239,9 +247,14 @@ export default function EntrepriseDetail() {
     try { await deleteDocument(docId); setParcoursRefresh((n) => n + 1); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  /* TÉLÉCHARGER : le fichier REÇU pour un document importé (c'est lui qui fait foi), le PDF sinon
+     — la règle de la fiche stagiaire. Recomposé depuis le modèle, le PDF d'un document importé ne
+     porterait pas la signature de l'entreprise. */
   async function telechargerPdf(d) {
-    try { await downloadDocumentPdf(d.id, `${d.title || "document"}.pdf`); }
-    catch (e) { setStatus({ type: "error", message: e.message }); }
+    try {
+      if (d.importe_le) await downloadDocumentImporte(d.id, d.fichier_nom);
+      else await downloadDocumentPdf(d.id, `${d.title || "document"}.pdf`);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function companySignLink(docId) {
     try {
@@ -289,6 +302,71 @@ export default function EntrepriseDetail() {
 
   if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} />;
 
+  /* IMPORTER L'EXEMPLAIRE SIGNÉ RENVOYÉ PAR L'ENTREPRISE (demandé le 2026-09-28 : « pour une
+     entreprise, seulement Préparer le document, alors que le stagiaire peut importer »). Même geste
+     que sur la fiche stagiaire, même route (`/documents/import`, par `document_id`) : le document
+     passe à signé, le fichier reçu fait foi, et rien ne se fait passer pour une signature
+     électronique. OÙ LE RATTACHER se décide dans `cibleImportGroupe` (lib/documentsDossier.js). */
+  function demanderImportGroupe(step) {
+    const cible = cibleImportGroupe(documentsDeLEtape(companyDocs, step.key, viewSessionId));
+    if (cible.refus === "plusieurs") {
+      setStatus({ type: "info", message: `« ${step.label} » a un document par OPCO (${cible.n}) : importez chaque exemplaire signé sur sa ligne, avec son bouton d'import.` });
+      return;
+    }
+    if (cible.refus === "signe") {
+      setStatus({ type: "info", message: `« ${cible.doc.title} » a été signé dans l'application : il n'y a rien à importer.` });
+      return;
+    }
+    ouvrirSelecteur({ doc: cible.doc || null, slug: step.key, label: step.label });
+  }
+  // Sur la LIGNE d'un document (un par OPCO, ou « Autres documents ») : il n'y a rien à deviner.
+  function demanderImportDocument(d) { ouvrirSelecteur({ doc: d, slug: d.template_slug, label: d.title }); }
+  // Un seul sélecteur, caché, comme sur la fiche stagiaire : le navigateur ouvre déjà sa fenêtre.
+  function ouvrirSelecteur(cible) {
+    cibleImport.current = cible;
+    fichierRef.current?.click();
+  }
+  async function envoyerImportGroupe(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // sinon réimporter LE MÊME fichier ne déclencherait aucun `change`
+    const cible = cibleImport.current;
+    cibleImport.current = null;
+    if (!file || !cible) return;
+    /* VÉRIFIÉ AVANT DE PRÉPARER : une étape jamais préparée l'est d'abord, et un fichier refusé
+       ensuite laisserait derrière lui un document préparé que personne n'a demandé. */
+    const refus = refusDocumentRecu(file);
+    if (refus) { setStatus({ type: "error", message: refus }); return; }
+    setStatus(null);
+    try {
+      let docId = cible.doc?.id || null;
+      if (!docId) {
+        /* L'ÉTAPE N'A JAMAIS ÉTÉ PRÉPARÉE : elle l'est par le MÊME chemin que « Préparer le
+           document » (un document par OPCO, le groupe listé), puis le fichier s'y rattache. Deux
+           chemins de préparation finiraient par produire deux documents différents. */
+        await createCompanyDocument(id, { session_id: viewSessionId, template_slug: cible.slug });
+        const r = await listCompanyDocuments(id);
+        setCompanyDocs(r.data || []);
+        const prepares = documentsDeLEtape(r.data || [], cible.slug, viewSessionId);
+        if (!prepares.length) throw new Error(`« ${cible.label} » n'a pas pu être préparé.`);
+        if (prepares.length > 1) {
+          setStatus({ type: "info", message: `« ${cible.label} » est préparé en ${prepares.length} documents, un par OPCO : importez chaque exemplaire signé sur sa ligne.` });
+          return;
+        }
+        docId = prepares[0].id;
+      }
+      const fd = new FormData();
+      /* Un scan photographié se réduit, un PDF passe intact — la règle de la fiche stagiaire. */
+      fd.append("file", await reduireSiImage(file, PROFILS.piece), file.name);
+      fd.append("document_id", docId);
+      await importDocumentFile(fd);
+      setStatus({ type: "success", message: `« ${file.name} » rattaché à « ${cible.label} » : le document est signé, l'exemplaire reçu fait foi.` });
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    } finally {
+      setParcoursRefresh((n) => n + 1);
+    }
+  }
+
   /* LES BOUTONS D'UN DOCUMENT DE GROUPE, une seule définition : sur la carte de son étape ET dans
      « Autres documents ». La corbeille garde sa confirmation (plus ferme pour un document signé). */
   function boutonsDocumentEntreprise(d) {
@@ -296,12 +374,22 @@ export default function EntrepriseDetail() {
       <>
         <button className="iconbtn" title="Aperçu / vérifier" aria-label={`Aperçu de ${d.title}`} onClick={() => setViewId(d.id)}><Icon name="eye" size={16} /></button>
         {d.status === "A_FAIRE" && <button className="iconbtn" title="Envoyer (à l'entreprise)" aria-label={`Envoyer ${d.title} à l'entreprise`} onClick={() => sendCompanyDoc(d.id)}><Icon name="send" size={16} /></button>}
-        {d.template_slug && <button className="iconbtn" title="Télécharger le PDF" aria-label={`Télécharger ${d.title}`} onClick={() => telechargerPdf(d)}><Icon name="download" size={16} /></button>}
+        {(d.importe_le || d.template_slug) && (
+          <button className="iconbtn" title={d.importe_le ? `Télécharger le document reçu${d.fichier_nom ? ` (${d.fichier_nom})` : ""}` : "Télécharger le PDF"}
+            aria-label={`Télécharger ${d.title}`} onClick={() => telechargerPdf(d)}><Icon name="download" size={16} /></button>
+        )}
+        {/* L'exemplaire signé renvoyé par l'entreprise. Pas sur un document signé DANS l'application :
+            il n'y a rien à recevoir. Sur un document déjà importé, il REMPLACE le fichier. */}
+        {!signeDansLApplication(d) && (
+          <button className="iconbtn" title={d.importe_le ? "Remplacer le document reçu" : "Importer l'exemplaire signé reçu (e-mail, scan)"}
+            aria-label={`Importer le document reçu pour ${d.title}`} onClick={() => demanderImportDocument(d)}><Icon name="upload" size={16} /></button>
+        )}
         <button className="iconbtn del" title={d.status === "SIGNE" ? "Supprimer (document signé)" : "Supprimer"} aria-label={`Supprimer ${d.title}`} onClick={() => deleteCompanyDoc(d.id, d.title, d.status === "SIGNE")}><Icon name="trash" size={15} /></button>
       </>
     );
   }
-  const traceDocument = (d) => (d.signed_at ? `signé le ${dateFr(d.signed_at)}`
+  const traceDocument = (d) => (d.importe_le ? `importé le ${dateFr(d.importe_le)}`
+    : d.signed_at ? `signé le ${dateFr(d.signed_at)}`
     : d.sent_at ? `envoyé le ${dateFr(d.sent_at)}`
     : d.created_at ? `préparé le ${dateFr(d.created_at)}` : "préparé");
 
@@ -315,10 +403,11 @@ export default function EntrepriseDetail() {
     if (!liste.length) return null;
     /* Plusieurs documents : chaque ligne porte le NOM de son OPCO et un état court — la date
        n'y tiendrait pas à côté de quatre boutons ; elle reste, complète, au survol. */
-    const etatCourt = (d) => (d.signed_at || d.status === "SIGNE" ? "signé" : d.sent_at ? "envoyé" : "préparé");
+    const etatCourt = (d) => (d.importe_le ? "importé" : d.signed_at || d.status === "SIGNE" ? "signé" : d.sent_at ? "envoyé" : "préparé");
     const ligne = (d, nom) => (
       <>
-        <span className="parc-trace" title={[d.title, d.created_at && `préparé le ${dateHeure(d.created_at)}`, d.sent_at && `envoyé le ${dateHeure(d.sent_at)}`, d.signed_at && `signé le ${dateHeure(d.signed_at)}`].filter(Boolean).join(" · ")}>
+        <span className="parc-trace" title={[d.title, d.created_at && `préparé le ${dateHeure(d.created_at)}`, d.sent_at && `envoyé le ${dateHeure(d.sent_at)}`, d.signed_at && `signé le ${dateHeure(d.signed_at)}`,
+          d.importe_le && `reçu et importé le ${dateHeure(d.importe_le)}${d.fichier_nom ? ` (${d.fichier_nom})` : ""}`].filter(Boolean).join(" · ")}>
           {nom ? `${nom} · ${etatCourt(d)}` : traceDocument(d)}
         </span>
         {boutonsDocumentEntreprise(d)}
@@ -565,6 +654,7 @@ export default function EntrepriseDetail() {
               resetKey={`${id}:${viewSessionId}`}
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
+              onImport={demanderImportGroupe}
               onOpenDoc={openCompanyDoc}
               renderGestes={gestesEtapeGroupe}
               renderPreparation={formulaireGroupe}
@@ -573,6 +663,8 @@ export default function EntrepriseDetail() {
             />
           )}
 
+          {/* Sélecteur partagé par l'étape et par chaque ligne ; `accept` aligné sur le serveur. */}
+          <input ref={fichierRef} type="file" accept={ACCEPT_DOCUMENT} style={{ display: "none" }} onChange={envoyerImportGroupe} />
           {autresDocs.length > 0 && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
               <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Autres documents</h3>

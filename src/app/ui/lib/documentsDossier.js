@@ -109,3 +109,27 @@ export function etatPourLeStagiaire(d) {
   if (d.quiz_id || d.signable !== false) return "todo";
   return d.company_sign ? "wait" : "done";
 }
+
+/**
+ * UN DOCUMENT SIGNÉ DANS L'APPLICATION n'a rien à recevoir : sa signature y est, scellée. Signé ET
+ * importé, c'est l'inverse — un exemplaire reçu, qu'on peut remplacer si l'on s'est trompé de
+ * fichier (réimporter remplace, cf. `importDocumentFile`).
+ */
+export const signeDansLApplication = (d) => !!d && d.status === "SIGNE" && !d.importe_le;
+
+/**
+ * OÙ RATTACHER L'EXEMPLAIRE SIGNÉ RENVOYÉ PAR UNE ENTREPRISE, pour une étape de GROUPE (fiche
+ * entreprise, demandé le 2026-09-28 : « pour une entreprise, seulement Préparer le document, alors
+ * que le stagiaire peut importer »). `liste` : les documents de l'étape (`documentsDeLEtape`).
+ *   · aucun : l'étape n'a jamais été préparée → `{ preparer: true }`, et l'écran la prépare par le
+ *     MÊME chemin que « Préparer le document » avant d'y rattacher le fichier ;
+ *   · un seul : c'est lui → `{ doc }`, sauf s'il a été signé dans l'application → `{ refus: "signe" }` ;
+ *   · plusieurs, un par OPCO → `{ refus: "plusieurs" }` : rien ne dit à quel OPCO appartient le
+ *     fichier, chacun s'importe sur SA ligne. Deviner rattacherait la convention d'AKTO à OCAPIAT.
+ */
+export function cibleImportGroupe(liste) {
+  const docs = liste || [];
+  if (!docs.length) return { preparer: true };
+  if (docs.length > 1) return { refus: "plusieurs", n: docs.length };
+  return signeDansLApplication(docs[0]) ? { refus: "signe", doc: docs[0] } : { doc: docs[0] };
+}

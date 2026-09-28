@@ -344,11 +344,17 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               au mauvais endroit. */}
           {/* BOUTONS SECONDAIRES PLEINS, pas « fantômes » : sur le fond gris du panneau, un bouton
               sans bordure se lisait comme une légende posée à droite, pas comme un geste. */}
-          {onImport && !String(step.key || "").startsWith("quiz:") && (
+          {/* FICHE ENTREPRISE (2026-09-28) : seul un document de GROUPE s'importe ici — l'exemplaire
+              signé que l'entreprise renvoie. Une étape « stagiaire » du parcours de groupe ne dit pas
+              de QUEL stagiaire il s'agirait : elle s'importe depuis la fiche de chacun, comme elle s'y
+              prépare. */}
+          {onImport && !String(step.key || "").startsWith("quiz:") && !(isGroup(step) && !step.company_level) && (
             <button className="btn" onClick={() => onImport(step)}
               title={step.piece
                 ? "Déposer ici une pièce reçue par e-mail ou scannée : elle sera validée du même geste"
-                : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
+                : isGroup(step)
+                  ? "Rattacher à cette étape l'exemplaire signé renvoyé par l'entreprise (e-mail, scan)"
+                  : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
               {step.piece ? "Déposer la pièce reçue" : "Importer un document reçu"}
             </button>
           )}
