@@ -71,7 +71,9 @@ test('le bouton annonce la bonne destination', () => {
     /* Une pièce ne rejoint pas les documents du dossier mais le circuit des pièces
        justificatives : annoncer « importer un document » ferait chercher le fichier au
        mauvais endroit. */
-    assert.match(ETAPES, /step\.piece \? "Déposer la pièce reçue" : "Importer un document reçu"/);
+    /* Et un document REMIS se DÉPOSE (2026-09-28) : l'école le donne, le destinataire en accuse
+       réception — ni une pièce à valider, ni un document reçu. */
+    assert.match(ETAPES, /s\.piece \? "Déposer la pièce reçue" : s\.remise \? "Déposer le document" : "Importer un document reçu"/);
 });
 
 test('la revue des pièces se rafraîchit après un dépôt du personnel', () => {

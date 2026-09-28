@@ -85,7 +85,9 @@ test('la liste du dossier ne charge JAMAIS le fichier', () => {
 test('l\'écran propose l\'import sur une étape, jamais sur un QCM', () => {
     /* Un questionnaire ne se remplace pas par un fichier : sans réponses enregistrées il ne prouve
        rien et ne se rejoue pas. */
-    assert.match(PARCOURS, /onImport && !String\(step\.key \|\| ""\)\.startsWith\("quiz:"\)/);
+    // La règle vit dans `importPossible` depuis que les remises s'y déposent aussi (2026-09-28).
+    assert.match(PARCOURS, /\{onImport && importPossible\(step\) && \(/);
+    assert.match(PARCOURS, /function importPossible\(s\) \{\s+if \(String\(s\.key \|\| ""\)\.startsWith\("quiz:"\)\) return false;/);
     // Le sélecteur se réarme, sinon réimporter le MÊME fichier ne déclencherait aucun `change`.
     assert.match(PAGE, /e\.target\.value = "";/);
     // Et la mention « reçu » s'affiche : c'est elle qui préserve la distinction à l'écran.

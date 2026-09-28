@@ -7,7 +7,7 @@ const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 /* La section « À l'arrivée via une entreprise » — la MÊME lecture que celle du parcours, pas
    une relecture du JSON écrite une seconde fois ici. */
-const { companyStepSlugs, etatDeGroupe, pourcentFait, needsSignature, SENT } = require('../lib/parcours.js');
+const { companyStepSlugs, compteRemiseGroupe, etatDeGroupe, pourcentFait, needsSignature, SENT } = require('../lib/parcours.js');
 const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
@@ -712,7 +712,12 @@ const getCompanyParcours = async (req, res) => {
     try {
         const conn = db.promise();
         const orgId = req.user.organization_id;
-        const [[company]] = await conn.query('SELECT id, name FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        /* `user_id` : le compte de son représentant (migration 084). Une remise adressée à l'entreprise
+           ne va dans SON espace que si elle en a un — sinon au stagiaire (`pourEntreprise`,
+           remise.controller.js) ; l'étape le dit de la même façon. */
+        const [[company]] = await conn.query(
+            `SELECT id, name, ${await colonneOuNull(conn, 'company', 'user_id')} FROM company WHERE id = ? AND organization_id = ?`,
+            [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
         const empty = { header: {}, steps: [], percent: 0, currentIndex: 0, currentKey: null, total_stagiaires: 0 };
         const sessionId = req.query.session_id;
@@ -742,10 +747,20 @@ const getCompanyParcours = async (req, res) => {
             ? intakeOrder.map((sl) => bySlug.get(sl)).filter((s) => s && s.doc_type !== 'EMARGEMENT')
             : grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
 
+        /* LES DOSSIERS QU'UNE ÉTAPE « STAGIAIRE » CONCERNE — la règle de `generateGroupDocuments` : une
+           étape « entreprise seulement » (inactive au parcours du dossier, présente dans la section) vise
+           TOUT le groupe, puisque le parcours de ces stagiaires EST la section ; les autres, les dossiers
+           dont le parcours l'appelle. On ne regardait que le second cas : l'AGEFICE de LA CUISINE DE
+           JULIEN disait « Aucun stagiaire concerné » ici, pendant que le parcours de son stagiaire la
+           réclamait (2026-09-28). */
+        const dossiersConcernes = (s) => (!s.active && intakeSet.has(s.slug)
+            ? grp.enrollments : grp.enrollments.filter((e) => e.slugs.has(s.slug)));
+
         let steps = [];
         for (const s of docSteps) {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
+            let remise = null; // l'état d'une REMISE pour le groupe (`compteRemiseGroupe`), sinon null
             if (s.company_level) {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
                 // pas une par stagiaire. On le représente comme une seule étape signée /
@@ -777,8 +792,26 @@ const getCompanyParcours = async (req, res) => {
                 }
                 gen = new Set(rows.map((r) => r.enrollment_id)).size;
                 signed = new Set(rows.filter((r) => r.status === 'SIGNE').map((r) => r.enrollment_id)).size;
+            } else if (s.remise_id) {
+                /* UNE REMISE NE SE GÉNÈRE PAS (migration 160) : l'école DÉPOSE un fichier, le destinataire
+                   en ACCUSE réception. Son état vient de `remise_document`, dossier par dossier
+                   (`compteRemiseGroupe`, lib/parcours.js). */
+                const ids = dossiersConcernes(s).map((e) => e.id);
+                let lignes = [];
+                if (ids.length) {
+                    const sel = (col) => `SELECT enrollment_id, statut, ${col} AS sans_objet FROM remise_document
+                                         WHERE organization_id = ? AND enrollment_id IN (?) AND remise_type_id = ?`;
+                    try { [lignes] = await conn.query(sel('COALESCE(sans_objet, 0)'), [orgId, ids, s.remise_id]); }
+                    catch (e) {
+                        if (e && e.code === 'ER_BAD_FIELD_ERROR') [lignes] = await conn.query(sel('0'), [orgId, ids, s.remise_id]); // 161 non jouée
+                        else if (!isMissingSchema(e)) throw e;
+                    }
+                }
+                const c = compteRemiseGroupe(ids, lignes);
+                total = c.total; gen = c.gen; signed = c.signed; recu = c.signed;
+                remise = c;
             } else {
-                const applicable = grp.enrollments.filter((e) => e.slugs.has(s.slug));
+                const applicable = dossiersConcernes(s);
                 total = applicable.length;
                 const ids = applicable.map((e) => e.id);
                 let rows = [];
@@ -798,15 +831,19 @@ const getCompanyParcours = async (req, res) => {
                dossier d'un stagiaire, cf. lib/parcours.js `stepDone`). Sans ça, un CGV restait
                éternellement « 0/1 signés » et bloquait la complétion du groupe. */
             const attendSignature = !!s.quiz_id || needsSignature(s);
-            const done = total > 0 && (attendSignature ? signed >= total : recu >= total);
+            const done = remise ? remise.done : total > 0 && (attendSignature ? signed >= total : recu >= total);
+            // À QUI va la remise pour CE groupe : l'entreprise si elle a un espace, sinon chaque stagiaire.
+            const remiseEntreprise = !!remise && s.destinataire === 'ENTREPRISE' && !!company.user_id;
             steps.push({
                 key: s.slug, label: s.label,
-                sub: s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
+                sub: remise ? (remiseEntreprise ? "Remis à l'entreprise" : 'Remis au stagiaire')
+                    : s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
                 signers, company_level: !!s.company_level, doc_type: s.doc_type,
                 signable: s.quiz_id ? false : signers.some((r) => r !== 'ORG'), quiz: !!s.quiz_id,
                 gen, total, signed, docId,
+                remise: !!remise, remise_id: s.remise_id || null, remiseEntreprise,
                 facultatif: !!s.facultatif, // hors décompte (migration 188)
-                _done: done,
+                _done: done, _sansObjet: !!(remise && remise.sansObjet),
             });
         }
         /* Même règle que le dossier d'un stagiaire (lib/parcours.js) : l'état réel, l'avancement de
@@ -818,8 +855,9 @@ const getCompanyParcours = async (req, res) => {
         const faites = dues.filter((s) => s._done).length;
         steps.forEach((s, i) => {
             s.status = i < currentIndex ? (s.facultatif && !s._done ? 'todo' : 'done') : i === currentIndex ? 'current' : 'todo';
-            s.etat = etatDeGroupe({ done: s._done, gen: s.gen, total: s.total });
-            delete s._done;
+            // Une remise écartée pour tout le groupe est FAITE (rien n'est dû), et se dit sans objet.
+            s.etat = s._sansObjet ? 'SANS_OBJET' : etatDeGroupe({ done: s._done, gen: s.gen, total: s.total });
+            delete s._done; delete s._sansObjet;
         });
 
         res.json({

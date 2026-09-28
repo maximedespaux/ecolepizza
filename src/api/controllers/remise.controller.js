@@ -32,6 +32,7 @@ const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+const { companyStepSlugs } = require('../lib/parcours.js');
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -195,25 +196,39 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
     const requete = (col) =>
         `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne,
                 ${dest} AS destinataire, e.company_id, c.name AS entreprise, ${representant} AS representant,
+                ps.active AS actif_parcours, ps.slug AS slug_etape, s.program_id,
                 r.id AS remise_id, r.statut, ${col} AS sans_objet,
                 DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
                 DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
                 COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), u.email) AS remis_par
            FROM enrollment e
            JOIN training_session s ON s.id = e.session_id
-           JOIN program_step ps ON ps.program_id = s.program_id AND ps.active = 1 AND ps.remise_id IS NOT NULL
+           JOIN program_step ps ON ps.program_id = s.program_id AND ps.remise_id IS NOT NULL
            JOIN remise_type rt ON rt.id = ps.remise_id
            LEFT JOIN remise_document r ON r.enrollment_id = e.id AND r.remise_type_id = rt.id
            LEFT JOIN user u ON u.id = r.remis_par
            LEFT JOIN company c ON c.id = e.company_id
           WHERE e.id = ? AND e.organization_id = ?
           ORDER BY ps.sort_order, rt.label`;
-    let rows;
-    try { [rows] = await conn.query(requete('COALESCE(r.sans_objet, 0)'), [enrollmentId, orgId]); }
+    let lues;
+    try { [lues] = await conn.query(requete('COALESCE(r.sans_objet, 0)'), [enrollmentId, orgId]); }
     catch (e) {
         if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
-        [rows] = await conn.query(requete('0'), [enrollmentId, orgId]);
+        [lues] = await conn.query(requete('0'), [enrollmentId, orgId]);
     }
+    /* LES REMISES QUE CE DOSSIER DOIT SE LISENT DANS SON PARCOURS (2026-09-28). Arrivé par une
+       entreprise dont la formation a une section « À l'arrivée via une entreprise », son parcours EST
+       cette section : elle REMPLACE celui du dossier (companyParcours, lib/parcours.js). Une remise qui
+       n'est QUE là — « entreprise seulement », inactive au parcours du dossier — lui est donc due. On
+       ne lisait que `ps.active = 1` : l'AGEFICE de LA CUISINE DE JULIEN s'affichait dans le parcours
+       du stagiaire, et nulle part où la déposer. Sans section, les étapes actives du dossier, comme
+       avant. */
+    const premier = lues[0];
+    const section = premier && premier.company_id ? await companyStepSlugs(conn, orgId, premier.program_id) : [];
+    const rows = (section.length
+        ? lues.filter((r) => section.includes(r.slug_etape))
+        : lues.filter((r) => Number(r.actif_parcours) === 1))
+        .map(({ actif_parcours: _a, slug_etape: _s, program_id: _p, ...r }) => r);
     const ids = rows.map((r) => r.remise_id).filter(Boolean);
     let parRemise = {};
     if (ids.length) {
@@ -252,6 +267,35 @@ async function dossierDe(conn, enrollmentId, orgId) {
         [enrollmentId, orgId]);
     return e || null;
 }
+
+/**
+ * GET /api/remises/groupe/:companyId/:sessionId — les remises des stagiaires qu'une entreprise envoie à
+ * une session : une ligne par dossier, avec SES remises (2026-09-28). La fiche entreprise dépose de là
+ * ce qui est remis à l'entreprise — l'AGEFICE —, sans passer par la fiche de chaque stagiaire.
+ * Les MÊMES remises que le panneau de la fiche stagiaire (`remisesDuDossier`) : deux écrans qui
+ * compteraient chacun à sa façon finiraient par se contredire.
+ * LE BUREAU SEULEMENT : on y lit les noms des stagiaires et les fichiers d'un dossier.
+ */
+const remisesDuGroupe = async (req, res) => {
+    try {
+        if (!estBureau(req.user)) return res.status(403).json({ message: 'Réservé au bureau.' });
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [dossiers] = await conn.query(
+            `SELECT e.id AS enrollment_id, e.learner_id, l.first_name, l.last_name
+               FROM enrollment e JOIN learner l ON l.id = e.learner_id
+              WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
+              ORDER BY l.last_name, l.first_name`,
+            [req.params.companyId, req.params.sessionId, orgId]);
+        const data = [];
+        for (const d of dossiers) data.push({ ...d, remises: await remisesDuDossier(conn, orgId, d.enrollment_id) });
+        res.json({ data });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: [] });
+        console.error('Erreur remises du groupe :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
 
 /** GET /api/remises/dossier/:enrollmentId — l'école comme le stagiaire, chacun le sien. */
 const listDossier = async (req, res) => {
@@ -543,6 +587,6 @@ const supprimerFichier = async (req, res) => {
 
 module.exports = {
     listTypes, createType, updateType, deleteType,
-    listDossier, remisesDuDossier, remisesDeLEntreprise, deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier,
+    listDossier, remisesDuDossier, remisesDuGroupe, remisesDeLEntreprise, deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier,
     STATUTS, MIMES, MAX_OCTETS, DESTINATAIRES, ROLES_BUREAU,
 };

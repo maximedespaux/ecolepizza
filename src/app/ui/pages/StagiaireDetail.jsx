@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, updateStagiaire, telechargerArchive} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -325,7 +325,8 @@ function StagiaireDetail() {
        partagé, et les deux gestes n'acceptent pas les mêmes formats. Il annonçait `.doc,.docx`
        pour tout le monde, y compris pour une PIÈCE justificative que le serveur refuse en 415 —
        le fichier paraissait valide dans la fenêtre de choix, et le refus tombait après. */
-    if (fichierRef.current) fichierRef.current.accept = step.piece ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
+    // Une remise se dépose comme une pièce : image ou PDF, jamais de traitement de texte (remise.controller).
+    if (fichierRef.current) fichierRef.current.accept = step.piece || step.remise ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
     fichierRef.current?.click();
   }
 
@@ -389,6 +390,23 @@ function StagiaireDetail() {
             ? `${deposes} fichiers enregistrés pour « ${step.label} ». La pièce est validée : vous venez de la voir.`
             : `« ${file.name} » enregistré pour « ${step.label} ». La pièce est validée : vous venez de la voir.`,
         });
+      }
+      return;
+    }
+
+    /* UNE REMISE NE PASSE PAS NON PLUS PAR LES DOCUMENTS GÉNÉRÉS : l'école DÉPOSE ce qu'elle remet
+       (migration 160), et le destinataire en accuse réception. Le bouton de l'étape cherchait un MODÈLE
+       portant le slug « remise:… » — il n'en existe aucun — et répondait « Modèle introuvable pour cette
+       étape » (relevé le 2026-09-28 sur l'AGEFICE). Même route que le panneau « Documents remis ». */
+    if (step.remise) {
+      if (!curEnrId) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
+      if (!step.remise_id) { setStatus({ type: "error", message: "Ce document remis n'est pas identifiable. Rechargez la page." }); return; }
+      try {
+        await deposerRemise(curEnrId, step.remise_id, await reduireSiImage(file, PROFILS.piece));
+        setStatus({ type: "success", message: `« ${file.name} » déposé pour « ${step.label} » : ${step.remiseEntreprise ? "l'entreprise" : "le stagiaire"} le reçoit dans son espace, et en accusera réception.` });
+        setParcoursRefresh((n) => n + 1);
+      } catch (err) {
+        setStatus({ type: "error", message: err.message });
       }
       return;
     }
@@ -691,7 +709,7 @@ function StagiaireDetail() {
             {/* L'AUTRE SENS, juste en dessous : ce que l'ÉCOLE remet. Les deux cartes se
                 ressemblent volontairement — c'est le même geste, dans les deux directions — et
                 chacune disparaît si son parcours n'en prévoit aucune. */}
-            <RemisesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
+            <RemisesReview enrollmentId={curEnrId} refresh={parcoursRefresh} onChange={() => setParcoursRefresh((n) => n + 1)} />
           </>
         )}
 

@@ -83,7 +83,8 @@ test('LE PARCOURS D\'UNE ENTREPRISE suit la même règle, d\'après ses compteur
     assert.strictEqual(etatDeGroupe({ done: false, gen: 0, total: 2 }), 'A_FAIRE');
     assert.strictEqual(etatDeGroupe({ done: false, gen: 0, total: 0 }), 'SANS_OBJET', 'aucun stagiaire concerné');
     const CO = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
-    assert.match(CO, /s\.etat = etatDeGroupe\(\{ done: s\._done, gen: s\.gen, total: s\.total \}\);/);
+    // Une remise écartée pour tout le groupe se dit « sans objet » ; sinon, la règle des compteurs.
+    assert.match(CO, /s\.etat = s\._sansObjet \? 'SANS_OBJET' : etatDeGroupe\(\{ done: s\._done, gen: s\.gen, total: s\.total \}\);/);
     /* Les étapes FAITES, plus le rang — parmi les étapes DUES depuis la migration 188 : une étape
        facultative sort des deux côtés de la fraction, et un parcours tout facultatif est complet. */
     assert.match(CO, /percent: dues\.length \? pourcentFait\(faites, dues\.length\) : \(steps\.length \? 100 : 0\),/,

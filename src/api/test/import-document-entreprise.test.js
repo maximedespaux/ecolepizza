@@ -111,10 +111,12 @@ test('LA LISTE DES DOCUMENTS DE GROUPE dit lesquels ont été reçus — avant c
     assert.deepStrictEqual(q2.params, ['o1', 'c1', 's1']);
 });
 
-test('LE PARCOURS DE GROUPE n\'offre l\'import que sur un document de GROUPE', () => {
+test('LE PARCOURS DE GROUPE n\'offre l\'import que sur un document de GROUPE (ou une remise)', () => {
     /* Une étape « stagiaire » vue depuis l'entreprise porte des compteurs (2/3 signés), pas UN
-       document : l'importer ici ne dirait pas pour quel stagiaire. Elle s'importe depuis sa fiche. */
-    assert.match(PARCOURS, /\{onImport && !String\(step\.key \|\| ""\)\.startsWith\("quiz:"\) && !\(isGroup\(step\) && !step\.company_level\) && \(/);
+       document : l'importer ici ne dirait pas pour quel stagiaire. Elle s'importe depuis sa fiche.
+       Une REMISE fait exception : l'école la dépose de là, stagiaire par stagiaire. */
+    assert.match(PARCOURS, /\{onImport && importPossible\(step\) && \(/);
+    assert.match(PARCOURS, /return !\(isGroup\(s\) && !s\.company_level\);/);
     assert.match(PARCOURS, /"Rattacher à cette étape l'exemplaire signé renvoyé par l'entreprise \(e-mail, scan\)"/);
 });
 
@@ -142,5 +144,6 @@ test('LA FICHE ENTREPRISE : vérifier, préparer au besoin par le chemin de « P
     const telecharger = fonction(ENTREPRISE, 'async function telechargerPdf');
     assert.match(telecharger, /if \(d\.importe_le\) await downloadDocumentImporte\(d\.id, d\.fichier_nom\);/,
         'le fichier REÇU fait foi, pas un PDF recomposé depuis le modèle');
-    assert.match(ENTREPRISE, /<input ref=\{fichierRef\} type="file" accept=\{ACCEPT_DOCUMENT\} style=\{\{ display: "none" \}\} onChange=\{envoyerImportGroupe\} \/>/);
+    assert.match(ENTREPRISE, /<input ref=\{fichierRef\} type="file" style=\{\{ display: "none" \}\} onChange=\{envoyerImportGroupe\} \/>/);
+    assert.match(fonction(ENTREPRISE, 'function ouvrirSelecteur'), /fichierRef\.current\.accept = cible\.remise \? ACCEPT_PIECE : ACCEPT_DOCUMENT;/);
 });

@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { listTypes, createType, updateType, deleteType, listDossier,
+const { listTypes, createType, updateType, deleteType, listDossier, remisesDuGroupe,
     deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier, MAX_OCTETS } = require('../controllers/remise.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -27,6 +27,8 @@ router.delete('/:id', authorizeRoles(...ADMIN_ROLES), deleteType);
    contrôleur, sur la propriété du dossier — « ce dossier est-il le mien ? » — ce qu'un filtre
    par rôle ne sait pas exprimer. */
 router.get('/dossier/:enrollmentId', listDossier);
+// Les remises des stagiaires d'une entreprise pour une session : le bureau seulement (garde dans le contrôleur).
+router.get('/groupe/:companyId/:sessionId', remisesDuGroupe);
 router.get('/fichier/:id', servirFichier);
 
 /* DÉPOSER ET RETIRER SONT RÉSERVÉS AU PERSONNEL, et c'est la différence de fond avec les pièces :

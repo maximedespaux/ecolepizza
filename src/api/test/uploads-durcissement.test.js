@@ -149,12 +149,16 @@ test('le sélecteur ne PROPOSE que ce que le serveur ACCEPTE', async () => {
     /* ET LES TROIS ÉCRANS LISENT LA MÊME SOURCE : trois chaînes recopiées auraient divergé au
        premier ajout de format, et l'on n'aurait corrigé que celle qu'on avait sous les yeux. */
     const UI = (f) => fs.readFileSync(path.join(API, '..', 'app', 'ui', f), 'utf8');
-    for (const f of ['pages/StagiaireDetail.jsx', 'pages/StudentFormationDetail.jsx', 'components/RemisesReview.jsx']) {
+    for (const f of ['pages/StagiaireDetail.jsx', 'pages/StudentFormationDetail.jsx', 'components/RemisesReview.jsx', 'pages/EntrepriseDetail.jsx']) {
         assert.match(UI(f), /from "\.\.\/lib\/formatsDepot\.js"/, `${f} doit lire la liste partagée`);
         assert.ok(!/accept="[^"]*\.docx/.test(UI(f)), `${f} : plus de liste recopiée dans le JSX`);
     }
     /* LE SÉLECTEUR EST PARTAGÉ entre les deux gestes : `accept` suit donc l'étape visée, comme
        `multiple` juste au-dessus de lui. Figé dans le JSX, il mentirait pour l'un des deux. */
+    /* Une REMISE se dépose comme une pièce (image ou PDF, remise.controller) : même liste. Et la
+       fiche entreprise suit la même règle pour son propre sélecteur partagé (2026-09-28). */
     assert.match(UI('pages/StagiaireDetail.jsx'),
-        /fichierRef\.current\.accept = step\.piece \? ACCEPT_PIECE : ACCEPT_DOCUMENT;/);
+        /fichierRef\.current\.accept = step\.piece \|\| step\.remise \? ACCEPT_PIECE : ACCEPT_DOCUMENT;/);
+    assert.match(UI('pages/EntrepriseDetail.jsx'),
+        /fichierRef\.current\.accept = cible\.remise \? ACCEPT_PIECE : ACCEPT_DOCUMENT;/);
 });
