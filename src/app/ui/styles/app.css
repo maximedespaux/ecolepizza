@@ -6091,3 +6091,19 @@ label .requis {
    dans la liste, et on ne saurait plus qui l'on a retiré. */
 .mail-destinataires-liste label.off{opacity:.5;text-decoration:line-through}
 .mail-destinataires-liste .hint{margin-left:auto;font-size:11.5px}
+
+/* MOYENS DE PAIEMENT (Paramètres → Facturation, migration 187) : le nom, le modèle de facture
+   qu'il pré-sélectionne, puis ses gestes. Trois colonnes sur ordinateur ; sur un téléphone, le nom
+   et les gestes sur une rangée, le modèle dessous sur toute la largeur — un menu déroulant de 120 px
+   coupait le nom du modèle, c'est-à-dire ce qu'on vient y lire. */
+.mp-liste{display:flex;flex-direction:column}
+.mp-ligne{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;gap:10px;align-items:start;
+  padding:8px 0;border-bottom:1px solid var(--border-soft)}
+.mp-ligne.mp-ajout{border-bottom:none;padding-top:12px}
+.mp-nom{min-width:0;align-self:center}
+.mp-modele{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mp-actions{display:flex;gap:6px;align-items:center;min-height:36px}
+@media (max-width:640px){
+  .mp-ligne{grid-template-columns:minmax(0,1fr) auto}
+  .mp-ligne .mp-modele{grid-column:1 / -1;order:1}
+}

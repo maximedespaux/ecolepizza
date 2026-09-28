@@ -226,6 +226,13 @@ const ACTION_LABEL = {
     'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
     'billing_profile.delete': ['Entité émettrice supprimée', R],
 
+    /* Moyens de paiement (migration 187) : la liste de l'école et le modèle de facture que chacun
+       pré-sélectionne. Un réglage — la cloche se tait, le journal nomme le moyen. */
+    'moyen_paiement.create': ['Moyen de paiement ajouté', G],
+    'moyen_paiement.update': ['Moyen de paiement modifié', A],
+    'moyen_paiement.delete': ['Moyen de paiement supprimé', R],
+    'moyen_paiement.ordre': ['Moyens de paiement réordonnés', A],
+
     // Archives
     'archive.bulk_delete': ['Archives supprimées en lot', R],
     /* Bleu, pas vert : rien n'est créé ni modifié, mais des copies — pièces d'identité comprises —
@@ -330,6 +337,7 @@ const ENTITY_LABEL = {
     MailImage: ['Image de mailing', 'f'],
     AccessProfile: ['Profil d\'accès', 'm'],
     BillingProfile: ['Entité émettrice', 'f'],
+    MoyenPaiement: ['Moyen de paiement', 'm'],
     Archive: ['Archive', 'f'],
     User: ['Membre', 'm'],
     quest_category: ['Catégorie (Pizza Quest)', 'f'],

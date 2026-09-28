@@ -59,6 +59,7 @@ const evaluationRoutes = require('./routes/evaluation.routes.js');
 const examenRoutes = require('./routes/examen.routes.js');
 const notationRoutes = require('./routes/notation.routes.js');
 const billingProfileRoutes = require('./routes/billingProfile.routes.js');
+const moyenPaiementRoutes = require('./routes/moyenPaiement.routes.js');
 const eventsRoutes = require('./routes/events.routes.js');
 
 /* --- CORS : QUI A LE DROIT D'APPELER L'API ---
@@ -187,6 +188,8 @@ app.use('/api/examens', examenRoutes);
 app.use('/api/notation', notationRoutes);
 app.use('/api/access-profiles', accessProfileRoutes);
 app.use('/api/emetteurs', billingProfileRoutes);
+// Moyens de paiement et leur modèle de facture (Paramètres → Facturation, migration 187).
+app.use('/api/moyens-paiement', moyenPaiementRoutes);
 app.use('/api/events', eventsRoutes);
 
 // PUBLIC (sans authentification) : lien de signature partageable.
