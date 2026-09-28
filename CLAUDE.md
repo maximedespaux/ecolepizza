@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-26** :
-**2112 tests — 2105 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2126 tests — 2119 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -199,9 +199,33 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 184 et la 183 à jouer ; toutes jouées jusqu'à la 182 ; la 177 et la 175 à constater (relevé le 2026-09-26)** — et l'outil `harmoniser-modeles.js` à lancer
+## 4. Migrations — **la 185 à jouer ; toutes jouées jusqu'à la 184 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
-**184 est À JOUER, ET AVANT DE DÉPLOYER LE CODE** (`184_emargement_rattrapage.sql`, le rattrapage d'une demi-journée
+**185 est À JOUER** (`185_document_zones_a_remplir.sql`, les ZONES À REMPLIR par le stagiaire — demandées le 2026-09-28).
+Une colonne sur `generated_document` : `saisies` (longtext, JSON CHIFFRÉ comme la signature). L'attestation sur l'honneur
+d'expérience (`attestation-honneur`) porte des pointillés — entreprise, fonction, type d'activité, « du … au … » — que
+l'école ne connaît pas : l'attestation se signait en blanc. Une ZONE est une puce `saisie:<texte|date>:<identifiant>`,
+posée par le bloc « Zones à remplir » de l'éditeur (règles : `src/api/lib/zonesARemplir.js`, clé : `src/app/ui/lib/
+zonesARemplir.js`, tenues d'accord par un test). **Décidé par l'école le même jour** : le stagiaire la remplit depuis son
+espace, OU LE BUREAU POUR LUI (les trois rôles qui signent à sa place) ; TOUTES sont obligatoires — le bouton « Signer »
+attend, et `signDocument` comme le lien public refusent (422) ; signé, le document les fige (409). Vide, une zone
+s'imprime en POINTILLÉS, comme avant. Sans la migration, rien ne casse ni ne bloque : pointillés, signature comme avant,
+l'écran le dit et l'enregistrement répond 503. **Elle se vérifie par l'API** : `GET /api/documents/:id` d'un document dont
+le modèle porte une zone rend `zones_indisponibles: false`. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='generated_document' AND column_name='saisies';`
+⚠️ Son revert efface les réponses des documents non signés (les signés gardent leur PDF scellé). **À FAIRE PAR L'ÉCOLE
+ENSUITE** : dans Modèles → Attestation sur l'honneur, remplacer chaque ligne de pointillés par une zone (Texte, ou Date pour
+« du » et « au »), et poser la puce « Date signature » après « Le : », qui imprime aujourd'hui un blanc.
+
+**184, 183 ET L'OUTIL `harmoniser-modeles.js` : FAITS — constaté le 2026-09-26 par l'API, sans SQL.** 184 : les présences de
+`GET /api/attendance/:sessionId` portent la clé `rattrapage_motif`. 183 : plus aucune puce `custom:Acomtpe` dans les 19
+modèles. L'outil : les dix modèles sont en Arial de bout en bout, leurs pieds sont EXACTEMENT ceux qu'il écrit — leurs
+corps ne portent plus son empreinte parce que chacun a été rouvert et enregistré dans l'éditeur ensuite (journal : dix
+`template.save` entre 07 h 36 et 08 h 01), ce qui réécrit le HTML sans rien changer à la mise en forme. Relancer son
+essai dirait donc « modifié depuis la relecture » pour les dix : c'est attendu. Leurs paragraphes ci-dessous gardent ce
+qu'ils font et leurs reverts.
+
+**184** (`184_emargement_rattrapage.sql`, le rattrapage d'une demi-journée
 d'émargement par l'école — revue des feuilles d'émargement du 2026-09-26). Trois colonnes sur `attendance_record` :
 `rattrapage_motif`, `rattrapage_par`, `rattrapage_le`. **Décidé par l'école le même jour : le stagiaire ne signe plus
 que PENDANT la demi-journée**, de son heure de début (horaires de la formation ; 8h30 / 13h30 à défaut) jusqu'à minuit
@@ -222,7 +246,7 @@ signé » dans une case vide d'un jour clos, un total d'heures, et se date de sa
 chaque nuit (`cloreLaVeille`, server.js) ; `PATCH /attendance/record/:id` (présent sans signature ni motif) est retiré.
 Tests : `emargement-feuille.test.js`.
 
-**L'OUTIL `database/tools/harmoniser-modeles.js` EST À LANCER** (la charte des documents, demandée le 2026-09-26 :
+**L'OUTIL `database/tools/harmoniser-modeles.js`** (la charte des documents, demandée le 2026-09-26 :
 « comme le devis RS7404 retravaillé, fais tous les autres »). Il applique `lib/charteDocuments.js` à DIX modèles —
 les trois devis, la convention, le contrat, le contrat d'hygiène, les CGV, l'invitation, le droit à l'image,
 l'attestation d'hygiène : Arial, titres bleus, texte en 9 pt (CGV 8 pt), avertissements rouges gardés. Les six
@@ -234,7 +258,7 @@ n'écrit que celles-là (un modèle modifié depuis est ignoré, et nommé). Ess
 Seul changement de charpente : deux sauts de page retirés (CGV, contrat d'hygiène) et un posé (CGV), nommés
 dans les profils. La 183 peut être jouée avant ou après : les deux états sont connus.
 
-**183 est À JOUER** (`183_jeton_acompte.sql`, migration de DONNÉES — l'acompte revient dans le devis, la
+**183** (`183_jeton_acompte.sql`, migration de DONNÉES — l'acompte revient dans le devis, la
 convention et le contrat). Relevé le 2026-09-26 par l'API : quatre modèles de production (`devis-particulier`,
 `devis-professionnel-copie`, `convention`, `contrat`) portent une puce `{custom:Acomtpe}`, alors que le jeton
 personnalisé s'appelle `Acompte` — sa clé avait été corrigée dans la fenêtre des jetons perso, et rien n'avait

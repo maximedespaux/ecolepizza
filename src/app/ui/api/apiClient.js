@@ -1295,6 +1295,10 @@ export function sendDocument(id) {
 export function signDocument(id, payload) {
   return request(`/documents/${id}/sign`, { method: "POST", body: JSON.stringify(payload) });
 }
+/** Les réponses aux zones à remplir d'un document, avant sa signature (le formulaire entier). */
+export function enregistrerSaisies(id, valeurs) {
+  return request(`/documents/${id}/saisies`, { method: "PUT", body: JSON.stringify({ valeurs }) });
+}
 
 export function deleteDocument(id) {
   return request(`/documents/${id}`, { method: "DELETE" });

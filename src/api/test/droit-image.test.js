@@ -335,7 +335,8 @@ test('la fenêtre de l\'espace enchaîne les deux questions, chacune sous son co
 
 test('le document pose sa question AVANT de proposer la signature', () => {
     const vue = sansCommentaires(lire(path.join(UI, 'components/DocumentViewModal.jsx')));
-    assert.match(vue, /const showSign = canSign && doc && doc\.signable && doc\.status !== "SIGNE" && !questions\.length;/,
+    /* …ni tant qu'une ZONE À REMPLIR reste vide (2026-09-28, signature-zones.test.js) : même règle, même ligne. */
+    assert.match(vue, /const showSign = canSign && doc && doc\.signable && doc\.status !== "SIGNE" && !questions\.length && !zonesVides\.length;/,
         'pas de bouton « Signer » tant qu\'une réponse imprimée manque');
     assert.match(vue, /doc\.peut_repondre \? \(\s*<QuestionsConsentement questions=\{questions\} onRepondu=\{recharger\} \/>/,
         'seul le stagiaire se voit poser la question ; les autres sont prévenus');

@@ -1,7 +1,8 @@
 // Endpoints PUBLICS (sans authentification) : signature d'un document via un lien
 // partageable (le représentant d'une entreprise signe sans compte).
 const db = require('../config/database.js');
-const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair } = require('./document.controller.js');
+const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument } = require('./document.controller.js');
+const { libellesEnClair } = require('../lib/zonesARemplir.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 
 /* Le document attend une réponse que seul le stagiaire peut donner, depuis son espace. */
@@ -9,6 +10,9 @@ const messageAttente = (manquants) => (manquants.length > 1
     ? `Ce document imprime les réponses du stagiaire à ${questionsEnClair(manquants)}, qu'il n'a pas encore données. `
     : `Ce document imprime la réponse du stagiaire à ${questionsEnClair(manquants)}, qu'il n'a pas encore donnée. `)
     + 'Il répond depuis son espace\u00a0: le document pourra ensuite être signé.';
+/* Le document porte des zones que le stagiaire n'a pas encore remplies (lib/zonesARemplir.js). */
+const messageZones = (zones) => `Ce document attend encore ${zones.length > 1 ? 'les informations' : 'l\'information'} du stagiaire\u00a0: ${libellesEnClair(zones)}. `
+    + 'Il les remplit depuis son espace (ou l\'école pour lui)\u00a0: le document pourra ensuite être signé.';
 
 async function loadLink(conn, token) {
     /* L'EXPIRATION EST TRANCHÉE PAR LA BASE, pas par une Date reconstruite en JS. Le pilote
@@ -85,6 +89,10 @@ const getSignPage = async (req, res) => {
         if (!already && link.slot === 'stagiaire' && doc.learner_id) {
             const manquants = await consentementsManquants(conn, doc.organization_id, doc);
             if (manquants.length) bloque = messageAttente(manquants);
+            else {
+                const zones = await zonesManquantesDuDocument(conn, doc.organization_id, doc);
+                if (zones.length) bloque = messageZones(zones);
+            }
         }
         res.json({ data: { title: doc.title, company, label: link.label || 'Signature', signed: already, signer_name: doc.signer_name || null, bloque, cachet_disponible: cachetDisponible, html: html || '<p>Aperçu indisponible.</p>' } });
     } catch (err) {
@@ -132,6 +140,9 @@ const submitSign = async (req, res) => {
             // Même règle que la signature du stagiaire lui-même : pas de réponse imprimée en blanc.
             const manquants = await consentementsManquants(conn, doc.organization_id, doc);
             if (manquants.length) return res.status(422).json({ message: messageAttente(manquants) });
+            // Ni une zone à remplir laissée en blanc (décidé par l'école le 2026-09-28).
+            const zones = await zonesManquantesDuDocument(conn, doc.organization_id, doc);
+            if (zones.length) return res.status(422).json({ message: messageZones(zones) });
             await applyLearnerSignature(conn, doc.organization_id, doc, {
                 signerName: signer_name, signatureData: signature_data,
                 ip: clientIp(req), userAgent: req.headers['user-agent'] || '',

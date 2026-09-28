@@ -11,6 +11,7 @@ const { resolveCustomTokens } = require('./customtokens.js');
 const { CASE_STAGIAIRE } = require('./documents.js');
 const { JETONS_A_FORME, aUneForme, texteEnLignes, texteEnBlocs } = require('./texteStructure.js');
 const { nombreChamp } = require('./montants.js');
+const { rendreZone } = require('./zonesARemplir.js');
 
 function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -131,6 +132,8 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
             const box = renderSlot(key, lm ? decodeEnt(lm[1]) : '');
             return size ? resizeSig(box, size) : box;
         }
+        // Zone à remplir par le stagiaire : sa réponse, ou des pointillés (lib/zonesARemplir.js).
+        if (key.startsWith('saisie:')) return rendreZone(key, ctx && ctx.saisies);
         if (!(key in values)) return '';
         const v = render(key);
         return size && RAW_TOKENS.has(key) ? resizeSig(v, size) : v;
