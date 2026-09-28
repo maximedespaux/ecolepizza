@@ -199,9 +199,14 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 185 à jouer ; toutes jouées jusqu'à la 184 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
-**185 est À JOUER** (`185_document_zones_a_remplir.sql`, les ZONES À REMPLIR par le stagiaire — demandées le 2026-09-28).
+**185 est JOUÉE — constaté le 2026-09-28 par l'API, sans SQL** : `PUT /api/documents/:id/saisies` sur un document sans zone
+répond 422 « aucune zone à remplir », et non 503 « migration 185 non jouée » (le contrôle de la colonne passe AVANT celui des
+zones, et rien ne s'écrit). Le même jour, l'attestation porte déjà « Date signature » après « Le : » ; ses cinq lignes de
+pointillés attendent encore leurs zones.
+
+**185** (`185_document_zones_a_remplir.sql`, les ZONES À REMPLIR par le stagiaire — demandées le 2026-09-28).
 Une colonne sur `generated_document` : `saisies` (longtext, JSON CHIFFRÉ comme la signature). L'attestation sur l'honneur
 d'expérience (`attestation-honneur`) porte des pointillés — entreprise, fonction, type d'activité, « du … au … » — que
 l'école ne connaît pas : l'attestation se signait en blanc. Une ZONE est une puce `saisie:<texte|date>:<identifiant>`,
