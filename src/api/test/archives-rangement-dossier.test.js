@@ -70,7 +70,7 @@ test('L\'ÉCRAN RANGE COMME L\'ARCHIVE : sous-dossiers, entreprise, plus haut, h
     // L'AGEFICE : l'école le range chez l'entreprise, pas chez le stagiaire — c'est sa seule place.
     assert.deepStrictEqual(ranger({ ...base, source: 'remise', remise_type_id: 'agefice', enr_company_id: 'c1', enr_company_name: 'LA CUISINE DE JULIEN' }),
         { hors_archive: false, sous_dossiers: [], ailleurs: 'entreprise' });
-    // Proposé par le parcours, rangé nulle part : hors de l'archive, et l'écran le dit.
+    // Proposé par le parcours, rangé nulle part : hors de l'archive — l'écran ne le montre pas.
     assert.deepStrictEqual(ranger({ ...base, source: 'gen', slug: 'livret-accueil' }), { hors_archive: true, sous_dossiers: [], ailleurs: null });
     // Un fichier ajouté au dossier : l'arborescence ne peut pas le nommer, il va à la racine du dossier.
     assert.deepStrictEqual(ranger({ ...base, source: 'archive', title: 'Scan diplôme' }).sous_dossiers, []);
@@ -90,7 +90,7 @@ test('UNE REMISE SE DÉSIGNE PAR SON TYPE, comme une pièce', () => {
 });
 
 test('L\'ÉCRAN : les documents d\'une feuille, groupés par ce rangement', async () => {
-    const { rangerDansLeDossier, dossierDeLaFeuille, extensionDuCoffre } = await import('../../app/ui/lib/rangementCoffre.js');
+    const { rangerDansLeDossier, dossierDeLaFeuille, extensionDuCoffre, dansLArchive } = await import('../../app/ui/lib/rangementCoffre.js');
     const d = (id, rangement) => ({ doc_id: id, rangement });
     const r = rangerDansLeDossier([
         d('racine'), d('ident', { hors_archive: false, sous_dossiers: [], ailleurs: null }),
@@ -104,7 +104,15 @@ test('L\'ÉCRAN : les documents d\'une feuille, groupés par ce rangement', asyn
     assert.deepStrictEqual(r.racine.map((x) => x.doc_id), ['racine', 'ident'], 'sans rangement (serveur d\'avant) : à la racine, comme avant');
     assert.deepStrictEqual(r.dossiers.map((x) => [x.nom, x.docs.map((y) => y.doc_id)]),
         [['Autres / Évaluations', ['eval']], ['Justificatifs', ['j1', 'j2']]], 'un bloc par sous-dossier, triés par nom');
-    assert.deepStrictEqual([r.entreprise, r.ailleurs, r.hors].map((l) => l.map((x) => x.doc_id)), [['agefice'], ['hygiene'], ['livret']]);
+    assert.deepStrictEqual([r.entreprise, r.ailleurs].map((l) => l.map((x) => x.doc_id)), [['agefice'], ['hygiene']]);
+    /* « HORS DE L'ARCHIVE » N'EST PLUS UN BLOC (retiré par l'école le 2026-09-28, « pas besoin ») : ce que
+       l'arborescence ne range pas n'est pas archivé, et l'écran des archives ne le montre nulle part. */
+    assert.ok(!('hors' in r));
+    const montres = [...r.racine, ...r.dossiers.flatMap((x) => x.docs), ...r.entreprise, ...r.ailleurs].map((x) => x.doc_id);
+    assert.ok(!montres.includes('livret'), 'ni à la racine, ni ailleurs');
+    assert.strictEqual(dansLArchive({ rangement: { hors_archive: true } }), false);
+    assert.strictEqual(dansLArchive({ rangement: { hors_archive: false, sous_dossiers: [] } }), true);
+    assert.strictEqual(dansLArchive({ doc_id: 'serveur d\'avant' }), true, 'sans rangement, rien n\'est écarté');
 
     assert.strictEqual(dossierDeLaFeuille([{ doc_id: 'a' }, { doc_id: 'b', enrollment_id: 'e1' }]), 'e1');
     assert.strictEqual(dossierDeLaFeuille([{ doc_id: 'vieux PDF importé' }]), null, 'une feuille faite de PDF rattachés par un nom');
@@ -194,6 +202,11 @@ test('LA ROUTE, et l\'écran qui l\'appelle', () => {
         'mêmes droits et même plafond par fichier que l\'import');
     const page = lireUi('pages/Suivi.jsx');
     assert.match(page, /<DocsDuDossier docs=\{L\.docs\} \/>/, 'chaque feuille range ses documents comme l\'archive');
+    // Seulement ce qui est archivé : l'arbre, ses comptes et le total du titre partent des MÊMES lignes.
+    assert.match(page, /const visibles = useMemo\(\(\) => \(rows \|\| \[\]\)\.filter\(dansLArchive\), \[rows\]\);/);
+    assert.match(page, /\? visibles\.filter\(\(r\) =>[^\n]*\n\s+: visibles;/);
+    assert.match(page, /<Card title=\{`Archives documentaires \(\$\{visibles\.length\}\)`\}>/);
+    assert.doesNotMatch(page, /Hors de l'archive/, 'le bloc est retiré');
     assert.match(page, /\{peutModifier && !L\.company && !L\.session && \(\(\) => \{/, 'le bouton est sur le dossier d\'un STAGIAIRE');
     assert.match(page, /ajouterDans\(\{ enrollmentId, chemin, nom: L\.name \}\)/);
     assert.match(page, /await ajouterAuDossierArchives\(cible\.enrollmentId, prets\);/);

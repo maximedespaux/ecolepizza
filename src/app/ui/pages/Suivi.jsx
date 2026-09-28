@@ -20,7 +20,7 @@ import { tableauxDuSuivi, etatCase } from "../lib/grilleSuivi.js";
 import { lienDossier } from "../lib/lienDossier.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import { colorOf, dateHeure } from "../lib/format.js";
-import { rangerDansLeDossier, dossierDeLaFeuille, extensionDuCoffre } from "../lib/rangementCoffre.js";
+import { rangerDansLeDossier, dossierDeLaFeuille, extensionDuCoffre, dansLArchive } from "../lib/rangementCoffre.js";
 import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 
@@ -588,8 +588,8 @@ function ArchivesView({ onError, onInfo }) {
 
   /* LES DOCUMENTS D'UNE FEUILLE, RANGÉS COMME L'ARCHIVE LES RANGE (2026-09-28) : à la racine de son
      dossier, puis dans les sous-dossiers de l'arborescence d'archivage (« Justificatifs »), puis ce
-     qu'elle range ailleurs ou laisse dehors — dit ici, pour qu'on sache AVANT de télécharger ce que
-     l'archive contiendra. Même rangement que l'archive ZIP : le serveur calcule l'un et l'autre. */
+     qu'elle range ailleurs. Même rangement que l'archive ZIP : le serveur calcule l'un et l'autre. Ce
+     qu'elle ne range pas n'arrive pas jusqu'ici (`dansLArchive`, plus bas). */
   const DocsDuDossier = ({ docs }) => {
     const r = rangerDansLeDossier(docs);
     const ligne = (d) => <DocLigne key={d.doc_id} d={d} />;
@@ -607,8 +607,6 @@ function ArchivesView({ onError, onInfo }) {
         {bloc("entreprise", <><Icon name="building" size={13} /> Dans le dossier de l'entreprise</>, r.entreprise,
           "L'arborescence d'archivage range ces documents chez l'entreprise.")}
         {bloc("ailleurs", "Plus haut dans l'archive", r.ailleurs)}
-        {bloc("hors", "Hors de l'archive", r.hors,
-          "L'arborescence d'archivage ne les range pas : l'archive ZIP ne les emporte pas (Formations → Arborescence d'archivage).")}
       </div>
     );
   };
@@ -617,12 +615,16 @@ function ArchivesView({ onError, onInfo }) {
      parce que des documents s'y trouvent, et disparaît avec son dernier document. Rien à
      nettoyer, aucun dossier vide que personne n'ose supprimer. Le revers assumé : on ne crée
      pas un classeur à l'avance, on le nomme en y déposant. */
+  const visibles = useMemo(() => (rows || []).filter(dansLArchive), [rows]);
   const { tree, classeurs } = useMemo(() => {
     if (!rows) return { tree: [], classeurs: [] };
     const needle = q.trim().toLowerCase();
+    /* SEULEMENT CE QUI EST DANS L'ARCHIVE (2026-09-28) : ce que l'arborescence ne range pas ne s'y
+       montre pas — et les comptes de l'année, de la semaine, de la formation et du stagiaire, pris
+       sur l'arbre, ne le comptent donc pas non plus. */
     const filtered = needle
-      ? rows.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title} ${r.dossier || ""}`.toLowerCase().includes(needle))
-      : rows;
+      ? visibles.filter((r) => `${r.last_name} ${r.first_name} ${r.company_name || ""} ${r.program_code} ${r.program_title} ${r.title} ${r.dossier || ""}`.toLowerCase().includes(needle))
+      : visibles;
     const parNom = new Map();
     for (const r of filtered) {
       if (!r.dossier) continue;
@@ -635,7 +637,7 @@ function ArchivesView({ onError, onInfo }) {
         .map(([nom, docs]) => ({ nom, docs }))
         .sort((a, b) => a.nom.localeCompare(b.nom)),
     };
-  }, [rows, q]);
+  }, [rows, visibles, q]);
 
   /* SEULE L'ANNÉE EN COURS S'OUVRE (demandé le 2026-09-24). Chaque année s'ouvrait avec toutes ses
      semaines : vingt-sept lignes sur deux ans, deux écrans et demi avant d'avoir ouvert quoi que ce
@@ -649,7 +651,7 @@ function ArchivesView({ onError, onInfo }) {
   if (rows === null) return <Card title="Archives"><p className="hint">Chargement…</p></Card>;
 
   return (
-    <Card title={`Archives documentaires (${rows.length})`}>
+    <Card title={`Archives documentaires (${visibles.length})`}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
         <input className="inp" placeholder="Rechercher un stagiaire, une entreprise, une formation, un document…" value={q}
           onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 460, flex: 1, minWidth: 220 }} />

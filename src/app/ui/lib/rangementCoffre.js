@@ -16,20 +16,20 @@
 
 /**
  * @param docs les lignes du coffre d'une même feuille (un stagiaire, une entreprise, une session)
- * @returns {{ racine, dossiers: [{ nom, docs }], entreprise, ailleurs, hors }}
+ * @returns {{ racine, dossiers: [{ nom, docs }], entreprise, ailleurs }}
  *   · racine : à la racine de son dossier ;
  *   · dossiers : ses sous-dossiers (« Justificatifs »), triés par nom ;
  *   · entreprise : rangés dans le dossier de l'entreprise (l'AGEFICE que l'école y range) ;
- *   · ailleurs : rangés plus haut dans l'archive ;
- *   · hors : que l'arborescence ne range pas — l'archive ZIP ne les emporte pas.
+ *   · ailleurs : rangés plus haut dans l'archive.
+ * Ce que l'arborescence ne range pas n'est dans AUCUN : l'écran ne le montre pas (cf. dansLArchive).
  */
 export function rangerDansLeDossier(docs) {
-  const racine = []; const entreprise = []; const ailleurs = []; const hors = [];
+  const racine = []; const entreprise = []; const ailleurs = [];
   const parDossier = new Map();
   for (const d of docs || []) {
     const r = d && d.rangement;
     if (!r) { racine.push(d); continue; }
-    if (r.hors_archive) { hors.push(d); continue; }
+    if (r.hors_archive) continue;
     if (r.ailleurs === "entreprise") { entreprise.push(d); continue; }
     if (r.ailleurs) { ailleurs.push(d); continue; }
     const nom = (r.sous_dossiers || []).filter(Boolean).join(" / ");
@@ -39,8 +39,17 @@ export function rangerDansLeDossier(docs) {
   }
   const dossiers = [...parDossier].map(([nom, liste]) => ({ nom, docs: liste }))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  return { racine, dossiers, entreprise, ailleurs, hors };
+  return { racine, dossiers, entreprise, ailleurs };
 }
+
+/**
+ * CE QUI EST DANS L'ARCHIVE, et seulement ça, à l'écran du coffre (2026-09-28). Un document que
+ * l'arborescence ne range pas n'est pas archivé — décidé par l'école le 2026-09-25 — : un bloc « Hors
+ * de l'archive » le montrait sous chaque stagiaire, et l'école l'a retiré le jour même (« pas besoin »).
+ * Il reste sur la fiche du stagiaire ; l'écran des archives ne montre que les archives, et ses comptes
+ * ne comptent qu'elles. Sans rangement (serveur d'avant), rien n'est écarté.
+ */
+export const dansLArchive = (d) => !(d && d.rangement && d.rangement.hors_archive);
 
 /**
  * LE DOSSIER (l'inscription) D'UNE FEUILLE « STAGIAIRE » DU COFFRE — là où « Ajouter des fichiers »
