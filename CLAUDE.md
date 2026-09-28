@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-28** :
-**2131 tests — 2124 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2155 tests — 2148 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -199,7 +199,26 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 186 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**186 est À JOUER, de préférence AVANT de déployer le code** (`186_audit_precisions.sql`, ce que désigne une ligne du
+journal — demandé le 2026-09-28 : « Document signé ×2 » ne disait pas LESQUELS). La cloche (Alertes, Activité de l'équipe),
+le journal d'audit et l'« Activité récente » du tableau de bord NOMMENT désormais ce que chaque ligne désigne — « Document
+signé (Devis particulier, Convention de formation) » —, le stagiaire concerné, et mènent à SA fiche (ou SA session, selon
+la rubrique), en relisant l'identifiant là où l'objet vit (`lib/precisionsActivite.js`, requêtes bornées à l'organisme, UUID
+seulement). Cela marche SANS la migration, lignes d'avant comprises, TANT QUE L'OBJET EXISTE. La 186 ajoute à `audit_log`
+`libelle` (le nom FIGÉ de l'objet) et `learner_id` (le stagiaire), écrits par les appelants qui SUPPRIMENT (document, réponse
+QCM, entreprise, retrait d'une session) ou dont l'identifiant ne désigne pas le dossier (note d'évaluation, écrite sous
+l'EXERCICE) : `logAudit`, cinquième argument `{ libelle, stagiaire }`. JAMAIS le nom d'une personne : il se relit dans la fiche,
+un stagiaire effacé disparaît de la cloche. POURQUOI AVANT : déployé sans elle, rien ne casse (la trace est gardée sans ses
+précisions, la console le dit une fois), mais les suppressions faites entre-temps resteront « Document supprimé », sans nom.
+Regroupement : un seul axe par groupe (plusieurs documents d'UN stagiaire, ou UN document pour plusieurs) ; « ×N » seulement
+quand les noms ne le disent pas. Trois libellés changent au journal : « Document généré en PDF / en Word », « Émargement
+signé par un intervenant », « Présence rattrapée par l'école ». **Elle se vérifie par l'API, sans SQL** : supprimer un
+document d'un stagiaire APRÈS l'avoir jouée, puis `GET /api/audit` — la ligne `document.delete` porte `objet` (le titre) et
+`stagiaire`. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='audit_log' AND column_name IN ('libelle','learner_id');`
+⚠️ Son revert efface les noms figés : les suppressions redeviennent « Document supprimé ». Tests : `activite-precisions.test.js`.
 
 **185 est JOUÉE — constaté le 2026-09-28 par l'API, sans SQL** : `PUT /api/documents/:id/saisies` sur un document sans zone
 répond 422 « aucune zone à remplir », et non 503 « migration 185 non jouée » (le contrôle de la colonne passe AVANT celui des

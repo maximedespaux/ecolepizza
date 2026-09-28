@@ -205,9 +205,11 @@ test('qui lit entity_id, et pourquoi un slug n\'y casse rien', () => {
        quelle. Un fichier de plus qui la nomme est un lecteur de plus : qu'il sache qu'elle ne
        contient pas que des UUID. */
     const lecteurs = [...sourcesApi()].filter(([, src]) => /\bentity_id\b/.test(src)).map(([rel]) => rel);
+    /* `lib/precisionsActivite.js` (2026-09-28) relit l'objet que la ligne désigne : il ne propose à
+       ses requêtes que des identifiants en UUID (`estUuid`) — un slug de modèle n'y passe jamais. */
     assert.deepStrictEqual(lecteurs.sort(), [
         'controllers/audit.controller.js', 'controllers/notification.controller.js',
-        'lib/activite.js', 'lib/audit.js',
+        'lib/activite.js', 'lib/audit.js', 'lib/precisionsActivite.js',
     ]);
     assert.ok(!/entity_id/.test(lire('src/app/ui/pages/Audit.jsx')), 'l\'écran du journal ne l\'affiche pas');
 

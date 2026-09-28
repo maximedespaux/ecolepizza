@@ -142,7 +142,9 @@ function sectionDeLEntite(entity) {
  * On remplacerait un lien inutile par un lien cassé — strictement pire.
  *
  * Pour en ajouter une, il ne suffit donc PAS de l'écrire ici : il faut d'abord une route de
- * détail pour elle, ou une requête qui remonte à son parent.
+ * détail pour elle, ou une requête qui remonte à son parent. C'est ce que fait, depuis le
+ * 2026-09-28, `lienPrecis` (lib/precisionsActivite.js) : un document mène à la fiche de SON
+ * stagiaire, une feuille d'émargement à SA session — la table ci-dessous reste la règle de base.
  */
 const DETAIL_PAR_ENTITE = {
     Learner: '/stagiaires',
@@ -230,22 +232,47 @@ function estLu({ quand, vue, dormant }) {
  *
  * Les lignes arrivent de la plus récente à la plus ancienne : le groupe garde donc la date de
  * la plus récente. Il est non lu dès qu'une seule de ses lignes l'est.
+ *
+ * LE GROUPE NOMME CE QU'IL CONTIENT (2026-09-28). « Document signé ×2 » ne disait pas lesquels :
+ * chaque ligne arrive désormais avec son `objet` (« Devis particulier ») et son `stagiaire`
+ * (lib/precisionsActivite.js), et le groupe les recueille — `objets`, `stagiaires`, sans doublon —
+ * pour que l'écran écrive « Document signé (Devis particulier, Convention de formation) ».
+ *
+ * UN SEUL AXE PAR GROUPE : plusieurs documents d'UN stagiaire, ou UN document pour plusieurs
+ * stagiaires — jamais les deux. Deux titres et deux noms côte à côte ne disent plus lequel va avec
+ * qui ; la ligne qui les mêlerait reste donc à part.
  */
 function regrouperConsecutives(lignes) {
     const out = [];
+    const ajouter = (liste, valeur, cle = (v) => v) => {
+        if (valeur && !liste.some((v) => cle(v) === cle(valeur))) liste.push(valeur);
+    };
+    const parId = (s) => s.id;
     for (const l of lignes) {
         const p = out[out.length - 1];
         if (p && p.action === l.action && p.entity === l.entity && p.auteur === l.auteur) {
-            p.nombre += 1;
-            p.is_read = p.is_read && l.is_read ? 1 : 0;
-            /* UN GROUPE NE NOMME PLUS UN ENREGISTREMENT, donc il perd son lien. « Stagiaire créé
-               ×12 », c'est douze fiches ; garder le lien de la première ferait ouvrir l'une des
-               douze au hasard, sans dire que c'en est une parmi douze. Même règle que
-               `lienDeLEntite` : on ne mène qu'à ce dont la ligne parle vraiment. */
-            p.link = null;
-            continue;
+            const objets = [...p.objets];
+            const stagiaires = [...p.stagiaires];
+            ajouter(objets, l.objet);
+            ajouter(stagiaires, l.stagiaire, parId);
+            if (objets.length <= 1 || stagiaires.length <= 1) {
+                p.nombre += 1;
+                p.is_read = p.is_read && l.is_read ? 1 : 0;
+                p.objets = objets;
+                p.stagiaires = stagiaires;
+                /* UN GROUPE NE GARDE SON LIEN QUE S'IL EST CELUI DE CHACUNE DE SES LIGNES. « Stagiaire
+                   créé ×12 », c'est douze fiches ; garder le lien de la première ferait ouvrir l'une
+                   des douze au hasard, sans dire que c'en est une parmi douze. Deux documents signés
+                   par la même personne, eux, mènent tous deux à SA fiche : le lien reste juste. */
+                if (p.link !== l.link) p.link = null;
+                continue;
+            }
         }
-        out.push({ ...l, nombre: 1 });
+        out.push({
+            ...l, nombre: 1,
+            objets: l.objet ? [l.objet] : [],
+            stagiaires: l.stagiaire ? [l.stagiaire] : [],
+        });
     }
     return out;
 }

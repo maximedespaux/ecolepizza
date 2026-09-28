@@ -86,7 +86,7 @@ const createQuestDifficulty = async (req, res) => {
                 'INSERT INTO quest_difficulty (id, organization_id, name, slug, xp, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
                 [id, orgId, name.slice(0, 80), slug, Math.max(0, Number(req.body?.xp) || 0),
                  req.body?.color ? String(req.body.color).slice(0, 20) : null, Number(mx.n) + 10]);
-            await logAudit(req, 'CREATE', 'quest_difficulty', id, { name });
+            await logAudit(req, 'CREATE', 'quest_difficulty', id, { libelle: name });
             res.status(201).json({ success: true, data: { id } });
         } catch (e) {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
@@ -139,7 +139,7 @@ const deleteQuestDifficulty = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'DELETE', 'quest_difficulty', req.params.id, null);
+        await logAudit(req, 'DELETE', 'quest_difficulty', req.params.id);
         res.json({ success: true, message: 'Difficulté supprimée.' });
     } catch (err) {
         console.error('Erreur suppression difficulté :', err);
@@ -168,7 +168,7 @@ const createQuestChapter = async (req, res) => {
                 'INSERT INTO quest_chapter (id, organization_id, program_id, title, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
                 [id, orgId, programId, title.slice(0, 160),
                  req.body?.icon ? String(req.body.icon).slice(0, 40) : null, Number(mx.n) + 10]);
-            await logAudit(req, 'CREATE', 'quest_chapter', id, { title });
+            await logAudit(req, 'CREATE', 'quest_chapter', id, { libelle: title });
             res.status(201).json({ success: true, data: { id } });
         } catch (e) {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
@@ -294,7 +294,7 @@ const deleteQuestChapter = async (req, res) => {
             }
         }
 
-        await logAudit(req, 'DELETE', 'quest_chapter', req.params.id, { title: chap.title, rang, progressions: nettoyes });
+        await logAudit(req, 'DELETE', 'quest_chapter', req.params.id, { libelle: chap.title });
         res.json({
             success: true,
             message: nettoyes
@@ -375,7 +375,7 @@ const createQuestQuestion = async (req, res) => {
                  req.body?.xp === '' || req.body?.xp == null ? null : Math.max(0, Number(req.body.xp) || 0),
                  parsed.vf, Number(mx.n) + 10]);
             await replaceOptions(conn, id, parsed.options);
-            await logAudit(req, 'CREATE', 'quest_question', id, { type: parsed.type });
+            await logAudit(req, 'CREATE', 'quest_question', id);
             res.status(201).json({ success: true, data: { id } });
         } catch (e) {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
@@ -410,7 +410,7 @@ const updateQuestQuestion = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'UPDATE', 'quest_question', req.params.id, { type: parsed.type });
+        await logAudit(req, 'UPDATE', 'quest_question', req.params.id);
         res.json({ success: true, message: 'Question enregistrée.' });
     } catch (err) {
         console.error('Erreur maj question :', err);
@@ -429,7 +429,7 @@ const deleteQuestQuestion = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'DELETE', 'quest_question', req.params.id, null);
+        await logAudit(req, 'DELETE', 'quest_question', req.params.id);
         res.json({ success: true, message: 'Question supprimée.' });
     } catch (err) {
         console.error('Erreur suppression question :', err);

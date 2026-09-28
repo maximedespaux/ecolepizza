@@ -89,7 +89,12 @@ test('retirer ET effacer : les non signés et les réponses QCM partent, le sign
     });
     const effaces = await executerRetrait(pool, 'o1', DOSSIER, { effacer: true });
     assert.deepStrictEqual(docsSupprimes(journal), ['d-fiche', 'd-qcm'], 'le document signé n\'est jamais effacé');
-    assert.deepStrictEqual(effaces, { documents: ['d-fiche', 'd-qcm'], reponses: ['rep-1', 'rep-orpheline'] });
+    /* LES TITRES, pour le journal (migration 186) : effacé, un document ne se nomme plus. La réponse
+       d'un QCM prend le titre de SON document ; la réponse orpheline n'en a aucun à prendre. */
+    assert.deepStrictEqual(effaces, {
+        documents: ['d-fiche', 'd-qcm'], reponses: ['rep-1', 'rep-orpheline'],
+        libelles: { 'd-fiche': 'd-fiche', 'd-qcm': 'd-qcm', 'rep-1': 'd-qcm' },
+    });
     assert.ok(rang(journal, /^DELETE FROM generated_document/) < rang(journal, /^DELETE FROM enrollment/));
     assert.ok(rang(journal, /^DELETE FROM enrollment/) < rang(journal, /^COMMIT$/), 'une seule transaction, validée à la fin');
     assert.ok(etat.commit && etat.release && !etat.rollback);
@@ -98,7 +103,7 @@ test('retirer ET effacer : les non signés et les réponses QCM partent, le sign
 test('retirer SEULEMENT : aucun document ni réponse touchés, comme avant', async () => {
     const { pool, journal, etat } = faussePool({ docs: [doc('d-fiche')], reste: [{ id: 'rep-1' }] });
     const effaces = await executerRetrait(pool, 'o1', DOSSIER, { effacer: false });
-    assert.deepStrictEqual(effaces, { documents: [], reponses: [] });
+    assert.deepStrictEqual(effaces, { documents: [], reponses: [], libelles: {} });
     assert.strictEqual(rang(journal, /generated_document|quiz_response/), -1, 'ni plan, ni document, ni réponse');
     assert.ok(rang(journal, /^DELETE ar FROM attendance_record/) > -1, 'les présences de la session partent');
     assert.ok(rang(journal, /^DELETE FROM enrollment/) > -1 && etat.commit);

@@ -97,10 +97,12 @@ async function planRetrait(conn, orgId, e) {
 
 /**
  * Retire le dossier, dans UNE transaction : rien n'est à moitié fait. `pool` = db.promise().
- * Rend ce qui a été effacé ({ documents, reponses } : identifiants), à journaliser APRÈS la validation.
+ * Rend ce qui a été effacé ({ documents, reponses } : identifiants), à journaliser APRÈS la validation,
+ * et `libelles` ({ identifiant: titre }) : le titre de chaque document effacé, et de ses réponses QCM,
+ * pour que le journal dise LESQUELS — une fois effacés, plus rien ne les nomme (migration 186).
  */
 async function executerRetrait(pool, orgId, e, { effacer = false } = {}) {
-    const effaces = { documents: [], reponses: [] };
+    const effaces = { documents: [], reponses: [], libelles: {} };
     const cx = await pool.getConnection();
     try {
         await cx.beginTransaction();
@@ -110,6 +112,7 @@ async function executerRetrait(pool, orgId, e, { effacer = false } = {}) {
                 const { reponses } = await supprimerDocument(cx, orgId, d);
                 effaces.documents.push(d.id);
                 effaces.reponses.push(...reponses);
+                if (d.title) for (const id of [d.id, ...reponses]) effaces.libelles[id] = d.title;
             }
             // Réponses QCM restantes du dossier : un QCM déjà supprimé, ou sans document.
             const [reste] = await cx.query('SELECT id FROM quiz_response WHERE enrollment_id = ? AND organization_id = ?', [e.id, orgId]);
