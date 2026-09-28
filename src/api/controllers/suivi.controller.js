@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const db = require('../config/database.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { avancementDossiers } = require('../lib/avancement.js');
@@ -9,7 +10,7 @@ const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // c
 const { colonneExiste } = require('../lib/colonnes.js');
 const { decryptBytes } = require('../lib/crypto.js');
 const { ecrivainZip } = require('../lib/zip.js');
-const { placesDansLArchive, offertsDesFormations, lireArbre, normaliserTitre } = require('../lib/arborescenceArchive.js');
+const { placesDansLArchive, rangementPourLEcran, offertsDesFormations, lireArbre, normaliserTitre } = require('../lib/arborescenceArchive.js');
 
 const SCORE_ORDER = { ROUGE: 0, ORANGE: 1, VERT: 2 };
 // Statuts « partagé avec le stagiaire » (envoyé / consulté / signé).
@@ -187,6 +188,9 @@ async function lignesDuCoffre(conn, orgId) {
             || e.code === 'WARN_DATA_TRUNCATED' || e.code === 'ER_DATA_TRUNCATED'))) throw e;
     }
 
+    /* UN FICHIER AJOUTÉ AU DOSSIER D'UN STAGIAIRE depuis cet écran (« fichier:<dossier>:… », 2026-09-28)
+       désigne son dossier par sa référence, comme une feuille d'émargement : il se range avec les
+       autres documents du stagiaire, et part dans l'archive de SON dossier. */
     // Documents archivés (PDF importés + feuilles d'émargement générées).
     // Pour l'émargement (ref « emarg:<enrollment>[:<slug>] »), on résout le vrai
     // stagiaire via le dossier, afin qu'il se range dans le MÊME dossier que ses
@@ -196,7 +200,7 @@ async function lignesDuCoffre(conn, orgId) {
        fonctionner exactement comme avant — sans classeur, pas avec une erreur SQL. */
     const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
     const [arch] = await conn.query(
-        `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope,
+        `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope, ad.mime,
                 NULL AS company_id, NULL AS company_name,
                 NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
                 ad.year, ad.week,
@@ -211,8 +215,8 @@ async function lignesDuCoffre(conn, orgId) {
                 e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
          FROM archive_document ad
-         LEFT JOIN enrollment e ON ad.ref LIKE 'emarg:%'
-              AND e.id = SUBSTRING_INDEX(SUBSTRING(ad.ref, 7), ':', 1)
+         LEFT JOIN enrollment e ON (ad.ref LIKE 'emarg:%' OR ad.ref LIKE 'fichier:%')
+              AND e.id = SUBSTRING_INDEX(SUBSTRING_INDEX(ad.ref, ':', 2), ':', -1)
          LEFT JOIN learner l ON l.id = e.learner_id
          LEFT JOIN training_session s ON s.id = e.session_id
          LEFT JOIN training_program p ON p.id = s.program_id
@@ -293,7 +297,62 @@ async function lignesDuCoffre(conn, orgId) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
     }
 
-    return { gen, comp, sess, arch, pieces };
+    /* DOCUMENTS REMIS — la sixième source (2026-09-28). Ce que l'école remet au stagiaire ou à son
+       entreprise (l'AGEFICE, un diplôme) n'entrait pas au coffre : l'arborescence pouvait placer
+       « AGEFICE » dans le dossier de l'entreprise, l'archive ne l'emportait jamais, faute de le
+       connaître. UNE LIGNE PAR FICHIER, comme les pièces ; les octets restent dans leur table, chiffrés. */
+    let remises = [];
+    try {
+        const [rf] = await conn.query(
+            `SELECT rf.id AS doc_id, rf.nom AS fichier_nom, rf.sort_order,
+                    rt.label AS remise_label, r.id AS remise_id, r.statut, r.remise_type_id,
+                    DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
+                    DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
+                    s.year, s.week,
+                    p.code AS program_code, p.title AS program_title,
+                    l.id AS learner_id, l.first_name, l.last_name, e.id AS enrollment_id,
+                    e.company_id AS enr_company_id, dc.name AS enr_company_name, s.id AS session_id,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+               FROM remise_fichier rf
+               JOIN remise_document r ON r.id = rf.remise_id
+               JOIN remise_type rt ON rt.id = r.remise_type_id
+               JOIN enrollment e ON e.id = r.enrollment_id
+               JOIN learner l ON l.id = e.learner_id
+               LEFT JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+               LEFT JOIN company dc ON dc.id = e.company_id
+              WHERE r.organization_id = ?
+              ORDER BY rf.remise_id, rf.sort_order, rf.created_at`,
+            [orgId]);
+        const parRemise = new Map();
+        for (const f of rf) parRemise.set(f.remise_id, (parRemise.get(f.remise_id) || 0) + 1);
+        const vus = new Map();
+        remises = rf.map((f) => {
+            const total = parRemise.get(f.remise_id);
+            const rang = (vus.get(f.remise_id) || 0) + 1;
+            vus.set(f.remise_id, rang);
+            return {
+                doc_id: f.doc_id,
+                title: total > 1 ? `${f.remise_label} (${rang}/${total})` : f.remise_label,
+                type: 'REMISE', status: f.statut, quiz_id: null, scope: 'LEARNER',
+                company_id: null, company_name: null,
+                sent_at: f.remis_le, signed_at: f.accuse_le,
+                year: f.year, week: f.week,
+                program_code: f.program_code, program_title: f.program_title,
+                learner_id: f.learner_id, first_name: f.first_name, last_name: f.last_name,
+                dossier: null,
+                source: 'remise',
+                fichier_nom: f.fichier_nom, remise_type_id: f.remise_type_id, enrollment_id: f.enrollment_id,
+                enr_company_id: f.enr_company_id, enr_company_name: f.enr_company_name,
+                session_id: f.session_id, debut: f.debut, fin: f.fin,
+            };
+        });
+    } catch (e) {
+        // Migration 160 non jouée : le coffre reste lisible sans les documents remis.
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+
+    return { gen, comp, sess, arch, pieces, remises };
 }
 
 /**
@@ -305,8 +364,16 @@ async function lignesDuCoffre(conn, orgId) {
 const getArchive = async (req, res) => {
     try {
         const conn = db.promise();
-        const { gen, comp, sess, arch, pieces } = await lignesDuCoffre(conn, req.user.organization_id);
-        res.json({ data: [...gen, ...comp, ...sess, ...arch, ...pieces] });
+        const { gen, comp, sess, arch, pieces, remises } = await lignesDuCoffre(conn, req.user.organization_id);
+        const lignes = [...gen, ...comp, ...sess, ...arch, ...pieces, ...remises];
+        /* OÙ L'ARCHIVE RANGE CHAQUE DOCUMENT, pour que l'écran le montre au même endroit (2026-09-28) :
+           ses sous-dossiers (« Justificatifs »), ou « hors de l'archive ». Un confort : s'il échoue,
+           l'écran range comme avant, et le coffre reste lisible. */
+        try {
+            const { placer } = await contexteDeRangement(conn, req.user.organization_id);
+            for (const l of lignes) if (!l.dossier) l.rangement = rangementPourLEcran(placer(l), l);
+        } catch (e) { console.error('Rangement du coffre indisponible :', e && e.message); }
+        res.json({ data: lignes });
     } catch (err) {
         console.error('Erreur archives documents :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -458,6 +525,82 @@ const importArchive = async (req, res) => {
     }
 };
 
+/* CE QU'ON AJOUTE AU DOSSIER D'UN STAGIAIRE : un PDF, ou le scan d'un papier (image). Rien d'autre —
+   servi EN LIGNE, un type que le client annonce ouvrirait la porte à du HTML exécuté (cf.
+   document.controller, MIMES_IMPORT). Le type retenu est celui de la liste, jamais la chaîne reçue. */
+const TYPES_DOSSIER = {
+    'application/pdf': 'application/pdf', 'image/jpeg': 'image/jpeg', 'image/png': 'image/png', 'image/webp': 'image/webp',
+};
+const EXT_DOSSIER = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
+/**
+ * POST /api/suivi/archives/dossier/:enrollmentId — ajoute des fichiers AU DOSSIER d'un stagiaire.
+ *
+ * Demandé le 2026-09-28 depuis Suivi Qualiopi → Archives : « pouvoir ajouter des fichiers dans le
+ * dossier du stagiaire ». Ils entrent au coffre comme une feuille d'émargement : chiffrés, rattachés
+ * au DOSSIER par leur référence (« fichier:<dossier>:… »). Ils se rangent donc avec ses autres
+ * documents — à la racine de son dossier, à l'écran comme dans l'archive ZIP de son dossier, de sa
+ * session ou de sa semaine. L'année, la semaine, la formation et le nom sont recopiés de la session :
+ * l'écran de stockage les lit, sans jointure.
+ * MÊME RÈGLE DE DOUBLON QUE L'IMPORT : le même nom dans le même dossier y est déjà, et c'est dit —
+ * pour remplacer une version, on supprime puis on ajoute.
+ */
+const ajouterAuDossier = async (req, res) => {
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ error: 'Aucun fichier reçu.' });
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[e]] = await conn.query(
+            `SELECT e.id, e.learner_id, l.first_name, l.last_name, s.year, s.week, p.code
+               FROM enrollment e JOIN learner l ON l.id = e.learner_id
+               LEFT JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE e.id = ? AND e.organization_id = ?`, [req.params.enrollmentId, orgId]);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
+        const mesure = await mesureDisponible(conn);
+        const personne = `${e.last_name || ''} ${e.first_name || ''}`.trim() || null;
+        let imported = 0, skipped = 0, doublons = 0, vides = 0;
+        const nomsRefuses = [], nomsDoublons = [], nomsVides = [], ajoutes = [];
+        for (const f of files) {
+            const titre = nomSeul(f.originalname).slice(0, 255);
+            const mime = TYPES_DOSSIER[String(f.mimetype || '')];
+            if (!mime) { skipped++; nomsRefuses.push(String(f.originalname || titre)); continue; }
+            // Un fichier VIDE n'entre pas au coffre (cf. importArchive) : il faut aller rechercher l'original.
+            if (!f.buffer || !f.buffer.length) { vides++; nomsVides.push(titre); continue; }
+            const [[deja]] = await conn.query(
+                'SELECT 1 AS oui FROM archive_document WHERE organization_id = ? AND ref LIKE ? AND title = ? LIMIT 1',
+                [orgId, `fichier:${e.id}:%`, titre]);
+            if (deja) { doublons++; nomsDoublons.push(titre); continue; }
+            const range = aRanger(f.buffer); // chiffré, empreinte et taille du clair (cf. importArchive)
+            await conn.query(
+                `INSERT INTO archive_document
+                    (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''})
+                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?${mesure ? ', ?, ?' : ''})`,
+                [orgId, `fichier:${e.id}:${crypto.randomBytes(6).toString('hex')}`, e.year ?? null, e.week ?? null,
+                    e.code || null, personne, titre, mime, range.file, ...(mesure ? [range.empreinte, range.octets] : [])]);
+            imported++;
+            ajoutes.push(titre);
+        }
+        /* SUR LE STAGIAIRE, pas sur le dossier : la cloche et le journal ne mènent qu'à une fiche (Learner,
+           Company, TrainingSession). Les noms des fichiers sont figés : ils se lisent même après suppression. */
+        if (imported) {
+            const noms = ajoutes.slice(0, 3).join(', ') + (ajoutes.length > 3 ? ` (+${ajoutes.length - 3})` : '');
+            logAudit(req, 'archive.dossier', 'Learner', e.learner_id, { libelle: noms, stagiaire: e.learner_id });
+        }
+        res.status(201).json({ data: {
+            imported, skipped, noms_refuses: nomsRefuses.slice(0, 20),
+            doublons, noms_doublons: nomsDoublons.slice(0, 20), vides, noms_vides: nomsVides.slice(0, 20),
+        } });
+    } catch (err) {
+        console.error('Erreur ajout au dossier (archives) :', err);
+        if (err && /max_allowed_packet|packet/i.test(err.message || '')) {
+            return res.status(413).json({ error: 'Fichier trop volumineux pour la base.' });
+        }
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** GET /api/suivi/archives/:id/file — sert le PDF importé (aperçu / téléchargement). */
 const getArchiveFile = async (req, res) => {
     try {
@@ -477,10 +620,12 @@ const getArchiveFile = async (req, res) => {
            corrompu à l'import. */
         const clair = aServir(row.file);
         if (clair === null) return res.status(500).json({ message: 'Archive illisible (déchiffrement — clé ?).' });
-        const name = (row.title || 'document').replace(/[\\/:*?"<>|]/g, '') + '.pdf';
-        // Les archives sont des PDF : on force le type (ne jamais renvoyer un mime
-        // fourni par le client, qui pourrait provoquer un rendu HTML/JS = XSS).
-        res.set('Content-Type', 'application/pdf');
+        /* UN PDF — ou une IMAGE ajoutée au dossier d'un stagiaire (2026-09-28). Le type servi vient d'une
+           LISTE, jamais de la chaîne enregistrée : ne jamais renvoyer un mime fourni par le client, qui
+           pourrait provoquer un rendu HTML/JS (XSS). Tout le reste repart en PDF, comme avant. */
+        const type = TYPES_DOSSIER[row.mime] || 'application/pdf';
+        const name = (row.title || 'document').replace(/[\\/:*?"<>|]/g, '') + (EXT_DOSSIER[type] || '.pdf');
+        res.set('Content-Type', type);
         res.set('X-Content-Type-Options', 'nosniff');
         res.set('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`);
         /* AUCUN CACHE — même raison que pour une pièce d'identité : un contrat signé, une
@@ -763,6 +908,23 @@ async function arborescencesDeLArchive(conn, orgId) {
     return { source: "l'arborescence de chaque formation (l'arborescence commune n'est pas encore enregistrée)", pour: (code) => parCode.get(code) || {} };
 }
 
+/**
+ * CE QUI RANGE L'ARCHIVE — les arborescences, les « OU » d'aujourd'hui, et ce que chaque formation
+ * propose de ranger (la liste même que l'aperçu de l'arborescence dit « non rangée » : ce qui y
+ * figure sans être rangé reste HORS de l'archive, c'est le choix de l'école, 2026-09-25 ; un document
+ * d'une formation inconnue n'a pas de liste, rien n'en est exclu).
+ * UNE SEULE LECTURE pour l'archive ZIP et pour l'écran du coffre (2026-09-28) : les deux rangent
+ * chaque document au même endroit, ou l'un des deux ment.
+ * @returns {Promise<{ arbres, placer: (ligne) => places }>}
+ */
+async function contexteDeRangement(conn, orgId) {
+    const arbres = await arborescencesDeLArchive(conn, orgId);
+    const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
+    const { paletteDeLOrganisme } = require('./formationProgram.controller.js');
+    const offerts = offertsDesFormations(await paletteDeLOrganisme(conn, orgId));
+    return { arbres, placer: (l) => placesDansLArchive(arbres.pour(l.program_code), l, groupes, offerts.get(l.program_code) || null) };
+}
+
 const EXTENSIONS = {
     'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/heic': '.heic',
     'image/webp': '.webp', 'image/gif': '.gif', 'application/msword': '.doc',
@@ -789,12 +951,20 @@ async function fichierDuCoffre(conn, user, l) {
         const clair = p && p.bytes ? decryptBytes(p.bytes) : null;
         return clair ? { buffer: clair, mime: p.mime || 'application/octet-stream', nom: p.nom } : null;
     }
+    if (l.source === 'remise') {
+        const [[r]] = await conn.query(
+            `SELECT rf.mime, rf.bytes, rf.nom FROM remise_fichier rf JOIN remise_document r ON r.id = rf.remise_id
+              WHERE rf.id = ? AND r.organization_id = ?`, [l.doc_id, user.organization_id]);
+        const clair = r && r.bytes ? decryptBytes(r.bytes) : null;
+        return clair ? { buffer: clair, mime: r.mime || 'application/octet-stream', nom: r.nom } : null;
+    }
     const { fichierPourArchive } = require('./document.controller.js');
     return fichierPourArchive(conn, user, l.doc_id);
 }
 
 const STATUT_LU = { SIGNE: 'signé', ENVOYE: 'envoyé', CONSULTE: 'consulté', GENERE: 'généré', ARCHIVE: 'importé',
-    VALIDEE: 'pièce validée', DEPOSEE: 'pièce à vérifier', REFUSEE: 'pièce refusée' };
+    VALIDEE: 'pièce validée', DEPOSEE: 'pièce à vérifier', REFUSEE: 'pièce refusée',
+    REMISE: 'remis, en attente de l\'accusé', RECUE: 'remis, réception confirmée' };
 const dateFr = (d) => d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
 
 /**
@@ -852,18 +1022,13 @@ const exporterArchive = async (req, res) => {
         const c = await lignesDuCoffre(conn, orgId);
         /* Les CLASSEURS (assurance, agrément) n'appartiennent à aucune session : l'écran les tient à
            part de l'arbre des sessions, l'archive aussi. */
-        const lignes = [...c.gen, ...c.comp, ...c.sess, ...c.arch, ...c.pieces].filter((l) => !l.dossier && portee.garde(l));
+        const lignes = [...c.gen, ...c.comp, ...c.sess, ...c.arch, ...c.pieces, ...c.remises].filter((l) => !l.dossier && portee.garde(l));
         if (!lignes.length) return res.status(404).json({ message: 'Aucun document dans le coffre pour cette sélection.' });
-        arbres = await arborescencesDeLArchive(conn, orgId);
-        const groupes = new Map((await loadEquivalences(conn, orgId)).map((e) => [e.key, { members: e.members, label: e.label }]));
-        /* CE QUE CHAQUE FORMATION PROPOSE DE RANGER — la liste même que l'aperçu de l'arborescence dit
-           « non rangée » : ce qui y figure sans être rangé reste HORS de l'archive, c'est le choix de
-           l'école (2026-09-25). Un document d'une formation inconnue n'a pas de liste : rien n'en est exclu. */
-        const { paletteDeLOrganisme } = require('./formationProgram.controller.js');
-        const offerts = offertsDesFormations(await paletteDeLOrganisme(conn, orgId));
+        const rangement = await contexteDeRangement(conn, orgId);
+        arbres = rangement.arbres;
         aEcrire = []; nonRanges = [];
         for (const l of lignes) {
-            const places = placesDansLArchive(arbres.pour(l.program_code), l, groupes, offerts.get(l.program_code) || null);
+            const places = rangement.placer(l);
             if (places.length) aEcrire.push({ l, places });
             else nonRanges.push({ titre: l.title });
         }
@@ -926,5 +1091,5 @@ const exporterArchive = async (req, res) => {
     }
 };
 
-module.exports = { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive,
+module.exports = { getSuivi, getArchive, importArchive, ajouterAuDossier, getArchiveFile, deleteArchive, bulkDeleteArchive,
     getArchiveStockage, exporterArchive, lignesDuCoffre, porteeDeLArchive, sommaireDeLArchive };

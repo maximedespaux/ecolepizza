@@ -234,6 +234,8 @@ const ACTION_LABEL = {
     /* Bleu, pas vert : rien n'est créé ni modifié, mais des copies — pièces d'identité comprises —
        sortent du coffre. La ligne doit se remarquer dans le journal sans passer pour une alerte. */
     'archive.export': ['Archive ZIP téléchargée', B],
+    // Des fichiers ajoutés au dossier d'un stagiaire depuis Suivi Qualiopi → Archives (2026-09-28).
+    'archive.dossier': ['Fichier ajouté aux archives du stagiaire', G],
     'archivetree.save': ["Arborescence d'archivage enregistrée", A],
 };
 

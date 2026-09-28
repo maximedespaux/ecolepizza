@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { getSuivi, getArchive, importArchive, getArchiveFile, deleteArchive, bulkDeleteArchive,
+const { getSuivi, getArchive, importArchive, ajouterAuDossier, getArchiveFile, deleteArchive, bulkDeleteArchive,
     getArchiveStockage, exporterArchive } = require('../controllers/suivi.controller.js');
 const { authenticateToken, authorizeRoles, AUDIT_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -48,6 +48,8 @@ router.get('/archives/stockage', authorizeRoles(...ADMIN_ROLES), getArchiveStock
 router.get('/archives/:id/file', getArchiveFile);
 // Import / suppression : administration uniquement.
 router.post('/archives/import', authorizeRoles(...ADMIN_ROLES), limiteDuLot, upload.array('files', 3000), importArchive);
+// Des fichiers ajoutés AU DOSSIER d'un stagiaire (2026-09-28) : mêmes droits, même plafond par fichier.
+router.post('/archives/dossier/:enrollmentId', authorizeRoles(...ADMIN_ROLES), limiteDuLot, upload.array('files', 50), ajouterAuDossier);
 router.post('/archives/delete', authorizeRoles(...ADMIN_ROLES), bulkDeleteArchive); // suppression groupée
 router.delete('/archives/:id', authorizeRoles(...ADMIN_ROLES), deleteArchive);
 

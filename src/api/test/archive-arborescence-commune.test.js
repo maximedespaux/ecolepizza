@@ -253,7 +253,9 @@ const ROUTES_SUIVI = lire('routes/suivi.routes.js');
 test('l\'archive a UNE route, sous la garde du coffre, et la liste même de l\'écran', () => {
     assert.match(ROUTES_SUIVI, /router\.use\(authenticateToken, authorizeRoles\(\.\.\.AUDIT_ROLES\)\);[\s\S]*router\.get\('\/archives\/zip', exporterArchive\);/,
         'qui ne peut pas ouvrir le coffre n\'en reçoit pas une copie — pièces d\'identité comprises');
-    assert.match(SUIVI, /const \{ gen, comp, sess, arch, pieces \} = await lignesDuCoffre\(conn, req\.user\.organization_id\);/, 'l\'écran');
+    // Six sources depuis les documents REMIS (2026-09-28) — l'AGEFICE que l'arborescence range chez l'entreprise.
+    assert.match(SUIVI, /const \{ gen, comp, sess, arch, pieces, remises \} = await lignesDuCoffre\(conn, req\.user\.organization_id\);/, 'l\'écran');
+    assert.match(SUIVI, /\[\.\.\.c\.gen, \.\.\.c\.comp, \.\.\.c\.sess, \.\.\.c\.arch, \.\.\.c\.pieces, \.\.\.c\.remises\]/, 'l\'archive, les mêmes');
     assert.match(SUIVI, /const c = await lignesDuCoffre\(conn, orgId\);/, 'l\'archive');
     assert.match(SUIVI, /\.filter\(\(l\) => !l\.dossier && portee\.garde\(l\)\)/, 'les classeurs restent à part, comme à l\'écran');
     // Au fil de l'eau, et une panne en route coupe la connexion plutôt que de livrer un ZIP tronqué.

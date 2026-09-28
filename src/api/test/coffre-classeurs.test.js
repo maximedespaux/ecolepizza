@@ -91,7 +91,8 @@ test('LA LIGNE DE DOCUMENT N\'EXISTE QU\'UNE FOIS', () => {
     assert.match(UI, /const DocLigne = \(\{ d \}\) =>/, 'la ligne est un composant');
     assert.strictEqual((UI.match(/<DocLigne key=\{d\.doc_id\} d=\{d\} \/>/g) || []).length, 2,
         'employé par l\'arbre ET par les classeurs');
-    assert.strictEqual((UI.match(/title="Télécharger le PDF"/g) || []).length, 1,
+    // « Télécharger » tout court depuis le 2026-09-28 : un fichier ajouté au dossier peut être une image.
+    assert.strictEqual((UI.match(/title="Télécharger"/g) || []).length, 1,
         'le rendu n\'est écrit qu\'une fois');
 });
 

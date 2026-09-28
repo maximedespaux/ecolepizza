@@ -58,7 +58,7 @@ function slugsDe(it, groupes) {
 
 /**
  * Cet item désigne-t-il ce document du coffre ?
- * `doc` : { slug, quiz_id, quiz_title, piece_type_id } — ce que le coffre sait du document.
+ * `doc` : { slug, quiz_id, quiz_title, piece_type_id, remise_type_id } — ce que le coffre sait du document.
  */
 function itemDesigne(it, doc, groupes) {
     if (!it || !doc) return false;
@@ -69,6 +69,8 @@ function itemDesigne(it, doc, groupes) {
     if (it.ref) {
         if (doc.quiz_id && it.ref === `quiz:${doc.quiz_id}`) return true;         // ancienne forme
         if (doc.piece_type_id && it.ref === `piece:${doc.piece_type_id}`) return true;
+        // Un document REMIS (l'AGEFICE) : son type, comme une pièce (2026-09-28).
+        if (doc.remise_type_id && it.ref === `remise:${doc.remise_type_id}`) return true;
         return !!doc.slug && it.ref === doc.slug;
     }
     return false;
@@ -152,6 +154,7 @@ function clesDuDocument(doc) {
     const cles = [];
     if (doc.quiz_title) cles.push(`qcm:${normaliserTitre(doc.quiz_title)}`);
     if (doc.piece_type_id) cles.push(`ref:piece:${doc.piece_type_id}`);
+    if (doc.remise_type_id) cles.push(`ref:remise:${doc.remise_type_id}`);
     if (doc.slug) cles.push(`ref:${doc.slug}`);
     return cles;
 }
@@ -202,7 +205,13 @@ function enPlace(chemin, doc, place, arbre) {
     const horsDeSonDossier = doc.scope === 'LEARNER' && !chemin.some(estParStagiaire);
     const titre = doc.title || 'Document';
     const fichier = nettoyer(horsDeSonDossier && ctx.stagiaire ? `${titre} — ${ctx.stagiaire}` : titre, 'Document');
-    return { dossiers, fichier, place, arbre };
+    /* CE QUE L'ÉCRAN DU COFFRE MONTRE SOUS LE DOSSIER DE SON PROPRIÉTAIRE (2026-09-28) : les sous-dossiers
+       rangés après le dossier du stagiaire (de l'entreprise, ou de la formation pour un document de
+       session) — « Justificatifs ». `null` : le document est rangé AILLEURS que dans ce dossier. */
+    const proprio = doc.scope === 'LEARNER' ? chemin.findIndex(estParStagiaire)
+        : doc.scope === 'COMPANY' ? chemin.findIndex(estEntreprise)
+            : chemin.findIndex((d) => /\{(Code|Formation)\}/.test((d && d.name) || ''));
+    return { dossiers, fichier, place, arbre, sous: proprio >= 0 ? dossiers.slice(proprio + 1) : null };
 }
 
 /**
@@ -262,6 +271,29 @@ function placesDansLArchive(arbres, doc, groupes, offerts = null) {
     // La COPIE pour l'entreprise : ce qu'on y a rangé, et rien d'autre — pas de place par défaut.
     if (doc.scope === 'LEARNER' && doc.enr_company_id && aDesDossiers(entreprise)) ranger(entreprise, 'entreprise', null);
     return places;
+}
+
+/**
+ * OÙ L'ÉCRAN DU COFFRE MONTRE UN DOCUMENT (Suivi Qualiopi → Archives, 2026-09-28). L'écran range par
+ * année, semaine, formation, puis stagiaire (entreprise, session) ; il ignorait ce que l'arborescence
+ * met SOUS ces dossiers — « Justificatifs » ne s'y voyait jamais — et ce qu'elle laisse hors de
+ * l'archive. Il suit désormais la place même que l'archive ZIP donne au document (`placesDansLArchive`),
+ * pour que l'écran et l'archive ne racontent jamais deux rangements.
+ * @param places le résultat de placesDansLArchive pour ce document
+ * @returns {{ hors_archive: boolean, sous_dossiers: string[], ailleurs: null | 'entreprise' | 'au-dessus' }}
+ *   · hors_archive : l'arborescence ne le range pas, l'archive ne l'emporte pas ;
+ *   · sous_dossiers : les dossiers sous celui de son propriétaire (vide : à sa racine) ;
+ *   · ailleurs : rangé hors de ce dossier — dans celui de l'entreprise (la seule copie qu'on garde), ou plus haut.
+ */
+function rangementPourLEcran(places, doc) {
+    if (!places || !places.length) return { hors_archive: true, sous_dossiers: [], ailleurs: null };
+    /* La place PRINCIPALE : celle de l'arbre du document. Une copie pour l'entreprise ne déplace pas
+       l'original ; mais quand elle est la seule place (l'AGEFICE, que l'école range chez l'entreprise),
+       c'est là qu'il est. */
+    const sienne = doc && doc.scope === 'COMPANY' ? 'entreprise' : 'stagiaire';
+    const p = places.find((x) => x.arbre === sienne) || places[0];
+    if (Array.isArray(p.sous)) return { hors_archive: false, sous_dossiers: p.sous, ailleurs: null };
+    return { hors_archive: false, sous_dossiers: [], ailleurs: p.arbre === 'entreprise' && doc.scope !== 'COMPANY' ? 'entreprise' : 'au-dessus' };
 }
 
 /* ─── La proposition : les arborescences des formations, fusionnées ─────────────────────────── */
@@ -626,7 +658,7 @@ function validerArbre(tree) {
 }
 
 module.exports = {
-    normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placesDansLArchive, clesDuDocument, contexteDu,
+    normaliserTitre, cleItem, slugsDe, itemDesigne, placeDansArbre, placesDansLArchive, rangementPourLEcran, clesDuDocument, contexteDu,
     resoudre, nettoyer, fusionnerArbres, validerArbre, aDesDossiers, lireArbre, actualiserLesOu, STANDARD, STANDARD_ENTREPRISE,
     cleEtape, lireVolet, paletteDesFormations, offertsDesFormations, sansEvaluations,
 };
