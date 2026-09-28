@@ -294,6 +294,29 @@ const deposer = async (req, res) => {
         const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
         if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: 'Dossier d\'un autre stagiaire.' });
 
+        /* LE PLAFOND EST APPLIQUÉ ICI, pas seulement affiché. Le refus nomme le nombre attendu :
+         * « 1 fichier au maximum » se comprend, « trop de fichiers » oblige à deviner. Il dit
+         * aussi comment s'en sortir — retirer avant d'ajouter — parce que c'est le geste que
+         * personne ne trouve seul. Ce geste appartient à l'ÉCOLE (le stagiaire n'a pas de corbeille,
+         * décidé le 2026-09-28) : à lui, on dit de le lui demander.
+         *
+         * ET AVANT TOUTE ÉCRITURE (2026-09-28). Le contrôle venait APRÈS la mise à jour du dépôt :
+         * un envoi refusé pour cause de plafond avait déjà remis la pièce « à vérifier » et EFFACÉ
+         * le motif du refus — une pièce refusée paraissait renvoyée sans l'être, et l'école ne
+         * savait plus pourquoi elle l'avait refusée. */
+        const max = Math.max(1, Number(pt?.fichiers_attendus) || 1); // pt (avec ses limites) lu plus haut
+        const [[existant]] = await conn.query(
+            'SELECT id FROM piece_depot WHERE enrollment_id = ? AND piece_type_id = ?',
+            [req.params.enrollmentId, req.params.pieceTypeId]);
+        if (existant) {
+            const [[dejaN]] = await conn.query('SELECT COUNT(*) AS n FROM piece_fichier WHERE depot_id = ?', [existant.id]);
+            if (dejaN.n >= max) {
+                return res.status(409).json({
+                    message: `« ${pt?.label || 'Cette pièce'} » accepte ${max} fichier${max > 1 ? 's' : ''} au maximum. `
+                        + (staff ? 'Retirez-en un avant d\'en ajouter un autre.' : 'Demandez à l\'école de retirer celui à remplacer.'),
+                });
+            }
+        }
         /* UN DÉPÔT FAIT PAR L'ÉCOLE VAUT VÉRIFICATION. Le circuit normal est « le stagiaire
            dépose, l'école contrôle » : le statut DEPOSEE signifie « quelqu'un attend un
            contrôle ». Mais quand c'est l'école elle-même qui dépose — la pièce est arrivée par
@@ -314,18 +337,6 @@ const deposer = async (req, res) => {
         const [[d]] = await conn.query(
             'SELECT id FROM piece_depot WHERE enrollment_id = ? AND piece_type_id = ?',
             [req.params.enrollmentId, req.params.pieceTypeId]);
-        /* LE PLAFOND EST APPLIQUÉ ICI, pas seulement affiché. Le refus nomme le nombre attendu :
-         * « 1 fichier au maximum » se comprend, « trop de fichiers » oblige à deviner. Il dit
-         * aussi comment s'en sortir — retirer avant d'ajouter — parce que c'est le geste que
-         * personne ne trouve seul. */
-        const [[dejaN]] = await conn.query('SELECT COUNT(*) AS n FROM piece_fichier WHERE depot_id = ?', [d.id]);
-        const max = Math.max(1, Number(pt?.fichiers_attendus) || 1); // pt (avec ses limites) lu plus haut
-        if (dejaN.n >= max) {
-            return res.status(409).json({
-                message: `« ${pt?.label || 'Cette pièce'} » accepte ${max} fichier${max > 1 ? 's' : ''} au maximum. `
-                    + 'Retirez-en un avant d\'en ajouter un autre.',
-            });
-        }
         const [[n]] = await conn.query('SELECT COALESCE(MAX(sort_order), 0) AS m FROM piece_fichier WHERE depot_id = ?', [d.id]);
         await conn.query(
             'INSERT INTO piece_fichier (id, depot_id, sort_order, nom, mime, bytes, taille) VALUES (?, ?, ?, ?, ?, ?, ?)',
