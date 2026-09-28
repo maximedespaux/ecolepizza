@@ -693,6 +693,11 @@ Deux pièges rencontrés en faisant ce contrôle, à ne pas re-découvrir :
   vers `category` sur `partner_product` sans rien changer à la structure. Elle se vérifie sur le
   contenu : les catégories portent bien « Four, Électrique, 450 °C, 4 pizzas ».
 
+**187 : ABANDONNÉE, à reverter si elle a été jouée** (`187_revert_moyens_paiement.sql`, un `DROP TABLE IF EXISTS
+moyen_paiement`). La PR #228 (moyens de paiement en une liste dans Paramètres → Facturation, modèle pré-sélectionné à la
+caisse) a été fusionnée et déployée le 2026-09-28 alors que la demande portait sur /factures ; la PR suivante la retire en
+entier. Son fichier aller est supprimé, seul le revert subsiste. Sans risque à ne pas jouer si la 187 ne l'a jamais été.
+
 **124 : ABANDONNÉE, à reverter si elle a été jouée.** Elle stockait sur `shop_request` le
 destinataire de la facture choisi par le stagiaire au panier. Le choix est revenu à l'école, qui
 le fait à l'émission — elle seule connaît l'accord de prise en charge. Son fichier **aller a été
