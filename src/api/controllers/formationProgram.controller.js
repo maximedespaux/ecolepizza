@@ -27,20 +27,25 @@ async function formationSteps(conn, orgId, program) {
     const orgSteps = await loadOrgSteps(orgId);
     const candidates = orgSteps.filter((s) => s.active && matchFormation(s.applies_when, program));
     let rows = [];
+    /* `facultatif` (migration 188) : sondé une fois, puis demandé dans chaque forme de la cascade
+       ci-dessous — sans la colonne, `0`, et toutes les étapes comptent comme avant. */
+    const fac = await colonneExiste(conn, 'program_step', 'facultatif') ? ', facultatif' : ', 0 AS facultatif';
     try {
-        [rows] = await conn.query('SELECT slug, sort_order, active, or_group, applies_when FROM program_step WHERE program_id = ?', [program.id]);
+        [rows] = await conn.query(`SELECT slug, sort_order, active, or_group, applies_when${fac} FROM program_step WHERE program_id = ?`, [program.id]);
     } catch (e) {
         if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
         // applies_when (migration 140) absente : on relit sans. Puis, si or_group (052) manque
         // aussi, on retombe sur le minimum. Le parcours doit rester lisible sans ces colonnes.
         try {
-            [rows] = await conn.query('SELECT slug, sort_order, active, or_group FROM program_step WHERE program_id = ?', [program.id]);
+            [rows] = await conn.query(`SELECT slug, sort_order, active, or_group${fac} FROM program_step WHERE program_id = ?`, [program.id]);
         } catch (e2) {
             if (!(e2 && e2.code === 'ER_BAD_FIELD_ERROR')) throw e2;
-            [rows] = await conn.query('SELECT slug, sort_order, active FROM program_step WHERE program_id = ?', [program.id]);
+            [rows] = await conn.query(`SELECT slug, sort_order, active${fac} FROM program_step WHERE program_id = ?`, [program.id]);
         }
     }
     const overlay = new Map(rows.map((r) => [r.slug, r]));
+    // Facultative DANS CETTE FORMATION (migration 188) : visible, faisable, hors décompte.
+    const facultatif = (slug) => !!(overlay.get(slug) && Number(overlay.get(slug).facultatif));
 
     // Étapes documentaires classiques. or_group : surcharge program_step sinon défaut.
     const docSteps = candidates.map((s) => {
@@ -60,6 +65,7 @@ async function formationSteps(conn, orgId, program) {
                Même logique que les pièces et les feuilles d'émargement juste en dessous :
                jamais imposées d'office à toutes les formations. */
             active: o ? !!o.active : s.parcours_defaut !== 0,
+            facultatif: facultatif(s.slug),
         };
     });
 
@@ -91,6 +97,7 @@ async function formationSteps(conn, orgId, program) {
                 applies_when: parseAW(o && o.applies_when),
                 sort_order: o ? o.sort_order : 15, // tôt dans le parcours : c'est un préalable
                 active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
+                facultatif: facultatif(slug),
             };
         });
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
@@ -104,8 +111,11 @@ async function formationSteps(conn, orgId, program) {
      * rester utilisable sans elle. */
     let remiseSteps = [];
     try {
+        /* À QUI la remise va (migration 188) : le stagiaire, ou son entreprise. Sans la colonne,
+           au stagiaire — le comportement d'avant. */
+        const dest = await colonneExiste(conn, 'remise_type', 'destinataire') ? 'destinataire' : "'STAGIAIRE' AS destinataire";
         const [remises] = await conn.query(
-            'SELECT id, label, consigne FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label',
+            `SELECT id, label, consigne, ${dest} FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
             [orgId]);
         remiseSteps = remises.map((rm) => {
             const slug = `remise:${rm.id}`;
@@ -122,6 +132,8 @@ async function formationSteps(conn, orgId, program) {
                 // à la fin, on demande une carte d'identité au début.
                 sort_order: o ? o.sort_order : 900,
                 active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
+                facultatif: facultatif(slug),
+                destinataire: rm.destinataire === 'ENTREPRISE' ? 'ENTREPRISE' : 'STAGIAIRE',
             };
         });
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
@@ -171,6 +183,7 @@ async function formationSteps(conn, orgId, program) {
                coup, la duplication le créant volontairement non rattaché. Le rattachement dit
                désormais qui PEUT l'utiliser, ce réglage s'il y entre TOUT SEUL. */
             active: o ? !!o.active : q.parcours_defaut !== 0,
+            facultatif: facultatif(slug),
         };
     });
 
@@ -203,6 +216,7 @@ async function formationSteps(conn, orgId, program) {
                 or_group: o ? (o.or_group || null) : null, emargement: true,
                 sort_order: o ? o.sort_order : (t.sort_order || 75),
                 active: o ? !!o.active : false,
+                facultatif: facultatif(t.slug),
             };
         });
     } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
@@ -784,6 +798,9 @@ const saveFormationSteps = async (req, res) => {
         let hasAppliesWhen = true;
         try { await conn.query('SELECT applies_when FROM program_step LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') hasAppliesWhen = false; else throw e; }
+        // `facultatif` (migration 188) : sans la colonne, le parcours s'enregistre, et on le DIT.
+        const hasFacultatif = await colonneExiste(conn, 'program_step', 'facultatif');
+        let facultatifsEcartes = 0;
         // Même règle à l'écriture : un groupe devenu solitaire ne doit pas être réenregistré,
         // sinon il ressurgit au prochain chargement et le nettoyage ne finit jamais.
         const aEcrire = normaliserGroupesPieces(steps);
@@ -827,6 +844,14 @@ const saveFormationSteps = async (req, res) => {
                 await conn.query('UPDATE program_step SET applies_when = ? WHERE program_id = ? AND slug = ?',
                     [aw, req.params.id, slug]).catch(() => {});
             }
+            /* FACULTATIVE DANS CETTE FORMATION (migration 188) : visible et faisable, mais hors du
+               décompte de l'avancement et de tout point d'accès. */
+            if (hasFacultatif) {
+                await conn.query('UPDATE program_step SET facultatif = ? WHERE program_id = ? AND slug = ?',
+                    [aEcrire[i].facultatif ? 1 : 0, req.params.id, slug]);
+            } else if (aEcrire[i].facultatif) {
+                facultatifsEcartes += 1;
+            }
             // QCM ajouté au parcours et rattaché à AUCUNE formation : on le lie à celle-ci.
             if (aEcrire[i].active && slug.startsWith('quiz:')) {
                 await rattacherSiOrphelin(conn, req.user.organization_id, slug.slice(5), req.params.id).catch(() => {});
@@ -862,7 +887,13 @@ const saveFormationSteps = async (req, res) => {
                     [cbs, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 100 non jouée
         }
-        res.json({ success: true, message: 'Parcours enregistré.' });
+        res.json({
+            success: true, message: 'Parcours enregistré.',
+            ...(facultatifsEcartes ? {
+                avertissement: `${facultatifsEcartes} étape(s) cochée(s) « facultative » ne le sont pas encore : `
+                    + "la migration 188 n'est pas jouée.",
+            } : {}),
+        });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);
         res.status(500).json({ error: 'Internal Server Error' });

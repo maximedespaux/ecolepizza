@@ -796,15 +796,19 @@ const getCompanyParcours = async (req, res) => {
                 signers, company_level: !!s.company_level, doc_type: s.doc_type,
                 signable: s.quiz_id ? false : signers.some((r) => r !== 'ORG'), quiz: !!s.quiz_id,
                 gen, total, signed, docId,
+                facultatif: !!s.facultatif, // hors décompte (migration 188)
                 _done: done,
             });
         }
-        let currentIndex = steps.findIndex((s) => !s._done);
+        /* Même règle que le dossier d'un stagiaire (lib/parcours.js) : l'état réel, l'avancement de
+           toutes les étapes DUES faites — une étape facultative (188) n'entre ni dans la fraction ni
+           dans le choix de la prochaine étape. */
+        let currentIndex = steps.findIndex((s) => !s._done && !s.facultatif);
         if (currentIndex < 0) currentIndex = steps.length;
-        // Même règle que le dossier d'un stagiaire (lib/parcours.js) : l'état réel, l'avancement de toutes les étapes faites.
-        const faites = steps.filter((s) => s._done).length;
+        const dues = steps.filter((s) => !s.facultatif);
+        const faites = dues.filter((s) => s._done).length;
         steps.forEach((s, i) => {
-            s.status = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo';
+            s.status = i < currentIndex ? (s.facultatif && !s._done ? 'todo' : 'done') : i === currentIndex ? 'current' : 'todo';
             s.etat = etatDeGroupe({ done: s._done, gen: s.gen, total: s.total });
             delete s._done;
         });
@@ -817,7 +821,7 @@ const getCompanyParcours = async (req, res) => {
                     financing: 'Groupe entreprise', opco: null,
                 },
                 total_stagiaires: grp.enrollments.length,
-                percent: pourcentFait(faites, steps.length),
+                percent: dues.length ? pourcentFait(faites, dues.length) : (steps.length ? 100 : 0),
                 currentIndex,
                 currentKey: currentIndex < steps.length ? steps[currentIndex].key : null,
                 steps,

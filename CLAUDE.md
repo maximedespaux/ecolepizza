@@ -111,7 +111,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-28** :
-**2170 tests — 2163 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+**2192 tests — 2185 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -199,7 +199,33 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 186 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**188 est À JOUER** (`188_remise_destinataire_etape_facultative.sql`, demandée le 2026-09-28 : « pour les Documents remis,
+choisir qui les reçoit, le stagiaire ou l'entreprise dans son espace ; et dans le parcours, une option facultatif qui ne compte
+pas dans la complétion »). Deux colonnes.
+`remise_type.destinataire` ('STAGIAIRE' par défaut, ou 'ENTREPRISE', choisi dans Modèles → Documents remis) : une remise
+adressée à l'entreprise paraît dans l'ESPACE ENTREPRISE (carte « Documents remis à votre entreprise », `GET /api/rep/remises`),
+c'est le compte du représentant qui en accuse réception, et le stagiaire ne la voit pas. UNE SEULE RÈGLE, `pourEntreprise`
+(remise.controller.js) : un stagiaire inscrit SANS entreprise, ou dont l'entreprise n'a PAS D'ESPACE (`company.user_id` vide),
+la reçoit lui-même, sinon personne ne pourrait l'accuser (le bureau ne le peut pas, cf. 160) ; le panneau du bureau le dit.
+`program_step.facultatif` (0 par défaut) : une case « Facultatif » par JALON dans Formations → Parcours documentaire, la même
+dans la section entreprise. L'étape reste visible et faisable, mais n'entre dans AUCUN côté de la fraction (faite ou non),
+n'est jamais la prochaine étape, ne ferme aucun point d'accès, ne compte pas dans « x/y signés » ; la grille du Suivi la
+montre faite, ou hors décompte, jamais comme un manque. Le rang du pipeline (« Étape 3/10 ») se compte parmi les étapes DUES
+(`parc.rang`). DÉFAUT TROUVÉ EN L'ÉCRIVANT : les remises tenaient pour du personnel tout rôle ni STAGIAIRE ni INTERVENANT, si
+bien qu'un compte ENTREPRISE aurait lu les remises et les fichiers de n'importe quel dossier ; la liste est désormais écrite
+(`ROLES_BUREAU`). Le même défaut vivait quatre fois dans `piece.controller.js` : corrigé le même jour (`ROLES_PERSONNEL`, PR #230).
+Sans la migration, rien ne casse : tout va au stagiaire, choisir l'entreprise répond 503 « Migration 188 non jouée » au lieu
+d'être ignoré, toutes les étapes comptent, et l'enregistrement du parcours dit combien de cases « Facultatif » n'ont pas tenu.
+⚠️ **LA PRÉSENCE DES CLÉS NE PROUVE RIEN** : sans les colonnes, l'API rend `destinataire: "STAGIAIRE"` et `facultatif: false`.
+**Elle se vérifie par l'API sur une VALEUR** : enregistrer un type de remise « L'entreprise » (503 sans elle), puis
+`GET /api/remises` rend `destinataire: "ENTREPRISE"` ; ou cocher « Facultatif », enregistrer sans avertissement, puis
+`GET /api/formations/:id/steps` rend `facultatif: true` sur l'étape. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND ((table_name='remise_type' AND column_name='destinataire') OR (table_name='program_step' AND column_name='facultatif'));`
+⚠️ Son revert remet tout au stagiaire (une remise déposée pour une entreprise passe dans l'espace du stagiaire, les accusés
+donnés restent) et fait recompter toutes les étapes : un dossier à 100 % peut redescendre. Tests :
+`remise-destinataire-facultatif.test.js`.
 
 **186 est À JOUER, de préférence AVANT de déployer le code** (`186_audit_precisions.sql`, ce que désigne une ligne du
 journal — demandé le 2026-09-28 : « Document signé ×2 » ne disait pas LESQUELS). La cloche (Alertes, Activité de l'équipe),

@@ -76,8 +76,11 @@ function lineFor(s) {
   }
   if (s.remise) {
     if (etat === "SANS_OBJET") return "Sans objet pour ce dossier.";
-    return { RECUE: "Remis au stagiaire, réception confirmée.", REMISE: "Remis au stagiaire, en attente de son accusé de réception." }[s.remiseStatus]
-      || "Document à remettre au stagiaire.";
+    /* À QUI (migration 188) : l'entreprise du dossier quand le type de remise lui est destiné —
+       c'est alors elle qui en accuse réception, depuis son espace —, sinon le stagiaire. */
+    const a = s.remiseEntreprise ? "à l'entreprise" : "au stagiaire";
+    return { RECUE: `Remis ${a}, réception confirmée.`, REMISE: `Remis ${a}, en attente de son accusé de réception.` }[s.remiseStatus]
+      || `Document à remettre ${a}.`;
   }
   if (etat === "VALIDE") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
   if (s.quiz) return s.docId ? "Envoyé : en attente de la réponse du stagiaire au QCM." : "QCM à envoyer au stagiaire.";
@@ -116,7 +119,8 @@ function actionFor(s) {
 }
 
 /* Combien d'étapes dans chaque état — les compteurs et la barre de l'en-tête. « Sans objet »
-   compte avec « validé » dans l'avancement (serveur), mais se nomme à part. */
+   compte avec « validé » dans l'avancement (serveur), mais se nomme à part. Les étapes
+   FACULTATIVES (migration 188) n'y entrent pas : l'appelant les écarte, comme le serveur. */
 function repartition(steps) {
   const n = { A_FAIRE: 0, ENVOYE: 0, RECU: 0, VALIDE: 0, SANS_OBJET: 0 };
   for (const s of steps) n[etatDe(s)] = (n[etatDe(s)] || 0) + 1;
@@ -242,9 +246,16 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
 
   const h = data.header || {};
   const headLine = [h.code, h.session, h.financing, h.opco].filter(Boolean).join(" · ");
-  const n = repartition(data.steps);
-  const total = data.steps.length;
-  const part = (k) => `${(n[k] / total) * 100}%`;
+  /* LA BARRE ET LES COMPTEURS NE PORTENT QUE LE DÛ. Une étape facultative (migration 188) reste
+     dans la grille, faisable, mais hors du pourcentage — le serveur l'écarte des deux côtés de la
+     fraction, la barre fait de même, sans quoi elle ne finirait jamais verte sous un « 100 % ». */
+  const requises = data.steps.filter((x) => !x.facultatif);
+  const nFacultatives = data.steps.length - requises.length;
+  const n = repartition(requises);
+  const total = requises.length;
+  const part = (k) => `${total ? (n[k] / total) * 100 : 0}%`;
+  // Rien de dû (toutes facultatives) : le serveur dit 100 %, la barre est pleine.
+  const largeurValide = total ? ((n.VALIDE + n.SANS_OBJET) / total) * 100 : 100;
   // Séparateurs de section (parcours entreprise) : seulement si l'API renvoie les DEUX sections.
   const hasSections = data.steps.some((x) => x.section === "company") && data.steps.some((x) => x.section === "learner");
 
@@ -258,8 +269,9 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
       {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est
           validé, ce qui attend l'école (reçu), ce qui attend le stagiaire (envoyé). */}
       <div className="parc-barre" role="img"
-        aria-label={`${n.VALIDE + n.SANS_OBJET} validée(s), ${n.RECU} reçue(s), ${n.ENVOYE} envoyée(s), ${n.A_FAIRE} à faire, sur ${total}`}>
-        <span className="valide" style={{ width: `${((n.VALIDE + n.SANS_OBJET) / total) * 100}%` }} />
+        aria-label={`${n.VALIDE + n.SANS_OBJET} validée(s), ${n.RECU} reçue(s), ${n.ENVOYE} envoyée(s), ${n.A_FAIRE} à faire, sur ${total}`
+          + (nFacultatives ? `, et ${nFacultatives} facultative(s) hors avancement` : "")}>
+        <span className="valide" style={{ width: `${largeurValide}%` }} />
         <span className="recu" style={{ width: part("RECU") }} />
         <span className="envoye" style={{ width: part("ENVOYE") }} />
       </div>
@@ -269,6 +281,11 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         {n.ENVOYE > 0 && <span><i className="envoye" />{pluriel(n.ENVOYE, "envoyée", "envoyées")}</span>}
         <span><i className="a-faire" />{pluriel(n.A_FAIRE, "à faire", "à faire")}</span>
         {n.SANS_OBJET > 0 && <span><i className="sans-objet" />{pluriel(n.SANS_OBJET, "sans objet", "sans objet")}</span>}
+        {nFacultatives > 0 && (
+          <span title="Visibles et faisables, mais hors de l'avancement du dossier">
+            <i className="facultative" />{pluriel(nFacultatives, "facultative", "facultatives")}, hors avancement
+          </span>
+        )}
       </div>
       {/* CE QUI RESTE À FAIRE QUAND IL NE RESTE PLUS RIEN À FAIRE. Le parcours fini, la fiche ne
           disait nulle part que la FORMATION, elle, pouvait être marquée terminée — la case vit
@@ -294,7 +311,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         <span className={`parc-tuile grande ${etatSel.classe}`}><Icon name={iconeDe(step)} size={20} /></span>
         <div className="parc-detail-info">
           <div className="parc-surtitre">
-            Étape {data.steps.indexOf(step) + 1} sur {total}
+            Étape {data.steps.indexOf(step) + 1} sur {data.steps.length}
             {/* LE RANG NE DIT PAS OÙ L'ON EN EST, il dit quelle étape est ouverte — d'où la
                 mention qui suit. « Parcours terminé » quand il n'y a plus de prochaine étape :
                 sans elle, un rang seul se lit comme un avancement, et « Étape 1 sur 16 » sous
@@ -305,6 +322,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           <div className="parc-detail-titre">
             <h3>{step.label}</h3>
             <Badge tone={etatSel.ton}>{etatSel.libelle}</Badge>
+            {step.facultatif && <Badge tone="n" title="Ne compte pas dans l'avancement du dossier">Facultative</Badge>}
           </div>
           {step.sub && <p className="parc-detail-sub">{step.sub}</p>}
           <p className={`parc-ligne ${etatSel.classe}`}>{lineFor(step)}</p>
@@ -360,13 +378,13 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               {/* LA CARTE N'EST PLUS UN BOUTON, elle en CONTIENT un : ses gestes (aperçu, envoi,
                   téléchargement, suppression) sont des boutons eux aussi, et un bouton dans un
                   bouton n'est pas du HTML valide — le clic sur la corbeille choisirait l'étape. */}
-              <div className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}`}>
+              <div className={`parc-etape${on ? " sel" : ""}${s.key === data.currentKey ? " prochaine" : ""}${s.facultatif ? " facultative" : ""}`}>
                 <button type="button" className="parc-etape-choix" onClick={() => choisir(s.key)} aria-pressed={on}
                   title={s.key === data.currentKey ? "Prochaine étape du parcours" : undefined}>
                   <span className={`parc-tuile ${e.classe}`}><Icon name={iconeDe(s)} size={17} /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b style={{ display: "block" }}>{s.label}</b>
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{listSub(s)}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>{s.facultatif && <i>Facultative{listSub(s) ? " · " : ""}</i>}{listSub(s)}</span>
                   </span>
                   <Badge tone={e.ton}>{e.libelle}</Badge>
                 </button>

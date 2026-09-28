@@ -1074,6 +1074,16 @@ tbody tr:last-child td{border-bottom:none}
 .pf-x{margin-left:2px;border:none;background:none;color:var(--dim,#b4b4b4);cursor:pointer;font-size:12px;
   line-height:1;padding:2px 3px;border-radius:5px;flex-shrink:0}
 .pf-x:hover{background:var(--ember-soft,#fdeae6);color:var(--ember1,#c0392b)}
+/* « FACULTATIF » SUR UNE ÉTAPE (migration 188) : une petite case sous l'intitulé. Cochée, elle passe
+   au bleu d'information, pas à la braise des alertes : rien n'y est faux, l'étape reste faisable, elle
+   ne compte simplement plus dans l'avancement ni dans aucun point d'accès. */
+.pf-fac{display:flex;width:fit-content;align-items:center;gap:5px;margin:4px auto 0;
+  font-size:11px;color:var(--muted);cursor:pointer;-webkit-user-select:none;user-select:none;
+  border-radius:20px;padding:1px 9px 1px 7px;transition:background .12s,color .12s}
+.pf-fac input{margin:0;width:12px;height:12px;accent-color:var(--blue)}
+.pf-fac:hover{color:var(--text)}
+.pf-fac.on{background:var(--blue-bg);color:var(--blue);font-weight:600}
+.parcours.compact .pf-fac{font-size:10px}
 /* Bouton d'ajout d'étape (dans la rangée du flux) */
 .pf-add{flex-shrink:0;border:1.5px dashed var(--border-soft,#d5d5d8);background:none;color:var(--muted,#666);
   border-radius:12px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;min-height:52px}
@@ -1155,6 +1165,7 @@ tbody tr:last-child td{border-bottom:none}
   .parcours.compact .pf-arrow,.parcours.compact .pf-brk-arrow{display:inline-block;transform:rotate(90deg)}
   .parcours.compact .pf-brk{align-self:center;flex-direction:row;gap:6px}
   .parcours.compact .pf-add{align-self:stretch;white-space:normal;min-height:44px}
+  .parcours.compact .pf-fac{margin-left:0}
 }
 /* CIBLES À LA TAILLE D'UN DOIGT. La poignée faisait 11 px et la croix de retrait 18 : au toucher,
    on attrape la carte d'à côté, ou la page défile au lieu de saisir. 40 px, c'est la cible qu'on
@@ -1165,6 +1176,8 @@ tbody tr:last-child td{border-bottom:none}
   .pf-x{min-width:36px;min-height:36px;display:inline-grid;place-items:center;font-size:14px}
   .pf-brk{min-width:44px;min-height:40px;justify-content:center}
   .pf-or-add{min-height:36px}
+  .pf-fac{min-height:36px;font-size:12px}
+  .pf-fac input{width:18px;height:18px}
 }
 /* L'ARBORESCENCE COMMUNE (2026-09-24). Un avis en tête — la proposition, la migration attendue —,
    bleu d'information et non l'ambre des alertes : rien n'y est faux, il y a seulement à relire. */
@@ -5792,6 +5805,7 @@ label .requis {
 .parc-compte i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .parc-compte .valide{background:var(--green)} .parc-compte .recu{background:var(--ember2)} .parc-compte .envoye{background:var(--blue)}
 .parc-compte .a-faire{background:transparent;border:1.5px dashed var(--muted)} .parc-compte .sans-objet{background:var(--surface3);border:1px solid var(--border)}
+.parc-compte .facultative{background:transparent;border:1.5px dotted var(--blue)}
 /* LA CARTE CONTIENT son bouton de sélection ET les gestes de son document (2026-09-21) : un bouton
    ne peut pas en contenir d'autres. Le bouton occupe toute la carte (`flex:1`), les gestes se
    rangent en bas — à hauteur égale d'une carte à l'autre sur une même rangée de la grille. */
@@ -5806,6 +5820,9 @@ label .requis {
 .parc-etape.sel{background:var(--surface2);border-color:var(--ember1)}
 /* LA PROCHAINE ÉTAPE, celle qui attend un geste : un filet à gauche, sans éteindre les autres. */
 .parc-etape.prochaine{box-shadow:inset 3px 0 0 0 var(--ember1)}
+/* Étape FACULTATIVE (migration 188) : bord en pointillés, comme sa pastille « hors avancement » —
+   elle se fait, mais ne compte pas. */
+.parc-etape.facultative{border-style:dashed}
 .parc-tuile{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:0 0 34px}
 .parc-tuile.grande{width:44px;height:44px;border-radius:11px;flex:0 0 44px}
 .parc-tuile.a-faire{background:var(--surface);color:var(--muted);border:1.5px dashed var(--border)}

@@ -312,6 +312,11 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
 
   // Activer / retirer une étape (le « OU » est déterminé par les équivalences).
   const toggleStep = (slug) => setSteps((ss) => ss.map((s) => (s.slug === slug ? { ...s, active: !s.active } : s)));
+  /* FACULTATIVE DANS CETTE FORMATION (migration 188) : l'étape reste visible et faisable, mais ne
+     compte pas dans l'avancement du dossier et ne bloque aucun point d'accès. Portée par l'ÉTAPE :
+     la même, cochée dans le parcours du dossier ou dans la section entreprise, l'est dans les deux.
+     Un jalon « OU » se coche d'un geste pour toutes ses variantes — d'où une LISTE de slugs. */
+  const toggleFacultatif = (slugs, valeur) => setSteps((ss) => ss.map((s) => (slugs.includes(s.slug) ? { ...s, facultatif: valeur } : s)));
 
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
@@ -329,12 +334,15 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
         const ru = await updateFormation(program.id, form);
         // Les pièces emportent leur seule condition (applies_when) : elles n'ont plus de « OU ».
         // Les documents, eux, gèrent le leur par les équivalences d'organisme, pas ici.
-        await saveFormationSteps(program.id, steps.map((s) => (s.doc_type === "PIECE"
+        const rs = await saveFormationSteps(program.id, steps.map((s) => (s.doc_type === "PIECE"
           // Plus de `or_group` : une pièce n'a plus de « OU ». Le serveur l'ignore de toute façon
             // (lib/groupesPieces.js) ; ne pas l'envoyer évite d'entretenir une valeur morte.
-            ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null }
-          : { slug: s.slug, active: s.active })), breakSlug || null, companySteps, companyBreakSlug || null);
-        onSaved(ru?.avertissement ? `Formation mise à jour. ${ru.avertissement}` : "Formation mise à jour.");
+            ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null, facultatif: !!s.facultatif }
+          : { slug: s.slug, active: s.active, facultatif: !!s.facultatif })), breakSlug || null, companySteps, companyBreakSlug || null);
+        /* LES DEUX AVERTISSEMENTS : la fiche, et le parcours (une étape « facultative » que la base
+           ne sait pas encore garder, migration 188 non jouée). */
+        const avert = [ru?.avertissement, rs?.avertissement].filter(Boolean).join(" ");
+        onSaved(avert ? `Formation mise à jour. ${avert}` : "Formation mise à jour.");
       }
     } catch (e) {
       onError(e.message);
@@ -467,12 +475,13 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
                   refusOu={refusOu} onEffacerRefus={() => setRefusOu(null)}
                   eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
                   onRetirerOu={retirerVariante}
-                  onSetPieceCondition={setPieceCondition} conditions={conditions} />
+                  onSetPieceCondition={setPieceCondition} conditions={conditions}
+                  onToggleFacultatif={toggleFacultatif} />
               )}
             </>
           ) : (
             <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep}
-              breakSlug={companyBreakSlug} onSetBreak={setCompanyBreakSlug} />
+              breakSlug={companyBreakSlug} onSetBreak={setCompanyBreakSlug} onToggleFacultatif={toggleFacultatif} />
           )}
           </div>
 
@@ -613,10 +622,30 @@ function stepBadge(s) {
   return null;
 }
 
+/* « FACULTATIF » SUR UNE ÉTAPE (migration 188) : visible et faisable, mais hors de l'avancement du
+   dossier et de tout point d'accès. Une case plutôt qu'un badge cliquable : on doit voir, sans
+   survoler, qu'elle se coche — et dans quel état elle est. */
+function CaseFacultatif({ etapes, onToggle }) {
+  if (typeof onToggle !== "function" || !etapes.length) return null;
+  const coche = etapes.every((e) => e.facultatif);
+  /* MIXTE : une variante d'un jalon « OU » facultative, l'autre non — possible quand une seule a été
+     cochée depuis la section entreprise. La case le montre (ni cochée ni vide) au lieu de mentir. */
+  const mixte = !coche && etapes.some((e) => e.facultatif);
+  return (
+    <label className={"pf-fac" + (coche ? " on" : "")}
+      title={mixte
+        ? "Facultative pour une partie des variantes seulement : cochez pour l'appliquer à tout le jalon"
+        : "Visible et faisable, mais ne compte pas dans l'avancement du dossier et ne bloque aucun point d'accès"}>
+      <input type="checkbox" checked={coche} ref={(el) => { if (el) el.indeterminate = mixte; }}
+        onChange={() => onToggle(etapes.map((e) => e.slug), !coche)} /> Facultatif
+    </label>
+  );
+}
+
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onSetPieceCondition, conditions }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onSetPieceCondition, conditions, onToggleFacultatif }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -706,6 +735,8 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                   )}
                 </div>
               ))}
+              {/* Une case par JALON, pas par variante : le dossier n'en suivra qu'une. */}
+              <CaseFacultatif etapes={g.steps} onToggle={onToggleFacultatif} />
               {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence).
                   LE MENU FLOTTANT A ÉTÉ RETIRÉ : il vivait dans `.parcours-flow`, qui défile en
                   `overflow:auto`. Mesuré — il s'arrêtait pile au bord du conteneur (708 px des
@@ -901,7 +932,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
 // Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
 // STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
 // entreprise ; n'altère pas le parcours principal.
-function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onSetBreak }) {
+function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onSetBreak, onToggleFacultatif }) {
   const [adding, setAdding] = useState(false);
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
@@ -990,6 +1021,7 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
                 )}
                 <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
               </div>
+              <CaseFacultatif etapes={[s]} onToggle={onToggleFacultatif} />
             </div>
             {typeof onSetBreak === "function" ? (
               <button type="button" className={"pf-brk" + (breakSlug === s.slug ? " on" : "")}

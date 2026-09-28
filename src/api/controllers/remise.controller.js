@@ -31,12 +31,35 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const ABSENTE = { message: 'Migration 160 non jouée.' };
 
 const STATUTS = ['ATTENDUE', 'REMISE', 'RECUE'];
+
+/* À QUI UN DOCUMENT EST REMIS (migration 188, décidé par l'école le 2026-09-28) : le stagiaire, ou
+ * son ENTREPRISE — qui le voit alors dans son espace et en accuse réception. Un stagiaire inscrit
+ * sans entreprise le reçoit lui-même : personne d'autre ne pourrait le recevoir.
+ * UNE ENTREPRISE SANS ESPACE (aucun compte de représentant, `company.user_id` vide) non plus : rien
+ * ne s'afficherait nulle part, personne ne pourrait en accuser réception, et l'étape resterait
+ * ouverte pour toujours — le bureau ne le peut pas à sa place, c'est voulu. Le stagiaire la reçoit
+ * donc, comme s'il était inscrit seul ; l'écran du bureau le dit (`entreprise_sans_espace`). */
+const DESTINATAIRES = ['STAGIAIRE', 'ENTREPRISE'];
+const pourEntreprise = (r) => r.destinataire === 'ENTREPRISE' && !!r.company_id && !!r.representant;
+const entrepriseSansEspace = (r) => r.destinataire === 'ENTREPRISE' && !!r.company_id && !r.representant;
+// La colonne du destinataire, ou sa valeur d'avant la 188 : tout au stagiaire.
+const colDestinataire = async (conn, alias = 'rt') =>
+    (await colonneExiste(conn, 'remise_type', 'destinataire') ? `${alias}.destinataire` : "'STAGIAIRE'");
+// Le compte du représentant de l'entreprise (migration 084) — sans lui, aucun.
+const colRepresentant = async (conn) => (await colonneExiste(conn, 'company', 'user_id') ? 'c.user_id' : 'NULL');
+
+/* LE BUREAU, NOMMÉ. On testait « ni stagiaire ni intervenant » : un compte ENTREPRISE passait donc
+ * pour du personnel, et aurait lu les remises — et les fichiers — de n'importe quel dossier.
+ * Depuis que les entreprises reçoivent des remises (188), la liste est explicite. */
+const ROLES_BUREAU = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR'];
+const estBureau = (u) => !!u && ROLES_BUREAU.includes(u.role);
 
 /* Ce qu'on accepte. Un document remis est le plus souvent un PDF scanné — un diplôme, une
  * attestation — d'où un plafond plus large qu'une photo. Pas de type bureautique : un document
@@ -50,8 +73,10 @@ const formatsLisibles = (mimes) => mimes.map((m) => LIB_FORMAT[m] || m).join(', 
 
 const listTypes = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
-            'SELECT id, code, label, consigne, active FROM remise_type WHERE organization_id = ? ORDER BY label',
+        const conn = db.promise();
+        const [rows] = await conn.query(
+            `SELECT id, code, label, consigne, active, ${await colDestinataire(conn, 'remise_type')} AS destinataire
+               FROM remise_type WHERE organization_id = ? ORDER BY label`,
             [req.user.organization_id]);
         res.json({ data: rows });
     } catch (err) {
@@ -66,16 +91,30 @@ const champsType = (b) => ({
     label: String(b.label || '').trim().slice(0, 160),
     consigne: String(b.consigne || '').trim().slice(0, 400) || null,
     active: b.active === false || b.active === 0 ? 0 : 1,
+    destinataire: DESTINATAIRES.includes(b.destinataire) ? b.destinataire : 'STAGIAIRE',
 });
+
+/* LE DESTINATAIRE S'ÉCRIT QUAND LA COLONNE EXISTE (188). Sans elle, « stagiaire » est ce que tout le
+   monde reçoit déjà : on enregistre sans. « Entreprise » en revanche serait IGNORÉ en silence — le
+   document partirait au stagiaire alors qu'on a choisi l'entreprise —, d'où un refus qui le dit. */
+async function colonnesDestinataire(conn, c) {
+    if (await colonneExiste(conn, 'remise_type', 'destinataire')) return { ok: true, avec: true };
+    return c.destinataire === 'ENTREPRISE' ? { ok: false } : { ok: true, avec: false };
+}
+const MIGRATION_188 = { message: "Migration 188 non jouée : une remise ne peut pas encore être adressée à l'entreprise." };
 
 const createType = async (req, res) => {
     try {
         const c = champsType(req.body || {});
         if (!c.code || !c.label) return res.status(422).json({ message: 'Un code et un intitulé sont requis.' });
+        const conn = db.promise();
+        const d = await colonnesDestinataire(conn, c);
+        if (!d.ok) return res.status(503).json(MIGRATION_188);
         const id = crypto.randomUUID();
-        await db.promise().query(
-            'INSERT INTO remise_type (id, organization_id, code, label, consigne, active) VALUES (?, ?, ?, ?, ?, ?)',
-            [id, req.user.organization_id, c.code, c.label, c.consigne, c.active]);
+        await conn.query(
+            `INSERT INTO remise_type (id, organization_id, code, label, consigne, active${d.avec ? ', destinataire' : ''})
+             VALUES (?, ?, ?, ?, ?, ?${d.avec ? ', ?' : ''})`,
+            [id, req.user.organization_id, c.code, c.label, c.consigne, c.active, ...(d.avec ? [c.destinataire] : [])]);
         logAudit(req, 'remise_type.create', 'RemiseType', id);
         res.status(201).json({ success: true, id });
     } catch (err) {
@@ -92,9 +131,13 @@ const updateType = async (req, res) => {
     try {
         const c = champsType(req.body || {});
         if (!c.code || !c.label) return res.status(422).json({ message: 'Un code et un intitulé sont requis.' });
-        const [r] = await db.promise().query(
-            'UPDATE remise_type SET code = ?, label = ?, consigne = ?, active = ? WHERE id = ? AND organization_id = ?',
-            [c.code, c.label, c.consigne, c.active, req.params.id, req.user.organization_id]);
+        const conn = db.promise();
+        const d = await colonnesDestinataire(conn, c);
+        if (!d.ok) return res.status(503).json(MIGRATION_188);
+        const [r] = await conn.query(
+            `UPDATE remise_type SET code = ?, label = ?, consigne = ?, active = ?${d.avec ? ', destinataire = ?' : ''}
+              WHERE id = ? AND organization_id = ?`,
+            [c.code, c.label, c.consigne, c.active, ...(d.avec ? [c.destinataire] : []), req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Type de remise introuvable.' });
         logAudit(req, 'remise_type.update', 'RemiseType', req.params.id);
         res.json({ success: true });
@@ -147,8 +190,11 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
        vide. Toutes les remises auraient donc disparu de l'écran chez qui a joué la 160 mais pas
        la 161 — une fonctionnalité qui marchait, effacée par l'ajout d'une option. On relit sans
        la colonne, et personne n'est exclu : le comportement d'avant la 161. */
+    const dest = await colDestinataire(conn);
+    const representant = await colRepresentant(conn);
     const requete = (col) =>
         `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne,
+                ${dest} AS destinataire, e.company_id, c.name AS entreprise, ${representant} AS representant,
                 r.id AS remise_id, r.statut, ${col} AS sans_objet,
                 DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
                 DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
@@ -159,6 +205,7 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
            JOIN remise_type rt ON rt.id = ps.remise_id
            LEFT JOIN remise_document r ON r.enrollment_id = e.id AND r.remise_type_id = rt.id
            LEFT JOIN user u ON u.id = r.remis_par
+           LEFT JOIN company c ON c.id = e.company_id
           WHERE e.id = ? AND e.organization_id = ?
           ORDER BY ps.sort_order, rt.label`;
     let rows;
@@ -176,8 +223,14 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
             [ids]);
         parRemise = fs.reduce((acc, f) => { (acc[f.remise_id] ||= []).push(f); return acc; }, {});
     }
-    return rows.map((r) => ({
+    /* `pour_entreprise` : le destinataire EFFECTIF de ce dossier. Adressée à l'entreprise mais
+       stagiaire inscrit seul, ou entreprise sans espace : c'est lui qui la reçoit (2026-09-28).
+       L'identifiant du compte du représentant ne sort pas d'ici : il n'a servi qu'à trancher. */
+    return rows.map(({ representant: _rep, ...r }) => ({
         ...r, statut: r.statut || 'ATTENDUE', sans_objet: !!r.sans_objet,
+        destinataire: r.destinataire === 'ENTREPRISE' ? 'ENTREPRISE' : 'STAGIAIRE',
+        pour_entreprise: pourEntreprise({ ...r, representant: _rep }),
+        entreprise_sans_espace: entrepriseSansEspace({ ...r, representant: _rep }),
         fichiers: parRemise[r.remise_id] || [],
     }));
 }
@@ -210,12 +263,65 @@ const listDossier = async (req, res) => {
            personne. Les octets restent protégés à part (`servirFichier` re-vérifie). */
         const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
         if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
+        const staff = estBureau(req.user);
         if (e.user_id !== req.user.id && !staff) return res.status(403).json({ message: "Dossier d'un autre stagiaire." });
-        res.json({ data: await remisesDuDossier(conn, req.user.organization_id, req.params.enrollmentId) });
+        const remises = await remisesDuDossier(conn, req.user.organization_id, req.params.enrollmentId);
+        /* LE STAGIAIRE NE VOIT PAS CE QUI EST REMIS À SON ENTREPRISE : ce n'est pas à lui d'en
+           accuser réception, et ce document ne lui est pas destiné. Le bureau voit tout. */
+        res.json({ data: staff ? remises : remises.filter((r) => !r.pour_entreprise) });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
         console.error('Erreur remises du dossier :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/rep/remises — ce que l'école a remis À L'ENTREPRISE du compte connecté (migration 188).
+ *
+ * RÉSERVÉ PAR LES DONNÉES, comme tout l'espace entreprise : les dossiers dont `enrollment.company_id`
+ * est une entreprise rattachée à ce compte (`company.user_id`), et seulement les remises adressées à
+ * l'entreprise. Rien n'est proposé avant le dépôt (ATTENDUE : rien à recevoir), ni ce que l'école a
+ * écarté (« sans objet »). Les octets ne sortent pas d'ici : de quoi afficher un lien, rien de plus.
+ */
+const remisesDeLEntreprise = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        if (!await colonneExiste(conn, 'remise_type', 'destinataire')
+            || !await colonneExiste(conn, 'company', 'user_id')) return res.json({ data: [] });
+        const [entreprises] = await conn.query(
+            'SELECT id FROM company WHERE user_id = ? AND organization_id = ?', [req.user.id, orgId]);
+        if (!entreprises.length) return res.json({ data: [] });
+        const sansObjet = await colonneExiste(conn, 'remise_document', 'sans_objet') ? ' AND COALESCE(r.sans_objet, 0) = 0' : '';
+        const [rows] = await conn.query(
+            `SELECT r.id AS remise_id, r.statut, rt.label, rt.consigne,
+                    DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
+                    DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
+                    l.first_name, l.last_name, p.code AS formation, c.name AS entreprise
+               FROM remise_document r
+               JOIN remise_type rt ON rt.id = r.remise_type_id
+               JOIN enrollment e ON e.id = r.enrollment_id
+               JOIN learner l ON l.id = e.learner_id
+               JOIN company c ON c.id = e.company_id
+               LEFT JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+              WHERE r.organization_id = ? AND e.company_id IN (?) AND rt.destinataire = 'ENTREPRISE'
+                AND r.statut IN ('REMISE', 'RECUE')${sansObjet}
+              ORDER BY r.statut = 'RECUE', r.remis_le DESC`,
+            [orgId, entreprises.map((c) => c.id)]);
+        const ids = rows.map((r) => r.remise_id);
+        let parRemise = {};
+        if (ids.length) {
+            const [fs] = await conn.query(
+                'SELECT id, remise_id, nom, mime, taille, sort_order FROM remise_fichier WHERE remise_id IN (?) ORDER BY sort_order, created_at',
+                [ids]);
+            parRemise = fs.reduce((acc, f) => { (acc[f.remise_id] ||= []).push(f); return acc; }, {});
+        }
+        res.json({ data: rows.map((r) => ({ ...r, fichiers: parRemise[r.remise_id] || [] })) });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: [] });
+        console.error('Erreur remises de l\'entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -276,9 +382,10 @@ const deposer = async (req, res) => {
 };
 
 /**
- * POST /api/remises/:id/accuser — le STAGIAIRE confirme avoir reçu.
+ * POST /api/remises/:id/accuser — le DESTINATAIRE confirme avoir reçu : le stagiaire, ou le compte
+ * de son entreprise quand la remise est adressée à l'entreprise (migration 188).
  *
- * LE GESTE EST À LUI, ET À PERSONNE D'AUTRE. Un membre du personnel qui pourrait accuser à sa
+ * LE GESTE EST AU DESTINATAIRE, ET À PERSONNE D'AUTRE. Un membre du personnel qui pourrait accuser à sa
  * place produirait une preuve fabriquée par celui qu'elle est censée engager — exactement ce
  * qu'un contrôle vient chercher. La route refuse donc le personnel, explicitement.
  *
@@ -288,15 +395,24 @@ const accuser = async (req, res) => {
     try {
         const conn = db.promise();
         const [[r]] = await conn.query(
-            `SELECT r.id, r.statut, l.user_id, (SELECT COUNT(*) FROM remise_fichier rf WHERE rf.remise_id = r.id) AS n
+            `SELECT r.id, r.statut, l.user_id, e.company_id, ${await colRepresentant(conn)} AS representant,
+                    ${await colDestinataire(conn)} AS destinataire,
+                    (SELECT COUNT(*) FROM remise_fichier rf WHERE rf.remise_id = r.id) AS n
                FROM remise_document r
                JOIN enrollment e ON e.id = r.enrollment_id
                JOIN learner l ON l.id = e.learner_id
+               JOIN remise_type rt ON rt.id = r.remise_type_id
+               LEFT JOIN company c ON c.id = e.company_id
               WHERE r.id = ? AND r.organization_id = ?`,
             [req.params.id, req.user.organization_id]);
         if (!r) return res.status(404).json({ message: 'Remise introuvable.' });
-        if (r.user_id !== req.user.id) {
-            return res.status(403).json({ message: "L'accusé de réception ne peut être signé que par le stagiaire lui-même." });
+        /* LE DESTINATAIRE, ET LUI SEUL (188) : le stagiaire, ou le compte de son entreprise quand la
+           remise lui est adressée — et qu'elle en a un (`pourEntreprise`). Un stagiaire qui
+           représente aussi son entreprise passe par là. */
+        if (pourEntreprise(r) ? r.representant !== req.user.id : r.user_id !== req.user.id) {
+            return res.status(403).json({ message: pourEntreprise(r)
+                ? "Ce document est remis à l'entreprise : c'est elle qui en accuse réception, depuis son espace."
+                : "L'accusé de réception ne peut être signé que par le stagiaire lui-même." });
         }
         if (!r.n) return res.status(422).json({ message: 'Aucun fichier remis : il n\'y a rien à recevoir.' });
         if (r.statut === 'RECUE') return res.json({ success: true }); // déjà fait : pas une erreur
@@ -367,17 +483,21 @@ const servirFichier = async (req, res) => {
     try {
         const conn = db.promise();
         const [[f]] = await conn.query(
-            `SELECT rf.mime, rf.bytes, rf.nom, r.organization_id, l.user_id
+            `SELECT rf.mime, rf.bytes, rf.nom, r.organization_id, l.user_id, e.company_id,
+                    ${await colRepresentant(conn)} AS representant, ${await colDestinataire(conn)} AS destinataire
                FROM remise_fichier rf
                JOIN remise_document r ON r.id = rf.remise_id
+               JOIN remise_type rt ON rt.id = r.remise_type_id
                JOIN enrollment e ON e.id = r.enrollment_id
                JOIN learner l ON l.id = e.learner_id
+               LEFT JOIN company c ON c.id = e.company_id
               WHERE rf.id = ?`, [req.params.id]);
         if (!f || f.organization_id !== req.user.organization_id) {
             return res.status(404).json({ message: 'Fichier introuvable.' });
         }
-        const staff = req.user.role !== 'STAGIAIRE' && req.user.role !== 'INTERVENANT';
-        if (f.user_id !== req.user.id && !staff) return res.status(403).json({ message: "Fichier d'un autre stagiaire." });
+        // Le bureau ; sinon le DESTINATAIRE de la remise — le stagiaire, ou le compte de son entreprise.
+        const destinataire = pourEntreprise(f) ? f.representant : f.user_id;
+        if (!estBureau(req.user) && destinataire !== req.user.id) return res.status(403).json({ message: "Ce document ne vous est pas adressé." });
         const nom = (f.nom || 'document').replace(/[^\w .\-()]/g, '_');
         res.setHeader('Content-Type', f.mime);
         res.setHeader('Content-Disposition', `inline; filename="${nom}"`);
@@ -423,6 +543,6 @@ const supprimerFichier = async (req, res) => {
 
 module.exports = {
     listTypes, createType, updateType, deleteType,
-    listDossier, remisesDuDossier, deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier,
-    STATUTS, MIMES, MAX_OCTETS,
+    listDossier, remisesDuDossier, remisesDeLEntreprise, deposer, accuser, basculerSansObjet, servirFichier, supprimerFichier,
+    STATUTS, MIMES, MAX_OCTETS, DESTINATAIRES, ROLES_BUREAU,
 };

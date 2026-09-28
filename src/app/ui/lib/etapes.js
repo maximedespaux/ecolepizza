@@ -22,10 +22,19 @@
 
 /**
  * @param {{status?: string, stagiaireSign?: boolean, piece?: boolean, pieceStatus?: string,
- *          remise?: boolean, remiseStatus?: string}} doc
- * @returns {"todo"|"progress"|"done"|"skip"} — « skip » = hors décompte (remise sans objet).
+ *          remise?: boolean, remiseStatus?: string, facultatif?: boolean}} doc
+ * @returns {"todo"|"progress"|"done"|"skip"} — « skip » = hors décompte (remise sans objet, ou
+ *          étape facultative pas encore faite).
  */
 export function stepState(doc) {
+    /* UNE ÉTAPE FACULTATIVE (migration 188) N'EST JAMAIS UN MANQUE. Faite, elle le dit — c'est une
+       information, et le contrôleur la lira ; pas faite, elle sort du décompte comme une remise
+       sans objet, sans quoi le bandeau et la grille réclameraient ce que l'école a déclaré
+       facultatif. Le serveur l'écarte de l'avancement des deux côtés, faite ou non. */
+    if (doc.facultatif) {
+        const etat = stepState({ ...doc, facultatif: false });
+        return etat === "done" ? "done" : "skip";
+    }
     /* UNE PIÈCE N'A PAS DE DOCUMENT GÉNÉRÉ : son état vient de son DÉPÔT, pas d'un `status` —
        lequel reste « A_FAIRE » à vie, ce qui est correct et n'a rien à voir avec elle. Sans ce
        cas, une carte d'identité validée tombait dans la règle générale et passait pour à faire.
@@ -98,9 +107,12 @@ export function manquesParFormation(dossiers) {
         || a.label.localeCompare(b.label));
 }
 
-/** Les dossiers concernés par une carte — même découpage que ci-dessus : type ET formation. */
+/** Les dossiers concernés par une carte — même découpage que ci-dessus : type ET formation, et la
+    même idée du manque : ni fait, ni hors décompte. Le filtre ne comptait que « fait », et le clic
+    sur une colonne ramenait des dossiers où ce document était sans objet — que le compte de la
+    même colonne, lui, n'avait pas comptés. */
 export function dossiersDuManque(dossiers, manque) {
     if (!manque) return dossiers;
     return (dossiers || []).filter((d) => (d.program_code || "") === (manque.code || "")
-        && (d.documents || []).some((doc) => doc.type === manque.type && stepState(doc) !== "done"));
+        && (d.documents || []).some((doc) => doc.type === manque.type && !["done", "skip"].includes(stepState(doc))));
 }

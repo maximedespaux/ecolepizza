@@ -48,8 +48,10 @@ function statutsDocuments(docs) {
  * PROFESSIONNELLE, à qui l'on réclamait le `contrat` des particuliers — son entreprise avait signé
  * la convention, le volet entreprise était franchi, aucun geste ne pouvait satisfaire celui-ci.
  */
+/* NI UNE ÉTAPE FACULTATIVE (migration 188) : elle ne compte pas dans l'avancement, elle ne ferme donc
+   pas non plus l'émargement — l'exiger ici la rendrait obligatoire par la bande. */
 function exigencesDossier(etapesDuDossier, seuil) {
-    return (etapesDuDossier || []).filter((s) => s.stagiaire_sign && !s.repli && !exempte(s) && Number(s.sort_order) <= seuil);
+    return (etapesDuDossier || []).filter((s) => s.stagiaire_sign && !s.repli && !s.facultatif && !exempte(s) && Number(s.sort_order) <= seuil);
 }
 /** Signée par son modèle, ou à défaut par son type (documents antérieurs aux modèles). */
 const signeeDossier = (s, statuts) => statuts.parSlug[s.slug] === 'SIGNE' || statuts.parType[s.doc_type] === 'SIGNE';
@@ -58,10 +60,14 @@ const signeeDossier = (s, statuts) => statuts.parSlug[s.slug] === 'SIGNE' || sta
  * VOLET ENTREPRISE — la section « À l'arrivée via une entreprise » jusqu'au point : ses étapes
  * actives qui ont un signataire. `null` si le point ne désigne aucune étape de la section.
  */
-function exigencesEntreprise(liste, pointSlug, etapesParSlug) {
+/* `facultatifs` : les slugs que le parcours de la FORMATION marque facultatifs (migration 188).
+   Ils viennent à part parce que `etapesParSlug` décrit les MODÈLES de l'organisme, pas le parcours
+   de cette formation — le drapeau n'y est pas. */
+function exigencesEntreprise(liste, pointSlug, etapesParSlug, facultatifs = new Set()) {
     const idx = (liste || []).indexOf(pointSlug);
     if (idx < 0) return null;
     return liste.slice(0, idx + 1)
+        .filter((sl) => !facultatifs.has(sl))
         .map((sl) => etapesParSlug.get(sl))
         .filter((s) => s && s.active && !exempte(s) && stepSigners(s).length > 0);
 }

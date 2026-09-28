@@ -84,13 +84,18 @@ test('LE PARCOURS D\'UNE ENTREPRISE suit la même règle, d\'après ses compteur
     assert.strictEqual(etatDeGroupe({ done: false, gen: 0, total: 0 }), 'SANS_OBJET', 'aucun stagiaire concerné');
     const CO = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
     assert.match(CO, /s\.etat = etatDeGroupe\(\{ done: s\._done, gen: s\.gen, total: s\.total \}\);/);
-    assert.match(CO, /percent: pourcentFait\(faites, steps\.length\),/, 'plus de pourcentage au rang');
+    /* Les étapes FAITES, plus le rang — parmi les étapes DUES depuis la migration 188 : une étape
+       facultative sort des deux côtés de la fraction, et un parcours tout facultatif est complet. */
+    assert.match(CO, /percent: dues\.length \? pourcentFait\(faites, dues\.length\) : \(steps\.length \? 100 : 0\),/,
+        'plus de pourcentage au rang');
+    assert.match(CO, /const faites = dues\.filter\(\(s\) => s\._done\)\.length;/);
 });
 
 test('DEUX NOMBRES, DEUX SENS : les étapes faites (Suivi) et le rang de la prochaine (pipeline)', () => {
     const lire = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
     const av = lire('lib/avancement.js');
-    assert.match(av, /const done = parc\.done;\s+const etape = parc\.currentIndex;/);
+    // Le rang parmi les étapes DUES (188) : il se lit sur `total`, qui ne compte qu'elles.
+    assert.match(av, /const done = parc\.done;\s+const etape = parc\.rang;/);
     assert.match(lire('controllers/session.controller.js'), /done: a\.done, etape: a\.etape,/);
     assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'pages', 'Pipeline.jsx'), 'utf8'),
         /Étape \{Math\.min\(\(r\.etape \?\? r\.done\) \+ 1, r\.total\)\}/, '« Étape 3/12 » est un RANG');

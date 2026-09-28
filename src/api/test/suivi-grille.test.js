@@ -166,7 +166,10 @@ test('le nom d\'une colonne est le filtre — et il ne s\'offre que s\'il y a qu
     assert.match(SUIVI, /onClick=\{\(\) => onFiltre\(actif \? null : c\.manque\)\}/, 'recliquer la colonne choisie rend tout');
     assert.match(SUIVI, /<GrilleFormation key=\{t\.code \|\| "-"\} t=\{t\} filtre=\{manqueFiltre\} onFiltre=\{setManqueFiltre\}/);
     // Et la case en dit autant que l'ancienne feuille de route : le document, son état, « à signer ».
-    assert.match(SUIVI, /const titre = `\$\{c\.label\} — \$\{e\.lib\}\$\{aSigner \? " · à signer" : ""\}`;/);
+    /* Depuis la 188, « hors décompte » réunit deux causes (sans objet, facultatif) : la case nomme
+       celle qu'elle connaît, et garde le reste — le document, son état, « à signer ». */
+    assert.match(SUIVI, /const titre = `\$\{c\.label\} — \$\{lib\}\$\{aSigner \? " · à signer" : ""\}`;/);
+    assert.match(SUIVI, /const lib = doc\?\.facultatif \? \(etat === "done" \? "Fait \(facultatif\)" : "Facultatif, pas fait"\)\s+: etat === "skip" \? "Sans objet" : e\.lib;/);
 });
 
 test('les en-têtes penchés n\'ont pas de fond, et leur place est mesurée sur eux', () => {

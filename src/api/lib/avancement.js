@@ -161,7 +161,10 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
         // Volet entreprise : seulement pour un dossier ARRIVÉ par une entreprise (enrollment.company_id).
         if (franchi && e.enr_company_id && pt.entreprise && pt.section && pt.section.length) {
             if (!etapesOrg) etapesOrg = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
-            const exigees = PointDeRupture.exigencesEntreprise(pt.section, pt.entreprise, etapesOrg);
+            /* Les étapes FACULTATIVES de la formation (migration 188) ne ferment rien : elles viennent
+               de son parcours, que les modèles de l'organisme (`etapesOrg`) ne connaissent pas. */
+            const facultatifs = new Set((await toutesLesEtapes(program)).filter((x) => x.facultatif).map((x) => x.slug));
+            const exigees = PointDeRupture.exigencesEntreprise(pt.section, pt.entreprise, etapesOrg, facultatifs);
             if (exigees && PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe)).locked) franchi = false;
         }
 
@@ -170,14 +173,17 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             pieces: piecesParDossier.get(e.enrollment_id) || {},
             remises: remisesParDossier.get(e.enrollment_id) || {},
         });
-        const total = parc.steps.length;
+        /* LES ÉTAPES DUES SEULEMENT : une étape facultative (migration 188) n'entre dans aucun des deux
+           nombres. `parc.total` le dit ; `parc.steps` les garde toutes pour l'affichage. */
+        const total = parc.total;
         /* DEUX NOMBRES, DEUX SENS. `done` compte les étapes FAITES, dans n'importe quel ordre — le
            Suivi en fait la somme par entreprise pour son pourcentage. `etape` est le RANG de la
            prochaine étape, celui qu'affiche le pipeline (« Étape 3/12 »). Tant que le parcours se
-           faisait dans l'ordre, les deux coïncidaient ; une étape faite en avance les sépare. */
+           faisait dans l'ordre, les deux coïncidaient ; une étape faite en avance les sépare.
+           Le rang se compte parmi les étapes DUES (`parc.rang`), comme `total` sur lequel il se lit. */
         const done = parc.done;
-        const etape = parc.currentIndex;
-        const signable = parc.steps.filter((s) => s.signable || s.quiz);
+        const etape = parc.rang;
+        const signable = parc.steps.filter((s) => !s.facultatif && (s.signable || s.quiz));
         const anyHandled = parc.steps.some((s) => ['GENERE', 'ENVOYE', 'CONSULTE', 'SIGNE'].includes(s.docStatus));
 
         out.set(e.enrollment_id, {
@@ -193,7 +199,9 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             /* Le point de rupture du parcours est-il franchi ? Vrai aussi quand la formation n'en
                pose aucun : rien ne bloque — la règle de l'émargement. */
             point_franchi: franchi,
-            score: total > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE',
+            /* Complet quand tout le DÛ est fait ; un parcours dont tout est facultatif l'est d'office
+               (rien n'est dû), un parcours vide ne l'est pas. */
+            score: parc.steps.length > 0 && done >= total ? 'VERT' : (done > 0 || anyHandled) ? 'ORANGE' : 'ROUGE',
             signed: signable.filter((s) => s.docStatus === 'SIGNE').length,
             toSign: signable.length,
             // Format attendu par la feuille de route (Roadmap). Omis quand personne ne le lit.
@@ -206,6 +214,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
                 piece: !!s.piece,
                 pieceStatus: s.pieceStatus || null,
                 remise: !!s.remise, remiseStatus: s.remiseStatus || null, sansObjet: !!s.sansObjet,
+                facultatif: !!s.facultatif, // hors décompte : la grille le montre, le bandeau ne le réclame pas
                 status: s.docStatus || 'A_FAIRE',
             })) : [],
         });

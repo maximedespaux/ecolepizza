@@ -77,10 +77,14 @@ const pourcentFait = (faites, total) => (total ? Math.round((faites / total) * 1
  * Calcule le parcours documentaire d'un dossier.
  * steps = étapes ordonnées (cf. enrollmentSteps) ; docs = generated_document du
  * dossier [{ id, type, status, template_slug, quiz_id }].
- * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status}],
- *           percent, currentIndex, currentKey }.
+ * Renvoie { steps:[{key,ic,label,sub,signable,quiz,docId,docStatus,status,facultatif}],
+ *           percent, done, total, rang, currentIndex, currentKey } — `done`, `total` et `rang`
+ *           ne comptent que les étapes DUES (les facultatives n'y entrent pas, migration 188).
+ * `entreprise` : le dossier est rattaché à une entreprise QUI A UN ESPACE (un compte de
+ * représentant) — une remise qui lui est destinée va alors à elle ; sinon, elle revient au
+ * stagiaire (cf. remise.controller, pourEntreprise).
  */
-function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} } = {}) {
+function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, entreprise = false } = {}) {
     const rows = steps.map((s) => {
         // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : sa complétion vient de
         // piece_depot.statut, PAS d'un document généré (il n'y en a pas). VALIDÉE ⇒ étape faite,
@@ -114,9 +118,14 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} }
        dans sa colonne. Mais l'AVANCEMENT compte toutes les étapes faites — une convention signée
        derrière une pièce manquante était « jamais comptée », et un dossier fait à 11 étapes sur 12
        pouvait afficher 0 %. */
-    let currentIndex = rows.findIndex((r) => !r.done);
+    /* UNE ÉTAPE FACULTATIVE (migration 188, cochée par formation dans le parcours) reste affichée et
+       faisable, mais NE COMPTE PAS : ni dans la fraction de l'avancement — des deux côtés, faite ou
+       non —, ni comme « prochaine étape ». Décidé par l'école le 2026-09-28 : un dossier dont tout le
+       dû est fait est à 100 %, même si un document facultatif attend encore. */
+    let currentIndex = rows.findIndex((r) => !r.done && !r.s.facultatif);
     if (currentIndex < 0) currentIndex = rows.length;
-    const faites = rows.filter((r) => r.done).length;
+    const requises = rows.filter((r) => !r.s.facultatif);
+    const faites = requises.filter((r) => r.done).length;
 
     const outSteps = rows.map((r, i) => ({
         key: keyFor(r.s), ic: iconFor(r.s), label: r.s.label, sub: subFor(r.s),
@@ -143,17 +152,30 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {} }
         remise_id: r.s.remise_id || null,
         remiseId: r.remiseId || null,  // l'identifiant de LA remise du dossier (pas du type) : c'est lui qu'on exclut
         remiseStatus: r.remiseStatus || null, // ATTENDUE | REMISE | RECUE
+        /* À QUI cette remise va (migration 188) : l'entreprise ne la reçoit que si le dossier en a
+           une, dotée d'un espace. C'est la même règle que `pourEntreprise` (remise.controller.js) —
+           l'écran dit « Remis à l'entreprise » là où le serveur réserve l'accusé à son compte. */
+        remiseEntreprise: !!(r.s.remise_id && r.s.destinataire === 'ENTREPRISE' && entreprise),
         sansObjet: !!r.sansObjet,
+        facultatif: !!r.s.facultatif, // hors décompte (migration 188) : l'écran le dit
         /* `status` garde son sens de RANG (faite / en cours / à venir) pour ceux qui s'en servent
-           encore ; `etat` dit ce qui s'est réellement passé, et c'est lui que l'écran affiche. */
-        status: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'todo',
+           encore ; `etat` dit ce qui s'est réellement passé, et c'est lui que l'écran affiche.
+           Une étape facultative passée sans être faite n'est pas « faite » pour autant. */
+        status: i < currentIndex ? (r.s.facultatif && !r.done ? 'todo' : 'done') : i === currentIndex ? 'current' : 'todo',
         etat: etatEtape(r),
     }));
 
     return {
         steps: outSteps,
-        percent: pourcentFait(faites, rows.length),
+        /* Rien de dû (toutes les étapes facultatives) : il ne manque rien, c'est 100 %. Aucune
+           étape du tout : 0 %, comme avant — un parcours vide n'est pas un dossier complet. */
+        percent: requises.length ? pourcentFait(faites, requises.length) : (rows.length ? 100 : 0),
         done: faites,
+        total: requises.length,
+        /* LE RANG DE LA PROCHAINE ÉTAPE DUE, parmi les dues — le « Étape 3/10 » du pipeline, lu sur
+           `total`. `currentIndex` compte aussi les facultatives qui la précèdent : « Étape 5/10 » pour
+           un dossier à sa troisième étape due mêlerait deux listes. Sans facultative, ils sont égaux. */
+        rang: rows.slice(0, currentIndex).filter((r) => !r.s.facultatif).length,
         currentIndex,
         currentKey: currentIndex < outSteps.length ? outSteps[currentIndex].key : null,
     };
