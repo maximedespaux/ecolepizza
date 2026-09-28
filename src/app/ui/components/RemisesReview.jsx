@@ -29,7 +29,9 @@ const ETAT = {
    et plus volumineux. On l'affiche pour distinguer deux documents qui portent le même nom. */
 const poids = (o) => (o >= 1024 * 1024 ? `${Math.round((o / 1024 / 1024) * 10) / 10} Mo` : `${Math.max(1, Math.round(o / 1024))} Ko`);
 
-export default function RemisesReview({ enrollmentId, refresh }) {
+/* `onChange` : prévenu après un dépôt, un retrait ou un « sans objet » — l'étape du parcours, au-dessus,
+   change d'état avec lui, sans attendre le rafraîchissement suivant. */
+export default function RemisesReview({ enrollmentId, refresh, onChange }) {
   const [remises, setRemises] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [occupe, setOccupe] = useState(null);
@@ -47,7 +49,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
     /* MÊME TRI QU'AILLEURS : un PDF part intact, un scan photographié est réduit. Le plafond
        du serveur est ici de 10 Mo, mais rien ne sert d'y loger 8 Mo de photo pour un document
        qui sera lu à l'écran. */
-    try { await deposerRemise(enrollmentId, remiseTypeId, await reduireSiImage(file, PROFILS.piece)); load(); }
+    try { await deposerRemise(enrollmentId, remiseTypeId, await reduireSiImage(file, PROFILS.piece)); load(); onChange?.(); }
     catch (e) { setErreur(e.message); }
     finally { setOccupe(null); }
   }
@@ -60,7 +62,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
       ? "\n\nL'accusé de réception de l'entreprise sera ANNULÉ : elle devra confirmer à nouveau."
       : "\n\nL'accusé de réception du stagiaire sera ANNULÉ : il devra confirmer à nouveau.";
     if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de la remise « ${libelle} » ?${perte}`)) return;
-    try { await supprimerRemiseFichier(f.id); setErreur(null); load(); }
+    try { await supprimerRemiseFichier(f.id); setErreur(null); load(); onChange?.(); }
     catch (e) { setErreur(e.message); }
   }
 
@@ -73,7 +75,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
       ? `Écarter « ${r.label} » du dossier de ce stagiaire ?\n\nElle cessera de compter comme due. Rien n'est supprimé : vous pourrez la rétablir.`
       : `Rétablir « ${r.label} » dans le dossier de ce stagiaire ?`;
     if (!window.confirm(phrase)) return;
-    try { await basculerRemiseSansObjet(enrollmentId, r.remise_type_id, exclu); setErreur(null); load(); }
+    try { await basculerRemiseSansObjet(enrollmentId, r.remise_type_id, exclu); setErreur(null); load(); onChange?.(); }
     catch (e) { setErreur(e.message); }
   }
 

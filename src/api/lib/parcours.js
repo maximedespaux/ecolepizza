@@ -252,4 +252,27 @@ async function companyParcours(conn, orgId, { programId, companyId, sessionId },
     return { steps, docs };
 }
 
-module.exports = { computeDocParcours, companyParcours, companyStepSlugs, etatDeGroupe, pourcentFait, ETATS, needsSignature, SENT };
+/**
+ * L'ÉTAT D'UNE REMISE POUR UN GROUPE (fiche entreprise, 2026-09-28), d'après les remises de ses
+ * dossiers — pas d'après des documents générés : une remise n'en produit jamais. On comptait des
+ * `generated_document` sous le slug « remise:… », qui n'existent pas, et l'étape restait à « 0/1
+ * reçu(s) » quoi qu'on dépose.
+ * `ids` : les dossiers concernés ; `lignes` : leurs `remise_document` pour ce type.
+ * Un dossier où la remise est « sans objet » (161) sort du compte, des deux côtés. Tous écartés :
+ * l'étape est faite — rien n'est dû, comme dans le parcours d'un stagiaire —, et se dit sans objet.
+ */
+function compteRemiseGroupe(ids, lignes) {
+    const parDossier = new Map((lignes || []).map((r) => [r.enrollment_id, r]));
+    let exclus = 0, deposes = 0, recus = 0;
+    for (const id of ids || []) {
+        const r = parDossier.get(id);
+        if (r && Number(r.sans_objet)) { exclus += 1; continue; }
+        if (r && (r.statut === 'REMISE' || r.statut === 'RECUE')) deposes += 1;
+        if (r && r.statut === 'RECUE') recus += 1;
+    }
+    const n = (ids || []).length;
+    const total = n - exclus;
+    return { total, gen: deposes, signed: recus, done: total > 0 ? recus >= total : n > 0, sansObjet: n > 0 && total === 0 };
+}
+
+module.exports = { computeDocParcours, companyParcours, companyStepSlugs, compteRemiseGroupe, etatDeGroupe, pourcentFait, ETATS, needsSignature, SENT };

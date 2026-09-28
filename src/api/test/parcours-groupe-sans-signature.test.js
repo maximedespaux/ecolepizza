@@ -34,7 +34,9 @@ test('getCompanyParcours : fait = signé POUR CE QUI SE SIGNE, reçu pour le res
     assert.match(fn, /recu = new Set\(rows\.filter\(\(r\) => SENT\.includes\(r\.status\)\)/);
     /* Le « fait » d'une étape : signatures pour ce qui se signe, RÉCEPTION pour un document sans signature. */
     assert.match(fn, /const attendSignature = !!s\.quiz_id \|\| needsSignature\(s\);/);
-    assert.match(fn, /const done = total > 0 && \(attendSignature \? signed >= total : recu >= total\);/);
+    /* Une REMISE a sa propre règle (l'accusé de réception, `compteRemiseGroupe`, 2026-09-28) ; pour
+       tout le reste, la même qu'avant. */
+    assert.match(fn, /const done = remise \? remise\.done : total > 0 && \(attendSignature \? signed >= total : recu >= total\);/);
 });
 
 test('l\'écran affiche « reçu » et non « signés » pour un document sans signature', () => {

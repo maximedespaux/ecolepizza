@@ -34,6 +34,9 @@ const isGroup = (s) => s && s.total != null;
 // Sous-titre affiché sous chaque étape de la chronologie. En mode groupe (fiche
 // entreprise) on montre le compteur de signatures d'un coup d'œil (0/2, 1/2…).
 function listSub(s) {
+  /* UNE REMISE DE GROUPE se DÉPOSE puis s'ACCUSE (2026-09-28) : on compte les accusés de réception,
+     pas des signatures ni des documents générés — elle n'en produit aucun. */
+  if (isGroup(s) && s.remise) return s.total ? `${s.signed}/${s.total} réception(s) confirmée(s)` : "Sans objet pour ce groupe";
   if (isGroup(s) && s.company_level) {
     // Document de groupe = UNE signature (organisme + entreprise), pas par stagiaire.
     if (s.total > 1) return `${s.signed}/${s.total} document(s) signé(s)`; // plusieurs OPCO
@@ -52,6 +55,11 @@ function listSub(s) {
 function lineFor(s) {
   const etat = etatDe(s);
   if (isGroup(s)) {
+    if (s.remise) {
+      if (!s.total) return "Sans objet pour les stagiaires de ce groupe.";
+      const qui = s.remiseEntreprise ? "par l'entreprise, dans son espace" : "par chaque stagiaire, dans son espace";
+      return `${s.gen}/${s.total} déposé(s) · ${s.signed}/${s.total} réception(s) confirmée(s) ${qui}.`;
+    }
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
       /* Deux-points et non tiret cadratin (règle du 2026-08-03). Cette ligne portait « groupe (signé (… » et
@@ -92,6 +100,27 @@ function lineFor(s) {
   if (!s.docId) return "Document à préparer.";
   if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer.";
   return "En cours.";
+}
+/* LE GESTE « DÉPOSER / IMPORTER » D'UNE ÉTAPE (`onImport`). Jamais sur un QCM : un questionnaire ne se
+   remplace pas par un fichier. Ni sur une étape « stagiaire » vue depuis l'entreprise — elle ne dit pas de
+   quel stagiaire il s'agit —, SAUF une REMISE : l'école la dépose de là pour chacun (2026-09-28, l'AGEFICE
+   de LA CUISINE DE JULIEN). Ni sur une remise sans objet : rien n'y est dû. */
+function importPossible(s) {
+  if (String(s.key || "").startsWith("quiz:")) return false;
+  if (s.remise) return etatDe(s) !== "SANS_OBJET";
+  return !(isGroup(s) && !s.company_level);
+}
+/* LE MOT CHANGE PARCE QUE LE GESTE CHANGE : une pièce reçue se dépose et se valide, un document remis se
+   DÉPOSE (l'école le donne, le destinataire en accuse réception), un document reçu s'IMPORTE. */
+const libelleImport = (s) => (s.piece ? "Déposer la pièce reçue" : s.remise ? "Déposer le document" : "Importer un document reçu");
+function titreImport(s) {
+  if (s.piece) return "Déposer ici une pièce reçue par e-mail ou scannée : elle sera validée du même geste";
+  if (s.remise) {
+    return `Déposer le document que l'école remet : ${s.remiseEntreprise ? "l'entreprise" : "le stagiaire"} le reçoit dans son espace, et en accuse réception`;
+  }
+  return isGroup(s)
+    ? "Rattacher à cette étape l'exemplaire signé renvoyé par l'entreprise (e-mail, scan)"
+    : "Rattacher à cette étape un document reçu par e-mail ou scanné";
 }
 function actionFor(s) {
   // Pièce : aucun « Préparer » — le stagiaire dépose, l'école valide dans le panneau Pièces.
@@ -344,18 +373,12 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               au mauvais endroit. */}
           {/* BOUTONS SECONDAIRES PLEINS, pas « fantômes » : sur le fond gris du panneau, un bouton
               sans bordure se lisait comme une légende posée à droite, pas comme un geste. */}
-          {/* FICHE ENTREPRISE (2026-09-28) : seul un document de GROUPE s'importe ici — l'exemplaire
-              signé que l'entreprise renvoie. Une étape « stagiaire » du parcours de groupe ne dit pas
-              de QUEL stagiaire il s'agirait : elle s'importe depuis la fiche de chacun, comme elle s'y
-              prépare. */}
-          {onImport && !String(step.key || "").startsWith("quiz:") && !(isGroup(step) && !step.company_level) && (
-            <button className="btn" onClick={() => onImport(step)}
-              title={step.piece
-                ? "Déposer ici une pièce reçue par e-mail ou scannée : elle sera validée du même geste"
-                : isGroup(step)
-                  ? "Rattacher à cette étape l'exemplaire signé renvoyé par l'entreprise (e-mail, scan)"
-                  : "Rattacher à cette étape un document reçu par e-mail ou scanné"}>
-              {step.piece ? "Déposer la pièce reçue" : "Importer un document reçu"}
+          {/* OÙ LE GESTE EST PROPOSÉ, ET SON MOT : `importPossible`, `libelleImport` (plus haut). Fiche
+              entreprise : un document de GROUPE (l'exemplaire signé renvoyé), ou une REMISE — jamais une
+              autre étape « stagiaire », qui ne dit pas de quel stagiaire il s'agirait. */}
+          {onImport && importPossible(step) && (
+            <button className="btn" onClick={() => onImport(step)} title={titreImport(step)}>
+              {libelleImport(step)}
             </button>
           )}
           {onSignLink && step.docId && (

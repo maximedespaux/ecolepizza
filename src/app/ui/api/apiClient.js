@@ -1183,6 +1183,8 @@ export function deletePieceType(id) { return request(`/pieces/${id}`, { method: 
    stagiaire accuse réception (le serveur refuse le personnel). C'est ce qui donne sa valeur à
    l'accusé : une preuve signée par celui qu'elle engage. */
 export function getDossierRemises(enrollmentId) { return request(`/remises/dossier/${enrollmentId}`, { silent: true }); }
+// Les remises des stagiaires d'une entreprise pour une session, dossier par dossier (fiche entreprise).
+export function getRemisesGroupe(companyId, sessionId) { return request(`/remises/groupe/${companyId}/${sessionId}`, { silent: true }); }
 export async function deposerRemise(enrollmentId, remiseTypeId, file) {
   const fd = new FormData();
   fd.append("fichier", file); // doit matcher depot.single('fichier') côté route

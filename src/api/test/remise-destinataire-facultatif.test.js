@@ -177,7 +177,7 @@ const dossierAvec = (cols, types) => scenario({ cols, rep: [
     [/FROM enrollment e JOIN learner l ON l\.id = e\.learner_id\s+WHERE e\.id = \?/, [[{ id: 'e1', organization_id: 'o1', user_id: 'u-stag' }]]],
     [/JOIN remise_type rt ON rt\.id = ps\.remise_id/, (sql) => [types.map((t) => ligneSelon(sql, {
         remise_type_id: t.id, code: t.id, label: t.id, consigne: null, remise_id: null, statut: null, sans_objet: 0,
-        company_id: 'c1', entreprise: 'Pizzeria Test', ...t,
+        company_id: 'c1', entreprise: 'Pizzeria Test', actif_parcours: 1, slug_etape: `remise:${t.id}`, program_id: 'p1', ...t,
     }))]],
 ] });
 const TYPES = [

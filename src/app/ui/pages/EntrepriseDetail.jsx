@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, generateGroupDocuments, createSignLink, documentPdfUrl, createRepresentativeAccount,
-  importDocumentFile, downloadDocumentImporte } from "../api/apiClient.js";
+  importDocumentFile, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
@@ -16,7 +16,7 @@ import { Icon } from "../components/Icon.jsx";
 import { Requis } from "../components/Field.jsx";
 import { dateHeure, dateFr } from "../lib/format.js";
 import { documentsDeLEtape, documentsEntrepriseHorsParcours, cibleImportGroupe, signeDansLApplication } from "../lib/documentsDossier.js";
-import { ACCEPT_DOCUMENT, refusDocumentRecu } from "../lib/formatsDepot.js";
+import { ACCEPT_DOCUMENT, ACCEPT_PIECE, refusDocumentRecu } from "../lib/formatsDepot.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 
 const LEGAL_STATUSES = ["SARL", "SAS", "SASU", "EURL", "EI", "Micro / Auto", "SA", "SCI", "Association", "Autre"];
@@ -95,6 +95,8 @@ export default function EntrepriseDetail() {
      un nouveau rendu — et rien ne l'affiche. */
   const fichierRef = useRef(null);
   const cibleImport = useRef(null);
+  // Les remises des stagiaires du groupe, session affichée : les lignes des étapes de remise.
+  const [remisesGroupe, setRemisesGroupe] = useState([]);
   const [learnerDocs, setLearnerDocs] = useState([]); // docs stagiaires à signer par le représentant
   const [repCreds, setRepCreds] = useState(null); // { email, password } du compte représentant
   // Rattacher un stagiaire existant à l'entreprise
@@ -150,6 +152,13 @@ export default function EntrepriseDetail() {
     // Par défaut : la session courante est cochée.
     setPrep((p) => (p.sessionIds.size ? p : { ...p, sessionIds: new Set(viewSessionId ? [viewSessionId] : []) }));
   }, [id, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* LES REMISES DU GROUPE (2026-09-28), vidées au changement de session seulement : à chaque
+     rafraîchissement, les lignes resteraient sinon un instant vides. */
+  useEffect(() => { setRemisesGroupe([]); }, [id, viewSessionId]);
+  useEffect(() => {
+    if (!viewSessionId) return;
+    getRemisesGroupe(id, viewSessionId).then((r) => setRemisesGroupe(r.data || [])).catch(() => setRemisesGroupe([]));
+  }, [id, viewSessionId, parcoursRefresh]);
   // Documents « entreprise » déjà générés (rafraîchis après génération/envoi/suppression).
   useEffect(() => {
     listCompanyDocuments(id).then((r) => setCompanyDocs(r.data || [])).catch(() => setCompanyDocs([]));
@@ -308,6 +317,18 @@ export default function EntrepriseDetail() {
      passe à signé, le fichier reçu fait foi, et rien ne se fait passer pour une signature
      électronique. OÙ LE RATTACHER se décide dans `cibleImportGroupe` (lib/documentsDossier.js). */
   function demanderImportGroupe(step) {
+    /* UNE REMISE (l'AGEFICE) : elle se dépose pour CHAQUE stagiaire, sur sa ligne. L'étape ne le fait
+       d'un geste que s'il n'y en a qu'un — elle ne devine pas pour qui. */
+    if (step.remise) {
+      const dues = lignesRemise(step.remise_id).filter(({ r }) => !r.sans_objet);
+      if (!dues.length) { setStatus({ type: "info", message: `Aucun stagiaire de ce groupe n'attend « ${step.label} ».` }); return; }
+      if (dues.length > 1) {
+        setStatus({ type: "info", message: `« ${step.label} » se remet à chaque stagiaire (${dues.length}) : déposez le document sur la ligne de chacun, avec son bouton de dépôt.` });
+        return;
+      }
+      demanderDepotRemise(dues[0].d, dues[0].r);
+      return;
+    }
     const cible = cibleImportGroupe(documentsDeLEtape(companyDocs, step.key, viewSessionId));
     if (cible.refus === "plusieurs") {
       setStatus({ type: "info", message: `« ${step.label} » a un document par OPCO (${cible.n}) : importez chaque exemplaire signé sur sa ligne, avec son bouton d'import.` });
@@ -324,14 +345,35 @@ export default function EntrepriseDetail() {
   // Un seul sélecteur, caché, comme sur la fiche stagiaire : le navigateur ouvre déjà sa fenêtre.
   function ouvrirSelecteur(cible) {
     cibleImport.current = cible;
+    /* `accept` SUIT LE GESTE, comme sur la fiche stagiaire : un document remis se dépose en image ou PDF
+       (remise.controller), un document reçu admet aussi le traitement de texte. */
+    if (fichierRef.current) fichierRef.current.accept = cible.remise ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
     fichierRef.current?.click();
   }
+  // Les lignes « un stagiaire, sa remise » d'un type de remise, dans la session affichée.
+  const lignesRemise = (typeId) => remisesGroupe
+    .map((d) => ({ d, r: (d.remises || []).find((x) => x.remise_type_id === typeId) }))
+    .filter((x) => x.r);
   async function envoyerImportGroupe(e) {
     const file = e.target.files?.[0];
     e.target.value = ""; // sinon réimporter LE MÊME fichier ne déclencherait aucun `change`
     const cible = cibleImport.current;
     cibleImport.current = null;
     if (!file || !cible) return;
+    /* UNE REMISE : un seul appel, la route du panneau « Documents remis » — rien n'est préparé avant,
+       le serveur juge le fichier et le dit (format, poids). */
+    if (cible.remise) {
+      setStatus(null);
+      try {
+        await deposerRemise(cible.enrollmentId, cible.remiseTypeId, await reduireSiImage(file, PROFILS.piece));
+        setStatus({ type: "success", message: `« ${file.name} » déposé pour « ${cible.label} » (${cible.nom}) : ${cible.qui} le reçoit dans son espace, et en accusera réception.` });
+      } catch (err) {
+        setStatus({ type: "error", message: err.message });
+      } finally {
+        setParcoursRefresh((n) => n + 1);
+      }
+      return;
+    }
     /* VÉRIFIÉ AVANT DE PRÉPARER : une étape jamais préparée l'est d'abord, et un fichier refusé
        ensuite laisserait derrière lui un document préparé que personne n'a demandé. */
     const refus = refusDocumentRecu(file);
@@ -398,6 +440,7 @@ export default function EntrepriseDetail() {
      nommée par son OPCO. Une étape « stagiaire » n'en a aucun : ses documents se génèrent depuis
      chaque fiche stagiaire. */
   function gestesEtapeGroupe(s) {
+    if (s.remise) return gestesRemise(s);
     if (!s.company_level) return null;
     const liste = documentsDeLEtape(companyDocs, s.key, viewSessionId);
     if (!liste.length) return null;
@@ -420,6 +463,52 @@ export default function EntrepriseDetail() {
         {liste.map((d) => <div key={d.id} className="parc-geste-ligne">{ligne(d, d.title.split(" — ").slice(1).join(" — ") || d.title)}</div>)}
       </div>
     );
+  }
+
+  /* LES REMISES D'UNE ÉTAPE DE GROUPE, une ligne par stagiaire (2026-09-28) : l'école y dépose ce
+     qu'elle remet — l'AGEFICE de LA CUISINE DE JULIEN —, voit ce qui est parti et qui en a accusé
+     réception. Retirer un fichier ou écarter la remise reste sur la fiche du stagiaire, dans son
+     panneau « Documents remis ». */
+  function gestesRemise(s) {
+    const lignes = lignesRemise(s.remise_id);
+    if (!lignes.length) return null;
+    const etat = (r) => (r.sans_objet ? "sans objet"
+      : r.statut === "RECUE" ? `reçu le ${dateFr(r.accuse_le)}`
+      : r.statut === "REMISE" ? "déposé, en attente de l'accusé"
+      : "à déposer");
+    return (
+      <div className="parc-gestes-multi">
+        {lignes.map(({ d, r }) => {
+          const nom = `${d.last_name || ""} ${d.first_name || ""}`.trim();
+          const fichiers = r.fichiers || [];
+          const dernier = fichiers[fichiers.length - 1];
+          const detail = [r.remis_le && `déposé le ${dateHeure(r.remis_le)}${r.remis_par ? ` par ${r.remis_par}` : ""}`,
+            r.accuse_le && `réception confirmée le ${dateHeure(r.accuse_le)} par ${r.pour_entreprise ? "l'entreprise" : "le stagiaire"}`].filter(Boolean).join(" · ");
+          return (
+            <div key={d.enrollment_id} className="parc-geste-ligne">
+              <span className="parc-trace" title={detail || undefined}>{nom} · {etat(r)}</span>
+              {dernier && (
+                <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`} aria-label={`Voir le document déposé pour ${nom}`}
+                  onClick={() => window.open(remiseFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
+              )}
+              {!r.sans_objet && (
+                <button className="iconbtn" title={fichiers.length ? "Déposer un autre fichier" : "Déposer le document"}
+                  aria-label={`Déposer ${r.label} pour ${nom}`} onClick={() => demanderDepotRemise(d, r)}><Icon name="upload" size={16} /></button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  /* DÉPOSER POUR UN STAGIAIRE DU GROUPE. Un dépôt sur une remise déjà REÇUE annule l'accusé (un accusé ne
+     vaut que pour le fichier sur lequel il porte, cf. \`deposer\`) : on le dit avant, pas après. */
+  function demanderDepotRemise(d, r) {
+    const nom = `${d.last_name || ""} ${d.first_name || ""}`.trim();
+    const qui = r.pour_entreprise ? "l'entreprise" : "le stagiaire";
+    if (r.statut === "RECUE" && !window.confirm(`Déposer un nouveau fichier pour « ${r.label} » (${nom}) ?\n\n`
+      + `L'accusé de réception déjà donné sera annulé : ${qui} devra confirmer à nouveau.`)) return;
+    ouvrirSelecteur({ remise: true, enrollmentId: d.enrollment_id, remiseTypeId: r.remise_type_id, label: r.label, nom, qui });
   }
 
   /* « PRÉPARER UN DOCUMENT » DE GROUPE, DANS L'ÉTAPE (2026-09-21) : la carte « Préparer un
@@ -663,8 +752,9 @@ export default function EntrepriseDetail() {
             />
           )}
 
-          {/* Sélecteur partagé par l'étape et par chaque ligne ; `accept` aligné sur le serveur. */}
-          <input ref={fichierRef} type="file" accept={ACCEPT_DOCUMENT} style={{ display: "none" }} onChange={envoyerImportGroupe} />
+          {/* Sélecteur partagé par l'étape et par chaque ligne ; `accept` est posé par `ouvrirSelecteur`,
+              selon le geste (document reçu ou document remis), aligné sur ce que le serveur accepte. */}
+          <input ref={fichierRef} type="file" style={{ display: "none" }} onChange={envoyerImportGroupe} />
           {autresDocs.length > 0 && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
               <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Autres documents</h3>
