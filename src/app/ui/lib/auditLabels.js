@@ -155,8 +155,9 @@ const ACTION_LABEL = {
     /* Pièces justificatives fournies par le STAGIAIRE — le sens inverse du reste. Le dépôt et
        la vérification se tracent : ce sont des copies de pièces d'identité, et « qui a vu quoi,
        quand » est précisément ce qu'un contrôle demandera. La suppression d'un fichier est en
-       ROUGE et non en neutre : tant que la règle de conservation n'est pas tranchée, c'est la
-       seule purge existante — elle doit se repérer d'un coup d'œil dans le journal. */
+       ROUGE et non en neutre : rien ne s'efface de lui-même (règle de conservation tranchée le
+       2026-09-15), ce retrait EST la purge manuelle — elle doit se repérer d'un coup d'œil dans
+       le journal. */
     /* « Pièce justificative créée » laissait croire qu'un stagiaire venait d'en déposer une.
        Ce sont les TYPES de pièces (carte d'identité, RIB…) que l'organisme paramètre, avec leur
        poids maximum et leurs formats — le dépôt, lui, c'est `piece.depot`. */

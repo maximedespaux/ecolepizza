@@ -11,10 +11,13 @@
  *     téléphoner pour dire « c'est illisible » ;
  *   · un contrôle HUMAIN, donc la trace de qui a validé.
  *
- * ⚠️ CONSERVATION NON TRANCHÉE (RGPD). Une copie de carte d'identité est une donnée personnelle
- * sensible. La suppression est MANUELLE pour l'instant, faute de décision — cf. le bloc en tête
- * de CLAUDE.md, à reposer jusqu'à réponse. `piece_depot.purge_at` existe déjà, NULL partout :
- * le jour où la règle est arrêtée, il n'y a qu'une purge à écrire ici.
+ * CONSERVATION — TRANCHÉ LE 2026-09-15 : suppression MANUELLE, et rien d'automatique. C'est la
+ * règle retenue, non plus un choix d'attente (cf. le bloc en tête de CLAUDE.md) : ne pas la
+ * rouvrir. Une copie de pièce d'identité ne disparaît que par un geste humain — le retrait d'un
+ * fichier (`supprimerFichier`, qui EST la purge manuelle) ou le refus de la pièce (`verifier`).
+ * Aucune purge ne tourne, et `piece_depot.purge_at` reste NULL partout. La colonne est gardée
+ * exprès : pour changer d'avis un jour, la remplir à la validation ou à la clôture et écrire la
+ * purge ici, sans migration ni reprise de données.
  *
  * Les fichiers vivent en BLOB, comme les photos de publication : rien sur disque, donc rien à
  * nettoyer, et la suppression suit la cascade (migration 127).
@@ -374,8 +377,9 @@ const deposer = async (req, res) => {
  *
  * `Content-Disposition: inline` avec un nom : une pièce se REGARDE avant de se valider, mais on
  * garde son nom si elle est téléchargée. Aucun cache : contrairement à une photo de publication,
- * une copie de carte d'identité ne doit pas traîner dans le cache du navigateur — c'est la seule
- * mesure de conservation qu'on puisse prendre tant que la règle d'effacement n'est pas tranchée.
+ * une copie de carte d'identité ne doit pas traîner dans le cache du navigateur. La suppression
+ * est manuelle (cf. l'en-tête) : une copie gardée en cache survivrait au retrait qui l'efface de
+ * la base.
  */
 const servirFichier = async (req, res) => {
     try {
@@ -407,10 +411,11 @@ const servirFichier = async (req, res) => {
 /**
  * DELETE /api/pieces/fichier/:id — retirer un fichier.
  *
- * C'EST AUSSI LA PURGE MANUELLE, seule mesure de conservation disponible tant que la règle
- * RGPD n'est pas tranchée (cf. l'en-tête). Le stagiaire peut retirer ce qu'il a envoyé tant que
- * ce n'est pas validé — après, la pièce fait foi et lui seul ne décide plus ; le personnel, lui,
- * peut retirer à tout moment, précisément pour pouvoir effacer une copie devenue inutile.
+ * C'EST AUSSI LA PURGE MANUELLE, celle de la règle de conservation tranchée le 2026-09-15 (cf.
+ * l'en-tête) : rien ne s'efface de lui-même. Le personnel peut retirer à tout moment, pièce
+ * validée comprise, précisément pour effacer une copie devenue inutile. Le stagiaire ne le peut
+ * que tant que sa pièce n'est pas validée — après, elle fait foi et lui seul ne décide plus —, et
+ * sa page ne lui offre pas ce geste (pas de corbeille, décidé le 2026-09-28).
  */
 const supprimerFichier = async (req, res) => {
     try {
@@ -454,8 +459,8 @@ const supprimerFichier = async (req, res) => {
  * l'école pour le demander. Le motif est donc exigé — c'est le seul champ obligatoire de tout ce
  * fichier.
  *
- * Un refus GARDE les fichiers : il faut pouvoir regarder ce qui a été envoyé pour comprendre
- * « verso illisible ».
+ * Un refus EFFACE les fichiers (cf. plus bas) : le dépôt ne garde que son statut et son motif —
+ * c'est le motif, et non le scan, qui dit au stagiaire ce qu'il doit renvoyer.
  */
 const verifier = async (req, res) => {
     const statut = String(req.body?.statut || '').toUpperCase();
