@@ -20,6 +20,18 @@ const isSig = (t) =>
 export default function TokenView({ node, updateAttributes, selected }) {
   const { token, label, w, h } = node.attrs;
 
+  /* UNE ZONE À REMPLIR (« saisie:texte:… », « saisie:date:… ») : ce que le stagiaire écrira avant de
+     signer. Elle s'imprime en pointillés tant qu'elle est vide — la puce le dit au survol. */
+  if (String(token || "").startsWith("saisie:")) {
+    const date = String(token).startsWith("saisie:date:");
+    return (
+      <NodeViewWrapper as="span" className="doc-token saisie" contentEditable={false}
+        title={`Zone à remplir${date ? " (une date)" : ""} par le stagiaire avant de signer — ou par le bureau pour lui. Obligatoire. Tant qu'elle est vide, elle s'imprime en pointillés.`}>
+        ✎ {label || token}{date ? " (date)" : ""}
+      </NodeViewWrapper>
+    );
+  }
+
   if (!isSig(token)) {
     // Teinte de la catégorie du jeton (comme la puce de la palette) — repérage visuel de la
     // famille (Stagiaire, Facture…) directement dans le document. null = catégorie inconnue → défaut.

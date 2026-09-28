@@ -75,7 +75,10 @@ function sectionFor(base, reste) {
     // signer SON PROPRE document depuis son espace : la rubrique /stagiaires étant en lecture seule
     // pour son rôle, le geste tombait en « Accès en lecture seule ». On NE dé-cadenasse PAS
     // /sign-link (création d'un lien de signature partageable = acte bureau, resté sous /stagiaires).
-    if (base === 'documents' && /\/sign\/?$/.test(reste || '')) return null;
+    /* Et REMPLIR LES ZONES qu'on va signer (PUT /documents/:id/saisies) : premier geste de la même
+       signature, même garde de propriété dans le contrôleur — sans quoi ce même compte ne pourrait
+       jamais signer une attestation, ses zones étant obligatoires. */
+    if (base === 'documents' && /\/(sign|saisies)\/?$/.test(reste || '')) return null;
     /* PIÈCES : trois natures sous une même base. DÉPOSER un fichier ou le retirer sont des actes
        de PARTICIPANT — le stagiaire propriétaire, garde de propriété dans piece.controller — et
        jamais l'écriture d'une rubrique : les y rattacher gèlerait le dépôt d'un compte à deux

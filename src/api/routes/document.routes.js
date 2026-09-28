@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const {
-    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, deleteDocument, createSignLink, checkDocumentConditions,
+    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, enregistrerSaisies, deleteDocument, createSignLink, checkDocumentConditions,
     importDocumentFile, getDocumentFile,
 } = require('../controllers/document.controller.js');
 const { signerMonDocument } = require('../controllers/intervenant.controller.js');
@@ -34,6 +34,9 @@ router.get('/:id/preview', authenticateToken, previewHtml);
 router.get('/:id/pdf', authenticateToken, downloadPdf);
 router.get('/:id/docx', authenticateToken, downloadDocx);
 router.post('/:id/sign', authenticateToken, signDocument);
+/* LES ZONES À REMPLIR avant de signer (lib/zonesARemplir.js) : le stagiaire, ou le bureau pour lui —
+   garde de propriété dans le contrôleur, comme la signature (et même exception de rubrique). */
+router.put('/:id/saisies', authenticateToken, enregistrerSaisies);
 /* SIGNER LES CADRES QU'ON M'A ATTRIBUÉS (formateur, membre du jury…) — même geste, même garde que
    l'espace intervenant : `signerMonDocument` ne signe que les cases dont `user_id` est le mien.
    Le suffixe « /sign » en fait un acte de PARTICIPANT, pas une écriture de la rubrique (cf.

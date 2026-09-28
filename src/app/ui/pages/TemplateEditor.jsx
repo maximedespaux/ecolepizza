@@ -9,6 +9,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import FieldSettingsPanel from "../components/FieldSettingsPanel.jsx";
 import CustomTokenManager from "../components/CustomTokenManager.jsx";
 import { categoryChipStyle, categoryAccent, registerTokenGroups, registerAnciensLibelles, jetonsInconnus } from "../lib/categoryColors.js";
+import { cleDeZone, TYPES_ZONE } from "../lib/zonesARemplir.js";
 import { aUnCadreStagiaire } from "../lib/signatures.js";
 
 const EMPTY = /^\s*(<p>(\s|<br\/?>)*<\/p>\s*)?$/i; // corps « vide »
@@ -142,6 +143,8 @@ function TemplateEditor() {
   const [openGroups, setOpenGroups] = useState({});
   const [active, setActive] = useState(null); // éditeur ayant le focus (cible palette/toolbar)
   const [sigLabel, setSigLabel] = useState(""); // libellé d'un bloc de signature personnalisé
+  const [zoneLabel, setZoneLabel] = useState(""); // libellé d'une zone à remplir par le stagiaire
+  const [zoneType, setZoneType] = useState("texte"); // « texte » ou « date »
   const [showFields, setShowFields] = useState(false); // modale « Champs documents »
   const [showCustom, setShowCustom] = useState(false); // modale « Jetons personnalisés »
   const fieldsRef = useRef(null);
@@ -343,6 +346,13 @@ function TemplateEditor() {
     target?.chain().focus().insertToken({ token: sigKey(lbl), label: lbl }).run();
   }
   const SIG_PRESETS = ["Jury 1", "Jury 2", "Président du jury", "Formateur", "Stagiaire 1", "Stagiaire 2", "Stagiaire 3", "Stagiaire 4"];
+  // Zone à remplir par le stagiaire : la clé vient de lib/zonesARemplir.js (confrontée au serveur par un test).
+  function insertZone() {
+    const lbl = zoneLabel.trim();
+    if (!lbl) return;
+    target?.chain().focus().insertToken({ token: cleDeZone(lbl, zoneType), label: lbl }).run();
+    setZoneLabel("");
+  }
   function onDrop(ed) {
     return (e) => {
       const rawText = e.dataTransfer.getData("application/x-rawtoken"); // jeton texte (bloc / par stagiaire)
@@ -542,6 +552,34 @@ function TemplateEditor() {
               </div>
             </div>
           </div>
+
+          {/* LES ZONES À REMPLIR PAR LE STAGIAIRE (demandé le 2026-09-28) : là où le modèle portait des
+              pointillés à remplir au stylo — l'entreprise, la fonction, la période d'une attestation sur
+              l'honneur. Le stagiaire les remplit avant de signer, ou le bureau pour lui ; toutes sont
+              obligatoires. Un document de GROUPE (🏢) n'a pas de stagiaire pour les remplir. */}
+          {!modeleEntreprise && (
+            <div className="tok-group">
+              <div className="tok-group-hd" style={{ cursor: "default" }}><span><Icon name="pencil" size={13} /> Zones à remplir</span></div>
+              <div className="tok-list" style={{ padding: "0 10px 8px" }}>
+                <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                  Des pointillés que le stagiaire remplit avant de signer (ou le bureau pour lui). Toutes obligatoires.
+                </p>
+                {/* Le libellé sur sa ligne : la palette est étroite, et « Ex. : Entreprise / structure » s'y coupait. */}
+                <input className="inp" value={zoneLabel} onChange={(e) => setZoneLabel(e.target.value)} aria-label="Libellé de la zone"
+                  onKeyDown={(e) => { if (e.key === "Enter") insertZone(); }}
+                  placeholder="Ex. : Entreprise / structure" style={{ fontSize: 12, padding: "4px 6px", width: "100%" }} />
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <select value={zoneType} onChange={(e) => setZoneType(e.target.value)} aria-label="Type de la zone" style={{ fontSize: 12, flex: 1 }}>
+                    {TYPES_ZONE.map((t) => <option key={t.valeur} value={t.valeur}>{t.libelle}</option>)}
+                  </select>
+                  <button className="btn sm ghost" title="Cliquer ou glisser dans le document"
+                    draggable={!!zoneLabel.trim()}
+                    onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: cleDeZone(zoneLabel.trim(), zoneType), label: zoneLabel.trim() }))}
+                    onClick={insertZone} disabled={!zoneLabel.trim()}>＋</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Recherche : onze groupes et plus de quatre-vingt-dix jetons. Sans elle, trouver
               « SIRET » demande d'ouvrir les groupes un par un — et de savoir dans lequel il

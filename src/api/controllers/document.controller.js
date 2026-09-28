@@ -42,6 +42,7 @@ const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { findMissingTokens, usedTokenKeys } = require('../lib/tokens.js');
 // Les réponses du stagiaire (photos, partenaires) que certains documents impriment.
 const consentements = require('../lib/consentements.js');
+const zonesARemplir = require('../lib/zonesARemplir.js');
 const { docxToPdf, htmlToPdf } = require('../lib/docxpdf.js');
 const { buildEmargementDocHtml } = require('../lib/emargement.js');
 const { logAudit } = require('../lib/audit.js');
@@ -394,7 +395,17 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             consentementsCtx = { reponses: reponses || {}, champsDuJour: await consentements.champsOrganisme(conn, organizationId) };
         } catch (e) { console.error('Réponses du stagiaire illisibles :', e.message); }
     }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx };
+    /* LES RÉPONSES AUX ZONES À REMPLIR (lib/zonesARemplir.js), chiffrées sur le document. Lues ICI, elles
+       entrent dans TOUS les rendus — aperçu, PDF, empreinte de la signature, PDF scellé. Sans la
+       migration 185, aucune : les zones s'impriment en pointillés, comme avant. */
+    let saisies = {};
+    if (documentId) {
+        try {
+            const [[s]] = await conn.query('SELECT saisies FROM generated_document WHERE id = ?', [documentId]);
+            saisies = zonesARemplir.lireSaisies(s && s.saisies);
+        } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+    }
+    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx, saisies };
 }
 
 /* Les jetons d'un modèle, quel que soit son format : éditeur (corps, en-tête, pied) ou Word. */
@@ -424,19 +435,47 @@ function jetonsDuContenu(content) {
  */
 async function consentementsManquants(conn, orgId, doc) {
     if (!doc || !doc.learner_id || doc.status === 'SIGNE' || isEmargDoc(doc)) return [];
-    let slug = doc.template_slug;
-    if (!slug) {
-        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
-        const f = (ctx.formations && ctx.formations[0]) || {};
-        slug = templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
-    }
-    const content = slug ? await getTemplateContent(orgId, slug) : null;
+    const content = await contenuDuModele(conn, orgId, doc);
     const finalites = consentements.finalitesDesJetons(jetonsDuContenu(content));
     if (!finalites.length) return [];
     const etat = await consentements.etatCourant(conn, orgId, doc.learner_id);
     if (!etat) return [];
     // Dans l'ordre du document, pas dans celui du registre (cf. finalitesDesJetons).
     return finalites.map((c) => etat.find((f) => f.cle === c)).filter((f) => f && f.accorde === null);
+}
+
+/** Le modèle d'un document : celui qu'il a retenu, sinon celui que sa formation désigne. */
+async function contenuDuModele(conn, orgId, doc) {
+    let slug = doc.template_slug;
+    if (!slug) {
+        const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
+        const f = (ctx.formations && ctx.formations[0]) || {};
+        slug = templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+    }
+    return slug ? getTemplateContent(orgId, slug) : null;
+}
+
+/** Les zones à remplir que porte le modèle d'un document (lib/zonesARemplir.js) — [] pour un émargement ou un fichier. */
+async function zonesDuDocument(conn, orgId, doc) {
+    if (!doc || isEmargDoc(doc)) return [];
+    const content = await contenuDuModele(conn, orgId, doc);
+    return content && content.kind === 'builder' ? zonesARemplir.zonesDuHtml(content.html, content.header, content.footer) : [];
+}
+
+/**
+ * LES ZONES ENCORE VIDES D'UN DOCUMENT QUE LE STAGIAIRE VA SIGNER. Décidé par l'école le 2026-09-28 :
+ * TOUTES obligatoires — une attestation aux blancs ne prouve rien. Chaque route qui signe pour le
+ * stagiaire le vérifie. Rien à exiger d'un document signé (figé), ni sans la migration 185 : la
+ * réponse ne pourrait pas s'enregistrer, et bloquer ferait pire qu'imprimer des pointillés, comme avant.
+ */
+async function zonesManquantesDuDocument(conn, orgId, doc) {
+    if (!doc || doc.status === 'SIGNE') return [];
+    const zones = await zonesDuDocument(conn, orgId, doc);
+    if (!zones.length) return [];
+    let ligne;
+    try { [[ligne]] = await conn.query('SELECT saisies FROM generated_document WHERE id = ?', [doc.id]); }
+    catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') return []; throw e; }
+    return zonesARemplir.zonesManquantes(zones, zonesARemplir.lireSaisies(ligne && ligne.saisies));
 }
 
 /* « Diffuser des photos… » et « Transmettre mes coordonnées… » : ce qui manque, dit en clair. */
@@ -906,12 +945,26 @@ const getDocument = async (req, res) => {
         /* LE STAGIAIRE LUI-MÊME ? Lui seul peut répondre — une réponse donnée à sa place ne vaudrait
            rien. L'écran lui pose donc la question, et se contente de PRÉVENIR tout autre lecteur :
            le personnel, ou le représentant d'une entreprise. */
-        let peutRepondre = false;
-        if (questions.length) {
+        /* LES ZONES À REMPLIR (lib/zonesARemplir.js) : l'écran les propose AVANT la signature. Décidé par
+           l'école le 2026-09-28 : le stagiaire les remplit, ou le bureau pour lui (au bureau, au
+           téléphone) — les trois rôles qui peuvent signer à sa place (`signDocument`). Une lecture qui
+           échoue n'empêche pas d'afficher le document : la signature refera le contrôle. */
+        let zones = [];
+        if (!importe && !modele_fichier) {
+            try { zones = await zonesDuDocument(conn, doc.organization_id, doc); }
+            catch (e) { console.error('Zones du document illisibles :', e.message); }
+        }
+        const saisiesPossibles = Object.prototype.hasOwnProperty.call(doc, 'saisies'); // migration 185 : `SELECT *` la rend
+        const saisies = zonesARemplir.lireSaisies(doc.saisies);
+        let estProprio = false;
+        if (questions.length || zones.length) {
             const [[proprio]] = await conn.query(
                 'SELECT user_id FROM learner WHERE id = ? AND organization_id = ?', [doc.learner_id, doc.organization_id]);
-            peutRepondre = !!(proprio && proprio.user_id && proprio.user_id === req.user.id);
+            estProprio = !!(proprio && proprio.user_id && proprio.user_id === req.user.id);
         }
+        const peutRepondre = questions.length > 0 && estProprio;
+        const peutRemplir = zones.length > 0 && saisiesPossibles && doc.status !== 'SIGNE'
+            && (estProprio || ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT'].includes(req.user.role));
         // Signature stagiaire pilotée par le modèle (Modeles de document : stagiaire_sign).
         const orgSteps = await loadOrgSteps(doc.organization_id);
         // Document dont la signature incombe à l'entreprise : pas signable par le stagiaire.
@@ -949,6 +1002,11 @@ const getDocument = async (req, res) => {
                     destinataires: f.destinataires, titreDestinataires: f.titreDestinataires,
                 })),
                 peut_repondre: peutRepondre,
+                // Les zones à remplir avant de signer, avec leur réponse s'il y en a une.
+                zones_a_remplir: zones.map((z) => ({ cle: z.cle, type: z.type, libelle: z.libelle, valeur: saisies[z.cle] || '' })),
+                peut_remplir: peutRemplir,
+                remplit_pour_le_stagiaire: peutRemplir && !estProprio, // le bureau, pour lui
+                zones_indisponibles: zones.length > 0 && !saisiesPossibles, // migration 185 non jouée
             },
         });
     } catch (err) {
@@ -1570,6 +1628,17 @@ const signDocument = async (req, res) => {
             });
         }
 
+        /* LES ZONES À REMPLIR, TOUTES (décidé par l'école le 2026-09-28) : l'écran ne propose de signer
+           qu'une fois remplies, mais c'est ici que la règle tient — un envoi direct ne la contourne pas. */
+        const zonesVides = await zonesManquantesDuDocument(conn, req.user.organization_id, rows[0]);
+        if (zonesVides.length) {
+            const deux = zonesVides.length > 1;
+            return res.status(422).json({
+                message: `Complétez d'abord ${zonesARemplir.libellesEnClair(zonesVides)}\u00a0: ${deux ? 'ces informations s\'impriment' : 'cette information s\'imprime'} sur le document.`,
+                zones: zonesVides.map((z) => z.cle),
+            });
+        }
+
         await applyLearnerSignature(conn, req.user.organization_id, rows[0], {
             signerName: signer_name, signatureData: signature_data,
             ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
@@ -1582,6 +1651,50 @@ const signDocument = async (req, res) => {
         res.status(200).json({ success: true, message: 'Document signé' });
     } catch (err) {
         console.error('Erreur signature document :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PUT /api/documents/:id/saisies — les réponses aux zones à remplir (lib/zonesARemplir.js).
+ * Corps : { valeurs: { 'saisie:texte:entreprise': 'Pizzeria Da Mario', 'saisie:date:debut': '2019-03-01' } }.
+ *
+ * Le stagiaire lui-même, ou le bureau pour lui (décidé par l'école le 2026-09-28) — les mêmes que
+ * `signDocument`. Les réponses REMPLACENT les précédentes : l'écran envoie le formulaire entier. Signé,
+ * le document les fige (409). Chiffrées au repos : c'est le parcours professionnel de quelqu'un.
+ */
+const enregistrerSaisies = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [rows] = await conn.query(
+            `SELECT d.* FROM generated_document d
+             LEFT JOIN learner l ON l.id = d.learner_id
+             WHERE d.id = ? AND d.organization_id = ?
+               AND (l.user_id = ? OR ? IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT'))`,
+            [req.params.id, req.user.organization_id, req.user.id, req.user.role]
+        );
+        const doc = rows[0];
+        if (!doc) return res.status(403).json({ message: 'Document non autorisé.' });
+        if (doc.status === 'SIGNE') return res.status(409).json({ message: 'Ce document est signé : ses réponses ne changent plus.' });
+        if (!Object.prototype.hasOwnProperty.call(doc, 'saisies')) {
+            return res.status(503).json({ message: 'Les zones à remplir ne sont pas encore disponibles (migration 185 non jouée).' });
+        }
+        const zones = await zonesDuDocument(conn, req.user.organization_id, doc);
+        if (!zones.length) return res.status(422).json({ message: 'Ce document n\'a aucune zone à remplir.' });
+        const { valeurs, erreurs } = zonesARemplir.normaliserSaisies(zones, (req.body || {}).valeurs);
+        if (erreurs.length) return res.status(422).json({ message: erreurs.join(' ') });
+        const [maj] = await conn.query("UPDATE generated_document SET saisies = ? WHERE id = ? AND status <> 'SIGNE'",
+            [zonesARemplir.ecrireSaisies(valeurs), doc.id]);
+        // Signé entre la lecture et l'écriture (un autre onglet) : rien n'a été réécrit.
+        if (!maj || !maj.affectedRows) return res.status(409).json({ message: 'Ce document est signé : ses réponses ne changent plus.' });
+        logAudit(req, 'document.saisies', 'GeneratedDocument', doc.id);
+        const restent = zonesARemplir.zonesManquantes(zones, valeurs).length;
+        res.json({
+            message: restent ? `Enregistré. ${restent} zone${restent > 1 ? 's restent' : ' reste'} à remplir avant de signer.` : 'Enregistré : le document peut être signé.',
+            data: { zones_a_remplir: zones.map((z) => ({ cle: z.cle, type: z.type, libelle: z.libelle, valeur: valeurs[z.cle] || '' })) },
+        });
+    } catch (err) {
+        console.error('Erreur zones à remplir :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -1747,4 +1860,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, loadSignedPdf, fichierPourArchive };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };

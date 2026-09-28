@@ -6,6 +6,7 @@ import { dateHeure, dateFr } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 import QuestionsConsentement from "./QuestionsConsentement.jsx";
+import ZonesARemplir from "./ZonesARemplir.jsx";
 import { pingAcces } from "../lib/gamification.js";
 
 /**
@@ -83,7 +84,11 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
   /* LES QUESTIONS QUE CE DOCUMENT IMPRIME, sans réponse encore (photos, partenaires). Tant qu'il en
      reste, pas de bouton « Signer » : le serveur refuserait, et le document signé ne dirait rien. */
   const questions = doc?.questions_consentement || [];
-  const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE" && !questions.length;
+  /* LES ZONES À REMPLIR, toutes obligatoires (décidé par l'école le 2026-09-28) : même règle que les
+     questions, le bouton « Signer » attend qu'elles soient remplies. */
+  const zones = doc?.zones_a_remplir || [];
+  const zonesVides = zones.filter((z) => !z.valeur);
+  const showSign = canSign && doc && doc.signable && doc.status !== "SIGNE" && !questions.length && !zonesVides.length;
 
   // Lien de signature pour un signataire EXTERNE (tuteur, financeur…) — action du personnel.
   async function externalLink() {
@@ -129,6 +134,24 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
               </span>
             </p>
           ))}
+          {/* LES ZONES À REMPLIR : le stagiaire, ou le bureau pour lui (`peut_remplir`, dit par le serveur).
+              Tout autre lecteur est prévenu de ce qui manque ; signé, le document les montre figées. */}
+          {zones.length > 0 && doc.status !== "SIGNE" && (doc.peut_remplir ? (
+            <ZonesARemplir documentId={id} zones={zones} pourLeStagiaire={!!doc.remplit_pour_le_stagiaire} onEnregistre={recharger} />
+          ) : doc.zones_indisponibles ? (
+            <p className="doc-attente">
+              <Icon name="clock" size={14} aria-hidden="true" />
+              <span>Ce document porte des zones à remplir, pas encore disponibles en ligne (migration 185 non jouée) : elles s'impriment en pointillés.</span>
+            </p>
+          ) : zonesVides.length > 0 ? (
+            <p className="doc-attente">
+              <Icon name="clock" size={14} aria-hidden="true" />
+              <span>
+                En attente {zonesVides.length > 1 ? "des informations" : "de l'information"} du stagiaire : {zonesVides.map((z) => `«\u00a0${z.libelle}\u00a0»`).join(", ")}.
+                {" "}Ce document ne se signe qu'une fois {zonesVides.length > 1 ? "remplies" : "remplie"}.
+              </span>
+            </p>
+          ) : null)}
           {doc && doc.org_signable && (
             <div style={{ padding: "6px 14px", fontSize: 12, background: doc.org_signed ? "rgba(22,163,74,.08)" : "rgba(184,134,11,.10)", borderBottom: "1px solid var(--border-soft)" }}>
               {doc.org_signed

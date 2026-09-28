@@ -125,7 +125,8 @@ export function jetonConnu(key) {
   const k = String(key || "");
   // Registre vide (palette non chargée) : on ne sait rien, on n'accuse rien.
   if (!Object.keys(KEY_GROUP).length) return true;
-  return k in KEY_GROUP || k.startsWith("sig:") || CLES_DE_BLOC.has(k)
+  // Les zones à remplir par le stagiaire (« saisie:texte:… ») : rendues par le serveur, jamais au catalogue.
+  return k in KEY_GROUP || k.startsWith("sig:") || k.startsWith("saisie:") || CLES_DE_BLOC.has(k)
     || k === "Signature stagiaire" || k === "Signature organisme";
 }
 /** Les puces d'un HTML d'éditeur dont la clé est inconnue : [{ cle, libelle }], sans doublon. */
