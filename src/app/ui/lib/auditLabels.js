@@ -46,6 +46,8 @@ const ACTION_LABEL = {
 
     // Facturation et ventes
     'invoice.create': ['Facture créée', G],
+    // Le modèle et le règlement posés sur un brouillon avant de l'émettre (2026-09-28).
+    'invoice.completer': ['Brouillon de facture complété', A],
     'invoice.facturx': ['Facture Factur-X téléchargée', B],
     'payment.record': ['Paiement enregistré', G],
     'sale.create': ['Vente enregistrée', G],
