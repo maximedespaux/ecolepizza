@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl, supprimerPieceFichier,
+import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl,
   getDossierRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "../components/Card.jsx";
@@ -118,22 +118,6 @@ function StudentFormationDetail() {
     }
   }
 
-  /* RETIRER UN FICHIER, UN SEUL (demandé le 2026-09-28) — un scan flou, une page en trop, le fichier
-     refusé : le stagiaire l'enlève sans tout renvoyer. Il ne pouvait RIEN retirer : arrivé à six
-     fichiers sur six, ou refusé sur une pièce à un seul fichier, il restait bloqué, le serveur
-     répondant « retirez-en un avant d'en ajouter un autre ». Permis tant que l'école n'a pas
-     VALIDÉ la pièce — le serveur l'applique : validée, elle fait foi, et seule l'école la retire.
-     Suppression définitive d'une copie chiffrée, d'où la confirmation. Le dernier fichier
-     retiré, la pièce redevient « à fournir ». */
-  async function retirerFichier(f, pieceLabel) {
-    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${pieceLabel} » ?\nIl sera supprimé définitivement.`)) return;
-    try {
-      await supprimerPieceFichier(f.id);
-      setStatus({ type: "success", message: `« ${f.nom || "Le fichier"} » est retiré.` });
-      load();
-    } catch (err) { setStatus({ type: "error", message: err.message }); }
-  }
-
   /* CONFIRMER, C'EST S'ENGAGER — donc on demande. Le clic produit une preuve horodatée que
      l'école pourra opposer lors d'un contrôle ; la phrase dit exactement ce qu'on signe, et
      invite à ouvrir le document d'abord. Un « oui » donné par réflexe sur un document jamais
@@ -158,10 +142,7 @@ function StudentFormationDetail() {
     const etat = PIECE_ETAT[p.statut] || "todo";
     const nb = p.fichiers?.length || 0;
     const max = Math.max(1, Number(p.fichiers_attendus) || 1);
-    /* …ET PLUS RIEN AU PLAFOND, même refusée (2026-09-28) : « Renvoyer » sur une pièce qui a déjà ses
-       six fichiers ne pouvait que se faire refuser (409). Le stagiaire retire d'abord le fichier en
-       cause — il a sa corbeille, par fichier —, et le bouton revient. */
-    return { kind: "piece", key: `p-${p.piece_type_id}`, p, etat, nb, max, peutAjouter: etat !== "done" && nb < max };
+    return { kind: "piece", key: `p-${p.piece_type_id}`, p, etat, nb, max, peutAjouter: etat === "wait" && nb < max };
   });
   /* « SIGNÉ OU PAS » NE SUFFISAIT PAS : un livret d'accueil, qui n'a aucun signataire, restait
      « À signer » et « à faire » pour toujours — et prenait la pastille « À faire » à l'étape qui
@@ -289,19 +270,12 @@ function StudentFormationDetail() {
                                 <Icon name="eye" size={14} /> Voir
                               </button>
                             )}
-                            {e.p.fichiers?.length === 1 && e.p.statut !== "VALIDEE" && (
-                              <button className="btn sm ghost danger"
-                                aria-label={`Retirer ${e.p.fichiers[0].nom || "le fichier"} de ${e.p.label}`}
-                                onClick={() => retirerFichier(e.p.fichiers[0], e.p.label)}>
-                                <Icon name="trash" size={14} />
-                              </button>
-                            )}
                             {/* AJOUTER TANT QUE C'EST OUVERT : à fournir (aucun fichier), refusé
                                 (à renvoyer), ou déposé mais pas encore au plafond (`peutAjouter`).
                                 Une fois validé — ou le plafond atteint — plus de bouton. */}
-                            {e.peutAjouter && (
+                            {(e.etat === "todo" || e.etat === "refused" || e.peutAjouter) && (
                               <button className="btn sm primary" onClick={() => choisirFichier(e.p.piece_type_id, e.p.fichiers_attendus)}>
-                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : e.nb > 0 ? "Ajouter" : "Fournir"}
+                                <Icon name="upload" size={14} /> {e.etat === "refused" ? "Renvoyer" : e.peutAjouter ? "Ajouter" : "Fournir"}
                               </button>
                             )}
                           </div>
@@ -317,24 +291,11 @@ function StudentFormationDetail() {
                                     onClick={() => window.open(pieceFichierUrl(f.id), "_blank", "noopener")}>
                                     <Icon name="eye" size={13} /> Voir
                                   </button>
-                                  {e.p.statut !== "VALIDEE" && (
-                                    <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
-                                      aria-label={`Retirer ${f.nom || `le fichier ${k + 1}`} de ${e.p.label}`}
-                                      onClick={() => retirerFichier(f, e.p.label)}>
-                                      <Icon name="trash" size={13} />
-                                    </button>
-                                  )}
                                 </div>
                               ))}
                             </div>
                           )}
                           {e.p.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.p.consigne}</p>}
-                          {e.etat === "refused" && !e.peutAjouter && (
-                            <p className="hint" style={{ margin: "4px 0 0" }}>
-                              {e.max > 1 ? `${e.max} fichiers au maximum : retirez d'abord celui ou ceux à remplacer` : "Retirez d'abord ce fichier"}
-                              {" "}(<Icon name="trash" size={11} />), puis renvoyez.
-                            </p>
-                          )}
                           {e.etat === "refused" && e.p.motif_refus && (
                             <p className="hint" style={{ margin: "4px 0 0", color: "var(--red, #c0392b)" }}>
                               <Icon name="x" size={12} /> Refusé&nbsp;: {e.p.motif_refus} — merci d'en envoyer un nouveau.

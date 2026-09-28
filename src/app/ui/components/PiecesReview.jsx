@@ -45,9 +45,17 @@ export default function PiecesReview({ enrollmentId, refresh }) {
      quand une seule page est en trop ou illisible, on l'enlève sans obliger le stagiaire à tout
      redéposer. Suppression définitive — c'est la purge manuelle d'une copie chiffrée (cf. la règle
      de conservation des pièces, CLAUDE.md) —, d'où la confirmation. Si c'était le dernier fichier,
-     le serveur remet la pièce « à fournir ». */
-  async function retirerFichier(f, pieceLabel) {
-    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${pieceLabel} » ?\nLa suppression est définitive.`)) return;
+     le serveur remet la pièce « à fournir ».
+
+     PIÈCE VALIDÉE COMPRISE (2026-09-28). Une pièce déposée PAR L'ÉCOLE est validée du même geste
+     (piece.controller, `deposer`) : un fichier joint par erreur — le mauvais scan, un doublon —
+     ne pouvait plus s'enlever, la corbeille était cachée sur toute pièce validée. Le retrait ne
+     touche pas à la validation, sauf pour le DERNIER fichier : la confirmation dit lequel des deux. */
+  async function retirerFichier(f, p) {
+    const suite = (p.fichiers || []).length <= 1
+      ? "\nC'est son dernier fichier : la pièce redeviendra « à fournir »."
+      : p.statut === "VALIDEE" ? "\nLa pièce reste validée." : "";
+    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${p.label} » ?${suite}\nLa suppression est définitive.`)) return;
     try { await supprimerPieceFichier(f.id); setErreur(null); load(); }
     catch (e) { setErreur(e.message); }
   }
@@ -102,17 +110,14 @@ export default function PiecesReview({ enrollmentId, refresh }) {
                         onClick={() => window.open(pieceFichierUrl(f.id), "_blank", "noopener")}>
                         <Icon name="eye" size={13} /> Voir
                       </button>
-                      {/* RETIRER CE FICHIER SEUL — le geste demandé : enlever une page sans vider
-                          toute la pièce. PAS UNE FOIS VALIDÉE : une pièce acceptée est figée, on ne
-                          la rogne pas d'un fichier en douce (le serveur l'autoriserait au personnel,
-                          mais l'écran ne l'offre plus — pour la corriger, on la refuse d'abord). */}
-                      {p.statut !== "VALIDEE" && (
-                        <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
-                          aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
-                          onClick={() => retirerFichier(f, p.label)}>
-                          <Icon name="trash" size={13} />
-                        </button>
-                      )}
+                      {/* RETIRER CE FICHIER SEUL — enlever une page sans vider toute la pièce, VALIDÉE
+                          COMPRISE (2026-09-28) : une pièce que l'école dépose elle-même est validée
+                          d'emblée, et un fichier joint par erreur n'avait plus de corbeille. */}
+                      <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
+                        aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${p.label}`}
+                        onClick={() => retirerFichier(f, p)}>
+                        <Icon name="trash" size={13} />
+                      </button>
                     </div>
                   ))}
                 </div>

@@ -20,15 +20,13 @@ const page = fs.readFileSync(path.join(API, '..', 'app', 'ui', 'pages', 'Student
 const ctrl = fs.readFileSync(path.join(API, 'controllers', 'piece.controller.js'), 'utf8');
 
 test('l\'écran laisse ajouter tant que déposé ET sous le plafond', () => {
-    /* La règle vit dans l'étape : PAS VALIDÉE, et place restante. Validé → plus rien ; plafond atteint
-       → plus rien, MÊME REFUSÉE (2026-09-28) : « Renvoyer » sur une pièce à six fichiers sur six ne
-       pouvait que se faire refuser (409). Le stagiaire retire d'abord un fichier (sa corbeille,
-       piece-retrait-stagiaire.test.js), et le bouton revient. */
-    assert.match(page, /peutAjouter: etat !== "done" && nb < max/);
-    /* Le bouton apparaît quand un ajout est possible — à fournir, à renvoyer, ou à compléter. */
-    assert.match(page, /\{e\.peutAjouter && \(/);
+    /* La règle vit dans l'étape : déposé (« wait »), et place restante. Validé → plus de place ;
+       plafond atteint → plus de place. */
+    assert.match(page, /peutAjouter: etat === "wait" && nb < max/);
+    /* Le bouton apparaît pour : à fournir, à renvoyer, OU ajout possible. */
+    assert.match(page, /\(e\.etat === "todo" \|\| e\.etat === "refused" \|\| e\.peutAjouter\)/);
     /* Et son libellé distingue les trois gestes — « Ajouter » n'est pas « Fournir ». */
-    assert.match(page, /e\.etat === "refused" \? "Renvoyer" : e\.nb > 0 \? "Ajouter" : "Fournir"/);
+    assert.match(page, /e\.etat === "refused" \? "Renvoyer" : e\.peutAjouter \? "Ajouter" : "Fournir"/);
     /* COMBIEN SUR COMBIEN : sans ce repère, le stagiaire ignore combien il peut encore en joindre. */
     assert.match(page, /\{e\.nb\} sur \{e\.max\} déposé/);
     /* `max` est BORNÉ À 1 AU MINIMUM : une pièce sans `fichiers_attendus` explicite en attend un. */

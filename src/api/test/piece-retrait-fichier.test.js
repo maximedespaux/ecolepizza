@@ -18,14 +18,19 @@ const lireUi = (f) => fs.readFileSync(path.join(API, '..', 'app', 'ui', f), 'utf
 test('l\'écran de revue retire un fichier à la fois', () => {
     const rev = lireUi('components/PiecesReview.jsx');
     /* Un bouton PAR fichier, dans la ligne du fichier — pas une action sur toute la pièce. */
-    assert.match(rev, /onClick=\{\(\) => retirerFichier\(f, p\.label\)\}/);
+    assert.match(rev, /onClick=\{\(\) => retirerFichier\(f, p\)\}/);
     assert.match(rev, /aria-label=\{`Retirer \$\{f\.nom \|\| `le fichier \$\{i \+ 1\}`\} de \$\{p\.label\}`\}/);
     /* SUPPRESSION DÉFINITIVE (purge d'une copie chiffrée) → confirmation obligatoire. */
     assert.match(rev, /window\.confirm\(`Retirer/);
     assert.match(rev, /await supprimerPieceFichier\(f\.id\)/);
-    /* PAS DE CORBEILLE SUR UNE PIÈCE VALIDÉE : une pièce acceptée est figée à l'écran (pour la
-       corriger, on la refuse d'abord). */
-    assert.match(rev, /\{p\.statut !== "VALIDEE" && \(\s*<button className="btn sm ghost danger"/);
+    /* UNE CORBEILLE SUR UNE PIÈCE VALIDÉE AUSSI (2026-09-28). Elle en était retirée — « une pièce
+       acceptée est figée » —, mais une pièce que l'ÉCOLE dépose est validée du même geste : un
+       fichier joint par erreur ne s'enlevait plus. La confirmation dit ce qui arrive : la pièce reste
+       validée, sauf si c'était son dernier fichier (le serveur la remet « à fournir »). */
+    assert.doesNotMatch(rev, /\{p\.statut !== "VALIDEE" && \(\s*<button className="btn sm ghost danger"/,
+        'la corbeille ne dépend plus du statut de la pièce');
+    assert.match(rev, /"\\nLa pièce reste validée\."/);
+    assert.match(rev, /C'est son dernier fichier : la pièce redeviendra « à fournir »\./);
     /* Le client API vise le FICHIER, pas le dépôt. */
     const api = lireUi('api/apiClient.js');
     assert.match(api, /supprimerPieceFichier\(fichierId\) \{ return request\(`\/pieces\/fichier\/\$\{fichierId\}`, \{ method: "DELETE" \}\)/);

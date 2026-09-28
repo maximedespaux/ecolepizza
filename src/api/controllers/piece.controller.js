@@ -297,7 +297,8 @@ const deposer = async (req, res) => {
         /* LE PLAFOND EST APPLIQUÉ ICI, pas seulement affiché. Le refus nomme le nombre attendu :
          * « 1 fichier au maximum » se comprend, « trop de fichiers » oblige à deviner. Il dit
          * aussi comment s'en sortir — retirer avant d'ajouter — parce que c'est le geste que
-         * personne ne trouve seul (le stagiaire a sa corbeille, par fichier, depuis le 2026-09-28).
+         * personne ne trouve seul. Ce geste appartient à l'ÉCOLE (le stagiaire n'a pas de corbeille,
+         * décidé le 2026-09-28) : à lui, on dit de le lui demander.
          *
          * ET AVANT TOUTE ÉCRITURE (2026-09-28). Le contrôle venait APRÈS la mise à jour du dépôt :
          * un envoi refusé pour cause de plafond avait déjà remis la pièce « à vérifier » et EFFACÉ
@@ -312,7 +313,7 @@ const deposer = async (req, res) => {
             if (dejaN.n >= max) {
                 return res.status(409).json({
                     message: `« ${pt?.label || 'Cette pièce'} » accepte ${max} fichier${max > 1 ? 's' : ''} au maximum. `
-                        + 'Retirez-en un avant d\'en ajouter un autre.',
+                        + (staff ? 'Retirez-en un avant d\'en ajouter un autre.' : 'Demandez à l\'école de retirer celui à remplacer.'),
                 });
             }
         }
