@@ -898,6 +898,8 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Calendrier (vue mois) --------------------------------------------- */
 .cal-toolbar{display:flex;align-items:center;gap:10px;margin:4px 0 16px;flex-wrap:wrap}
+/* Pourquoi le calendrier s'ouvre sur ce mois (2026-09-28) : une ligne, sous la barre, collée à elle. */
+.cal-ouverture{margin:-8px 0 12px}
 .cal-title{font-family:var(--font-d);font-size:20px;text-transform:capitalize;min-width:170px;margin:0}
 /* `minmax(0,1fr)` ET NON `1fr` : un `1fr` seul a pour MINIMUM la largeur de son contenu. Les
    puces de session ne passent pas à la ligne (« RS7404 » + le nombre d'inscrits), si bien que sur

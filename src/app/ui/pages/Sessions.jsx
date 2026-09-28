@@ -9,6 +9,7 @@ import { SelectField, Field } from "../components/Field.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { colorOf, initials } from "../lib/format.js";
 import { MONTHS, DOW, monthMatrix, ymd, isWeekend, inRange, isToday, isoWeek } from "../lib/calendar.js";
+import { ouvertureDuCalendrier } from "../lib/ouvertureCalendrier.js";
 
 function Sessions() {
   const navigate = useNavigate();
@@ -27,11 +28,19 @@ function Sessions() {
   const [status, setStatus] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ program_id: "", start_date: ymd(now) });
+  /* OÙ LE CALENDRIER S'OUVRE (2026-09-28) : la prochaine session, sauf si la précédente a encore un
+     dossier à finir (lib/ouvertureCalendrier.js). Décidé UNE FOIS, quand les sessions ET les dossiers
+     sont là : ensuite, c'est l'utilisateur qui navigue — recharger les sessions après un ajout ne doit
+     pas le ramener en arrière. Sans les dossiers (réponse refusée), on reste sur le mois du jour. */
+  const [sessionsChargees, setSessionsChargees] = useState(false);
+  const [dossiersCharges, setDossiersCharges] = useState(false);
+  const [ouverture, setOuverture] = useState(null);
 
   async function loadSessions() {
     try {
       const r = await getSessions();
       setSessions(r.data);
+      setSessionsChargees(true);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     }
@@ -41,10 +50,18 @@ function Sessions() {
     loadSessions();
     getFormations().then((r) => setPrograms(r.data)).catch(() => {});
     getLocations().then((r) => setLocations(r.data || [])).catch(() => {});
-    getEnrollments().then((r) => setEnrollments(r.data)).catch(() => {});
+    getEnrollments().then((r) => { setEnrollments(r.data); setDossiersCharges(true); }).catch(() => {});
     // Silencieux : réservé au bureau, et son absence n'empêche pas de lire un planning.
     getConsentsManquants().then((r) => setASolliciter(r.data || {})).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (ouverture || !sessionsChargees || !dossiersCharges) return;
+    const o = ouvertureDuCalendrier(sessions, enrollments, ymd(new Date()));
+    setOuverture(o);
+    const d = new Date(`${o.date}T00:00:00`);
+    setYear(d.getFullYear()); setMonth(d.getMonth());
+  }, [ouverture, sessionsChargees, dossiersCharges, sessions, enrollments]);
 
   // `T00:00:00` : lecture en heure locale, sinon la date recule d'un jour en fuseau négatif.
   const frDate = (d) => (d ? new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");
@@ -234,6 +251,27 @@ function Sessions() {
             Aujourd'hui
           </button>
         </div>
+        {/* POURQUOI CE MOIS-CI : sans un mot, s'ouvrir sur octobre le 28 septembre passerait pour une
+            erreur. Dit tant qu'on regarde le mois choisi, et seulement quand il n'est pas celui du jour. */}
+        {(() => {
+          if (!ouverture || !ouverture.session) return null;
+          const d = new Date(`${ouverture.date}T00:00:00`);
+          if (d.getFullYear() !== year || d.getMonth() !== month) return null;
+          const s = ouverture.session;
+          const quoi = `${s.program_code || "la session"}${s.week ? `, semaine ${s.week}` : ""}`;
+          if (ouverture.raison === "suivante") {
+            return <p className="hint cal-ouverture">Ouvert sur la prochaine session ({quoi}) : les dossiers de la session précédente sont finis.</p>;
+          }
+          if (ouverture.raison === "precedente") {
+            return (
+              <p className="hint cal-ouverture">
+                Ouvert sur la session précédente ({quoi}) : {ouverture.aFinir} dossier{ouverture.aFinir > 1 ? "s" : ""} encore
+                à finir avant de passer à la suivante.
+              </p>
+            );
+          }
+          return null;
+        })()}
 
         {view !== "mois" ? (
           <div className="cal-multi">

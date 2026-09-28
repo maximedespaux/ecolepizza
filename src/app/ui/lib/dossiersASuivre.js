@@ -21,6 +21,14 @@ export const DERNIERS_DOSSIERS = 6;
 const pourcent = (x) => Number(x.percent) || 0;
 
 /**
+ * UN DOSSIER QUI RESTE À FINIR, sa session passée : sous 100 %, un parcours non vide, et un stagiaire
+ * venu (point de rupture franchi) — cf. `dossiersASuivre` ci-dessous, qui dit pourquoi chacune des
+ * trois conditions. Exportée pour le calendrier des sessions (2026-09-28), qui ne passe à la session
+ * suivante qu'une fois la précédente finie : les deux écrans disent la même chose d'un même dossier.
+ */
+export const resteAFinir = (x) => (Number(x.total) || 0) > 0 && pourcent(x) < 100 && x.point_franchi === true;
+
+/**
  * TABLEAU DE BORD — les dossiers à suivre et, parmi eux, ceux de la carte.
  *
  * Un dossier d'une session TERMINÉE reste à suivre s'il n'est pas à 100 % ET que le stagiaire a
@@ -43,8 +51,7 @@ const pourcent = (x) => Number(x.percent) || 0;
  *          ligne marquée `echu` quand elle n'y est que parce qu'elle reste à finir.
  */
 export function dossiersASuivre(enr, actives, estPassee) {
-    const echu = (x) => !actives.has(x.session_id) && estPassee(x)
-        && (Number(x.total) || 0) > 0 && pourcent(x) < 100 && x.point_franchi === true;
+    const echu = (x) => !actives.has(x.session_id) && estPassee(x) && resteAFinir(x);
     const aSuivre = (enr || []).filter((x) => actives.has(x.session_id) || echu(x));
     /* L'ORDRE DIT CE QUI PRESSE, et il se fait AVANT la coupe : l'incomplet d'une session terminée
        (en retard), puis l'incomplet en cours, puis le complet. Coupée d'abord, la liste gardait les
