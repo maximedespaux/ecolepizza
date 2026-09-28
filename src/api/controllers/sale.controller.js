@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { loadOrgSteps } = require('./template.controller.js');
+const { modeleDuReglement } = require('../lib/moyensPaiement.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
@@ -421,7 +422,11 @@ const checkout = async (req, res) => {
         const hasInvSplit = await hasColumn(conn, 'invoice', 'payment_split');
         // Modèle de facture CHOISI dans le panier (obligatoire côté caisse). Figé sur la facture.
         const hasInvTemplate = await hasColumn(conn, 'invoice', 'template_slug');
-        const templateSlug = String(req.body.invoice_template_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') || null;
+        /* Sans choix, celui du PREMIER moyen de paiement (Facturation → Moyens de paiement, 187) :
+           l'écran le pré-sélectionne déjà, le serveur tient la même règle pour qui ne l'envoie pas. */
+        const templateSlug = String(req.body.invoice_template_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+            || (hasInvTemplate ? await modeleDuReglement(conn, orgId, parts, req.body.payment_method) : null)
+            || null;
         // Échéance : date de règlement (YYYY-MM-DD) saisie en caisse, ou rien. `due_date` est une
         // colonne de base — on l'écrit toujours ; NULL = paiement à réception, comportement actuel.
         const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.due_date || '')) ? req.body.due_date : null;

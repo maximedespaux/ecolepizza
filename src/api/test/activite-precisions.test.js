@@ -389,7 +389,7 @@ test('« Document signé (Devis particulier) » : le libellé et ce qu\'il dési
     assert.strictEqual(avecObjets('Stagiaire ajouté', []), 'Stagiaire ajouté');
     // Deux parenthèses de suite se lisaient mal : « en PDF », et un deux-points pour le reste.
     assert.strictEqual(auditLabel('document.pdf', 'GeneratedDocument').label, 'Document généré en PDF');
-    assert.strictEqual(avecObjets('Publication supprimée (modération)', ['Ma pâte']), 'Publication supprimée (modération) : Ma pâte');
+    assert.strictEqual(avecObjets('Publication supprimée (modération)', ['Ma pâte']), 'Publication supprimée (modération)\u00a0: Ma pâte');
     assert.doesNotMatch(avecObjets('X (y)', ['z']), /[—–]/, 'pas de tiret long dans l\'interface (commit 5bc392e4)');
     // Quatre noms en entier ; au-delà, trois et le compte — jamais « et 1 autre ».
     assert.strictEqual(listeCourte(['A', 'B', 'C', 'D']), 'A, B, C, D');

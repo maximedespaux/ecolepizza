@@ -44,6 +44,8 @@ const SECTION_BY_BASE = {
        déléguable — jamais un trou de sécurité, mais un écran qui « ne marche pas ». */
     conditions: '/modeles', 'emargement-templates': '/modeles', equivalences: '/modeles',
     emetteurs: '/reglages-facturation', community: '/communaute',
+    // La liste des moyens de paiement se tient au même endroit que les entités (migration 187).
+    'moyens-paiement': '/reglages-facturation',
     /* ÉQUIPE ET RÔLES, en LECTURE SEULE (cf. SECTIONS_LECTURE_SEULE). Elles manquaient ici, si
        bien qu'accorder « Rôles d'accès » à un secrétariat depuis l'écran ne débloquait rien :
        l'API répondait « Accès refusé » sur le seul rôle. Le menu promettait, le serveur

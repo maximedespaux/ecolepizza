@@ -12,6 +12,7 @@
 
 const db = require('../config/database.js');
 const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
+const { modeleDuReglement } = require('../lib/moyensPaiement.js');
 
 /* Colonnes de `invoice` arrivées par migration. Écrire une colonne absente ferait échouer
  * l'INSERT ENTIER : on perdrait la facture pour un choix facultatif d'émettrice ou de modèle. */
@@ -269,7 +270,9 @@ const invoiceShopRequest = async (req, res) => {
         await ajouter('payment_split', ventilation);
         await ajouter('due_date', echeance);
         await ajouter('billing_profile_id', emetteur ? emetteur.id : null);
-        await ajouter('template_slug', slugChoisi);
+        /* Sans choix (« Automatique »), le modèle du PREMIER moyen de paiement (187), puis la règle
+           de l'acheteur à l'édition — la même que la caisse. */
+        await ajouter('template_slug', slugChoisi || await modeleDuReglement(conn, orgId, parts, req.body?.payment_method));
         await ajouter('company_id', versEntreprise ? r.company_id : null);
         await conn.query(
             `INSERT INTO invoice (${ic.join(', ')}) VALUES (uuid(), ${ic.slice(1).map(() => '?').join(', ')})`,

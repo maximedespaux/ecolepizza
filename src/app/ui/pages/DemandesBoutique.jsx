@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -7,7 +7,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import { euro, dateFr, initials } from "../lib/format.js";
-import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, getEmitters, getTemplates, getShopSettings } from "../api/apiClient.js";
+import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, getEmitters, getTemplates, getMoyensPaiement } from "../api/apiClient.js";
 
 // Créneau de retrait en clair (« lundi 27 juillet »), comme côté stagiaire : une date
 // ISO nue se relit mal quand on prépare les commandes de la journée.
@@ -229,8 +229,20 @@ function FacturerModal({ d, busy, onClose, onValider }) {
   const [modeles, setModeles] = useState([]);
   const [emetteurId, setEmetteurId] = useState("");
   const [slug, setSlug] = useState("");
+  /* Les moyens de paiement de l'école, chacun avec son modèle (Facturation → Moyens de paiement,
+     187). Ils se lisaient dans les anciens réglages boutique, que plus aucun écran ne modifie : un
+     moyen ajouté sur une entité n'apparaissait donc jamais ici. */
   const [moyens, setMoyens] = useState([]);
   const [paiements, setPaiements] = useState([{ method: "", amount: "" }]);
+  /* LE PREMIER MOYEN PRÉ-SÉLECTIONNE SON MODÈLE, comme à la caisse — s'il est un modèle FACTURE
+     actif. Changer de moyen le propose de nouveau ; saisir un montant ne défait rien. */
+  const premierMoyen = paiements[0]?.method || "";
+  const modeleDuMoyen = useMemo(() => {
+    const m = moyens.find((x) => x.libelle === premierMoyen);
+    const lie = (m && m.template_slug) || "";
+    return lie && modeles.some((t) => t.slug === lie) ? lie : "";
+  }, [moyens, premierMoyen, modeles]);
+  useEffect(() => { if (modeleDuMoyen) setSlug(modeleDuMoyen); }, [modeleDuMoyen]);
   // Total TTC des seules lignes ÉCOLE : c'est ce que l'école encaisse (une ligne partenaire
   // est vendue par le partenaire, cf. invoiceShopRequest).
   const totalTtc = (d.lines || [])
@@ -252,10 +264,10 @@ function FacturerModal({ d, busy, onClose, onValider }) {
       setEmetteurs(l);
       setEmetteurId((l.find((e) => e.is_default) || {}).id || "");
     }).catch(() => {});
-    getShopSettings().then((r) => {
-      const l = String(r.data?.payment_methods || "").split(",").map((x) => x.trim()).filter(Boolean);
+    getMoyensPaiement().then((r) => {
+      const l = r.data || [];
       setMoyens(l);
-      if (l.length) setPaiements([{ method: l[0], amount: "" }]);
+      if (l.length) setPaiements([{ method: l[0].libelle, amount: "" }]);
     }).catch(() => {});
     getTemplates().then((r) => {
       const l = (r.data || []).filter((t) => String(t.doc_type || "").toUpperCase() === "FACTURE"
@@ -320,14 +332,19 @@ function FacturerModal({ d, busy, onClose, onValider }) {
               choisir un moyen et à taire l'autre. */}
           <div className="field">
             <label>Règlement</label>
-            <PaiementSplit options={moyens} total={totalTtc} rows={paiements} onChange={setPaiements} />
+            <PaiementSplit options={moyens.map((m) => m.libelle)} total={totalTtc} rows={paiements} onChange={setPaiements} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Modèle de facture</label>
             <select className="inp" value={slug} onChange={(e) => setSlug(e.target.value)}>
               <option value="">Choisir automatiquement</option>
-              {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.title || t.slug}</option>)}
+              {/* `label` et non `title` : les modèles n'ont pas de `title`, et la liste
+                  n'affichait que leurs identifiants (« facture-stagiaire »). */}
+              {modeles.map((t) => <option key={t.slug} value={t.slug}>{t.label || t.slug}</option>)}
             </select>
+            {modeleDuMoyen && slug === modeleDuMoyen && (
+              <p className="hint" style={{ margin: "6px 0 0" }}>Choisi d'après le moyen de paiement « {premierMoyen} ».</p>
+            )}
             {!modeles.length && (
               <p className="hint" style={{ margin: "6px 0 0", color: "var(--ember1)" }}>
                 Aucun modèle de type FACTURE actif : la facture ne pourra pas être éditée en PDF.
