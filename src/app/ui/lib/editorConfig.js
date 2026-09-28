@@ -1,13 +1,17 @@
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
-import TextStyle from "@tiptap/extension-text-style";
+// Tiptap 3 : les extensions passent en exports NOMMÉS (plus de export default). text-style et
+// table n'exposent plus de défaut ; les autres gardent un défaut, laissé tel quel.
+import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Link from "@tiptap/extension-link";
 import { ResizableImage } from "./ResizableImage.jsx";
-import Table from "@tiptap/extension-table";
+// Tiptap 3 regroupe la table dans un seul paquet : Table, TableRow, TableHeader, TableCell
+// (les anciens paquets séparés n'exportent plus de défaut). On prend les quatre ici.
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 
 // Tableau avec un style de bordure choisi (solid / dashed / none), sérialisé en data-border
 // + classe. Le rendu PDF réinjecte des bordures EN LIGNE (LibreOffice ignore le CSS).
@@ -51,16 +55,16 @@ const StyledTable = Table.extend({
     };
   },
 });
-import TableRow from "@tiptap/extension-table-row";
-import TableHeader from "@tiptap/extension-table-header";
-import TableCell from "@tiptap/extension-table-cell";
 import { FontSize, LineHeight, PageBreak, Columns, Column } from "./tiptapExtensions.js";
 import { TokenNode } from "./TokenNode.js";
 
 /** Jeu d'extensions partagé par les éditeurs (corps, en-tête, pied de page). */
 export function buildExtensions({ tokens = true } = {}) {
   const ext = [
-    StarterKit,
+    // Tiptap 3 : StarterKit embarque désormais Link et Underline. On les coupe ici pour garder
+    // NOS versions autonomes, configurées juste après (Link sans ouverture au clic, etc.) —
+    // deux extensions de même nom feraient planter l'éditeur (« Duplicate extension names »).
+    StarterKit.configure({ link: false, underline: false }),
     Underline,
     TextStyle,
     Color,
