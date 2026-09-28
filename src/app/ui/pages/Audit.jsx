@@ -8,6 +8,13 @@ import { Squelette } from "../components/Squelette.jsx";
 import { auditLabel, entityLabel } from "../lib/auditLabels.js";
 
 const pad = (n) => String(n).padStart(2, "0");
+
+/* CE QUE LA LIGNE DÉSIGNE (2026-09-28) : « Devis particulier · Jean Dupont », relu par le serveur
+   (lib/precisionsActivite.js). La colonne affichait « Document » à côté de « Document supprimé » :
+   l'entité redisait l'action, et rien ne disait lequel. Le stagiaire qui a agi lui-même n'est pas
+   redit — la colonne de droite le nomme déjà. */
+const designation = (r) => [r.objet, r.stagiaire && !r.stagiaire.soi ? r.stagiaire.nom : null]
+  .filter(Boolean).join(" · ");
 const jourDe = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /* « Aujourd'hui » et « Hier » plutôt qu'une date : dans un journal, ce qu'on cherche d'abord
@@ -84,6 +91,7 @@ function Audit() {
                 </div>
                 {evs.map((r) => {
                   const { label, tone } = auditLabel(r.action, r.entity);
+                  const quoi = designation(r);
                   const who = [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email || "Système";
                   return (
                     /* La couleur porte le TYPE d'action — vert pour ce qui aboutit, tomate pour
@@ -95,7 +103,7 @@ function Audit() {
                       <span className="aud-h chiffres">{String(r.created_at || "").slice(11, 16) || "-"}</span>
                       <span className="aud-pt" aria-hidden="true" />
                       <span className="aud-a">{label}</span>
-                      <span className="aud-e">{entityLabel(r.entity)}</span>
+                      <span className="aud-e" title={quoi || undefined}>{quoi || entityLabel(r.entity)}</span>
                       <span className="aud-q">{who}</span>
                     </div>
                   );

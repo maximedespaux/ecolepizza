@@ -9,6 +9,7 @@ const { createStagiaireAccount } = require('./learner.controller.js');
 const { avancementDossiers } = require('../lib/avancement.js');
 const { logAudit } = require('../lib/audit.js');
 const { planRetrait, executerRetrait } = require('../lib/retraitDossier.js');
+const { libelleSession } = require('../lib/precisionsActivite.js');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -341,9 +342,12 @@ const deleteEnrollment = async (req, res) => {
         if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
         const effacer = req.query.effacer === '1';
         const effaces = await executerRetrait(conn, orgId, e, { effacer });
-        for (const id of effaces.documents) logAudit(req, 'document.delete', 'GeneratedDocument', id);
-        for (const id of effaces.reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id);
-        logAudit(req, 'enrollment.delete', 'Learner', e.learner_id);
+        /* CHAQUE EFFACEMENT NOMMÉ, et la session quittée : le dossier n'existe plus pour les retrouver
+           (migration 186). Le stagiaire, lui, est la fiche même de la ligne « retiré ». */
+        const precisions = (id) => ({ libelle: effaces.libelles[id], stagiaire: e.learner_id });
+        for (const id of effaces.documents) logAudit(req, 'document.delete', 'GeneratedDocument', id, precisions(id));
+        for (const id of effaces.reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id, precisions(id));
+        logAudit(req, 'enrollment.delete', 'Learner', e.learner_id, { libelle: await libelleSession(conn, orgId, e.session_id) });
         res.status(200).json({
             success: true, message: 'Stagiaire retiré',
             effaces: { documents: effaces.documents.length, reponses: effaces.reponses.length },

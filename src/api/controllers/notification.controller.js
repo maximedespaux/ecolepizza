@@ -2,8 +2,10 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { notificationEmail } = require('../lib/mailTemplates.js');
-const { sectionsVisibles, entitesVisibles, sectionDeLEntite, lienDeLEntite, estLu, regrouperConsecutives, estEvenement, SECTION_PAR_ENTITE } = require('../lib/activite.js');
+const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperConsecutives, estEvenement, SECTION_PAR_ENTITE } = require('../lib/activite.js');
 const { aLaCapaciteEnBase } = require('../lib/capacites.js');
+const { preciser } = require('../lib/precisionsActivite.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 
 /* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
    une particularité de la table : une notification d'organisme (`user_id` nul) est UNE ligne
@@ -147,8 +149,14 @@ async function compteActiviteParRole({ orgId, moi, role, navAccess, vue, dormant
 async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
     const entites = entitesDeLActivite({ role, navAccess });
     if (entites.length === 0) return { equipe: [], stagiaire: [] };
+    const conn = db.promise();
+    /* LE NOM FIGÉ DE CE QUI N'EXISTE PLUS (migration 186). Une seule colonne sondée : les deux
+       arrivent par le même ALTER, ensemble ou pas du tout. Sans elles, `NULL` — la ligne se nomme
+       encore par ce qu'elle désigne, tant que ça existe (lib/precisionsActivite.js). */
+    const figes = await colonneExiste(conn, 'audit_log', 'libelle')
+        ? 'a.libelle, a.learner_id' : 'NULL AS libelle, NULL AS learner_id';
 
-    const enPuce = (r) => ({
+    const enPuce = (r, p) => ({
         /* Préfixe `activite:` — l'identifiant vient d'`audit_log`, pas de `notification`. Il ne
            doit jamais être envoyé à « marquer comme lue » : une marque « jusqu'ici » ne sait pas
            dire l'état d'UNE ligne. C'est « Tout marquer comme lu » qui fait avancer la date. */
@@ -168,26 +176,34 @@ async function activiteRecente({ orgId, moi, role, navAccess, vue, dormant }) {
            marche toujours ». Il marchait, en effet : il ne tombait jamais sur une 404. Mais sur
            les cent dernières lignes du journal, quatre-vingt-onze déposaient sur une LISTE — le
            calendrier des sessions pour un émargement précis, l'annuaire complet des stagiaires
-           pour un document précis. Un lien qui marche toujours et n'emmène nulle part. */
-        link: lienDeLEntite(r.entity, r.entity_id),
+           pour un document précis. Un lien qui marche toujours et n'emmène nulle part.
+           Depuis le 2026-09-28, il remonte au PARENT quand la ligne n'a pas de page à elle : un
+           document signé ouvre la fiche de SON stagiaire, un émargement SA session (`lienPrecis`). */
+        link: p.lien,
         /* La rubrique reste, mais pour ce qu'elle est vraiment : une ÉTIQUETTE (« où ça s'est
            passé »), que l'interface affiche à gauche de la ligne. Elle voyage à part depuis
            qu'elle n'est plus le lien — le front la lisait dans `link`, ce qui la faisait
            disparaître dès que le lien devenait précis ou nul. */
         section: sectionDeLEntite(r.entity),
+        /* CE QUE LA LIGNE DÉSIGNE (2026-09-28) : « Document signé » ne disait pas LEQUEL. Le nom de
+           l'objet (« Devis particulier ») et le stagiaire concerné — son nom relu dans sa fiche,
+           `soi` quand c'est lui qui a agi. Des DONNÉES, pas des libellés : l'écran compose la phrase. */
+        objet: p.objet,
+        stagiaire: p.stagiaire,
         is_read: estLu({ quand: r.quand, vue, dormant }) ? 1 : 0,
         created_at: r.created_at,
     });
 
     const lire = async (roleClause) => {
-        const [rows] = await db.promise().query(
-            `SELECT a.id, a.action, a.entity, a.entity_id, a.created_at AS quand,
+        const [rows] = await conn.query(
+            `SELECT a.id, a.action, a.entity, a.entity_id, a.user_id, ${figes}, a.created_at AS quand,
                     DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i') AS created_at, u.first_name, u.last_name
                FROM audit_log a LEFT JOIN user u ON u.id = a.user_id
               WHERE a.organization_id = ? AND a.user_id IS NOT NULL AND a.user_id <> ? AND ${roleClause}
                     AND a.entity IN (${entites.map(() => '?').join(',')})
               ORDER BY a.created_at DESC LIMIT 30`, [orgId, moi, ...entites]);
-        return regrouperConsecutives(rows.map(enPuce));
+        const precisions = await preciser(conn, orgId, rows);
+        return regrouperConsecutives(rows.map((r, i) => enPuce(r, precisions[i])));
     };
     /* Le stagiaire d'abord, l'équipe ensuite : deux listes distinctes, jamais le même flux coupé. */
     return {

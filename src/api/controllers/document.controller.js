@@ -1708,13 +1708,16 @@ const deleteDocument = async (req, res) => {
     try {
         const conn = db.promise();
         const orgId = req.user.organization_id;
-        const [[doc]] = await conn.query('SELECT id, type, enrollment_id, quiz_id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        const [[doc]] = await conn.query('SELECT id, type, enrollment_id, quiz_id, title, learner_id FROM generated_document WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable' });
         /* Le document ET ce qui ne vit que par lui (archive d'émargement, PDF scellé, réponses du QCM) :
            lib/suppressionDocument.js, la même règle que le retrait d'un stagiaire « en effaçant ». */
         const { reponses } = await supprimerDocument(conn, orgId, doc);
-        for (const id of reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id);
-        logAudit(req, 'document.delete', 'GeneratedDocument', req.params.id);
+        /* SON NOM ET SON STAGIAIRE, pendant qu'on les a : effacé, le document ne se nommera plus, et
+           la cloche dirait « Document supprimé » sans dire lequel ni pour qui (migration 186). */
+        const precisions = { libelle: doc.title, stagiaire: doc.learner_id };
+        for (const id of reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id, precisions);
+        logAudit(req, 'document.delete', 'GeneratedDocument', req.params.id, precisions);
         res.status(200).json({ success: true, message: 'Document supprimé' });
     } catch (err) {
         console.error('Erreur suppression document :', err);

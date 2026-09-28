@@ -704,6 +704,19 @@ tbody tr:last-child td{border-bottom:none}
 .notif-corps{display:block;font-size:12.5px;color:var(--muted);line-height:1.4}
 .notif-date{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
 .notif-point{width:8px;height:8px;flex:none;border-radius:50%;background:var(--ember1)}
+.notif-texte{flex:1;min-width:0}
+/* SUR UN TÉLÉPHONE, LE TITRE PREND TOUTE LA LARGEUR. Depuis qu'une ligne nomme ce qu'elle annonce
+   (« Document généré en PDF (Convention de formation) », puis les stagiaires), le texte, coincé
+   entre l'étiquette et la date, tenait dans 130 px : un mot par ligne, dix lignes de haut. La
+   rubrique et la date passent au-dessus, le texte dessous, sur toute la largeur. */
+@media (max-width:640px){
+  .notif-ligne{flex-wrap:wrap;column-gap:8px;row-gap:6px}
+  .notif-ligne .notif-texte{order:1;flex:1 0 100%}
+  /* La rubrique à gauche, la date à droite, et le chevron APRÈS elle : collé à l'étiquette, il
+     semblait lui appartenir. */
+  .notif-ligne .badge{order:-2}
+  .notif-ligne .notif-date{order:-1;margin-left:auto}
+}
 
 .skel{display:block;border-radius:10px;background:var(--surface2);position:relative;overflow:hidden}
 .skel::after{content:"";position:absolute;inset:0;

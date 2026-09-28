@@ -654,9 +654,11 @@ const createCompanyDocument = async (req, res) => {
 const deleteCompany = async (req, res) => {
     try {
         const conn = db.promise();
+        // Son nom, lu avant : une entreprise effacée ne se nomme plus au journal (migration 186).
+        const [[avant]] = await conn.query('SELECT name FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         const [r] = await conn.query('DELETE FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        logAudit(req, 'company.delete', 'Company', req.params.id);
+        logAudit(req, 'company.delete', 'Company', req.params.id, avant ? { libelle: avant.name } : null);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur suppression entreprise :', err);

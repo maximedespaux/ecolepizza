@@ -507,7 +507,7 @@ const saveNote = async (req, res, roleAttendu) => {
            La jointure lie désormais l'exercice au PARCOURS du dossier, et `roleAttendu` — posé
            par l'APPELANT, jamais par la requête — dit de quelle grille il a le droit. */
         const [[ex]] = await conn.query(
-            `SELECT ${COLS_EX_X} FROM evaluation_exercice x
+            `SELECT ${COLS_EX_X}, e.learner_id AS stagiaire FROM evaluation_exercice x
                JOIN evaluation_grille g ON g.id = x.grille_id AND g.organization_id = x.organization_id
                JOIN enrollment e ON e.id = ?
                JOIN training_session s ON s.id = e.session_id AND s.program_id = g.program_id
@@ -528,7 +528,7 @@ const saveNote = async (req, res, roleAttendu) => {
         if (vide) {
             await conn.query('DELETE FROM evaluation_note WHERE enrollment_id = ? AND exercice_id = ?',
                 [enrollmentId, exerciceId]);
-            logAudit(req, 'evaluation.note', 'EvaluationNote', exerciceId);
+            logAudit(req, 'evaluation.note', 'EvaluationNote', exerciceId, { stagiaire: ex.stagiaire });
             return res.json({ data: { enrollment_id: enrollmentId, exercice_id: exerciceId, points: null } });
         }
 
@@ -544,7 +544,9 @@ const saveNote = async (req, res, roleAttendu) => {
             [crypto.randomUUID(), orgId, enrollmentId, exerciceId, String(valeur).slice(0, 40),
                 points, commentaire, req.user.id]);
 
-        logAudit(req, 'evaluation.note', 'EvaluationNote', exerciceId);
+        /* LE STAGIAIRE NOTÉ, passé à part : la ligne porte l'identifiant de l'EXERCICE (« Étalage »),
+           qui ne dit pas qui a été noté (migration 186). */
+        logAudit(req, 'evaluation.note', 'EvaluationNote', exerciceId, { stagiaire: ex.stagiaire });
         res.json({ data: { enrollment_id: enrollmentId, exercice_id: exerciceId, points, libelle } });
     } catch (err) {
         if (err && err.code === 'ER_NO_SUCH_TABLE') {

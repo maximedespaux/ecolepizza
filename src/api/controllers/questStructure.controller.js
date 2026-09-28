@@ -117,7 +117,7 @@ const createQuestCategory = async (req, res) => {
                  req.body?.icon ? String(req.body.icon).slice(0, 40) : null,
                  Number(mx.n) + 10]
             );
-            await logAudit(req, 'CREATE', 'quest_category', id, { kind, name });
+            await logAudit(req, 'CREATE', 'quest_category', id, { libelle: name });
             res.status(201).json({ success: true, data: { id, kind, name, slug } });
         } catch (e) {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
@@ -156,7 +156,7 @@ const updateQuestCategory = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'UPDATE', 'quest_category', req.params.id, req.body);
+        await logAudit(req, 'UPDATE', 'quest_category', req.params.id, { libelle: req.body?.name });
         res.json({ success: true, message: 'Catégorie enregistrée.' });
     } catch (err) {
         console.error('Erreur maj catégorie quest :', err);
@@ -186,7 +186,7 @@ const deleteQuestCategory = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'DELETE', 'quest_category', req.params.id, null);
+        await logAudit(req, 'DELETE', 'quest_category', req.params.id);
         res.json({ success: true, message: 'Catégorie supprimée.' });
     } catch (err) {
         console.error('Erreur suppression catégorie quest :', err);
@@ -271,7 +271,7 @@ const addQuestPrerequisite = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'CREATE', 'quest_prerequisite', id, { programId, requiresId });
+        await logAudit(req, 'CREATE', 'quest_prerequisite', id);
         res.status(201).json({ success: true, data: { id, program_id: programId, requires_program_id: requiresId } });
     } catch (err) {
         console.error('Erreur ajout prérequis :', err);
@@ -292,7 +292,7 @@ const deleteQuestPrerequisite = async (req, res) => {
             if (isMissingSchema(e)) return res.status(503).json({ message: MIGRATION_HINT });
             throw e;
         }
-        await logAudit(req, 'DELETE', 'quest_prerequisite', req.params.id, null);
+        await logAudit(req, 'DELETE', 'quest_prerequisite', req.params.id);
         res.json({ success: true, message: 'Prérequis retiré.' });
     } catch (err) {
         console.error('Erreur suppression prérequis :', err);

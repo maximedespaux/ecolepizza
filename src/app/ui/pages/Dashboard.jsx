@@ -6,7 +6,7 @@ import DataTable from "../components/DataTable.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
-import { auditLabel } from "../lib/auditLabels.js";
+import { auditLabel, avecObjets } from "../lib/auditLabels.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { euro, colorOf, dateHeure, dateFr } from "../lib/format.js";
@@ -438,7 +438,8 @@ function Dashboard() {
                 {/* La pastille prend le TON de l'action : vert pour ce qui aboutit, rouge pour
                     ce qui supprime. Elle était toujours orange, donc muette. */}
                 <span className={`dash-act-dot tone-${tone}`} aria-hidden="true" />
-                <span style={{ flex: 1 }}>{label}</span>
+                {/* Ce que la ligne désigne, comme dans la cloche : « Document signé (Devis) ». */}
+                <span style={{ flex: 1 }}>{avecObjets(label, a.objet ? [a.objet] : [])}</span>
                 <span className="dash-act-date">{dateHeure(a.created_at)}</span>
               </div>
             );

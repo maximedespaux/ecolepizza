@@ -908,6 +908,8 @@ module.exports = {
     // Les demi-journées et la fenêtre de signature : UNE règle pour la feuille, les relances,
     // la signature du stagiaire et la création des feuilles.
     demiJourneesDuJour, ouverture, OUVERTURE_DEFAUT, horaireDuJour, fenetreSignature, calendrierSession,
+    // Le nom d'une demi-journée, aussi pour la cloche (« Émargement signé (RS7404 · 14/09 matin) »).
+    SLOT,
     /* `parseDaySchedules` et `fmtHM` sortent d'ici pour le jeton {HorairesJours} (lib/tokens.js).
        Ils NE SONT PAS recopiés là-bas : ce parseur connaît les formes réelles écrites par
        l'organisme — « Jour 5 : 9h-12h », « Jours 1 à 4 », une ligne unique valant pour tous —

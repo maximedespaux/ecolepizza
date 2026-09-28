@@ -451,6 +451,8 @@ CREATE TABLE audit_log (
     action          varchar(120) NOT NULL,          -- ex. « document.generate »
     entity          varchar(120) DEFAULT NULL,
     entity_id       varchar(64)  DEFAULT NULL,      -- UUID, slug de modèle ou nom de rôle (migration 175)
+    libelle         varchar(255) DEFAULT NULL,      -- nom FIGÉ de l'objet, pour ce qui n'existera plus (migration 186)
+    learner_id      uuid         DEFAULT NULL,      -- stagiaire concerné ; son nom se relit dans sa fiche (migration 186)
     created_at      timestamp    NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (id),
     KEY idx_audit_org (organization_id, entity),

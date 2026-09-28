@@ -1339,11 +1339,21 @@ const getPreuveReponse = async (req, res) => {
 
 const deleteResponse = async (req, res) => {
     try {
-        const [r] = await db.promise().query(
+        const conn = db.promise();
+        /* LE QUESTIONNAIRE ET SON STAGIAIRE, lus AVANT l'effacement : après, la cloche dirait « Réponse
+           QCM supprimée » sans dire laquelle ni de qui (migration 186). */
+        const [[lue]] = await conn.query(
+            `SELECT q.title, COALESCE(r.learner_id, e.learner_id) AS learner_id
+               FROM quiz_response r JOIN quiz q ON q.id = r.quiz_id
+               LEFT JOIN enrollment e ON e.id = r.enrollment_id
+              WHERE r.id = ? AND r.organization_id = ?`,
+            [req.params.id, req.user.organization_id]);
+        const [r] = await conn.query(
             'DELETE FROM quiz_response WHERE id = ? AND organization_id = ?',
             [req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Réponse introuvable.' });
-        logAudit(req, 'quiz.response_delete', 'QuizResponse', req.params.id);
+        logAudit(req, 'quiz.response_delete', 'QuizResponse', req.params.id,
+            lue ? { libelle: lue.title, stagiaire: lue.learner_id } : null);
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur suppression réponse QCM :', err);

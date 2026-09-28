@@ -24,8 +24,11 @@ const G = 'g'; const A = 'a'; const R = 'r'; const B = 'b'; const N = 'n';
 const ACTION_LABEL = {
     // Documents de dossier
     'document.create': ['Document préparé', N],
-    'document.docx': ['Document généré (Word)', B],
-    'document.pdf': ['Document généré (PDF)', B],
+    /* « EN Word », « EN PDF » plutôt qu'entre parenthèses : la cloche ajoute le NOM du document
+       entre parenthèses (« Document généré en PDF (Convention de formation) ») — deux parenthèses
+       de suite se lisaient mal (2026-09-28). */
+    'document.docx': ['Document généré en Word', B],
+    'document.pdf': ['Document généré en PDF', B],
     'document.send': ['Document envoyé', B],
     'document.sign': ['Document signé', G],
     'document.saisies': ['Zones à remplir complétées', G],
@@ -55,9 +58,10 @@ const ACTION_LABEL = {
     // Émargements
     'attendance.generate': ['Émargement généré', B],
     'attendance.sign': ['Émargement signé', G],
-    'attendance.rattrapage': ['Présence rattrapée par l\'école (émargement)', A],
+    // La demi-journée suit entre parenthèses (« RS7404 · 14/09 matin ») : elle dit déjà l'émargement.
+    'attendance.rattrapage': ['Présence rattrapée par l\'école', A],
     'emargement.regenerate': ['Émargement régénéré', A],
-    'intervenant.emargement.sign': ['Émargement signé (intervenant)', G],
+    'intervenant.emargement.sign': ['Émargement signé par un intervenant', G],
     'emargement_template.create': ['Modèle d\'émargement créé', G],
     'emargement_template.update': ['Modèle d\'émargement modifié', A],
     'emargement_template.delete': ['Modèle d\'émargement supprimé', R],
@@ -376,6 +380,32 @@ function auditLabel(action, entity) {
     return { label: action, tone: N };
 }
 
+/**
+ * « Devis particulier, Convention de formation » : une liste de noms, COURTE. Jusqu'à quatre, tous ;
+ * au-delà, les trois premiers et le compte du reste (« A, B, C et 5 autres »). Quatre s'écrivent en
+ * entier parce que « et 1 autre » prendrait la place du nom qu'il cache.
+ */
+function listeCourte(noms, max = 4) {
+    const l = (noms || []).filter(Boolean);
+    if (l.length <= max) return l.join(', ');
+    return `${l.slice(0, max - 1).join(', ')} et ${l.length - (max - 1)} autres`;
+}
+
+/**
+ * LE LIBELLÉ ET CE QU'IL DÉSIGNE : « Document signé (Devis particulier) » — demandé le 2026-09-28,
+ * « Document signé ×2 » ne disait pas LESQUELS. Les objets viennent du serveur
+ * (lib/precisionsActivite.js) : des NOMS, jamais un libellé d'action.
+ *
+ * Entre parenthèses, comme l'utilisateur l'a écrit ; un libellé qui en porte déjà prend un deux-points
+ * (« Publication supprimée (modération) : … »). Pas de tiret long : il a quitté l'interface le
+ * 2026-08-03 (commit 5bc392e4).
+ */
+function avecObjets(label, objets) {
+    const liste = listeCourte(objets);
+    if (!liste) return label;
+    return /\)$/.test(label) ? `${label}\u00a0: ${liste}` : `${label} (${liste})`;
+}
+
 /** Nom lisible d'une entité, pour la colonne de droite. Rend l'entité brute si inconnue. */
 function entityLabel(entity) {
     if (!entity) return '';
@@ -383,4 +413,4 @@ function entityLabel(entity) {
     return e ? e[0] : entity;
 }
 
-export { auditLabel, entityLabel, ACTION_LABEL, ENTITY_LABEL };
+export { auditLabel, entityLabel, avecObjets, listeCourte, ACTION_LABEL, ENTITY_LABEL };

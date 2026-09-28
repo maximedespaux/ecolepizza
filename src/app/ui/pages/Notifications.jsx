@@ -11,7 +11,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
-import { auditLabel, entityLabel } from "../lib/auditLabels.js";
+import { auditLabel, entityLabel, avecObjets, listeCourte } from "../lib/auditLabels.js";
 import { PAGE_TITLES, aLaCapacite, OWNER_ROLES } from "../lib/nav.js";
 import { UserContext } from "../context/UserContext.jsx";
 
@@ -30,7 +30,8 @@ const TONE = { SIGNATURE: "g", PAIEMENT: "a", RELANCE: "r", QUALIOPI: "b", BOUTI
  * question que le libellé ne traite pas — OÙ ça s'est passé — et c'est justement là que mène le
  * lien de la ligne. Reste l'entité en repli, pour une rubrique qu'on ne saurait pas nommer.
  *
- * Au total la ligne dit : QUOI (le libellé), QUI (le corps), OÙ (l'étiquette), QUAND (la date).
+ * Au total la ligne dit : QUOI et LEQUEL (le titre), POUR QUI et PAR QUI (le corps), OÙ
+ * (l'étiquette), QUAND (la date).
  */
 function ligneLisible(n) {
   if (n.type !== "ACTIVITE") {
@@ -42,10 +43,21 @@ function ligneLisible(n) {
      l'enregistrement lui-même, `link` vaut « /stagiaires/<id> » ou rien du tout — et
      l'étiquette serait retombée sur le nom de l'entité, ou aurait disparu. */
   const rubrique = PAGE_TITLES[n.section] || PAGE_TITLES[n.link] || entityLabel(n.entity) || "Activité";
-  // « ×12 » : l'inscription d'un groupe crée douze fiches d'un coup. Le journal les garde une
-  // par une ; ici on dit le nombre plutôt que de répéter douze fois la même phrase.
-  const titre = n.nombre > 1 ? `${label} ×${n.nombre}` : label;
-  return { titre, corps: n.auteur ? `par ${n.auteur}` : null, ton: tone, etiquette: rubrique };
+  /* CE QUE LA LIGNE DÉSIGNE, ET POUR QUI (2026-09-28) : « Document signé ×2 » ne disait pas
+     lesquels. Le titre nomme les objets — « Document signé (Devis, Convention) » —, le corps le
+     stagiaire concerné, puis l'auteur. Le stagiaire qui a agi lui-même (`soi`) n'est pas redit :
+     « par Jean Dupont » le nomme déjà. Un groupe ne mêle jamais plusieurs objets ET plusieurs
+     stagiaires (lib/activite.js) : chaque nom reste lié au bon titre. */
+  const objets = n.objets || [];
+  const stagiaires = n.stagiaires || [];
+  /* « ×12 » SEULEMENT QUAND LES NOMS NE LE DISENT PAS : douze lignes sans nom (d'avant, ou dont
+     l'objet n'existe plus), ou le même document envoyé deux fois. Deux documents nommés sont deux
+     documents : le compte redirait ce que la liste montre. */
+  const fois = n.nombre > Math.max(objets.length, stagiaires.length, 1) ? ` ×${n.nombre}` : "";
+  const titre = `${avecObjets(label, objets)}${fois}`;
+  const pour = listeCourte(stagiaires.filter((s) => !s.soi).map((s) => s.nom));
+  const corps = [pour, n.auteur ? `par ${n.auteur}` : null].filter(Boolean).join(" · ") || null;
+  return { titre, corps, ton: tone, etiquette: rubrique };
 }
 
 /**
@@ -97,7 +109,7 @@ function Liste({ lignes, onOuvrir, onSupprimer, peutSupprimer }) {
                     title={n.link ? "Ouvrir" : (n.is_read || n.type === "ACTIVITE" ? undefined : "Marquer comme lu")}
                   >
                     <Badge tone={ton}>{etiquette}</Badge>
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="notif-texte">
                       <b>{titre}</b>
                       {corps && <span className="notif-corps">{corps}</span>}
                     </span>
