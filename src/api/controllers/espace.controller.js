@@ -225,7 +225,16 @@ async function companyEmargementGate(conn, e, orgId) {
     // Étapes à/avant le point, résolues sur le parcours de l'organisme.
     const bySlug = new Map((await loadOrgSteps(orgId)).map((s) => [s.slug, s]));
     const break_label = (bySlug.get(breakSlug) || {}).label || null;
-    const required = PointDeRupture.exigencesEntreprise(list, breakSlug, bySlug);
+    /* LES ÉTAPES FACULTATIVES de la formation (migration 188) ne ferment pas l'émargement : elles se
+       lisent dans son parcours (`program_step`), que `bySlug` — les modèles — ne connaît pas. Sans
+       la colonne, aucune : tout reste exigé, comme avant. */
+    let facultatifs = new Set();
+    try {
+        const [fr] = await conn.query(
+            'SELECT slug FROM program_step WHERE program_id = ? AND organization_id = ? AND facultatif = 1', [e.program_id, orgId]);
+        facultatifs = new Set(fr.map((r) => r.slug));
+    } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; }
+    const required = PointDeRupture.exigencesEntreprise(list, breakSlug, bySlug, facultatifs);
     if (!required.length) return { ...none, break_label };
 
     // Documents du DOSSIER (stagiaire).

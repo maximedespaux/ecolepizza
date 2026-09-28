@@ -101,5 +101,8 @@ test('un repli SILENCIEUX est un enregistrement qui ment', () => {
 
     // Et l'écran le RELAIE : sans ça, l'avertissement resterait lettre morte dans le JSON.
     assert.match(PAGE, /rc\?\.avertissement \? `Formation créée\. \$\{rc\.avertissement\}`/);
-    assert.match(PAGE, /ru\?\.avertissement \? `Formation mise à jour\. \$\{ru\.avertissement\}`/);
+    /* Celui de la fiche ET celui du parcours (une étape « facultative » sans la migration 188) :
+       l'enregistrement fait deux appels, l'écran relaie les deux avertissements. */
+    assert.match(PAGE, /const avert = \[ru\?\.avertissement, rs\?\.avertissement\]\.filter\(Boolean\)\.join\(" "\);/);
+    assert.match(PAGE, /onSaved\(avert \? `Formation mise à jour\. \$\{avert\}` : "Formation mise à jour\."\);/);
 });

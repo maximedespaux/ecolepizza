@@ -30,7 +30,8 @@ export default function RemiseTypes({ onStatus }) {
 
   async function enregistrer(e) {
     e.preventDefault();
-    const payload = { code: edite.code, label: edite.label, consigne: edite.consigne, active: edite.active !== false };
+    const payload = { code: edite.code, label: edite.label, consigne: edite.consigne, active: edite.active !== false,
+      destinataire: edite.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE" };
     try {
       if (edite._new) await createRemiseType(payload); else await updateRemiseType(edite.id, payload);
       setEdite(null); onStatus?.({ type: "success", message: "Remise enregistrée." }); load();
@@ -52,13 +53,13 @@ export default function RemiseTypes({ onStatus }) {
     <Card title={`Documents remis au stagiaire (${items.length})`}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
         <p className="hint" style={{ margin: 0 }}>
-          Ce que l'école <b>remet</b> à un stagiaire en particulier (diplôme obtenu ailleurs, attestation d'un
-          certificateur, carte professionnelle). Le stagiaire en <b>accuse réception</b>, et c'est cet accusé qui
-          termine l'étape. Pour un document identique à tous — livret d'accueil, règlement — utilisez plutôt un
+          Ce que l'école <b>remet</b> pour un stagiaire en particulier (diplôme obtenu ailleurs, attestation d'un
+          certificateur, carte professionnelle), à lui ou à son entreprise. Le destinataire en <b>accuse réception</b>,
+          et c'est cet accusé qui termine l'étape. Pour un document identique à tous — livret d'accueil, règlement — utilisez plutôt un
           modèle de document avec un PDF joint. Rattachez-les à un parcours dans <b>Formations → Parcours documentaire</b>.
         </p>
         <button type="button" className="btn sm primary" style={{ flex: "none" }}
-          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true })}>＋ Ajouter une remise</button>
+          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true, destinataire: "STAGIAIRE" })}>＋ Ajouter une remise</button>
       </div>
 
       {items.length === 0 ? (
@@ -69,6 +70,7 @@ export default function RemiseTypes({ onStatus }) {
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--border-soft)", borderRadius: 10, opacity: r.active ? 1 : 0.5 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <b>{r.label}</b>{!r.active && <span className="hint"> · inactive</span>}
+                {r.destinataire === "ENTREPRISE" && <span className="badge b" style={{ marginLeft: 8 }}>pour l'entreprise</span>}
                 <div className="hint" style={{ fontSize: 12 }}>{r.code}{r.consigne ? ` · ${r.consigne}` : ""}</div>
               </div>
               <button type="button" className="btn sm ghost" onClick={() => setEdite({ ...r })}><Icon name="settings" size={14} /> Réglages</button>
@@ -102,10 +104,31 @@ export default function RemiseTypes({ onStatus }) {
                   </div>
                 </div>
                 <div className="field">
-                  <label>Consigne (lue par le stagiaire)</label>
+                  <label>Consigne (lue par {edite.destinataire === "ENTREPRISE" ? "l'entreprise" : "le stagiaire"})</label>
                   <input className="inp" value={edite.consigne || ""} maxLength={400}
                     placeholder="Conservez-le : il vous sera demandé à l'inscription au CAP."
                     onChange={(e) => setEdite((p) => ({ ...p, consigne: e.target.value }))} />
+                </div>
+                {/* À QUI LE DOCUMENT EST REMIS (migration 188, décidé le 2026-09-28). L'entreprise le
+                    reçoit dans son espace et en accuse réception ; un stagiaire inscrit sans entreprise,
+                    ou dont l'entreprise n'a pas d'espace, le reçoit lui-même, sinon personne ne pourrait
+                    en accuser réception (cf. `pourEntreprise`, remise.controller.js). */}
+                <div className="field">
+                  <label>Destinataire</label>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 400 }}>
+                    <input type="radio" name="destinataire" checked={edite.destinataire !== "ENTREPRISE"}
+                      onChange={() => setEdite((p) => ({ ...p, destinataire: "STAGIAIRE" }))} />
+                    Le stagiaire, dans son espace
+                  </label>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 400 }}>
+                    <input type="radio" name="destinataire" checked={edite.destinataire === "ENTREPRISE"}
+                      onChange={() => setEdite((p) => ({ ...p, destinataire: "ENTREPRISE" }))} />
+                    L'entreprise, dans son espace entreprise
+                  </label>
+                  <p className="hint" style={{ margin: "4px 0 0" }}>
+                    C'est le destinataire qui accuse réception. Un stagiaire inscrit sans entreprise, ou dont l'entreprise
+                    n'a pas d'espace, le reçoit lui-même.
+                  </p>
                 </div>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                   <input type="checkbox" checked={edite.active !== false}

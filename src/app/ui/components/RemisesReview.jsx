@@ -52,11 +52,13 @@ export default function RemisesReview({ enrollmentId, refresh }) {
     finally { setOccupe(null); }
   }
 
-  async function retirer(f, libelle, accuse) {
+  async function retirer(f, libelle, accuse, entreprise) {
     /* LE RETRAIT ANNULE L'ACCUSÉ, et la confirmation le dit. Sans cet avertissement, on
        retirerait un document en croyant corriger une pièce jointe, et on effacerait au passage
-       une preuve de remise déjà donnée par le stagiaire. */
-    const perte = accuse ? "\n\nL'accusé de réception du stagiaire sera ANNULÉ : il devra confirmer à nouveau." : "";
+       une preuve de remise déjà donnée par le destinataire. */
+    const perte = !accuse ? "" : entreprise
+      ? "\n\nL'accusé de réception de l'entreprise sera ANNULÉ : elle devra confirmer à nouveau."
+      : "\n\nL'accusé de réception du stagiaire sera ANNULÉ : il devra confirmer à nouveau.";
     if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de la remise « ${libelle} » ?${perte}`)) return;
     try { await supprimerRemiseFichier(f.id); setErreur(null); load(); }
     catch (e) { setErreur(e.message); }
@@ -80,7 +82,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
   return (
     <div style={{ marginTop: 16 }}>
       <h3 style={{ fontSize: 15, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 7 }}>
-        <Icon name="file-text" size={16} /> Documents remis au stagiaire
+        <Icon name="file-text" size={16} /> {remises.some((r) => r.pour_entreprise) ? "Documents remis" : "Documents remis au stagiaire"}
       </h3>
       {erreur && <p className="hint" style={{ color: "var(--red, #c0392b)", marginTop: 0 }}>{erreur}</p>}
       <div style={{ display: "flex", flexDirection: "column" }}>
@@ -93,6 +95,19 @@ export default function RemisesReview({ enrollmentId, refresh }) {
                 <span style={{ flex: 1, minWidth: 140 }}>
                   <b>{r.label}</b>
                   {r.consigne && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{r.consigne}</span>}
+                  {/* À QUI (migration 188). Dit ici parce que c'est ici qu'on dépose : l'école doit
+                      savoir, avant d'envoyer, qui verra le document et qui en accusera réception. */}
+                  {r.pour_entreprise ? (
+                    <span style={{ display: "block", fontSize: 11.5, color: "var(--blue)" }}>
+                      <Icon name="building" size={12} /> Pour l'entreprise{r.entreprise ? ` ${r.entreprise}` : ""} : elle le reçoit dans son espace et en accuse réception.
+                    </span>
+                  ) : r.destinataire === "ENTREPRISE" && (
+                    <span style={{ display: "block", fontSize: 11.5, color: "var(--amber, #b8860b)" }}>
+                      {r.entreprise_sans_espace
+                        ? `Destiné à l'entreprise, mais ${r.entreprise || "elle"} n'a pas d'espace : le stagiaire le reçoit.`
+                        : "Destiné à l'entreprise, mais le stagiaire est inscrit sans entreprise : il le reçoit lui-même."}
+                    </span>
+                  )}
                   {/* LES DEUX DATES SE DISENT SÉPARÉMENT : quand l'école a déposé, et quand le
                       stagiaire a confirmé. Les confondre effacerait la seule chose qu'un contrôle
                       vient lire — le délai entre la mise à disposition et la réception. */}
@@ -103,7 +118,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
                   )}
                   {r.accuse_le && (
                     <span style={{ display: "block", fontSize: 11.5, color: "var(--green, #2e9e5b)" }}>
-                      Réception confirmée par le stagiaire · {dateHeure(r.accuse_le)}
+                      Réception confirmée par {r.pour_entreprise ? "l'entreprise" : "le stagiaire"} · {dateHeure(r.accuse_le)}
                     </span>
                   )}
                 </span>
@@ -139,7 +154,7 @@ export default function RemisesReview({ enrollmentId, refresh }) {
                       </button>
                       <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
                         aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${r.label}`}
-                        onClick={() => retirer(f, r.label, !!r.accuse_le)}>
+                        onClick={() => retirer(f, r.label, !!r.accuse_le, !!r.pour_entreprise)}>
                         <Icon name="trash" size={13} />
                       </button>
                     </div>

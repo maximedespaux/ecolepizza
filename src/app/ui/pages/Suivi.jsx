@@ -34,7 +34,8 @@ const ETAT_CASE = {
   done: { cls: "fait", lib: "Fait" },
   progress: { cls: "encours", lib: "En cours" },
   todo: { cls: "afaire", lib: "À faire" },
-  skip: { cls: "sansobjet", lib: "Sans objet" },
+  // « Hors décompte » : une remise écartée (161), ou une étape facultative pas encore faite (188).
+  skip: { cls: "sansobjet", lib: "Sans objet ou facultatif" },
   absent: { cls: "absent", lib: "Ne concerne pas ce dossier" },
 };
 
@@ -152,7 +153,10 @@ function GrilleFormation({ t, filtre, onFiltre, entrepriseOuvrable }) {
                     const { etat, doc } = etatCase(d, c.type);
                     const e = ETAT_CASE[etat];
                     const aSigner = doc?.stagiaireSign && (etat === "todo" || etat === "progress");
-                    const titre = `${c.label} — ${e.lib}${aSigner ? " · à signer" : ""}`;
+                    /* « Hors décompte » réunit deux causes : la case dit laquelle, quand on la connaît. */
+                    const lib = doc?.facultatif ? (etat === "done" ? "Fait (facultatif)" : "Facultatif, pas fait")
+                      : etat === "skip" ? "Sans objet" : e.lib;
+                    const titre = `${c.label} — ${lib}${aSigner ? " · à signer" : ""}`;
                     const actif = !!(filtre && c.manque && filtre.cle === c.manque.cle);
                     return (
                       <td key={c.type} className={"sg-case" + (actif ? " on" : "")} title={titre}>
@@ -295,7 +299,7 @@ function Suivi() {
                   <span><Pastille etat="done" /> fait</span>
                   <span><Pastille etat="progress" /> en cours</span>
                   <span><Pastille etat="todo" /> à faire</span>
-                  <span><Pastille etat="skip" /> sans objet</span>
+                  <span><Pastille etat="skip" /> sans objet ou facultatif</span>
                   <span>case vide : ne concerne pas ce dossier</span>
                   <span className="sg-legende-geste">Cliquer le nom d'un document : seuls les dossiers où il manque.</span>
                 </p>

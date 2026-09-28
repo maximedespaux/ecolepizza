@@ -182,7 +182,17 @@ const getParcours = async (req, res) => {
                     { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet }]));
             } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 160 non jouée
             const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
-            parc = computeDocParcours({ steps, docs, pieces, remises });
+            /* L'entreprise du dossier a-t-elle un ESPACE (compte de représentant, migration 084) ? Une
+               remise qui lui est destinée n'y va que dans ce cas, sinon au stagiaire — la règle de
+               `pourEntreprise` (remise.controller.js), que l'écran doit dire à l'identique. */
+            let entrepriseAvecEspace = false;
+            if (e.company_id) {
+                try {
+                    const [[c]] = await conn.query('SELECT user_id FROM company WHERE id = ? AND organization_id = ?', [e.company_id, orgId]);
+                    entrepriseAvecEspace = !!(c && c.user_id);
+                } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; } // migration 084 non jouée
+            }
+            parc = computeDocParcours({ steps, docs, pieces, remises, entreprise: entrepriseAvecEspace });
         }
 
         res.json({

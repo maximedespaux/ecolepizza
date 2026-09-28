@@ -39,8 +39,9 @@ router.delete('/fichier/:id', authorizeRoles(...STAFF_ROLES), supprimerFichier);
 router.patch('/dossier/:enrollmentId/:remiseTypeId/sans-objet', authorizeRoles(...STAFF_ROLES), basculerSansObjet);
 
 /* ACCUSER RÉCEPTION N'EST PAS FILTRÉ PAR RÔLE — et surtout pas ouvert au personnel. Le
-   contrôleur exige que le demandeur SOIT le stagiaire du dossier : une preuve de remise signée
-   par celui qu'elle engage, jamais par l'école à sa place. */
+   contrôleur exige que le demandeur SOIT le destinataire : le stagiaire du dossier, ou le compte de
+   son entreprise quand la remise lui est destinée (migration 188). Une preuve de remise signée par
+   celui qu'elle engage, jamais par l'école à sa place. */
 router.post('/:id/accuser', accuser);
 
 module.exports = router;

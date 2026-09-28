@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, repDocumentPdfUrl } from "../api/apiClient.js";
+import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, repDocumentPdfUrl,
+  getRepRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -8,6 +9,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
+import { dateHeure } from "../lib/format.js";
 
 const DOC_STATUS = { A_FAIRE: ["À signer", "n"], ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé", "g"] };
 
@@ -18,9 +20,13 @@ function RepresentantEspace() {
   const [signing, setSigning] = useState(null);   // document en cours de signature
   const [preview, setPreview] = useState(null);    // { title, html }
   const [settingStamp, setSettingStamp] = useState(false); // dessin du cachet
+  const [remises, setRemises] = useState([]);      // documents remis À L'ENTREPRISE (migration 188)
   const fileRef = useRef(null);
 
   async function load() {
+    /* Les remises à part, et sans message d'erreur : une liste qui ne se charge pas ne doit pas
+       masquer les documents à signer, qui restent le cœur de cet espace. */
+    getRepRemises().then((r) => setRemises(r.data || [])).catch(() => setRemises([]));
     try { const r = await getRepDocuments(); setData(r.data || { documents: [] }); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
@@ -61,6 +67,18 @@ function RepresentantEspace() {
       load();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
+  /* CONFIRMER, C'EST S'ENGAGER — la même question qu'au stagiaire (StudentFormationDetail) : le
+     clic produit une preuve datée que l'école opposera lors d'un contrôle. */
+  async function confirmerRemise(r) {
+    if (!window.confirm(`Confirmer que votre entreprise a bien reçu « ${r.label} »`
+      + (r.first_name || r.last_name ? ` (${`${r.first_name || ""} ${r.last_name || ""}`.trim()})` : "") + " ?\n\n"
+      + "Ouvrez-le d'abord si ce n'est pas déjà fait : votre confirmation est datée et vaut preuve de remise.")) return;
+    try {
+      await accuserRemise(r.remise_id);
+      setStatus({ type: "success", message: "Réception confirmée. Merci." });
+      load();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
   async function signWithStamp(doc) {
     try {
       await signRepDocument(doc.id, { use_saved: true, signer_name: fullName });
@@ -71,14 +89,20 @@ function RepresentantEspace() {
 
   const docs = data?.documents || [];
   const toSign = docs.filter((d) => d.status !== "SIGNE").length;
+  const aConfirmer = remises.filter((r) => r.statut === "REMISE").length;
 
   return (
     <>
       <div className="hero">
         <div className="eyebrow">Espace entreprise</div>
         <h1>Bonjour {user?.first_name}</h1>
-        <p>Signez les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
-        {toSign > 0 && <div className="badge-row"><span className="pill">{toSign} document(s) à signer</span></div>}
+        <p>{remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
+        {(toSign > 0 || aConfirmer > 0) && (
+          <div className="badge-row">
+            {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
+            {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
+          </div>
+        )}
       </div>
 
       <StatusMessage status={status} />
@@ -121,6 +145,48 @@ function RepresentantEspace() {
           </div>
         )}
       </Card>
+
+      {/* CE QUE L'ÉCOLE REMET À L'ENTREPRISE (migration 188) : un type de remise destiné à
+          l'entreprise ne va plus au stagiaire, il arrive ICI, et c'est ce compte qui en accuse
+          réception. Rien ne s'affiche tant qu'il n'y a rien : une carte vide n'a rien à dire à une
+          entreprise dont l'école ne remet aucun document. */}
+      {remises.length > 0 && (
+        <Card title="Documents remis à votre entreprise">
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {remises.map((r) => (
+              <div key={r.remise_id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ flex: "1 1 200px", minWidth: 0 }}>
+                    <b>{r.label}</b>
+                    <span className="hint" style={{ display: "block", margin: 0 }}>
+                      {[`${r.first_name || ""} ${r.last_name || ""}`.trim(), r.formation].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <Badge tone={r.statut === "RECUE" ? "g" : "b"}>{r.statut === "RECUE" ? "Reçu" : "À confirmer"}</Badge>
+                  {(r.fichiers || []).map((f, k) => (
+                    <button key={f.id} className="btn sm ghost"
+                      aria-label={`Voir ${f.nom || `le document ${k + 1}`}, ${r.label}`}
+                      onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                      <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
+                    </button>
+                  ))}
+                  {r.statut === "REMISE" && (
+                    <button className="btn sm primary" onClick={() => confirmerRemise(r)}>
+                      <Icon name="check" size={15} /> J'ai bien reçu
+                    </button>
+                  )}
+                </div>
+                {r.consigne && <p className="hint" style={{ margin: "4px 0 0" }}>{r.consigne}</p>}
+                {r.accuse_le && (
+                  <p className="hint" style={{ margin: "4px 0 0", color: "var(--green, #2e9e5b)" }}>
+                    Réception confirmée le {dateHeure(r.accuse_le)}.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {preview && (
         <div className="overlay">

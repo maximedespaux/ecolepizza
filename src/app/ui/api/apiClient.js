@@ -612,6 +612,11 @@ export function createRepresentativeAccount(id) {
 }
 
 // --- Espace représentant d'entreprise ---
+/* Documents que l'école a REMIS à l'entreprise du compte (migration 188) — elle en accuse réception
+   par `accuserRemise`, comme un stagiaire, et les ouvre par `remiseFichierUrl`. */
+export function getRepRemises() {
+  return request("/rep/remises");
+}
 export function getRepDocuments() { return request("/rep/documents"); }
 export function previewRepDocument(id) { return request(`/rep/documents/${id}/preview`, { silent: true }); }
 // URL directe du PDF signé (ouverte en nouvel onglet) : l'authentification passe par le cookie.
