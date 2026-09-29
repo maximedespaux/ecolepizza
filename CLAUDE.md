@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-28** :
-**2222 tests — 2215 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-29** :
+**2256 tests — 2249 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -207,7 +207,29 @@ hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « 
 
 ---
 
-## 4. Migrations — **la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**191 est À JOUER** (`191_fiche_photo.sql`, la PHOTO d'une fiche technique — demandée le 2026-09-29 avec le nouvel
+éditeur). Une table `recipe_photo` : une photo par fiche (`recipe_id` en clé primaire, ON DELETE CASCADE), octets CHIFFRÉS
+au repos comme ceux de la Communauté, `empreinte` (12 caractères du SHA-256) dans l'adresse de l'image pour que le cache
+suive une photo remplacée, `octets` en clair. « PAS GRASSE », demandé par l'école : le navigateur réduit (`lib/image.js`,
+profil `fiche` : 1 000 px, 160 Ko visés, 220 au plus), le serveur refuse au-delà de 250 Ko (`MAX_PHOTO_FICHE`,
+`lib/photoFiche.js`), multer s'arrête à 400 Ko pour que ce soit le contrôleur qui réponde (413 lisible). Le FORMAT se lit
+dans les octets (JPEG, PNG, WebP — `lib/formatImage.js`), jamais dans le type déclaré. Seul l'auteur pose ou retire la
+photo ; la LIRE, c'est pouvoir ouvrir la fiche (`lib/ficheAccessible.js`, la règle unique, que les j'aime et commentaires
+partagent). Contrôleur à part (`photoFiche.controller.js`) : c'est le seul endroit des recettes qui rouvre le cache
+(`cache-documents.test.js`). Collation `utf8mb4_general_ci`, celle de `recipe` (cf. 107) — sinon la clé étrangère est
+refusée. Sans la migration, rien ne casse : l'emplacement dit « Photo pas encore disponible », l'envoi répond 503, les
+listes s'affichent sans photo. **Elle se vérifie par l'API, sans SQL** : poser une photo sur une fiche, puis
+`GET /api/recipes/:id` rend `photo_disponible: true` et `photo_v` rempli. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='recipe_photo';`
+⚠️ Son revert supprime toutes les photos, et elles seules. Tests : `fiche-photo.test.js`.
+
+**190 : ABANDONNÉE, et JOUÉE — à reverter** (`190_revert_program_step_destinataire.sql`, un `DROP COLUMN IF EXISTS
+destinataire` sur `program_step`). Jouée le 2026-09-28 pour essayer le destinataire des jalons (CGV reçues par l'entreprise) ;
+l'école a préféré dupliquer le document en « Groupe », et la PR #246 a retiré le code et les deux fichiers. Le revert revient
+seul, comme celui de la 187 : jouer ce fichier retire la colonne restée en base. Plus rien ne la lit. Sans risque s'il est
+rejoué. La 191 ne réutilise PAS le numéro : 190 reste celui d'une migration jouée.
 
 **188 est À JOUER** (`188_remise_destinataire_etape_facultative.sql`, demandée le 2026-09-28 : « pour les Documents remis,
 choisir qui les reçoit, le stagiaire ou l'entreprise dans son espace ; et dans le parcours, une option facultatif qui ne compte

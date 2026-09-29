@@ -4,7 +4,7 @@ import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
 import FicheRecette from "./FicheRecette.jsx";
-import { getMyRecipes, deleteRecipe, unshareRecipe } from "../api/apiClient.js";
+import { getMyRecipes, deleteRecipe, unshareRecipe, photoFicheUrl } from "../api/apiClient.js";
 
 /**
  * MES FICHES TECHNIQUES — l'outil UNIQUE (2026-09-29) qui réunit les empâtements, garnitures et
@@ -19,6 +19,8 @@ import { getMyRecipes, deleteRecipe, unshareRecipe } from "../api/apiClient.js";
  */
 const KIND_MODE = { PATE: "empatement", PREPARATION: "garniture", RECETTE: "realisation" };
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
+// Même pastille que l'éditeur : chaque type a sa couleur (elles étaient toutes du même beige).
+const KIND_ICON = { PATE: "wheat", PREPARATION: "list-checks", RECETTE: "pizza" };
 const FILTERS = [
   { key: "", label: "Toutes" },
   { key: "PATE", label: "Empâtements" },
@@ -33,8 +35,16 @@ export default function FichesTechniques() {
   const reload = () => getMyRecipes().then((r) => setFiches(r.data || [])).catch(() => {});
   useEffect(() => { reload(); }, []);
 
-  // Éditeur embarqué : créer ou modifier une fiche, puis revenir à la liste (rechargée).
-  if (edit) return <FicheRecette mode={edit.mode} openId={edit.id} embedded onExit={() => { setEdit(null); reload(); }} />;
+  // Éditeur embarqué : créer ou modifier une fiche, puis revenir à la liste (rechargée). Depuis
+  // l'éditeur, on ouvre aussi une AUTRE fiche (celle qu'une réalisation importe, ou une
+  // réalisation qui utilise la fiche) : la clé remonte l'éditeur, qui repart de zéro.
+  if (edit) {
+    return (
+      <FicheRecette key={edit.id || `nouvelle-${edit.mode}`} mode={edit.mode} openId={edit.id} embedded
+        onExit={() => { setEdit(null); reload(); }}
+        onOpen={(kind, id) => setEdit({ mode: KIND_MODE[kind] || "realisation", id })} />
+    );
+  }
 
   const shown = filter ? fiches.filter((f) => f.kind === filter) : fiches;
   const count = (k) => fiches.filter((f) => f.kind === k).length;
@@ -66,7 +76,10 @@ export default function FichesTechniques() {
           <div style={{ display: "flex", flexDirection: "column" }}>
             {shown.map((s) => (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                <span className="fiche-tag">{KIND_LABEL[s.kind]}</span>
+                {s.photo_v
+                  ? <img className="fe-vignette" src={photoFicheUrl(s.id, s.photo_v)} alt="" loading="lazy" />
+                  : <span className={"fe-vignette vide fe-k-" + s.kind} aria-hidden="true"><Icon name={KIND_ICON[s.kind] || "file-text"} size={18} /></span>}
+                <span className={"fe-kind sm fe-k-" + s.kind}><Icon name={KIND_ICON[s.kind] || "file-text"} size={12} /> {KIND_LABEL[s.kind]}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <b>{s.name}</b>
                   <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>

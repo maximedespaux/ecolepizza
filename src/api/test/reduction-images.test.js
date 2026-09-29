@@ -66,13 +66,14 @@ test('chaque écran qui envoie une image la réduit d\'abord', () => {
         ['pages/IntervenantEspace.jsx', /saveSignature\(await reduireEnDataUrl\(file, PROFILS\.marque\)\)/, 'signature d’intervenant'],
         ['pages/Quiz.jsx', /await reduireEnDataUrl\(f, PROFILS\.quiz\)/, 'illustration de QCM'],
         ['components/QuestionPost.jsx', /await reduireImage\(f\)/, 'photo de la communauté'],
+        ['pages/FicheRecette.jsx', /const blob = await reduireSiImage\(f, PROFILS\.fiche\);/, 'photo d’une fiche technique'],
     ];
     for (const [fichier, motif, quoi] of chemins) {
         assert.match(lireUi(fichier), motif, `${quoi} : l’image doit être réduite avant l’envoi`);
     }
     /* `e.target.value = ""` SUR CHAQUE ENTRÉE : sans lui, rechoisir LE MÊME fichier après un
        refus ne déclenche aucun `change`, et le bouton paraît mort. */
-    for (const f of ['pages/Reglages.jsx', 'pages/EmargementEditor.jsx', 'pages/Quiz.jsx']) {
+    for (const f of ['pages/Reglages.jsx', 'pages/EmargementEditor.jsx', 'pages/Quiz.jsx', 'pages/FicheRecette.jsx']) {
         assert.match(lireUi(f), /e\.target\.value = "";/, `${f} : l’entrée doit se réarmer`);
     }
 });
@@ -89,6 +90,14 @@ test('le plafond d\'un profil reste SOUS la limite du serveur qu\'il alimente', 
 
     const avatar = nombre(lireApi('controllers/espace.controller.js'), /> (\d+) \* 1024\)/, 'plafond avatar');
     assert.ok(profilKo('avatar') < avatar, `profil avatar ${profilKo('avatar')} Ko >= serveur ${avatar} Ko`);
+
+    /* LA PHOTO D'UNE FICHE : « pas grasse », demandé par l'école. Le plafond du serveur est serré
+       exprès — le profil doit donc rester dessous, et multer AU-DESSUS du contrôleur, sinon c'est
+       une erreur brute de multer qui répondrait au lieu d'un 413 lisible. */
+    const fiche = nombre(lireApi('lib/photoFiche.js'), /const MAX_PHOTO_FICHE = (\d+) \* 1024;/, 'plafond photo de fiche');
+    assert.ok(profilKo('fiche') < fiche, `profil fiche ${profilKo('fiche')} Ko >= serveur ${fiche} Ko`);
+    const multerFiche = nombre(lireApi('routes/recipe.routes.js'), /fileSize: (\d+) \* 1024/, 'limite multer photo de fiche');
+    assert.ok(fiche < multerFiche, 'la limite de multer doit rester au-dessus de celle du contrôleur');
 
     /* SIGNATURE, CACHET, LOGO, QCM voyagent en data-URL DANS du JSON. Deux plafonds les
        bornent, et le base64 pèse un TIERS de plus que les octets qu'il transporte : c'est ce

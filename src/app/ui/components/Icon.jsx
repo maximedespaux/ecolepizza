@@ -758,6 +758,34 @@ const PATHS = {
       <path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" />
     </>
   ),
+  // — Éditeur de fiche technique —
+  "grip-vertical": (
+    <>
+      <circle cx="9" cy="12" r="1" /><circle cx="9" cy="5" r="1" /><circle cx="9" cy="19" r="1" />
+      <circle cx="15" cy="12" r="1" /><circle cx="15" cy="5" r="1" /><circle cx="15" cy="19" r="1" />
+    </>
+  ),
+  "arrow-up-right": (
+    <>
+      <path d="M7 7h10v10" /><path d="M7 17 17 7" />
+    </>
+  ),
+  "arrow-right": (
+    <>
+      <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+    </>
+  ),
+  "trending-down": (
+    <>
+      <path d="M16 17h6v-6" /><path d="m22 17-8.5-8.5-5 5L2 7" />
+    </>
+  ),
+  "tag": (
+    <>
+      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+    </>
+  ),
 };
 
 /** Icône SVG décorative. `name` = clé du dico. `fill` permet de remplir une forme fermée

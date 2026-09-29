@@ -1245,6 +1245,27 @@ export function addRecipeComment(id, body) { return request(`/recipes/${id}/comm
 export function updateRecipeComment(id, cid, body) { return request(`/recipes/${id}/comments/${cid}`, { method: "PUT", body: JSON.stringify({ body }) }); }
 export function deleteRecipeComment(id, cid) { return request(`/recipes/${id}/comments/${cid}`, { method: "DELETE" }); }
 export function getRecipe(id) { return request(`/recipes/${id}`); }
+/* LA PHOTO D'UNE FICHE (migration 191). Servie par une route authentifiée, donc utilisable
+   directement en `src` ; `v` est son empreinte : une photo remplacée change d'adresse, et le
+   cache du navigateur suit. */
+export function photoFicheUrl(id, v) { return `${API_BASE_URL}/recipes/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`; }
+/** Envoi de la photo, DÉJÀ réduite par le navigateur (lib/image.js, profil `fiche`). */
+export async function envoyerPhotoFiche(id, blob) {
+  const fd = new FormData();
+  const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/png" ? "png" : "webp";
+  fd.append("photo", blob, `photo.${ext}`);
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/recipes/${id}/photo`, { method: "PUT", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi de la photo échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
+export function retirerPhotoFiche(id) { return request(`/recipes/${id}/photo`, { method: "DELETE" }); }
 export function createRecipe(payload) { return request("/recipes", { method: "POST", body: JSON.stringify(payload) }); }
 export function updateRecipe(id, payload) { return request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
 export function deleteRecipe(id) { return request(`/recipes/${id}`, { method: "DELETE" }); }
