@@ -8,7 +8,7 @@
  *  1. LA PÂTE COMPTÉE DEUX FOIS. Une réalisation portait une carte « Empâtement » (pâton + prix de
  *     la farine) ET pouvait importer une fiche Empâtement comme ingrédient : les deux
  *     s'additionnaient. Relevé sur une Reine : 2,56 € de matière au lieu de 2,38 €.
- *  2. LE COÛT AU KG D'UNE GARNITURE AVAIT DEUX VALEURS. L'éditeur et l'import divisaient par un
+ *  2. LE COÛT AU KG D'UNE PRÉPARATION AVAIT DEUX VALEURS. L'éditeur et l'import divisaient par un
  *     rendement de 1 000 g posé par défaut, l'impression par le poids des ingrédients : 8,40 €/kg
  *     d'un côté, 3,28 €/kg de l'autre, pour la même sauce — et c'est le premier qui entrait dans
  *     les pizzas.
@@ -83,7 +83,7 @@ test('« ne compter aucune pâte » tient, y compris relu depuis dough_params (C
     assert.ok(!coutFiche({ ...r, dough_params: JSON.stringify({ pate: 'aucune' }) }).lignes.some((l) => l.estimee));
 });
 
-test('une garniture : coût au kg du rendement déclaré, sinon du poids des ingrédients', async () => {
+test('une préparation : coût au kg du rendement déclaré, sinon du poids des ingrédients', async () => {
     const { coutFiche } = await ecran();
     const sans = coutFiche(sauce());
     assert.ok(pres(sans.total, 8.4045, 0.0001));
@@ -95,9 +95,9 @@ test('une garniture : coût au kg du rendement déclaré, sinon du poids des ing
     assert.ok(pres(avec.perte, (2100 - 2565) / 2565, 0.0001), 'la perte à la préparation se lit');
 });
 
-test('l\'écran et le serveur chiffrent une garniture exactement de la même façon', async () => {
+test('l\'écran et le serveur chiffrent une préparation exactement de la même façon', async () => {
     /* C'est le prix du SERVEUR qu'une réalisation importe : s'il divergeait de celui de l'écran,
-       la garniture afficherait un coût et en ferait payer un autre aux pizzas. */
+       la préparation afficherait un coût et en ferait payer un autre aux pizzas. */
     const { prixUnitairePreparation } = await ecran();
     const cas = [
         [8.4, 2565, '', 'g'], [8.4, 2565, 2100, 'g'], [8.4, 2565, 2.1, 'kg'], [8.4, 2565, 1500, 'ml'],
@@ -109,7 +109,7 @@ test('l\'écran et le serveur chiffrent une garniture exactement de la même fa�
     }
 });
 
-test('le serveur importe une garniture à la règle commune, et n\'en garde pas d\'autre', () => {
+test('le serveur importe une préparation à la règle commune, et n\'en garde pas d\'autre', () => {
     const ctrl = lire(API, 'controllers/recipe.controller.js');
     const corps = /async function ficheUnitCost\(conn, r\) \{[\s\S]*?\n\}/.exec(ctrl)[0];
     assert.match(corps, /prixUnitairePreparation\(ingCost, poidsIngredients\(ings\), r\.yield_qty, r\.yield_unit\)/);
@@ -138,7 +138,7 @@ test('l\'impression et la Communauté passent par le même calcul que l\'éditeu
     assert.doesNotMatch(comm, /const per = dough \+ topping/, 'la pâte estimée s\'ajoutait à toute fiche');
 });
 
-test('une nouvelle garniture naît sans rendement (il valait 1 000 g, que personne n\'ajustait)', () => {
+test('une nouvelle préparation naît sans rendement (il valait 1 000 g, que personne n\'ajustait)', () => {
     assert.match(lire(UI, 'pages/FicheRecette.jsx'), /yield_qty: "", yield_unit: "g"/);
 });
 

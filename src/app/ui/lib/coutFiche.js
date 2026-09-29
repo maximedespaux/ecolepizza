@@ -10,7 +10,7 @@
  *    de la composition : la fiche Pâte importée, ou à défaut une pâte ESTIMÉE (pâton + farine,
  *    l'ancienne carte), qui s'efface d'elle-même dès qu'une fiche Pâte entre dans la réalisation.
  *
- *  · LE COÛT AU KG D'UNE GARNITURE AVAIT DEUX VALEURS. L'éditeur et l'import divisaient par le
+ *  · LE COÛT AU KG D'UNE PRÉPARATION AVAIT DEUX VALEURS. L'éditeur et l'import divisaient par le
  *    RENDEMENT — 1 000 g par défaut, jamais ajusté —, l'impression par le POIDS DES INGRÉDIENTS :
  *    8,40 €/kg d'un côté, 3,28 €/kg de l'autre, pour la même sauce. La règle est maintenant
  *    unique (`prixUnitairePreparation`) : le rendement DÉCLARÉ s'il y en a un, sinon le poids des
@@ -101,11 +101,11 @@ export function prixUnitairePreparation(total, poidsG, yieldQty, yieldUnit) {
 /**
  * Tout ce qu'affiche une fiche (hors calculateur de pâte) :
  *   lignes    — chaque ligne avec `cout`, `poids`, `part` (0..1) et `couleur` (ou null) ;
- *   total     — coût matière (d'une pizza pour une réalisation, du lot pour une garniture) ;
+ *   total     — coût matière (d'une pizza pour une réalisation, du lot pour une préparation) ;
  *   poids     — grammes connus ; `poidsIncomplet` si une pièce n'a pas de poids ;
- *   coutKg    — coût au kg : du produit fini pour une garniture, de la pizza sinon ;
- *   prep      — pour une garniture : le prix unitaire et sa source (rendement / poids / lot) ;
- *   perte     — pour une garniture à rendement en masse : écart produit fini / ingrédients ;
+ *   coutKg    — coût au kg : du produit fini pour une préparation, de la pizza sinon ;
+ *   prep      — pour une préparation : le prix unitaire et sa source (rendement / poids / lot) ;
+ *   perte     — pour une préparation à rendement en masse : écart produit fini / ingrédients ;
  *   prix, marge, lot — pour une réalisation : prix conseillé, marge en euros, coût du lot.
  */
 export function coutFiche(r) {

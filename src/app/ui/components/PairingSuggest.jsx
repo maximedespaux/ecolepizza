@@ -4,7 +4,7 @@ import Card from "./Card.jsx";
 import { GARN_BASES, pairSuggestions, num } from "../lib/garnitures.js";
 
 /**
- * ACCORDS DE SAVEURS — helper d'une fiche GARNITURE. On part d'une base (sauce tomate, crème…)
+ * ACCORDS DE SAVEURS — helper d'une fiche PRÉPARATION. On part d'une base (sauce tomate, crème…)
  * puis `pairSuggestions` remonte, à partir de ce qui est posé, les produits que l'école associe
  * (relations ASYMÉTRIQUES : cf. lib/garnitures.js). Chaque suggestion s'ajoute comme LIGNE
  * D'INGRÉDIENT à la fiche, chiffrée depuis MA MERCURIALE quand le produit y figure (par libellé),

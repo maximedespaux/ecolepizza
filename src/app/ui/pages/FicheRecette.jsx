@@ -18,8 +18,8 @@ import { UserContext } from "../context/UserContext.jsx";
  * Fiche technique — trois types composables :
  *  • PÂTE (empâtement) : calculée en pourcentage boulanger (calculateur intégré : typologie,
  *                        empâtement direct/indirect, hydratation, sel, huile, levure).
- *  • PRÉPARATION (garniture) : une base (sauce tomate = tomate + sel + huile) et son rendement.
- *  • RECETTE (réalisation) : une pizza complète = sa pâte + des garnitures importées + des
+ *  • PRÉPARATION : une base (sauce tomate = tomate + sel + huile) et son rendement.
+ *  • RECETTE (réalisation) : une pizza complète = sa pâte + des préparations importées + des
  *                        ingrédients de la mercuriale ou du catalogue.
  *
  * LA MISE EN PAGE (2026-09-29). À gauche, la fiche telle qu'elle s'imprime : identité,
@@ -33,7 +33,7 @@ import { UserContext } from "../context/UserContext.jsx";
  * même recherche (`AjoutLigne`), là où quatre boutons ouvraient quatre fenêtres différentes.
  *
  * LES CHIFFRES viennent de lib/coutFiche.js, que l'impression et la Communauté appellent aussi :
- * la pâte n'y est comptée qu'une fois, et le coût au kg d'une garniture y a une seule définition,
+ * la pâte n'y est comptée qu'une fois, et le coût au kg d'une préparation y a une seule définition,
  * celle du serveur quand une réalisation l'importe.
  */
 const TYPES = ["Classique", "Contemporaine", "Napolitaine", "Teglia", "Pala"];
@@ -41,7 +41,7 @@ const YIELD_UNITS = ["g", "kg", "ml", "l", "piece"];
 // Constantes & helpers de calcul d'empâtement (W, presets, cahiers napolitains, levure, TB50…)
 // → source unique dans lib/dough.js, importée ci-dessus. Partagée avec l'assistant pas-à-pas.
 
-/* Le RENDEMENT naît VIDE. Il valait 1 000 g, que personne n'ajustait : toute garniture se
+/* Le RENDEMENT naît VIDE. Il valait 1 000 g, que personne n'ajustait : toute préparation se
    chiffrait comme si elle produisait un kilo, quel que soit son poids réel. Vide, la règle
    commune s'applique — le coût au kg se calcule sur le poids des ingrédients. */
 const NEW = () => ({
@@ -51,8 +51,8 @@ const NEW = () => ({
 });
 
 // Chaque page (mode) est verrouillée sur un type de fiche — trois builders distincts.
-const MODE_KIND = { empatement: "PATE", garniture: "PREPARATION", realisation: "RECETTE" };
-const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
+const MODE_KIND = { empatement: "PATE", preparation: "PREPARATION", realisation: "RECETTE" };
+const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Préparation", RECETTE: "Réalisation" };
 const KIND_ICON = { PATE: "wheat", PREPARATION: "list-checks", RECETTE: "pizza" };
 // Bloc « cuisson » d'une réalisation (rangé dans dough_params côté back, en attendant sa colonne).
 const COOK_TYPES = ["Four à bois", "Four à gaz", "Four électrique", "Four hybride", "Convoyeur", "Plaque / teglia"];
@@ -350,7 +350,7 @@ function IngredientSearchModal({ onClose, onAdd, added }) {
   );
 }
 
-// Fenêtre « Choisir une fiche » : empâtements / garnitures (à soi ou partagés) avec leur coût
+// Fenêtre « Choisir une fiche » : empâtements / préparations (à soi ou partagés) avec leur coût
 // unitaire calculé, à insérer comme ingrédient. `kinds` restreint la liste (la pâte d'une
 // réalisation ne se choisit que parmi les empâtements).
 function ComponentPickerModal({ onClose, onAdd, added, excludeId, kinds = null }) {
@@ -373,12 +373,12 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId, kinds = null }
         <div className="mbody" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <span className="gs-search">
             <Icon name="search" size={14} aria-hidden="true" />
-            <input placeholder={pates ? "Rechercher un empâtement…" : "Rechercher un empâtement ou une garniture…"} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+            <input placeholder={pates ? "Rechercher un empâtement…" : "Rechercher un empâtement ou une préparation…"} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
             {q && <button className="gs-clear" title="Effacer" onClick={() => setQ("")}><Icon name="x" size={13} /></button>}
           </span>
           <div className="gs-res" style={{ maxHeight: "48vh", minHeight: 160 }}>
             {res.length === 0 ? (
-              <p className="hint" style={{ margin: "auto", padding: 24 }}>{pates ? "Aucun empâtement. Crée-en un d'abord dans Mes fiches techniques." : "Aucun empâtement ni garniture. Crée-en d'abord."}</p>
+              <p className="hint" style={{ margin: "auto", padding: 24 }}>{pates ? "Aucun empâtement. Crée-en un d'abord dans Mes fiches techniques." : "Aucun empâtement ni préparation. Crée-en d'abord."}</p>
             ) : res.map((c) => (
               <div key={c.id} className="gs-item">
                 <span className={"fe-kind sm fe-k-" + c.kind}><Icon name={KIND_ICON[c.kind] || "file-text"} size={12} /> {KIND_LABEL[c.kind] || "Fiche"}</span>
@@ -794,7 +794,7 @@ function Procede({ steps, onChange }) {
 }
 
 /**
- * LE RENDEMENT d'une garniture : ce que le lot produit une fois préparé. Vide, le coût au kg se
+ * LE RENDEMENT d'une préparation : ce que le lot produit une fois préparé. Vide, le coût au kg se
  * calcule sur le poids des ingrédients ; rempli, sur le produit fini, et la perte se lit.
  */
 function Rendement({ r, cf, set }) {
@@ -940,7 +940,7 @@ function Repliable({ titre, sous, icone, defaultOpen = false, children }) {
 }
 
 /**
- * `mode` verrouille le TYPE de fiche (empâtement / garniture / réalisation). Toujours EMBARQUÉ par
+ * `mode` verrouille le TYPE de fiche (empâtement / préparation / réalisation). Toujours EMBARQUÉ par
  * « Mes fiches techniques » (FichesTechniques.jsx), qui gère la liste de toutes les fiches :
  * l'éditeur reçoit `openId` (la fiche à ouvrir à l'entrée), `onExit` (retour à la liste) et
  * `onOpen(kind, id)` (ouvrir une autre fiche : celle qu'on importe, ou une réalisation qui
@@ -1037,7 +1037,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     unit_price: prod.unit_ht != null ? Number(prod.unit_ht) : 0,
     qty: prod.type_unity === "Piece" ? 1 : 50,
   }, { focus });
-  // Importe un empâtement / une garniture comme ingrédient (prix = coût unitaire de la fiche,
+  // Importe un empâtement / une préparation comme ingrédient (prix = coût unitaire de la fiche,
   // verrouillé). Un empâtement se range EN TÊTE : la pâte d'abord, comme sur la fiche imprimée.
   const addComponent = (c) => ajouter({
     label: c.name, product_id: null, component_recipe_id: c.id, component_kind: c.kind, piece_g: c.piece_g ?? null,
@@ -1059,7 +1059,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const isPate = kind === "PATE";
   const isPrep = kind === "PREPARATION";
 
-  // Procédé (garniture ET réalisation) & cuisson (réalisation) — persistés dans dough_params (JSON).
+  // Procédé (préparation ET réalisation) & cuisson (réalisation) — persistés dans dough_params (JSON).
   const steps = r.steps || [];
   const setSteps = (a) => setR((p) => ({ ...p, steps: a }));
   const cooking = r.cooking || {};
@@ -1202,7 +1202,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     setBusy(true);
     const merged = { ...r, ...overrides };
     const nettoyer = (a) => (a || []).map((s) => String(s).trim()).filter(Boolean);
-    const nomParDefaut = merged.kind === "PREPARATION" ? "Garniture maison" : `${merged.type} maison`;
+    const nomParDefaut = merged.kind === "PREPARATION" ? "Préparation maison" : `${merged.type} maison`;
     const name = String(merged.name || "").trim() || nomParDefaut;
     const payload = { ...merged, name,
       // En mode « par farine », le rendement enregistré = nb de pâtons obtenus.
@@ -1290,7 +1290,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     </div>
   );
 
-  // Garniture : le chiffre qu'une réalisation importe, et ce sur quoi il se calcule.
+  // Préparation : le chiffre qu'une réalisation importe, et ce sur quoi il se calcule.
   const pr = cf.prep || {};
   const garnGrand = pr.unit === "g" ? { lbl: "Coût au kg", u: "/ kg" } : pr.source === "lot" ? { lbl: "Coût du lot", u: "" } : { lbl: "Coût à la pièce", u: "/ pièce" };
   const garnSous = pr.source === "rendement" && pr.unit === "g" ? `Produit fini · ${kgFr(pr.quantite)} pour ${euroFixe(cf.total)} de matière`
@@ -1334,7 +1334,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     </div>
   ) : isPrep ? (
     <div className="card dough-result fe-panel">
-      <span className="fe-panel-eyebrow">Garniture</span>
+      <span className="fe-panel-eyebrow">Préparation</span>
       <div className="fe-panel-kpi">
         <span className="fe-panel-lbl">{garnGrand.lbl}</span>
         <span className="fe-panel-big"><b className="chiffres">{euroFixe(pr.unitPrice)}</b>{garnGrand.u && <span>{garnGrand.u}</span>}</span>

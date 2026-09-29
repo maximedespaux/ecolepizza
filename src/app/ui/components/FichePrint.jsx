@@ -16,7 +16,7 @@ import { coutFiche } from "../lib/coutFiche.js";
  *                  l'éditeur : produits de la mercuriale, fiches importées, et la pâte estimée
  *                  d'une réalisation qui n'importe pas d'empâtement — elle manquait à la feuille,
  *                  dont le total ne tombait donc pas sur celui de l'écran. Le coût au kg d'une
- *                  garniture est celui du PRODUIT FINI quand un rendement est déclaré : la feuille
+ *                  préparation est celui du PRODUIT FINI quand un rendement est déclaré : la feuille
  *                  divisait par le poids des ingrédients (3,28 €/kg) quand l'écran et l'import
  *                  divisaient par le rendement (8,40 €/kg), pour la même sauce.
  *
@@ -53,7 +53,7 @@ function contenu(r) {
   const p = r.kind === "PREPARATION" ? cf.prep : null;
   return {
     rows, poidsTotal: cf.poids / 1000, poidsIncomplet: cf.poidsIncomplet, coutTotal: cf.total, coutKg: cf.coutKg,
-    // Garniture à rendement déclaré : la ligne « Produit fini » (et sa perte), puis le prix du
+    // Préparation à rendement déclaré : la ligne « Produit fini » (et sa perte), puis le prix du
     // kilo — ou de la pièce — du produit fini.
     fini: p && p.source === "rendement" ? { quantite: p.quantite, unite: p.unit, perte: cf.perte } : null,
     prixPiece: p && p.unit === "piece" && p.source === "rendement" ? p.unitPrice : null,
