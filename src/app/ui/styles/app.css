@@ -3062,6 +3062,17 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 @media(max-width:600px){.seg{flex-wrap:wrap;max-width:100%;border-radius:14px}}
 .seg-btn{border:none;background:none;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:4px}
 .seg-btn.on{background:var(--grad-ember);color:#fff}
+
+/* Contrôle segmenté « source » (onglets de la mercuriale « Ma mercuriale / Prix du marché », et la
+   bascule « Frais / marché / Metro »). MÊME langage que .seg — un rail en pilule, le segment actif
+   en braise. La règle MANQUAIT : ses <button> nus rendaient des boîtes grises par défaut du
+   navigateur, seules dans toute la page à ne pas suivre la charte. */
+.src{display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:2px;gap:2px}
+.src>button{border:none;background:none;padding:7px 15px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:color .16s var(--ease),background .16s var(--ease)}
+.src>button:hover:not(.on){color:var(--text)}
+.src>button.on{background:var(--grad-ember);color:#fff}
+@media(max-width:600px){.src{flex-wrap:wrap;border-radius:14px}}
+.stu-app .src>button{min-height:38px}
 /* Carte communauté : en-tête cliquable + barre d'actions (like/commentaires/copier) + fil */
 .comm-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
 .comm-card.on{border-color:color-mix(in srgb,var(--ember1) 40%,var(--border))}
