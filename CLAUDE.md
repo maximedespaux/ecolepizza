@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-29** :
-**2289 tests — 2282 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-30** :
+**2315 tests — 2308 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -204,6 +204,15 @@ un libellé périmé (`libelleAffiche`, `ANCIENS_LIBELLES`).
 regarder si le modèle a changé depuis. Le 2026-09-26, le devis RS7404 retravaillé (00 h 10–00 h 17) a été remplacé
 une heure plus tard par l'ancienne mise en forme, depuis un onglet ouvert avant. Avant toute écriture de modèles
 hors de l'éditeur (outil, migration), faire fermer ou recharger les onglets « Modèles → éditeur ».
+
+**Un montant TAPÉ ne passe jamais par `Number()`, ni par un champ `type="number"`** (2026-09-29/30).
+`Number("12,5")` vaut NaN ; et un champ numérique ne rend jamais ce qu'on a tapé : il lit la virgule selon les
+réglages de l'APPAREIL — la langue de la page n'y change rien (relevé dans Chromium) — et rend VIDE ce qu'il ne sait
+pas lire (règle HTML) : 0, sans un mot — une remise à 0 %, une TVA à 0 %. Les champs d'argent sont en texte
+(`inputMode="decimal"`), lus par `lireMontant` (lib/montantSaisi.js, écran et serveur, tenus d'accord par un test) ;
+l'illisible est refusé en disant « écrivez-le par exemple 315,93 » ; la base garde le point (`toFixed(2)`) ; une
+valeur de la base s'affiche avec une virgule (`montantEnSaisie`). Un écran qui calcule à chaque frappe (fiche
+technique) passe par `ChampMontant`. Tests : `montant-saisi*.test.js`.
 
 ---
 

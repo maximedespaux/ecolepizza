@@ -7,6 +7,7 @@ import { FORMES_JURIDIQUES } from "../lib/formesJuridiques.js";
 import StatusMessage from "../components/StatusMessage.jsx";
 import LocationsManager from "../components/LocationsManager.jsx";
 import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
+import { montantEnSaisie } from "../lib/montantSaisi.js";
 
 const FIELDS = [
   ["legal_name", "Raison sociale"], ["short_name", "Sigle"], ["manager", "Responsable"],
@@ -21,7 +22,10 @@ function Reglages() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    getOrganisation().then((r) => setForm(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
+    // Le taux de la base (« 20.00 ») s'affiche comme on le tape : « 20,00 ».
+    getOrganisation().then((r) => setForm(r.data && r.data.vat_rate != null
+      ? { ...r.data, vat_rate: montantEnSaisie(r.data.vat_rate) } : r.data))
+      .catch((e) => setStatus({ type: "error", message: e.message }));
   }, []);
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }));
@@ -89,7 +93,10 @@ function Reglages() {
             <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>Facturation / TVA</h3>
             <p className="sub" style={{ marginTop: 0 }}>Taux appliqué sur les documents, jetons {"{Prix HT}"}, {"{TVA}"}, {"{Prix TTC}"}, {"{Reste à payer}"}. Laisser à 0 si la formation est exonérée de TVA (art. 261-4-4° CGI).</p>
             <div className="row3">
-              <Field label="Taux de TVA (%)" type="number" value={form.vat_rate ?? 0} onChange={set("vat_rate")} placeholder="0" />
+              {/* TEXTE en `inputMode="decimal"`, plus `type="number"` : sans pas déclaré, le champ
+                  numérique REFUSAIT « 5,5 » à l'envoi (pas de 1) ; et là où la virgule n'est pas le
+                  séparateur de l'appareil, il la rendait vide — le serveur en faisait 0 %. */}
+              <Field label="Taux de TVA (%)" inputMode="decimal" autoComplete="off" value={form.vat_rate ?? ""} onChange={set("vat_rate")} placeholder="0" />
             </div>
 
             <div className="divider" />

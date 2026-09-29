@@ -34,3 +34,24 @@ export function lireMontant(v) {
 export function montantEnSaisie(v) {
   return v == null ? "" : String(v).replace(".", ",");
 }
+
+/**
+ * POUR UN CHAMP QUI GARDE CE QU'ON TAPE (components/ChampMontant.jsx) : ce que le parent reçoit
+ * pour un texte — "" (champ vidé), la valeur lue écrite avec un point (« 12.5 »), ou `null` : rien,
+ * quand le texte ne se lit pas. Le parent garde alors sa dernière valeur lisible.
+ */
+export function valeurTransmise(texte) {
+  if (String(texte ?? "").trim() === "") return "";
+  const n = lireMontant(texte);
+  return Number.isFinite(n) ? String(n) : null;
+}
+
+/**
+ * … et le texte à montrer quand la valeur change PAR AILLEURS (un prix repris de la mercuriale) :
+ * le texte en cours s'il la dit déjà — « 12, » en cours de frappe vaut 12 —, sinon la valeur.
+ */
+export function texteAJour(texte, value) {
+  const attendu = value === "" || value == null ? NaN : Number(value);
+  if (String(texte ?? "").trim() === "" ? Number.isNaN(attendu) : lireMontant(texte) === attendu) return texte;
+  return montantEnSaisie(value);
+}

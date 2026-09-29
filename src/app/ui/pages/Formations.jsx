@@ -14,6 +14,7 @@ import GrilleEvaluation from "../components/GrilleEvaluation.jsx";
 import { euro, colorOf } from "../lib/format.js";
 import { setBadgeColors } from "../lib/levels.js";
 import { useReordonner, deplacerDans } from "../lib/useReordonner.js";
+import { montantEnSaisie } from "../lib/montantSaisi.js";
 
 function Formations() {
   const [programs, setPrograms] = useState([]);
@@ -197,6 +198,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
   const [form, setForm] = useState(() => {
     const f = {};
     for (const k of FIELDS) f[k] = program[k] ?? (k === "active" || k === "needs_emargement" ? 1 : k === "hygiene" ? 0 : "");
+    f.price = montantEnSaisie(program.price); // « 1250.00 » de la base s'affiche « 1250,00 »
     return f;
   });
   const [saving, setSaving] = useState(false);
@@ -408,8 +410,10 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
               <input className="inp" type="number" min="0" value={form.days} onChange={set("days")} /></div>
             <div className="field"><label>Nombre d'heures</label>
               <input className="inp" type="number" min="0" value={form.hours} onChange={set("hours")} /></div>
+            {/* TEXTE en `inputMode="decimal"` : le champ numérique rendait « 1250,50 » VIDE là où la
+                virgule n'est pas le séparateur de l'appareil. Le serveur lit la virgule. */}
             <div className="field"><label>Montant net (€)</label>
-              <input className="inp" type="number" min="0" step="0.01" value={form.price} onChange={set("price")} /></div>
+              <input className="inp" inputMode="decimal" autoComplete="off" value={form.price} onChange={set("price")} /></div>
           </div>
 
           <div className="field"><label>Horaires (affiché sur la feuille d'émargement)<HelpDot text={"Une ligne par horaire, utile si les journées n'ont pas les mêmes horaires.\n\nEx. :\n9h00 - 12h30 / 13h30 - 17h00\nJour 5 : 9h00 - 12h00"} /></label>

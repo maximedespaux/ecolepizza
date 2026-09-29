@@ -9,6 +9,7 @@ const { logAudit } = require('../lib/audit.js');
 const { coutLigne, poidsIngredients, prixUnitairePreparation, coutPate } = require('../lib/coutFiche.js');
 const { accessibleRecipe } = require('../lib/ficheAccessible.js');
 const { ajouterPhotos } = require('../lib/photoFiche.js');
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -414,6 +415,30 @@ const getRecipe = async (req, res) => {
 const DP_MAX = 20000;
 const PARAMS_TROP_LONGS = 'Fiche trop longue : raccourcis la procédure pour pouvoir l\'enregistrer.';
 
+/* LES PRIX D'UNE FICHE se TAPENT en français : « 1,20 » la farine, « 12,50 » la mozzarella, « 0,50 »
+ * le sel. `Number(v) || 0` en faisait 0 € EN SILENCE — une fiche au coût faux, un prix de vente
+ * conseillé faux. Vides, ils valent 0 comme avant ; illisibles, la fiche est REFUSÉE, avant toute
+ * écriture (cf. refusPrixFiche). */
+const prixLu = (v) => { const n = lireMontant(v); return Number.isFinite(n) ? n : 0; };
+const prixIllisible = (v) => !(v === '' || v == null) && !Number.isFinite(lireMontant(v));
+function refusPrixFiche(b) {
+    if (prixIllisible(b.flour_price)) return 'Prix de la farine illisible : écrivez-le par exemple 1,20.';
+    for (const g of Array.isArray(b.ingredients) ? b.ingredients : []) {
+        const label = String((g && g.label) || '').trim();
+        if (label && prixIllisible(g.unit_price)) return `Prix illisible pour « ${label} » : écrivez-le par exemple 12,50.`;
+    }
+    const prix = b.dough_params && typeof b.dough_params === 'object' ? b.dough_params.prices : null;
+    if (prix && typeof prix === 'object' && Object.values(prix).some(prixIllisible)) {
+        return 'Prix de la pâte illisible : écrivez-le par exemple 0,50.';
+    }
+    return null;
+}
+/** Les prix de la pâte (sel, huile, levure…) LUS avant d'entrer dans le JSON : « 0,50 » y restait une
+ *  chaîne, que coutFiche.js lit par `Number()` — un coût de pâte à 0. Vides, laissés tels quels. */
+const prixPateLus = (dp) => (dp.prices && typeof dp.prices === 'object'
+    ? { ...dp, prices: Object.fromEntries(Object.entries(dp.prices).map(([k, v]) => [k, v === '' || v == null ? v : prixLu(v)])) }
+    : dp);
+
 function normRecipe(b) {
     return {
         kind: ['PATE', 'PREPARATION', 'RECETTE'].includes(b.kind) ? b.kind : 'RECETTE',
@@ -422,11 +447,11 @@ function normRecipe(b) {
         description: b.description ? String(b.description).slice(0, 5000) : null,
         servings: Math.max(1, parseInt(b.servings, 10) || 6),
         paton_g: Math.max(1, parseInt(b.paton_g, 10) || 250),
-        flour_price: Math.max(0, Number(b.flour_price) || 0),
+        flour_price: Math.max(0, prixLu(b.flour_price)),
         margin_pct: Math.max(0, Math.min(1000, parseInt(b.margin_pct, 10) || 0)),
         yield_qty: (b.yield_qty != null && b.yield_qty !== '') ? Math.max(0, Number(b.yield_qty) || 0) : null,
         yield_unit: b.yield_unit ? String(b.yield_unit).slice(0, 20) : null,
-        dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(b.dough_params) : null,
+        dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(prixPateLus(b.dough_params)) : null,
         visibility: b.visibility === 'SHARED' ? 'SHARED' : 'PRIVATE',
     };
 }
@@ -441,7 +466,7 @@ async function saveIngredients(conn, recipeId, ingredients) {
             `INSERT INTO recipe_ingredient (id, recipe_id, product_id, component_recipe_id, label, qty, unit, unit_price, sort_order)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [crypto.randomUUID(), recipeId, g.product_id || null, g.component_recipe_id || null, label.slice(0, 255),
-             Number(g.qty) || 0, g.unit === 'piece' ? 'piece' : 'g', Number(g.unit_price) || 0, i]
+             Number(g.qty) || 0, g.unit === 'piece' ? 'piece' : 'g', prixLu(g.unit_price), i]
         );
     }
 }
@@ -450,6 +475,8 @@ async function saveIngredients(conn, recipeId, ingredients) {
 const createRecipe = async (req, res) => {
     try {
         const conn = db.promise();
+        const refus = refusPrixFiche(req.body || {});
+        if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});
         if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         const id = crypto.randomUUID();
@@ -474,6 +501,8 @@ const updateRecipe = async (req, res) => {
         const [[cur]] = await conn.query('SELECT author_user_id FROM recipe WHERE id = ?', [req.params.id]);
         if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
         if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
+        const refus = refusPrixFiche(req.body || {});
+        if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});
         if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         await conn.query(

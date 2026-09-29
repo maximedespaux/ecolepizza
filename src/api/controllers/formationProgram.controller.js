@@ -9,6 +9,14 @@ const { matchFormation, matchStep, stepSigners } = require('../lib/documents.js'
 const { matchCustom, loadConditionMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap, alertesParSlug } = require('../lib/equivalence.js');
 const { loadOrgSteps } = require('./template.controller.js');
+const { lireMontant } = require('../lib/montantSaisi.js');
+
+/* LE MONTANT NET D'UNE FORMATION se TAPE en français (« 1 250,00 ») : il partait TEL QUEL dans
+   l'INSERT, et MariaDB, en mode strict, refuse « 1250,00 » dans un DECIMAL — erreur 500, formation
+   non enregistrée (hors mode strict : 1250, les centimes perdus en silence). Vide → NULL, comme
+   avant ; illisible → NaN, que l'appelant REFUSE ; lisible → la base garde le point. */
+const prixFormation = (v) => (v === '' || v == null ? null : lireMontant(v));
+const PRIX_ILLISIBLE = 'Montant net illisible : écrivez-le par exemple 1250,00.';
 
 // Parse d'une condition `applies_when` stockée (chaîne JSON en base, ou déjà objet). Tolérant :
 // une valeur illisible vaut « aucune condition » plutôt que de casser tout le parcours.
@@ -405,12 +413,15 @@ const createProgram = (req, res) => {
     if (!b.code || !b.title) {
         return res.status(422).json({ error: 'Code et intitulé requis' });
     }
+    const prix = prixFormation(b.price);
+    if (Number.isNaN(prix)) return res.status(422).json({ error: PRIX_ILLISIBLE });
     const cols = [];
     const vals = [];
     for (const f of CREATE_FIELDS) {
         if (b[f] === undefined) continue;
         let v = b[f];
         if (f === 'hygiene' || f === 'active' || f === 'needs_emargement') v = v ? 1 : 0;
+        else if (f === 'price') v = prix === null ? null : prix.toFixed(2);
         else if (v === '') v = null; // champ vidé -> NULL (colonnes nullables)
         cols.push(f);
         vals.push(v);
@@ -451,12 +462,15 @@ const updateProgram = (req, res) => {
         'objective_general', 'duration_detail', 'program_detail', 'prerequisites',
         'rs_code', 'hygiene', 'needs_emargement', 'horaires', 'active', 'sort_order',
     ];
+    const prix = prixFormation(req.body.price);
+    if (Number.isNaN(prix)) return res.status(422).json({ error: PRIX_ILLISIBLE });
     const sets = [];
     const values = [];
     for (const f of ALLOWED) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
         if (f === 'hygiene' || f === 'active' || f === 'needs_emargement') v = v ? 1 : 0;
+        else if (f === 'price') v = prix === null ? null : prix.toFixed(2);
         else if (f === 'code') {
             v = String(v).trim();
             if (!v) continue; // le code est obligatoire : on ignore une valeur vide

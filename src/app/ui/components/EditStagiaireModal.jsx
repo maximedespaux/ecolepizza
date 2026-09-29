@@ -8,6 +8,7 @@ import { GROUPES_PROJET, CASES_PROJET, PRECISIONS_FOUR, MIGRATION_DES_CASES } fr
 import { bumpBadges } from "../lib/events.js";
 import ReferentEntreprise from "./ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
+import { montantEnSaisie } from "../lib/montantSaisi.js";
 
 const CIVILITES = ["M.", "Mme"];
 const STATUTS = ["En activité", "Demandeur d'emploi", "Sans activité", "Étudiant", "Retraité", "Autre"];
@@ -59,6 +60,7 @@ function toForm(d) {
   form.birthday = dateOnly(d.birthday);
   form.financing = d.financing || "PARTICULIER";
   form.company_id = d.company_id || (d.company && d.company.id) || "";
+  form.cpf_amount = montantEnSaisie(d.cpf_amount); // « 1500.00 » de la base s'affiche « 1500,00 »
   return form;
 }
 
@@ -291,7 +293,9 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   <option value="">-</option>
                   {STATUTS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </SelectField>
-                <Field label="Montant CPF (€)" type="number" step="0.01" value={form.cpf_amount} onChange={set("cpf_amount")} placeholder="1500" />
+                {/* TEXTE en `inputMode="decimal"` : le champ numérique rendait « 1500,50 » VIDE là où la
+                    virgule n'est pas le séparateur de l'appareil. Le serveur lit la virgule. */}
+                <Field label="Montant CPF (€)" inputMode="decimal" autoComplete="off" value={form.cpf_amount} onChange={set("cpf_amount")} placeholder="1500" />
                 <Field label="N° de sécurité sociale" value={form.social_security} onChange={set("social_security")} placeholder="1 85 07 65 123 456 78" />
               </div>
               {isJobSeeker && (
