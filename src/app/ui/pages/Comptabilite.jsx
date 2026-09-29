@@ -12,6 +12,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { dateFr } from "../lib/format.js";
 import { apportType } from "../lib/apports.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
@@ -73,9 +74,12 @@ function Comptabilite() {
 
   async function submitDep() {
     if (!dep.label.trim() || !dep.montantHT) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
+    // « 315,93 » : le clavier français ne propose que la virgule (cf. lib/montantSaisi.js).
+    const montant = lireMontant(dep.montantHT);
+    if (!Number.isFinite(montant) || montant < 0) { setStatus({ type: "error", message: "Montant illisible : écrivez-le par exemple 315,93." }); return; }
     setSavingDep(true);
     try {
-      await createExpense(dep);
+      await createExpense({ ...dep, montantHT: montant });
       setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today() });
       setStatus({ type: "success", message: "Dépense enregistrée." });
       load(annee, mois, { silent: true });
@@ -95,9 +99,9 @@ function Comptabilite() {
 
   async function saveCibles() {
     const targets = {};
-    for (const c of CATS) { const n = Number(cibleForm[c.v]); if (Number.isFinite(n)) targets[c.v] = n; }
+    for (const c of CATS) { const n = lireMontant(cibleForm[c.v]); if (Number.isFinite(n)) targets[c.v] = n; }
     try {
-      await saveComptaTargets({ targets, dividendeCible: Number(dividendeForm) });
+      await saveComptaTargets({ targets, dividendeCible: lireMontant(dividendeForm) });
       setEditCibles(false);
       setStatus({ type: "success", message: "Cibles enregistrées." });
       load(annee, mois, { silent: true });

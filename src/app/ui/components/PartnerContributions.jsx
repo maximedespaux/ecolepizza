@@ -3,6 +3,7 @@ import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
 import { createRevenue, createContribution } from "../api/apiClient.js";
 import { APPORT_TYPES, apportType, moisDeLApport } from "../lib/apports.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -26,13 +27,16 @@ export default function ApportForm({ partners = [], onSaved }) {
   async function submit() {
     if (!form.partner_id) return setError("Choisissez le partenaire.");
     if (!form.label.trim()) return setError("Indiquez la commission ou ce qui a été reçu.");
-    if (form.value === "" || Number.isNaN(Number(form.value))) return setError("La valeur est obligatoire (même pour une contribution en nature).");
+    if (form.value === "") return setError("La valeur est obligatoire (même pour une contribution en nature).");
+    // « 1250,50 » : la virgule était lue comme une valeur ABSENTE (cf. lib/montantSaisi.js).
+    const valeur = lireMontant(form.value);
+    if (!Number.isFinite(valeur) || valeur < 0) return setError("Valeur illisible : écrivez-la par exemple 1250,50.");
     setError(""); setOk(""); setSaving(true);
     try {
       if (isCash) {
-        await createRevenue({ label: form.label, categorie: form.type, montant: form.value, date: form.date, partner_id: form.partner_id });
+        await createRevenue({ label: form.label, categorie: form.type, montant: valeur, date: form.date, partner_id: form.partner_id });
       } else {
-        await createContribution({ partner_id: form.partner_id, type: form.type, label: form.label, value: form.value, date: form.date });
+        await createContribution({ partner_id: form.partner_id, type: form.type, label: form.label, value: valeur, date: form.date });
       }
       // Sans date, le serveur date du jour : le message aussi.
       const mois = moisDeLApport(form.date || today());

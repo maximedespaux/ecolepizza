@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
+/* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien (cf. le
+   fichier) — une dépense ainsi saisie était refusée, une cible ignorée en silence. */
+const { lireMontant } = require('../lib/montantSaisi.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
     REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
@@ -327,7 +330,7 @@ const getPerformance = async (req, res) => {
 const createExpense = async (req, res) => {
     const { label, categorie, montantHT, date, note } = req.body;
     const cat = EXPENSE_CATEGORIES.includes(categorie) ? categorie : 'DIVERS';
-    const amount = Number(montantHT);
+    const amount = lireMontant(montantHT);
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
@@ -397,7 +400,7 @@ const listRevenues = async (req, res) => {
 const createRevenue = async (req, res) => {
     const { label, categorie, montant, date, note, partner_id } = req.body;
     const cat = REVENU_CATEGORIES.includes(categorie) ? categorie : 'COMMISSION';
-    const amount = Number(montant);
+    const amount = lireMontant(montant);
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
@@ -434,7 +437,13 @@ const updateRevenue = async (req, res) => {
     const fields = {};
     if (b.label !== undefined) fields.label = String(b.label).trim().slice(0, 255);
     if (b.categorie !== undefined) fields.category = REVENU_CATEGORIES.includes(b.categorie) ? b.categorie : 'COMMISSION';
-    if (b.montant !== undefined) { const a = Number(b.montant); if (Number.isFinite(a) && a >= 0) fields.amount = a.toFixed(2); }
+    /* Un montant illisible est REFUSÉ : il était ignoré, et la correction répondait « Produit mis
+       à jour » en gardant l'ancien montant — le libellé changeait, pas la somme. */
+    if (b.montant !== undefined) {
+        const a = lireMontant(b.montant);
+        if (!Number.isFinite(a) || a < 0) return res.status(422).json({ error: 'Montant illisible : écrivez-le par exemple 315,93.' });
+        fields.amount = a.toFixed(2);
+    }
     if (b.date !== undefined) fields.date = b.date || null;
     if (b.partner_id !== undefined) fields.partner_id = b.partner_id || null;
     if (b.note !== undefined) fields.note = b.note ? String(b.note).slice(0, 255) : null;
@@ -486,7 +495,7 @@ const deleteRevenue = async (req, res) => {
  */
 const saveTargets = async (req, res) => {
     const targets = mergeTargets(req.body.targets);
-    let dividende = Number(req.body.dividendeCible);
+    let dividende = lireMontant(req.body.dividendeCible);
     if (!Number.isFinite(dividende) || dividende < 0 || dividende > 100) dividende = DEFAULT_DIVIDENDE_CIBLE;
     try {
         const conn = db.promise();
