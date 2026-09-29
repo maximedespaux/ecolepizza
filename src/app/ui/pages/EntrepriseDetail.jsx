@@ -6,6 +6,7 @@ import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, ge
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
+import { compterMots, NOTE_ENTREPRISE_MOTS_MAX } from "../lib/mots.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -275,13 +276,20 @@ export default function EntrepriseDetail() {
   }
 
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: valeurNormalisee(k, e.target.value) }));
+  /* LA NOTE : 128 MOTS AU PLUS, comptés comme le serveur les recompte (lib/mots.js). La frappe reste
+     libre — on n'ampute pas ce qu'on écrit — mais l'enregistrement attend qu'on redescende. */
+  const motsNote = compterMots(form.note_libre || "");
+  const noteTropLongue = motsNote > NOTE_ENTREPRISE_MOTS_MAX;
   async function saveInfo() {
+    if (noteTropLongue) { setStatus({ type: "error", message: `La note dépasse ${NOTE_ENTREPRISE_MOTS_MAX} mots (${motsNote}) : raccourcissez-la pour enregistrer.` }); return; }
     setSavingInfo(true); setStatus(null);
     try {
       const r = await updateCompany(id, form);
-      /* CE QUE LE SERVEUR N'A PU GARDER (migration 174 non jouée) : dit, plutôt qu'un succès qui ment. */
+      /* CE QUE LE SERVEUR N'A PU GARDER (migration 174 ou 189 non jouée) : dit, plutôt qu'un succès qui ment. */
       const perdu = messageReferentPerdu(r?.ignores);
-      setStatus(perdu ? { type: "info", message: `Entreprise enregistrée, sauf ${perdu}` } : { type: "success", message: "Entreprise enregistrée." });
+      const perduNote = (r?.ignores || []).includes("note_libre") ? "la note : la migration 189 n'est pas jouée." : null;
+      const manque = [perdu, perduNote].filter(Boolean).join(" ");
+      setStatus(manque ? { type: "info", message: `Entreprise enregistrée, sauf ${manque}` } : { type: "success", message: "Entreprise enregistrée." });
       load();
     }
     catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -674,6 +682,24 @@ export default function EntrepriseDetail() {
             </div>
             <ReferentEntreprise valeur={form} onChange={(m) => setForm((p) => ({ ...p, ...m }))} requis
               suggestions={data.learners || []} stagiaire={data.referent_stagiaire || null} fonctions={REP_ROLES} />
+
+            {/* LA NOTE (migration 189, demandé le 2026-09-29) : du texte simple, 128 mots au plus, comme
+                celle du stagiaire (168). Écrite et lue par le bureau — le représentant ne la voit pas.
+                Le compteur est annoncé aux lecteurs d'écran, sinon la limite n'existerait que pour qui
+                voit la couleur. */}
+            <div className="divider" style={{ margin: "14px 0" }} />
+            <h3 id="note-entreprise-titre" style={{ fontSize: 15, marginBottom: 10 }}>Note</h3>
+            <div className="field">
+              <textarea className="inp note-libre" rows={4} value={form.note_libre || ""} onChange={set("note_libre")}
+                aria-labelledby="note-entreprise-titre" aria-describedby="note-entreprise-compte" aria-invalid={noteTropLongue || undefined}
+                placeholder="Texte libre : contexte, interlocuteur, accord de prise en charge, précisions…" />
+              <div id="note-entreprise-compte" className={"mots-compte" + (noteTropLongue ? " trop" : "")} aria-live="polite">
+                {noteTropLongue
+                  ? `${motsNote} / ${NOTE_ENTREPRISE_MOTS_MAX} mots : retirez-en ${motsNote - NOTE_ENTREPRISE_MOTS_MAX} pour enregistrer`
+                  : `${motsNote} / ${NOTE_ENTREPRISE_MOTS_MAX} mots`}
+              </div>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10, flexWrap: "wrap" }}>
               <button className="btn primary" onClick={saveInfo} disabled={savingInfo}><Icon name="check" size={15} /> Enregistrer</button>
               <button className="btn ghost danger" onClick={removeCompany}><Icon name="trash" size={15} /> Supprimer l'entreprise</button>
