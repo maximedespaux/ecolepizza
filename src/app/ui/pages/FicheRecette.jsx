@@ -1,10 +1,9 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations, getMercuriale } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getComponents, getRecipe, createRecipe, updateRecipe, getMyFormations, getMercuriale } from "../api/apiClient.js";
 import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel } from "../lib/dough.js";
 import { perWeightUnit } from "../lib/garnitures.js";
 import Mercuriale from "../components/Mercuriale.jsx";
@@ -37,13 +36,6 @@ const NEW = () => ({
 // Chaque page (mode) est verrouillée sur un type de fiche — trois builders distincts.
 const MODE_KIND = { empatement: "PATE", garniture: "PREPARATION", realisation: "RECETTE" };
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
-const SAVED_TITLE = { PATE: "Mes empâtements enregistrés", PREPARATION: "Mes garnitures enregistrées", RECETTE: "Mes réalisations enregistrées" };
-const SAVED_EMPTY = { PATE: "Aucun empâtement enregistré pour l'instant.", PREPARATION: "Aucune garniture enregistrée pour l'instant.", RECETTE: "Aucune réalisation enregistrée pour l'instant." };
-const HEADS = {
-  empatement: { eyebrow: "Outils · mes empâtements", title: "Mes empâtements", lead: "Calcule ton empâtement au pourcentage boulanger : typologie, force de la farine (W), hydratation, sel, huile, levure, température. Obtiens le poids de chaque ingrédient, le nombre de pâtons et le coût, puis enregistre ta pâte pour la réutiliser dans une réalisation." },
-  garniture: { eyebrow: "Outils · mes garnitures", title: "Mes garnitures", lead: "Compose une garniture (sauce, base, topping…) à partir du catalogue Metro : coût matière, rendement, et le déroulé de fabrication. Réutilisable dans une réalisation." },
-  realisation: { eyebrow: "Outils · mes réalisations", title: "Mes réalisations", lead: "Assemble une pizza complète : ton empâtement + tes garnitures + le catalogue, avec la cuisson (four, température, énergie, temps). Calcule le coût matière et fixe ton prix de vente conseillé." },
-};
 // Bloc « cuisson » d'une réalisation (rangé dans dough_params côté back, en attendant sa colonne).
 const COOK_TYPES = ["Four à bois", "Four à gaz", "Four électrique", "Four hybride", "Convoyeur", "Plaque / teglia"];
 const NEW_COOKING = () => ({ type: "", temp: "", energy: "", time: "" });
@@ -399,15 +391,14 @@ function MercurialeModal({ items, reload, onClose, onAdd }) {
 }
 
 /**
- * `mode` verrouille le TYPE de fiche (empâtement / garniture / réalisation). Embarqué par
- * « Mes fiches techniques » (FichesTechniques.jsx), l'éditeur reçoit `embedded` (masque l'en-tête
- * de page et la liste des fiches, que le hub gère déjà), `openId` (la fiche à ouvrir à l'entrée)
- * et `onExit` (retour à la liste). Sans ces props, il reste une page autonome comme avant.
+ * `mode` verrouille le TYPE de fiche (empâtement / garniture / réalisation). Toujours EMBARQUÉ par
+ * « Mes fiches techniques » (FichesTechniques.jsx), qui gère la liste de toutes les fiches :
+ * l'éditeur reçoit `openId` (la fiche à ouvrir à l'entrée) et `onExit` (retour à la liste), et
+ * ne rend que l'éditeur (barre de retour + formulaire), jamais son propre en-tête ni sa liste.
  */
-function FicheRecette({ mode = "realisation", openId = null, embedded = false, onExit = null }) {
+function FicheRecette({ mode = "realisation", openId = null, onExit = null }) {
   const kind = MODE_KIND[mode] || "RECETTE"; // chaque page est verrouillée sur son type de fiche
   const [r, setR] = useState(() => initFor(mode));
-  const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -420,8 +411,6 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
   const added = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
   const importedIds = useMemo(() => new Set(r.ingredients.map((i) => i.component_recipe_id).filter(Boolean)), [r.ingredients]);
 
-  const reload = () => getMyRecipes().then((res) => setSaved(res.data || [])).catch(() => {});
-  useEffect(() => { reload(); }, []);
   // Embarqué pour MODIFIER : on charge la fiche demandée à l'entrée (openRecipe est déclarée plus bas, hoistée).
   useEffect(() => { if (openId) openRecipe(openId); }, [openId]);
   const reloadMerc = () => getMercuriale().then((res) => setMerc(res.data || [])).catch(() => {});
@@ -610,7 +599,6 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
       const res = r.id ? await updateRecipe(r.id, payload) : await createRecipe(payload);
       const id = r.id || (res.data && res.data.id);
       setR((p) => ({ ...p, ...overrides, id }));
-      reload();
     } catch { /* silencieux : la barre d'erreur globale s'affiche */ }
     finally { setBusy(false); }
   }
@@ -627,13 +615,7 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
         ingredients: d.ingredients?.length ? d.ingredients : [] });
     } catch { /* ignore */ }
   }
-  async function removeRecipe(id) {
-    if (!window.confirm("Supprimer cette fiche ?")) return;
-    try { await deleteRecipe(id); if (r.id === id) setR({ ...NEW(), kind: r.kind }); reload(); } catch { /* ignore */ }
-  }
   const shared = r.visibility === "SHARED";
-  // Liste « mes fiches » : uniquement le type de la page courante.
-  const mine = saved.filter((s) => s.kind === kind);
 
   // Bloc d'actions (créer / partager / nouvelle), réutilisé par les panneaux de résultat.
   const actions = (
@@ -654,16 +636,12 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
 
   return (
     <>
-      {embedded ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          <button className="btn ghost sm" onClick={onExit}><Icon name="chevron-left" size={14} /> Retour aux fiches</button>
-          <b style={{ fontSize: 16 }}>{r.id ? "Modifier" : "Créer"} · {KIND_LABEL[kind]}</b>
-          <span style={{ flex: 1 }} />
-          <button className="btn ghost sm" onClick={() => setPrintOpen(true)} title="Aperçu imprimable au format fiche technique"><Icon name="printer" size={14} /> Imprimer la fiche</button>
-        </div>
-      ) : (
-        <PageHead {...(HEADS[mode] || HEADS.realisation)} />
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <button className="btn ghost sm" onClick={onExit}><Icon name="chevron-left" size={14} /> Retour aux fiches</button>
+        <b style={{ fontSize: 16 }}>{r.id ? "Modifier" : "Créer"} · {KIND_LABEL[kind]}</b>
+        <span style={{ flex: 1 }} />
+        <button className="btn ghost sm" onClick={() => setPrintOpen(true)} title="Aperçu imprimable au format fiche technique"><Icon name="printer" size={14} /> Imprimer la fiche</button>
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
@@ -1055,25 +1033,6 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
           </Card>
         )}
 
-        {/* Ligne 4 — mes fiches enregistrées (masquée quand « Mes fiches techniques » gère déjà la liste) */}
-        {!embedded && <Card title={<span className="card-ttl"><Icon name="history" size={16} /> {SAVED_TITLE[kind]}</span>}>
-          {mine.length === 0 ? (
-            <p className="hint" style={{ margin: 0 }}>{SAVED_EMPTY[kind]}</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {mine.map((s) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span className="fiche-tag">{KIND_LABEL[s.kind]}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.kind === "RECETTE" && s.type ? s.type : KIND_LABEL[s.kind]}{s.visibility === "SHARED" ? " · partagée" : ""}</span>
-                    <Tags text={s.description} /></span>
-                  <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
-                  <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>}
       </div>
 
       {printOpen && <FichePrint fiche={r} onClose={() => setPrintOpen(false)} />}
