@@ -69,7 +69,8 @@ test('le CA des inscriptions est daté au mois où le stagiaire VIENT, sur le mo
         "l'année et le mois se lisent sur la MÊME date, celle de la session");
     assert.doesNotMatch(bloc, /created_at/, 'la date de saisie du dossier ne date plus rien');
     assert.doesNotMatch(inscr, /s\.year = \?/, "l'année de session, indécoupable en mois, ne revient pas");
-    assert.match(SRC, /const DATE_SESSION = 'COALESCE\(s\.start_date, /, 'le premier jour de la session, d\'abord');
+    // La règle vit à part depuis que la Facturation la partage (lib/inscriptionsFacturees.js).
+    assert.match(net('lib/inscriptionsFacturees.js'), /const DATE_SESSION = 'COALESCE\(s\.start_date, /, 'le premier jour de la session, d\'abord');
 });
 
 test('le filtre de mois est factorisé, et couvre toutes les sources', () => {

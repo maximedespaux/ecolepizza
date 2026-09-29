@@ -105,7 +105,7 @@ test('L\'ANNÉE ENTIÈRE : même règle, sans filtre de mois — les douze mois 
 test('UNE SESSION SANS DATE DE DÉBUT se date au lundi de sa semaine ISO', () => {
     /* La formule SQL, recopiée ici pour être éprouvée : la semaine 1 est celle du 4 janvier, et son
        lundi est le 4 janvier moins son rang dans la semaine (WEEKDAY : 0 = lundi). */
-    const src = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'comptabilite.controller.js'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'inscriptionsFacturees.js'), 'utf8');
     assert.match(src, /const DATE_SESSION = 'COALESCE\(s\.start_date, DATE_ADD\(MAKEDATE\(s\.year, 4\), INTERVAL \(\(s\.week - 1\) \* 7 - WEEKDAY\(MAKEDATE\(s\.year, 4\)\)\) DAY\)\)';/);
     const lundi = (annee, semaine) => {
         const quatre = new Date(Date.UTC(annee, 0, 4));
