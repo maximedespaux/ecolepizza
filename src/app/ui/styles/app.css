@@ -21,6 +21,10 @@
   --font-d:"Mulish",system-ui,sans-serif; --font-b:"Mulish",system-ui,sans-serif; --font-m:"Space Mono",ui-monospace,monospace;
   --r:16px; --r-sm:11px; --ease:cubic-bezier(.22,.61,.36,1);
   --shadow-glow:0 8px 30px -8px rgba(220,62,55,.4);
+  /* Halo au survol d'un bouton plein (braise) : plus large et plus dense que le halo au repos.
+     C'est le retour de survol des CTA — la lumière, pas le mouvement (l'admin proscrit le rebond,
+     cf. « pas de rebond, une descente franche »). Une seule teinte, elle porte sur les deux thèmes. */
+  --shadow-glow-strong:0 12px 38px -8px rgba(220,62,55,.55);
   /* Échelle d'élévation cohérente (cartes → panneaux → modales) */
   --relief:none;   /* en clair, c'est l'ombre qui porte l'élévation — cf. le thème sombre */
   --shadow-1:0 1px 2px rgba(31,33,64,.05), 0 1px 3px rgba(31,33,64,.05);
@@ -333,7 +337,12 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 
 /* Buttons ------------------------------------------------------------ */
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 15px;border-radius:11px;font-size:14px;font-weight:600;transition:.16s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
-.btn:hover{border-color:var(--dim)}
+/* Le survol d'un bouton secondaire ne tenait qu'à la bordure (→ --dim). Sur une carte blanche,
+   où le bouton EST déjà blanc (--surface), le geste ne renvoyait presque rien. On ajoute un fond
+   --surface2 (défini en clair ET en sombre) : un retour visible sans mouvement, dans l'esprit du
+   parti pris admin « pas de rebond ». .primary / .danger gardent leur fond plein — leurs règles,
+   plus bas et de même spécificité, l'emportent par l'ordre de la source. */
+.btn:hover{border-color:var(--dim);background:var(--surface2)}
 .btn:active{transform:translateY(1px) scale(.99)}
 /* Un bouton désactivé DOIT se voir. Sans ça, il gardait l'apparence d'un bouton actif — halo
    compris sur .primary : on clique, rien ne se passe, on ne comprend pas pourquoi. Le curseur
@@ -345,11 +354,18 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 .btn:disabled:active,.btn[disabled]:active{transform:none}
 .iconbtn:disabled,.iconbtn[disabled]{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--grad-ember);color:#fff;border:none;box-shadow:var(--shadow-glow)}
-.btn.primary:hover{filter:brightness(1.06)}
+/* Au survol, la braise s'avive un peu et son halo s'élargit : l'appel à l'action « respire » par
+   la lumière, sans bouger (le mouvement reste réservé à l'espace stagiaire). */
+.btn.primary:hover{filter:brightness(1.06);box-shadow:var(--shadow-glow-strong)}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
-.btn.ghost:hover{background:var(--surface);color:var(--text)}
+/* --hover est un voile translucide : il tient sur N'IMPORTE quel fond (barre d'outils, en-tête de
+   carte, page). L'ancien --surface rendait le bouton fantôme invisible sur une carte blanche. */
+.btn.ghost:hover{background:var(--hover);color:var(--text)}
 .btn.sm{padding:6px 11px;font-size:12.5px;border-radius:9px}
 .btn.danger{color:#fff;background:var(--ember1);border:none}
+/* .danger n'avait AUCUN survol propre : il retombait sur .btn:hover, sans effet sur un fond plein.
+   Même respiration que .primary, pour que le geste se sente aussi sur une suppression. */
+.btn.danger:hover{filter:brightness(1.07);box-shadow:var(--shadow-glow-strong)}
 
 /* Bouton d'action en ligne (édition, suppression dans une liste/tableau) */
 .iconbtn{width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--muted);display:grid;place-items:center;font-size:14px;transition:.15s var(--ease);flex:0 0 32px}

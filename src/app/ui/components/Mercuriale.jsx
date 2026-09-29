@@ -9,7 +9,6 @@ import { RAYONS, rayonOf, isRawProduct } from "../lib/garnitures.js";
 // Unité Metro (Kg/L/Piece) → unité mercuriale (kg/litre/pièce).
 const metroUnit = (t) => (t === "Piece" ? "pièce" : t === "L" ? "litre" : "kg");
 const unitPer = (u) => (u === "kg" ? "kg" : u === "litre" ? "L" : u);
-const SOURCE_LABEL = { RNM: "RNM / marché", METRO: "Metro", FOURNISSEUR: "Fournisseur", MANUEL: "Manuel" };
 
 // Ma mercuriale = liste de prix curée. Deux onglets : « Ma mercuriale » (ma liste éditable, avec un
 // AJOUT UNIFIÉ en tête : on cherche un produit, il vient des « Prix du marché » en un clic ou se crée
@@ -156,10 +155,12 @@ function ProductBubble({ r, anchor }) {
   );
 }
 
-// --- Onglet Ma mercuriale : recherche d'ajout unifiée en tête + cartes éditables (prix, unité, source) ---
+// --- Onglet Ma mercuriale : recherche d'ajout unifiée en tête + cartes éditables (prix, unité) ---
+// La « source du prix » (RNM/Metro/Fournisseur/Manuel) n'est plus un réglage par carte : elle est
+// posée à l'ajout, et une saisie de prix à la main la bascule sur MANUEL. La montrer par item
+// n'apportait rien — l'origine se lit déjà dans la puce du marché (m.market).
 function MineTab({ items, reload, refs, onAddFresh, onAddMetro, onAddManual }) {
-  const [busy, setBusy] = useState(false);
-  const patch = async (id, body) => { setBusy(true); try { await updateMercurialeItem(id, body); reload(); } catch { /* ignore */ } finally { setBusy(false); } };
+  const patch = async (id, body) => { try { await updateMercurialeItem(id, body); reload(); } catch { /* ignore */ } };
   const remove = async (id) => { if (!window.confirm("Retirer ce produit de ta mercuriale ?")) return; try { await deleteMercurialeItem(id); reload(); } catch { /* ignore */ } };
 
   // Regroupe par famille (rayon).
@@ -201,11 +202,6 @@ function MineTab({ items, reload, refs, onAddFresh, onAddMetro, onAddManual }) {
                     <select className="inp" value={m.unit || "kg"} onChange={(e) => patch(m.id, { unit: e.target.value })}>
                       {["kg", "litre", "pièce", "botte", "plateau"].map((u) => <option key={u} value={u}>{u}</option>)}
                     </select>
-                  </div>
-                </div>
-                <div className="field" style={{ marginBottom: 0, marginTop: 8 }}><label>Source du prix</label>
-                  <div className="src">
-                    {["RNM", "METRO", "FOURNISSEUR", "MANUEL"].map((s) => <button key={s} className={m.source === s ? "on" : ""} onClick={() => patch(m.id, { source: s })} disabled={busy}>{SOURCE_LABEL[s].split(" ")[0]}</button>)}
                   </div>
                 </div>
               </div>
