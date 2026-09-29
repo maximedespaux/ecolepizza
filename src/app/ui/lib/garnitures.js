@@ -204,6 +204,79 @@ export function pairSuggestions(selectedKeys, baseKey) {
     .filter((p) => p.label && p.cat).slice(0, 6);
 }
 
+/* ── LA COMPOSITION D'UNE RÉALISATION, LUE POUR LES ACCORDS (2026-09-29) ──────────────────────
+ *
+ * Les accords de saveurs vivaient dans la fiche PRÉPARATION, où ils n'avaient pas leur place :
+ * une préparation est UN ingrédient préparé (une sauce, une crème). C'est la RÉALISATION qui
+ * assemble — une pâte, des préparations, d'autres ingrédients —, et c'est là qu'on se demande
+ * quoi mettre avec quoi. Le guide lit donc la composition telle qu'elle est :
+ *   · la BASE : une ligne qui nomme une base de l'école (« Sauce tomate San Marzano » → sauce
+ *     tomate), de préférence une PRÉPARATION importée ;
+ *   · les produits DÉJÀ POSÉS, pour ne pas les resuggérer et pour que leurs affinités comptent.
+ *
+ * La lecture se fait mot à mot, sans casse ni accents, au singulier, et la correspondance la
+ * plus PRÉCISE l'emporte : « Jambon cru de Parme » est du jambon cru, pas du jambon ;
+ * « Mozzarella di bufala » de la bufala, pas de la mozzarella. Un produit se reconnaît à son
+ * libellé OU à sa clé : « Basilic frais » a pour clé `basilic`, qui reconnaît une ligne « Basilic ». */
+const MOTS_VIDES = new Set(["de", "d", "du", "des", "la", "le", "les", "l", "au", "aux", "et", "a", "en"]);
+const singulier = (m) => (m.length > 3 && m.endsWith("s") ? m.slice(0, -1) : m);
+export const motsDe = (texte) => String(texte || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  .split(/[^a-z0-9]+/).filter((m) => m && !MOTS_VIDES.has(m)).map(singulier);
+const motifsDe = (entree) => [motsDe(entree.label), motsDe(String(entree.key).replace(/_/g, " "))].filter((m) => m.length);
+// La correspondance la plus précise d'une liste : celle dont le motif compte le plus de mots.
+function meilleure(entrees, mots) {
+  const presents = new Set(mots);
+  let choix = null, poids = 0;
+  for (const e of entrees) {
+    for (const motif of motifsDe(e)) {
+      if (motif.length > poids && motif.every((m) => presents.has(m))) { choix = e; poids = motif.length; }
+    }
+  }
+  return choix ? { entree: choix, poids } : null;
+}
+const BASES_LUES = GARN_BASES.filter((b) => (b.pairs || []).length);
+
+/**
+ * Ce que la composition dit aux accords : `{ base, ligneBase, presents }` — la base de l'école
+ * reconnue (ou `null`), la ligne qui la porte, et les clés des produits déjà posés.
+ */
+export function lireComposition(lignes) {
+  const presents = new Set();
+  const bases = [];
+  (lignes || []).forEach((l, i) => {
+    const mots = motsDe(l.label);
+    const produit = meilleure([...GARN_PRODUITS, ...GARN_DAIRY], mots);
+    const base = meilleure(BASES_LUES, mots);
+    const preparation = l.component_kind === "PREPARATION";
+    // Une ligne qui nomme à la fois une base et un produit va au plus précis ; à égalité, une
+    // PRÉPARATION importée est une base (« Crème de mozzarella » est une crème).
+    if (base && (!produit || base.poids > produit.poids || (base.poids === produit.poids && preparation))) {
+      bases.push({ base: base.entree, ligne: l, rang: preparation ? 0 : 1, i });
+    } else if (produit) {
+      presents.add(produit.entree.key);
+    }
+  });
+  bases.sort((a, b) => a.rang - b.rang || a.i - b.i);
+  return { base: bases[0] ? bases[0].base : null, ligneBase: bases[0] ? bases[0].ligne : null, presents: [...presents] };
+}
+
+/**
+ * Le produit dans MA MERCURIALE, reconnu de la même façon : l'article dont la lecture LA PLUS
+ * PRÉCISE est ce produit (« Mozzarella fior di latte » pour la mozzarella — et pas « Mozzarella
+ * di bufala », qui est de la bufala). Une BASE, elle, ne se reconnaît qu'à son nom entier : sa
+ * clé (`tomate`) désignerait aussi bien les tomates cerises.
+ */
+export function dansMercuriale(merc, produit) {
+  const estBase = GARN_BASES.some((b) => b.key === produit.key);
+  const nom = motsDe(produit.label).join(" ");
+  return (merc || []).find((m) => {
+    const mots = motsDe(m.label);
+    if (estBase) return mots.join(" ") === nom;
+    const lu = meilleure([...GARN_PRODUITS, ...GARN_DAIRY], mots);
+    return !!lu && lu.entree.key === produit.key;
+  }) || null;
+}
+
 // Coût matière d'une garniture (base + produits + laitier), €/pizza.
 export function garnitureCost(garn) {
   const items = garnitureItems(garn);

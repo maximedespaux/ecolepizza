@@ -1,7 +1,7 @@
 /**
  * COÛT UNITAIRE D'UNE FICHE — la part du calcul que le serveur doit faire lui-même.
  *
- * Quand une réalisation importe une garniture, c'est le prix calculé ICI (`ficheUnitCost`,
+ * Quand une réalisation importe une préparation, c'est le prix calculé ICI (`ficheUnitCost`,
  * recipe.controller.js) qui entre dans la réalisation. Il devait donc être le même que celui
  * que l'éditeur affiche et que la fiche imprime — ce qu'il n'était pas : l'éditeur et l'import
  * divisaient par un rendement de 1 000 g posé par défaut, l'impression par le poids des

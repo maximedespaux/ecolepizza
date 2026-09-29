@@ -113,13 +113,13 @@ const KIND_TABS = [
   { k: "ALL", label: "Tout" },
   { k: "ECHANGE", label: "Entraide" },
   { k: "PATE", label: "Empâtements" },
-  { k: "PREPARATION", label: "Garnitures" },
+  { k: "PREPARATION", label: "Préparations" },
   { k: "RECETTE", label: "Réalisations" },
 ];
 // Type de fiche → libellé, couleur d'accent et icône (badges).
 const kindMeta = (k) => (
   k === "PATE" ? { label: "Empâtement", color: "var(--gold)", icon: "wheat" }
-    : k === "PREPARATION" ? { label: "Garniture", color: "var(--green)", icon: "list-checks" }
+    : k === "PREPARATION" ? { label: "Préparation", color: "var(--green)", icon: "list-checks" }
       : { label: "Réalisation", color: "var(--ember1)", icon: "pizza" }
 );
 // Hashtags (#tag) de la description → badges.
@@ -503,7 +503,7 @@ export default function Communaute() {
   }
 
   /* Retirer une fiche du fil — modération. Elle repasse en PRIVÉE : l'auteur la garde dans ses
-     empâtements ou ses garnitures, souvent le travail d'une session. Le libellé le dit en toutes
+     empâtements ou ses préparations, souvent le travail d'une session. Le libellé le dit en toutes
      lettres dans la confirmation : « retirer » et « supprimer » ne doivent pas se confondre au
      moment où l'on clique. */
   async function retirerDuFil(d) {
@@ -568,8 +568,8 @@ export default function Communaute() {
           Seule l'accroche change — le fil, lui, reste le même (cadré sur l'organisme). */}
       <PageHead eyebrow={duBureau ? "Formation · communauté" : "Outils · communauté"} title="Communauté"
         lead={duBureau
-          ? "Le fil des stagiaires : questions d'entraide, empâtements, garnitures et réalisations. Vous pouvez y répondre, épingler ce qui compte, et publier une annonce de l'école."
-          : "Les fiches partagées par les autres stagiaires : empâtements, garnitures et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter."} />
+          ? "Le fil des stagiaires : questions d'entraide, empâtements, préparations et réalisations. Vous pouvez y répondre, épingler ce qui compte, et publier une annonce de l'école."
+          : "Les fiches partagées par les autres stagiaires : empâtements, préparations et réalisations. Aime, commente, mets de côté (wishlist), ou enregistre-en une dans tes fiches pour l'adapter."} />
 
       {/* LE BANDEAU DE L'ÉCOLE. Avant la barre d'outils, donc avant tout filtre : une annonce
           ne se cherche pas, elle s'impose. Il ne s'affiche que s'il a quelque chose à dire —

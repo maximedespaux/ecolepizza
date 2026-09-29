@@ -6485,6 +6485,11 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .fe-rdt-alerte > svg{flex:none;margin-top:1px}
 [data-theme="dark"] .fe-rdt-alerte{color:#f6a66a}
 
+/* ── Accords de saveurs (réalisation) : la base lue dans la composition, puis les suggestions ── */
+.fe-accord-base{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.fe-accord-sans-base{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.fe-accord-puces{display:flex;flex-wrap:wrap;gap:8px}
+
 /* ── Carte repliable (accords de saveurs) ── */
 .fe-repli{padding:0}
 .fe-repli-t{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;width:100%;min-height:64px;padding:12px 20px 12px 24px;border:none;border-radius:inherit;

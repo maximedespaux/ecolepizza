@@ -507,7 +507,7 @@ const deleteRecipe = async (req, res) => {
  * POST /api/recipes/:id/retirer — retirer une fiche du fil de la Communauté.
  *
  * ELLE REPASSE EN PRIVÉE, elle n'est PAS supprimée. Une fiche partagée appartient aussi à son
- * auteur : elle vit dans ses empâtements, ses garnitures, ses réalisations, et c'est souvent le
+ * auteur : elle vit dans ses empâtements, ses préparations, ses réalisations, et c'est souvent le
  * travail d'une session. Détruire sa fiche parce que sa publication dérange dans le fil punit
  * la personne pour le geste — et sans recours. Dépublier suffit à la modération, et se défait :
  * l'auteur peut repartager, l'école re-retirer.

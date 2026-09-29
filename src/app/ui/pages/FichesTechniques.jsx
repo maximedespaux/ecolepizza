@@ -7,7 +7,7 @@ import FicheRecette from "./FicheRecette.jsx";
 import { getMyRecipes, deleteRecipe, unshareRecipe, photoFicheUrl } from "../api/apiClient.js";
 
 /**
- * MES FICHES TECHNIQUES — l'outil UNIQUE (2026-09-29) qui réunit les empâtements, garnitures et
+ * MES FICHES TECHNIQUES — l'outil UNIQUE (2026-09-29) qui réunit les empâtements, préparations et
  * réalisations d'autrefois. Une fiche = des ingrédients (puisés dans la mercuriale) + d'autres
  * fiches importées (à leur coût au kg) + une procédure ; toutes vivent dans la même table `recipe`,
  * distinguées par leur `kind`. Ici : la liste de TOUTES les fiches (tous types, filtrables) et
@@ -17,14 +17,14 @@ import { getMyRecipes, deleteRecipe, unshareRecipe, photoFicheUrl } from "../api
  * ENTIÈRE) ; on peut retirer du partage d'ici, car `unshareRecipe` est une route dédiée qui ne
  * touche qu'à la visibilité (repartager depuis la liste réécrirait la fiche sans ses ingrédients).
  */
-const KIND_MODE = { PATE: "empatement", PREPARATION: "garniture", RECETTE: "realisation" };
-const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
+const KIND_MODE = { PATE: "empatement", PREPARATION: "preparation", RECETTE: "realisation" };
+const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Préparation", RECETTE: "Réalisation" };
 // Même pastille que l'éditeur : chaque type a sa couleur (elles étaient toutes du même beige).
 const KIND_ICON = { PATE: "wheat", PREPARATION: "list-checks", RECETTE: "pizza" };
 const FILTERS = [
   { key: "", label: "Toutes" },
   { key: "PATE", label: "Empâtements" },
-  { key: "PREPARATION", label: "Garnitures" },
+  { key: "PREPARATION", label: "Préparations" },
   { key: "RECETTE", label: "Réalisations" },
 ];
 
@@ -54,12 +54,12 @@ export default function FichesTechniques() {
   return (
     <>
       <PageHead icon="file-text" eyebrow="Outils · fiches techniques" title="Mes fiches techniques"
-        lead="Tes empâtements, garnitures et réalisations réunis. Compose une fiche à partir de ta mercuriale, importe une fiche dans une autre à son coût au kg, et partage-la à la communauté." />
+        lead="Tes empâtements, préparations et réalisations réunis. Compose une fiche à partir de ta mercuriale, importe une fiche dans une autre à son coût au kg, et partage-la à la communauté." />
 
       <BuilderHub cards={[
         { title: "Empâtement", badge: count("PATE") || "0", desc: "Calcule ta pâte au pourcentage boulanger (hydratation, sel, huile, levure).", icon: "wheat", color: "#e0ac48", onClick: () => setEdit({ mode: "empatement", id: null }) },
-        { title: "Garniture", badge: count("PREPARATION") || "0", desc: "Compose une base, une sauce, une garniture ; chiffrée depuis ta mercuriale.", icon: "list-checks", color: "#3aa0e0", onClick: () => setEdit({ mode: "garniture", id: null }) },
-        { title: "Réalisation", badge: count("RECETTE") || "0", desc: "Assemble une pizza : importe tes fiches et des ingrédients, coût matière et prix.", icon: "pizza", color: "#5f9e3f", onClick: () => setEdit({ mode: "realisation", id: null }) },
+        { title: "Préparation", badge: count("PREPARATION") || "0", desc: "Un ingrédient que tu prépares : une sauce, une base, une crème… Chiffré depuis ta mercuriale.", icon: "list-checks", color: "#3aa0e0", onClick: () => setEdit({ mode: "preparation", id: null }) },
+        { title: "Réalisation", badge: count("RECETTE") || "0", desc: "Ta pizza : une pâte, tes préparations et les autres ingrédients. Coût matière, prix conseillé et accords de saveurs.", icon: "pizza", color: "#5f9e3f", onClick: () => setEdit({ mode: "realisation", id: null }) },
       ]} />
 
       <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes fiches enregistrées</span>} style={{ marginTop: 20 }}>

@@ -1,65 +1,76 @@
-import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Card from "./Card.jsx";
-import { GARN_BASES, pairSuggestions, num } from "../lib/garnitures.js";
+import { euroFixe } from "../lib/format.js";
+import { GARN_BASES, pairSuggestions, num, perWeightUnit, unitShort, lireComposition, dansMercuriale } from "../lib/garnitures.js";
 
 /**
- * ACCORDS DE SAVEURS — helper d'une fiche GARNITURE. On part d'une base (sauce tomate, crème…)
- * puis `pairSuggestions` remonte, à partir de ce qui est posé, les produits que l'école associe
- * (relations ASYMÉTRIQUES : cf. lib/garnitures.js). Chaque suggestion s'ajoute comme LIGNE
- * D'INGRÉDIENT à la fiche, chiffrée depuis MA MERCURIALE quand le produit y figure (par libellé),
- * sinon au prix indicatif du produit. Le partage de la fiche et le calcul du coût sont inchangés.
+ * ACCORDS DE SAVEURS — le guide d'une fiche RÉALISATION (déplacé de la préparation le 2026-09-29).
+ *
+ * Une préparation est UN ingrédient préparé (une sauce, une crème) ; c'est la réalisation qui
+ * assemble une pâte, des préparations et d'autres ingrédients, et c'est là qu'on se demande quoi
+ * mettre avec quoi. Le guide ne demande donc plus rien : il LIT la composition (`lireComposition`,
+ * lib/garnitures.js) — sa base, souvent une préparation importée (« Sauce tomate San Marzano »),
+ * et les produits déjà posés — puis `pairSuggestions` remonte ce que l'école associe à l'ensemble
+ * (relations ASYMÉTRIQUES : cf. lib/garnitures.js). Rien n'est gardé ici : ajouter une suggestion
+ * l'ajoute à la composition, qui la relit aussitôt — elle sort des suggestions, et ses propres
+ * affinités y entrent.
+ *
+ * Une suggestion s'ajoute depuis MA MERCURIALE quand le produit y figure (« Mozzarella fior di
+ * latte » pour la mozzarella, avec son prix et son produit Metro), sinon au prix indicatif.
  */
-const stars = (s) => "★".repeat(s >= 3 ? 3 : s >= 2 ? 2 : 1);
+const etoiles = (s) => "★".repeat(s >= 3 ? 3 : s >= 2 ? 2 : 1);
 
-export default function PairingSuggest({ merc, onAdd, bare = false }) {
-  const [base, setBase] = useState("");
-  const [picked, setPicked] = useState([]); // clés de produits déjà ajoutés via les accords
+export default function PairingSuggest({ lignes, merc, onAdd, bare = false }) {
+  const { base, ligneBase, presents } = lireComposition(lignes);
+  const suggestions = pairSuggestions(presents, base ? base.key : null);
 
-  // Prix : d'abord MA MERCURIALE (par libellé, insensible à la casse), sinon le prix indicatif.
-  const priceOf = (label, fallback) => {
-    const m = (merc || []).find((x) => (x.label || "").toLowerCase() === String(label).toLowerCase());
-    return m ? num(m.price) : num(fallback);
+  // La ligne à ajouter : le produit de ma mercuriale s'il y est, sinon le produit de l'école.
+  const ligneDe = (p) => {
+    const m = dansMercuriale(merc, p);
+    if (!m) return { label: p.label, unit: "g", unit_price: num(p.price), qty: p.qty || 40 };
+    const auPoids = perWeightUnit(m.unit);
+    return { label: m.label, product_id: m.catalog_product_id || null, unit: auPoids ? "g" : "piece", unit_price: num(m.price), qty: auPoids ? (p.qty || 40) : 1 };
   };
-  const chooseBase = (b) => { setBase(b.key); onAdd({ label: b.label, unit_price: priceOf(b.label, b.price), unit: "g", qty: b.qty || 60 }); };
-  const addProd = (p) => { setPicked((k) => [...k, p.key]); onAdd({ label: p.label, unit_price: priceOf(p.label, p.price), unit: "g", qty: p.qty || 40 }); };
+  const prixDe = (p) => {
+    const m = dansMercuriale(merc, p);
+    return m ? `prix de ta mercuriale : ${euroFixe(num(m.price))}/${unitShort(m.unit)}` : `prix indicatif : ${euroFixe(num(p.price))}/kg`;
+  };
 
-  const baseObj = GARN_BASES.find((b) => b.key === base);
-  const sugg = base ? pairSuggestions(picked, base) : [];
-
-  // `bare` : sans sa carte ni son titre, quand l'appelant l'enveloppe déjà (section repliable
-  // de l'éditeur de fiche).
+  // `bare` : sans sa carte ni son titre, quand l'appelant l'enveloppe déjà (section repliable).
   const Cadre = bare ? Nu : Card;
   return (
     <Cadre title={<span className="card-ttl"><Icon name="star" size={16} /> Accords de saveurs <span className="hint" style={{ fontWeight: 400 }}>· ce que l'école associe</span></span>}>
-      {!base ? (
-        <>
-          <p className="hint" style={{ marginTop: 0 }}>Choisis une base : elle s'ajoute à la fiche, puis les produits suggérés (chiffrés depuis ta mercuriale) s'ajoutent d'un clic.</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {base ? (
+        <p className="fe-accord-base">
+          <span className="fiche-tag">{base.emoji} {base.label}</span>
+          {ligneBase && ligneBase.label !== base.label && <span className="hint">« {ligneBase.label} »</span>}
+        </p>
+      ) : (
+        <div className="fe-accord-sans-base">
+          <p className="hint" style={{ margin: 0 }}>
+            Aucune base dans la composition. Ajoute ta préparation (sauce, crème…) par le champ d'ajout, ou pars d'une base de l'école :
+          </p>
+          <div className="fe-accord-puces">
             {GARN_BASES.filter((b) => (b.pairs || []).length).map((b) => (
-              <button key={b.key} className="btn sm ghost" onClick={() => chooseBase(b)}>{b.emoji} {b.label}</button>
+              <button key={b.key} type="button" className="btn sm ghost" onClick={() => onAdd(ligneDe(b))} title={prixDe(b)}>
+                {b.emoji} {b.label}
+              </button>
             ))}
           </div>
-        </>
-      ) : (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            <span className="fiche-tag">{baseObj?.emoji} {baseObj?.label}</span>
-            <button className="btn sm ghost" onClick={() => { setBase(""); setPicked([]); }}><Icon name="chevron-left" size={13} /> Changer de base</button>
-          </div>
-          {sugg.length === 0 ? (
-            <p className="hint" style={{ margin: 0 }}>Plus de suggestion pour cet accord — ajoute d'autres ingrédients depuis ta mercuriale.</p>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {sugg.map((p) => (
-                <button key={p.key} className="btn sm ghost" onClick={() => addProd(p)} title={`Suggéré par ${p.matches.join(", ")}`}>
-                  <Icon name="plus" size={12} /> {p.emoji} {p.label} <span style={{ color: "var(--gold)", letterSpacing: 1 }}>{stars(p.score)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+        </div>
       )}
+      {suggestions.length > 0 ? (
+        <div className="fe-accord-puces">
+          {suggestions.map((p) => (
+            <button key={p.key} type="button" className="btn sm ghost" onClick={() => onAdd(ligneDe(p))}
+              title={`Avec ${p.matches.join(", ")} · ${prixDe(p)}`}>
+              <Icon name="plus" size={12} /> {p.emoji} {p.label} <span style={{ color: "var(--gold)", letterSpacing: 1 }}>{etoiles(p.score)}</span>
+            </button>
+          ))}
+        </div>
+      ) : base ? (
+        <p className="hint" style={{ margin: 0 }}>Plus de suggestion : ta composition couvre déjà les accords de l'école.</p>
+      ) : null}
     </Cadre>
   );
 }
