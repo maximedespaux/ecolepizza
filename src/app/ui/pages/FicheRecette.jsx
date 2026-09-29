@@ -10,6 +10,7 @@ import { perWeightUnit } from "../lib/garnitures.js";
 import Mercuriale from "../components/Mercuriale.jsx";
 import MercProductPicker from "../components/MercProductPicker.jsx";
 import PairingSuggest from "../components/PairingSuggest.jsx";
+import FichePrint from "../components/FichePrint.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 
 /**
@@ -412,6 +413,7 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
   const [importOpen, setImportOpen] = useState(false);
   const [mercOpen, setMercOpen] = useState(false);
   const [merc, setMerc] = useState([]); // ma mercuriale : source de prix des ingrédients
+  const [printOpen, setPrintOpen] = useState(false); // aperçu de la fiche imprimable
   const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) → Niveau II ou Expert
   const [napo, setNapo] = useState(false); // typologie Napolitaine → spécialisation Napolitaine
   const [spe, setSpe] = useState(false);   // typologies Teglia/Pala → spécialisation In Teglia & Pala (ou Expert)
@@ -428,7 +430,7 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
   // — SAUF le personnel, qui les a TOUTES. Il enseigne ces empâtements et n'a pas de fiche
   // stagiaire, si bien que `getMyFormations` lui répond 404 : sans ce raccourci, un formateur de
   // niveau II se verrait refuser la napolitaine dans l'outil qu'il fait utiliser à ses stagiaires.
-  const { user } = useContext(UserContext);
+  const { user } = useContext(UserContext) || {};
   const estPersonnel = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
   useEffect(() => {
     if (estPersonnel) { setNiv2(true); setNapo(true); setSpe(true); return; }
@@ -656,6 +658,8 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <button className="btn ghost sm" onClick={onExit}><Icon name="chevron-left" size={14} /> Retour aux fiches</button>
           <b style={{ fontSize: 16 }}>{r.id ? "Modifier" : "Créer"} · {KIND_LABEL[kind]}</b>
+          <span style={{ flex: 1 }} />
+          <button className="btn ghost sm" onClick={() => setPrintOpen(true)} title="Aperçu imprimable au format fiche technique"><Icon name="printer" size={14} /> Imprimer la fiche</button>
         </div>
       ) : (
         <PageHead {...(HEADS[mode] || HEADS.realisation)} />
@@ -1072,6 +1076,7 @@ function FicheRecette({ mode = "realisation", openId = null, embedded = false, o
         </Card>}
       </div>
 
+      {printOpen && <FichePrint fiche={r} onClose={() => setPrintOpen(false)} />}
       {mercOpen && <MercurialeModal items={merc} reload={reloadMerc} onClose={() => { setMercOpen(false); reloadMerc(); }} onAdd={addFromMerc} />}
       {searchOpen && <IngredientSearchModal onClose={() => setSearchOpen(false)} onAdd={addProduct} added={added} />}
       {importOpen && <ComponentPickerModal onClose={() => setImportOpen(false)} onAdd={addComponent} added={importedIds} excludeId={r.id} />}
