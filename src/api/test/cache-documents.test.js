@@ -69,7 +69,10 @@ test('LES ROUTES QUI SERVENT UN DOCUMENT NOMINATIF NE RÉOUVRENT PAS LE CACHE', 
     /* Le défaut est fermé en un point ; ce test garde la liste de ceux qui pourraient le
        rouvrir. Seules les images d'écran ont une raison d'être gardées : elles reviennent
        plusieurs fois par page et ne portent aucune pièce de dossier. */
-    const permis = new Set(['espace.controller.js', 'community.controller.js', 'events.controller.js']);
+    /* `photoFiche.controller.js` (migration 191) : la photo d'une fiche technique est une image
+       d'écran — vignette de la liste et de la Communauté —, pas une pièce de dossier. Elle a son
+       contrôleur À ELLE pour que l'exception ne couvre pas les autres routes des recettes. */
+    const permis = new Set(['espace.controller.js', 'community.controller.js', 'events.controller.js', 'photoFiche.controller.js']);
     const dossier = path.join(API, 'controllers');
     const fautifs = [];
     for (const f of fs.readdirSync(dossier)) {

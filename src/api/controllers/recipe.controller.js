@@ -6,20 +6,15 @@ const db = require('../config/database.js');
 const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
 const { peutModerer } = require('../lib/moderation.js');
 const { logAudit } = require('../lib/audit.js');
-const { coutLigne, poidsIngredients, prixUnitairePreparation } = require('../lib/coutFiche.js');
+const { coutLigne, poidsIngredients, prixUnitairePreparation, coutPate } = require('../lib/coutFiche.js');
+const { accessibleRecipe } = require('../lib/ficheAccessible.js');
+const { ajouterPhotos } = require('../lib/photoFiche.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
 // Liste séparée par des virgules → tableau. Même idiome que learner.levels / completed_levels.
 const listeCadres = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
 
-// Récupère une fiche accessible à l'utilisateur (auteur, ou partagée dans le même organisme).
-async function accessibleRecipe(conn, id, user) {
-    const [[r]] = await conn.query('SELECT id, author_user_id, organization_id, visibility FROM recipe WHERE id = ?', [id]);
-    if (!r) return null;
-    const ok = r.author_user_id === user.id || (r.visibility === 'SHARED' && r.organization_id === user.organization_id);
-    return ok ? r : false;
-}
 
 /** GET /api/recipes/catalog?q=&brand=&family=&sort=&limit= — recherche filtrée d'ingrédients. */
 const searchCatalog = async (req, res) => {
@@ -96,27 +91,18 @@ const catalogBrands = async (req, res) => {
 const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
     flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at`;
 
-// Ratio pâte/farine (pourcentage boulanger). Depuis les réglages du calculateur si présents,
-// sinon 1.68 par défaut (≈ 60 % hydratation).
-function doughRatio(r) {
-    let dp = r.dough_params;
-    if (typeof dp === 'string') { try { dp = JSON.parse(dp); } catch { dp = null; } }
-    if (dp && (dp.hydra != null || dp.sel != null || dp.huile != null || dp.levure != null)) {
-        return 1 + ((Number(dp.hydra) || 0) + (Number(dp.sel) || 0) + (Number(dp.huile) || 0) + (Number(dp.levure) || 0)) / 100;
-    }
-    return 1.68;
-}
-
 // Coût unitaire d'une fiche (pour l'importer dans une recette) : { unit:'g'|'piece', unitPrice, total }.
-// PÂTE = coût par pâton (farine + ingrédients) ; PRÉPARATION = coût total ÷ rendement déclaré,
-// ou ÷ poids des ingrédients s'il n'y en a pas — la règle de lib/coutFiche.js, la même qu'à
+// PÂTE = coût par pâton : farine, sel, huile, levure (et substitutions, adjonctions) — le calcul
+// du calculateur, `coutPate` ; PRÉPARATION = coût total ÷ rendement déclaré, ou ÷ poids des
+// ingrédients s'il n'y en a pas. Les deux règles vivent dans lib/coutFiche.js, les mêmes qu'à
 // l'écran et à l'impression.
 async function ficheUnitCost(conn, r) {
     const [ings] = await conn.query('SELECT qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ?', [r.id]);
     const ingCost = ings.reduce((s, t) => s + coutLigne(t), 0);
     if (r.kind === 'PATE') {
-        const perPaton = ((Number(r.paton_g) / 1000) / doughRatio(r)) * Number(r.flour_price || 0) + ingCost;
-        return { unit: 'piece', unitPrice: perPaton, total: perPaton * Math.max(1, Number(r.servings) || 1) };
+        const pate = coutPate(r);
+        const perPaton = pate.parPaton + ingCost;
+        return { unit: 'piece', unitPrice: perPaton, total: perPaton * pate.patons };
     }
     const p = prixUnitairePreparation(ingCost, poidsIngredients(ings), r.yield_qty, r.yield_unit);
     return { unit: p.unit, unitPrice: p.unitPrice, total: ingCost };
@@ -136,6 +122,7 @@ const listMine = async (req, res) => {
             `SELECT ${RECIPE_COLS} FROM recipe WHERE author_user_id = ? ${kf ? 'AND kind = ?' : ''} ORDER BY updated_at DESC, name`,
             kf ? [req.user.id, kind] : [req.user.id]
         );
+        await ajouterPhotos(conn, rows);
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
@@ -310,6 +297,7 @@ const listShared = async (req, res) => {
                 rows.forEach((r) => { r.new_likes = 0; }); // migration 106 non jouée
             }
         }
+        await ajouterPhotos(conn, rows);
         res.json({ data: rows });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
@@ -405,7 +393,9 @@ const getRecipe = async (req, res) => {
         /* `can_moderate` : sans lui, le bouton de suppression ne s'affichait que sur `mine` et
          * l'école n'avait aucun moyen de retirer le commentaire d'un tiers — sinon supprimer la
          * fiche entière, ce qui punit son auteur pour le message d'un autre. */
-        res.json({ data: { ...r, mine, ingredients: ings, used_in: usedIn, like_count: likeCount, liked, comments,
+        // `photo_disponible` : l'éditeur sait s'il peut proposer une photo (migration 191).
+        const photoDisponible = await ajouterPhotos(conn, [r]);
+        res.json({ data: { ...r, mine, ingredients: ings, used_in: usedIn, photo_disponible: photoDisponible, like_count: likeCount, liked, comments,
             can_moderate: await peutModerer(req.user) } });
     } catch (err) {
         if (noTable(err)) return res.status(404).json({ message: 'Espace recettes non initialisé (migration 071).' });

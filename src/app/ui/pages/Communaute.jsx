@@ -18,7 +18,7 @@ import { cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } fro
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
+import { photoFicheUrl, getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -694,6 +694,8 @@ export default function Communaute() {
                         )}
                       </div>
                       <Tags text={s.description} />
+                      {/* La photo de la fiche (migration 191), en vignette comme celle d'une question. */}
+                      {s.photo_v && <img className="q-vignette" src={photoFicheUrl(s.id, s.photo_v)} alt="" loading="lazy" />}
                     </div>
                     <div className="comm-foot">
                       <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(s.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
@@ -751,6 +753,7 @@ export default function Communaute() {
                         profil, geste attendu quand on lit ce qu'il a publié. */}
                     <PostHead id={detail.author_user_id} name={detail.author_name} avatar={detail.author_avatar}
                       cadre={cadreDe(detail.author_user_id, detail.author_done, detail.author_cadre, detail.author_cadres_ex)} date={detail.updated_at} onOpen={openProfile} />
+                    {detail.photo_v && <img className="q-photo" src={photoFicheUrl(detail.id, detail.photo_v)} alt={`Photo de ${detail.name}`} />}
                     {detail.description && <p style={{ fontSize: 13.5, margin: "10px 0 6px" }}>{detail.description}</p>}
                     <Tags text={detail.description} />
 

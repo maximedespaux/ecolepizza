@@ -5,6 +5,7 @@
  *
  *  · LA PÂTE COMPTÉE DEUX FOIS. Une réalisation portait une carte « Empâtement » (pâton + prix de
  *    la farine) ET pouvait importer une fiche Pâte comme ingrédient : les deux s'additionnaient.
+ *    (Et une pâte coûte partout sa farine, son sel, son huile et sa levure : `computeBuild`.)
  *    Relevé sur une Reine : 2,56 € de matière au lieu de 2,38 €. Désormais la pâte est UNE LIGNE
  *    de la composition : la fiche Pâte importée, ou à défaut une pâte ESTIMÉE (pâton + farine,
  *    l'ancienne carte), qui s'efface d'elle-même dès qu'une fiche Pâte entre dans la réalisation.
@@ -24,14 +25,10 @@
  *   component_recipe_id, component_kind ("PATE" | "PREPARATION", renvoyé par le serveur),
  *   piece_g (poids d'une pièce : le pâton d'une fiche Pâte).
  */
-import { num } from "./dough.js";
+import { num, computeBuild, DP_DEFAULT } from "./dough.js";
 
 /* Diviseur vers le kilo (1 L compté pour 1 kg, comme partout dans l'outil). */
 export const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 };
-
-/* Ratio pâte / farine d'une pâte ESTIMÉE : 1,68 ≈ 60 % d'eau + sel, huile, levure. C'est le
-   forfait qu'appliquait l'ancienne carte « Empâtement » ; une fiche Pâte, elle, a le sien. */
-export const RATIO_PATE_ESTIMEE = 1.68;
 
 /* Couleurs des trois lignes qui coûtent le plus (fromage, tomate, bleu) — les autres en gris.
    Elles marquent la barre de chaque ligne ET la répartition du panneau : la même couleur y
@@ -67,13 +64,22 @@ export const sansPateEstimee = (r) => (r?.pate ?? lireParams(r).pate) === "aucun
 /** La pâte estimée compte-t-elle ? Réalisation, sans fiche Pâte, et pas retirée. */
 export const pateEstimeeActive = (r) => r?.kind === "RECETTE" && !aUneFichePate(r) && !sansPateEstimee(r);
 
-/** La pâte estimée, sous forme de ligne : un pâton au prix du kilo de PÂTE (farine ÷ ratio). */
+/**
+ * La pâte ESTIMÉE, sous forme de ligne : un pâton de pâte CLASSIQUE (les réglages par défaut du
+ * calculateur : 55 % d'eau, 2 % de sel, 2,5 % d'huile, 0,35 % de levure), chiffré comme tout
+ * empâtement — farine, sel, huile et levure (décidé par l'école le 2026-09-29). Son prix au kilo
+ * est celui de la PÂTE, pour que « poids × prix » tombe sur le coût du pâton.
+ * Elle se comptait à la farine seule (farine ÷ 1,68), quand une fiche Empâtement importée comptait
+ * aussi le reste : la même pizza changeait de prix selon d'où venait sa pâte.
+ */
+export const PATE_ESTIMEE = { ...DP_DEFAULT, mode: "patons" };
+export function coutPateEstimee(r) {
+  const paton = Math.max(1, num(r.paton_g) || 250);
+  return computeBuild({ servings: 1, paton_g: paton, flour_price: r.flour_price, dough_params: PATE_ESTIMEE });
+}
 export function ligneEstimee(r) {
-  return {
-    estimee: true, label: "Pâte (estimation)", unit: "g",
-    qty: Math.max(1, num(r.paton_g) || 250),
-    unit_price: num(r.flour_price) / RATIO_PATE_ESTIMEE,
-  };
+  const b = coutPateEstimee(r);
+  return { estimee: true, label: "Pâte (estimation)", unit: "g", qty: b.patonG, unit_price: b.costPerKg };
 }
 
 /**

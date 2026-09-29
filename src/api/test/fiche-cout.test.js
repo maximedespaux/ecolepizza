@@ -27,6 +27,7 @@ const API = path.join(__dirname, '..');
 const UI = path.join(__dirname, '..', '..', 'app', 'ui');
 const lire = (base, f) => fs.readFileSync(path.join(base, f), 'utf8');
 const ecran = () => import('../../app/ui/lib/coutFiche.js');
+const pates = () => import('../../app/ui/lib/dough.js');
 const serveur = require('../lib/coutFiche.js');
 const pres = (a, b, tol = 0.005) => Math.abs(a - b) <= tol;
 
@@ -58,11 +59,14 @@ test('une réalisation qui importe son empâtement ne recompte pas la pâte', as
 });
 
 test('sans empâtement importé, la pâte estimée compte — une fois, en tête de la composition', async () => {
-    const { coutFiche, RATIO_PATE_ESTIMEE } = await ecran();
+    const { coutFiche } = await ecran();
+    const { computeBuild, DP_DEFAULT } = await pates();
     const r = reine();
     r.ingredients = r.ingredients.slice(1);
     const c = coutFiche(r);
-    const pate = (250 / 1000) * (1.2 / RATIO_PATE_ESTIMEE);
+    // Une pâte classique d'un pâton, farine, sel, huile ET levure — comme tout empâtement.
+    const pate = computeBuild({ servings: 1, paton_g: 250, flour_price: 1.2, dough_params: { ...DP_DEFAULT, mode: 'patons' } }).costPerPaton;
+    assert.ok(pate > (250 / 1000) * (1.2 / 1.68), 'l\'estimation ne se compte plus à la farine seule');
     assert.ok(c.lignes[0].estimee, 'la pâte estimée est la première ligne');
     assert.equal(c.lignes.filter((l) => l.estimee).length, 1);
     assert.ok(pres(c.lignes[0].cout, pate));
@@ -188,4 +192,61 @@ test('sur téléphone, une ligne de la composition devient une carte où le nom 
     assert.ok(bloc, 'la composition se replie en cartes');
     assert.match(bloc[0], /\.fe-ing\{display:flex;flex-wrap:wrap/);
     assert.match(bloc[0], /\.fe-ing-nom\{order:1;flex:1 1 calc\(100% - 110px\)\}/, 'le nom prend la première rangée');
+});
+
+/* ── LE COÛT D'UN EMPÂTEMENT : farine, sel, huile, levure — partout (décidé le 2026-09-29) ──
+ *
+ * Il avait trois valeurs. L'éditeur et l'import (le prix qu'une réalisation payait pour sa pâte)
+ * ne comptaient que la farine ; l'impression et la Communauté comptaient aussi le sel, l'huile et
+ * la levure (`computeBuild`) — environ 15 % d'écart sur un pâton classique. Le serveur calcule
+ * désormais comme `computeBuild`, dont il porte une copie : ces tests les confrontent, tables et
+ * résultats. Une valeur changée d'un seul côté les fait rougir. */
+const DOUGHS = [
+    ['classique par pâtons', { servings: 10, paton_g: 250, flour_price: 1.2, dough_params: { preset: 'Classique', method: 'Direct', hydra: 55, bassinage: 0, sel: 2, huile: 2.5, levure: 0.35, mode: 'patons' } }],
+    ['napolitaine sans huile', { servings: 12, paton_g: 270, flour_price: 1.4, dough_params: { preset: 'Napolitaine', hydra: 60, sel: 2.8, huile: 0, levure: 0.1, mode: 'patons' } }],
+    ['par farine, avec bassinage', { servings: 1, paton_g: 250, flour_price: 1.1, dough_params: { hydra: 62, bassinage: 5, sel: 2.5, huile: 2, levure: 0.3, mode: 'farine', flourKg: 10 } }],
+    ['substitutions plafonnées + tipo', { servings: 8, paton_g: 280, flour_price: 1.3, dough_params: { hydra: 60, sel: 2, huile: 1, levure: 0.4, tipo: '1', substitutions: [{ key: 'ble1', pct: 30 }, { key: 'seigle', pct: 40 }] } }],
+    ['ancienne substitution unique', { servings: 6, paton_g: 250, flour_price: 1.2, dough_params: { hydra: 58, sel: 2, huile: 2, levure: 0.3, substitution: { key: 'soja', pct: 10 } } }],
+    ['adjonctions', { servings: 10, paton_g: 260, flour_price: 1.25, dough_params: { hydra: 60, sel: 2.2, huile: 2, levure: 0.3, adjonctions: [{ key: 'graines', pct: 4 }, { key: 'charbon', pct: 1 }] } }],
+    ['prix de la fiche', { servings: 10, paton_g: 250, flour_price: 1.2, dough_params: { hydra: 55, sel: 2, huile: 2.5, levure: 0.35, prices: { sel: '1', levure: 12, huile: '7.5' } } }],
+    ['réglages vides', { servings: 0, paton_g: 0, flour_price: 0, dough_params: {} }],
+];
+
+test('le serveur chiffre un empâtement exactement comme le calculateur', async () => {
+    const { computeBuild } = await pates();
+    for (const [nom, r] of DOUGHS) {
+        const b = computeBuild(r);
+        const s = serveur.coutPate(r);
+        assert.ok(Math.abs(b.totalCost - s.total) < 1e-9, `${nom} : coût total ${b.totalCost} (écran) ≠ ${s.total} (serveur)`);
+        assert.ok(Math.abs(b.costPerPaton - s.parPaton) < 1e-9, `${nom} : coût du pâton ${b.costPerPaton} ≠ ${s.parPaton}`);
+        assert.ok(Math.abs(b.costPerKg - s.parKg) < 1e-9, `${nom} : coût au kg ${b.costPerKg} ≠ ${s.parKg}`);
+        assert.equal(s.patons, b.effNb, `${nom} : nombre de pâtons`);
+        // Le serveur relit aussi dough_params en chaîne JSON, telle que la colonne la rend.
+        const t = serveur.coutPate({ ...r, dough_params: JSON.stringify(r.dough_params) });
+        assert.ok(Math.abs(t.total - s.total) < 1e-9, `${nom} : dough_params en chaîne`);
+    }
+    // Le sel, l'huile et la levure COMPTENT : un pâton classique coûte plus que sa farine seule.
+    const [, classique] = DOUGHS[0];
+    const farineSeule = (250 / 1000) / (1 + (55 + 2 + 2.5 + 0.35) / 100) * 1.2;
+    assert.ok(serveur.coutPate(classique).parPaton > farineSeule + 0.02, 'sel, huile et levure entrent dans le coût du pâton');
+});
+
+test('les tables de prix et d\'eau du serveur sont celles du calculateur', async () => {
+    const d = await pates();
+    assert.deepStrictEqual(serveur.PRIX_PATE, d.PRICE_DEFAULT, 'prix indicatifs');
+    assert.deepStrictEqual(serveur.BASSINAGE_SUBSTITUTION, Object.fromEntries(d.SUBSTITUTIONS.map((x) => [x.key, x.bass10])), 'eau des farines de substitution');
+    assert.deepStrictEqual(serveur.EAU_ADJONCTION, Object.fromEntries(d.ADJONCTIONS.map((x) => [x.key, x.water || 0])), 'eau des adjonctions');
+    assert.deepStrictEqual(serveur.EAU_TIPO, Object.fromEntries(d.TIPOS.map((x) => [x.key, x.water])), 'eau des types de farine');
+    assert.equal(serveur.SUB_MAX, d.SUB_MAX);
+});
+
+test('l\'éditeur, l\'import et l\'estimation chiffrent la pâte par computeBuild', () => {
+    const ed = lire(UI, 'pages/FicheRecette.jsx');
+    assert.match(ed, /const build = useMemo\(\(\) => computeBuild\(\{ \.\.\.r, dough_params: dp \}\), \[r, dp\]\);/);
+    assert.match(ed, /const perUnit = build\.costPerPaton \+ ingSum;/);
+    assert.doesNotMatch(ed, /\(\(patonG \/ 1000\) \/ addPct\) \* num\(r\.flour_price\)/, 'la farine seule ne fait plus le coût');
+    const ctrl = lire(API, 'controllers/recipe.controller.js');
+    assert.match(ctrl, /const pate = coutPate\(r\);/);
+    assert.doesNotMatch(ctrl, /function doughRatio/, 'l\'ancien ratio (farine seule) a disparu');
+    assert.match(lire(UI, 'lib/coutFiche.js'), /return computeBuild\(\{ servings: 1, paton_g: paton, flour_price: r\.flour_price, dough_params: PATE_ESTIMEE \}\);/);
 });

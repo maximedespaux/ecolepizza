@@ -59,6 +59,11 @@ export const PROFILS = {
      WebP, que LibreOffice n'ouvre pas tel quel (icône cassée dans le PDF) : le serveur les enveloppe
      d'un SVG avant chaque PDF — lib/imagesPdf.js. Ne pas retirer l'un sans l'autre. */
   marque: { maxPx: 900, maxKo: 320, maxDur: 900, fond: null, qualiteMin: 0.6 },
+  /* Photo d'une fiche technique : vignette dans l'éditeur, la liste et la Communauté, plus grande
+     dans le détail d'une fiche partagée. PAS « GRASSE », demandé par l'école : 1 000 px suffisent
+     à une pizza vue sur un écran, et le serveur refuse au-delà de 250 Ko (MAX_PHOTO_FICHE,
+     recipe.controller.js). Plancher de qualité bas : c'est un plat, pas un document à lire. */
+  fiche: { maxPx: 1000, maxKo: 160, maxDur: 220, fond: '#fff', qualiteMin: 0.45 },
   /* Image glissée dans un e-mail : elle voyage en pièce jointe avec chaque message. */
   mail: { maxPx: 1200, maxKo: 400, maxDur: 590, fond: '#fff', qualiteMin: 0.45 },
   /* Illustration d'une question de QCM. PLAFOND SERRÉ, et pour une raison qui ne se devine pas :

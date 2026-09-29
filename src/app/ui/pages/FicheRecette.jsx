@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro, euroFixe, dateHeure } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getCatalogBrands, getComponents, getRecipe, createRecipe, updateRecipe, getMyFormations, getMercuriale } from "../api/apiClient.js";
-import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel } from "../lib/dough.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getComponents, getRecipe, createRecipe, updateRecipe, getMyFormations, getMercuriale, photoFicheUrl, envoyerPhotoFiche, retirerPhotoFiche } from "../api/apiClient.js";
+import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel, computeBuild, PRICE_DEFAULT } from "../lib/dough.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 import { perWeightUnit, unitShort } from "../lib/garnitures.js";
 import { coutFiche, coutLigne, repartition, pctPart, phraseCout, aUneFichePate, pateEstimeeActive, MASS_VOL } from "../lib/coutFiche.js";
 import Mercuriale from "../components/Mercuriale.jsx";
@@ -540,7 +541,9 @@ function LignePateEstimee({ r, c, set, onRetirer, onChoisir }) {
       <div className="fe-ing-nom">
         <span className="fe-ing-titre"><span>Pâte (estimation)</span></span>
         <span className="fe-ing-src">
-          <span className="fe-src s-est"><Icon name="wheat" size={12} /> Estimation</span>
+          <span className="fe-src s-est" title="Une pâte classique : 55 % d'eau, 2 % de sel, 2,5 % d'huile, 0,35 % de levure. La farine au prix saisi, le reste aux prix indicatifs.">
+            <Icon name="wheat" size={12} /> Estimation
+          </span>
           <button type="button" className="fe-lien" onClick={onChoisir}>Choisir mon empâtement</button>
         </span>
       </div>
@@ -847,6 +850,39 @@ function Rendement({ r, cf, set }) {
   );
 }
 
+/**
+ * LA PHOTO DE LA FICHE : un cadre carré en tête de fiche. Vide, il invite à en ajouter une ; plein,
+ * il propose de la changer ou de la retirer. L'image est réduite par le navigateur avant l'envoi
+ * (lib/image.js, profil `fiche`) : elle ne pèse jamais « lourd ».
+ */
+function PhotoFiche({ src, occupe, erreur, indisponible, nouvelle, onChoisir, onRetirer }) {
+  const entree = useRef(null);
+  const ouvrir = () => entree.current && entree.current.click();
+  return (
+    <div className="fe-photo">
+      {src ? (
+        <div className="fe-photo-cadre">
+          <img src={src} alt="Photo de la fiche" />
+          <div className="fe-photo-actions">
+            <button type="button" className="fe-photo-btn" onClick={ouvrir} disabled={occupe}><Icon name="camera" size={15} /> Changer</button>
+            <button type="button" className="fe-photo-btn" onClick={onRetirer} disabled={occupe} aria-label="Retirer la photo" title="Retirer la photo"><Icon name="trash" size={15} /></button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="fe-photo-vide" onClick={ouvrir} disabled={occupe || indisponible}>
+          <Icon name="camera" size={26} />
+          <span>{occupe ? "Envoi…" : indisponible ? "Photo pas encore disponible" : "Ajouter une photo"}</span>
+        </button>
+      )}
+      {nouvelle && src && <span className="fe-photo-note">Enregistrée avec la fiche</span>}
+      {/* `e.target.value = ""` : sans lui, rechoisir le MÊME fichier après un refus ne déclenche rien. */}
+      <input ref={entree} type="file" accept="image/*" hidden
+        onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onChoisir(f); }} />
+      {erreur && <p className="fe-photo-err" role="alert">{erreur}</p>}
+    </div>
+  );
+}
+
 /* La répartition du coût dans le panneau : les trois lignes les plus chères, puis le reste. */
 function Repartition({ lignes }) {
   const { top, autres } = repartition(lignes);
@@ -927,9 +963,44 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const [majPrix, setMajPrix] = useState([]);   // fiches importées dont le coût a changé depuis l'import
   const [usedIn, setUsedIn] = useState([]);     // réalisations qui importent cette fiche
   const [aFocaliser, setAFocaliser] = useState(null); // { i, champ } : champ d'une ligne à rendre actif
+  /* LA PHOTO (migration 191). Sur une fiche enregistrée, elle part TOUT DE SUITE — elle n'attend
+     pas « Enregistrer ». Sur une fiche nouvelle, qui n'a pas encore d'identifiant, elle attend,
+     montrée depuis la mémoire du navigateur, et part juste après la création. */
+  const [photo, setPhoto] = useState({ v: null, attente: null, apercu: null, occupe: false, erreur: "", indisponible: false });
+  const apercuRef = useRef(null);
+  useEffect(() => () => { if (apercuRef.current) URL.revokeObjectURL(apercuRef.current); }, []);
+  const poserApercu = (blob) => {
+    if (apercuRef.current) URL.revokeObjectURL(apercuRef.current);
+    apercuRef.current = blob ? URL.createObjectURL(blob) : null;
+    return apercuRef.current;
+  };
+  const choisirPhoto = async (f) => {
+    setPhoto((p) => ({ ...p, occupe: true, erreur: "" }));
+    // Réduite AVANT l'envoi : une photo de téléphone pèse 3 à 8 Mo, le serveur en accepte 250 Ko.
+    const blob = await reduireSiImage(f, PROFILS.fiche);
+    if (!r.id) { setPhoto((p) => ({ ...p, occupe: false, attente: blob, apercu: poserApercu(blob) })); return; }
+    try {
+      const res = await envoyerPhotoFiche(r.id, blob);
+      setPhoto((p) => ({ ...p, occupe: false, v: (res.data && res.data.photo_v) || null, attente: null, apercu: poserApercu(null) }));
+    } catch (e) {
+      setPhoto((p) => ({ ...p, occupe: false, erreur: e.message || "Envoi de la photo échoué." }));
+    }
+  };
+  const retirerPhoto = async () => {
+    if (photo.attente) { setPhoto((p) => ({ ...p, attente: null, apercu: poserApercu(null), erreur: "" })); return; }
+    if (!r.id || !photo.v) return;
+    setPhoto((p) => ({ ...p, occupe: true, erreur: "" }));
+    try {
+      await retirerPhotoFiche(r.id);
+      setPhoto((p) => ({ ...p, occupe: false, v: null }));
+    } catch (e) {
+      setPhoto((p) => ({ ...p, occupe: false, erreur: e.message || "Retrait de la photo échoué." }));
+    }
+  };
 
   // Embarqué pour MODIFIER : on charge la fiche demandée à l'entrée (openRecipe est déclarée plus bas, hoistée).
-  useEffect(() => { window.scrollTo?.({ top: 0 }); if (openId) openRecipe(openId); }, [openId]);
+  // Seul le CHANGEMENT de fiche recharge : `openRecipe` est recréée à chaque rendu.
+  useEffect(() => { window.scrollTo?.({ top: 0 }); if (openId) openRecipe(openId); }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
   const reloadMerc = () => getMercuriale().then((res) => setMerc(res.data || [])).catch(() => {});
   useEffect(() => { reloadMerc(); }, []);
   // Options avancées (indirects, napolitaine, teglia/pala) : débloquées par les formations SUIVIES
@@ -1085,30 +1156,25 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const totalDough = dpMode === "farine" ? Math.max(0, flourKg) * 1000 * addPct : nb * patonG;
   const effNb = dpMode === "farine" ? Math.floor(totalDough / patonG) : nb; // pâtons obtenus
   const reste = dpMode === "farine" ? totalDough - effNb * patonG : 0;
-  const doughPerUnit = ((patonG / 1000) / addPct) * num(r.flour_price);
   const ingSum = useMemo(() => r.ingredients.reduce((s, t) => s + coutLigne(t), 0), [r.ingredients]);
 
-  // Décomposition de la pâte (grammes) pour le résultat du calculateur.
-  const farineG = totalDough / addPct;
-  const dough = [
-    { k: "Farine", ic: "wheat", v: farineG, pct: "100 %", color: "#fcb900" },
-    { k: "Eau", ic: "droplet", v: farineG * num(dp.hydra) / 100, pct: `${dp.hydra} %`, color: "#3aa0e0" },
-    ...(num(dp.bassinage) > 0 ? [{ k: "Eau de bassinage", ic: "droplet", v: farineG * num(dp.bassinage) / 100, pct: `${dp.bassinage} %`, color: "#7fc7ef" }] : []),
-    { k: "Sel", ic: "salt", v: farineG * num(dp.sel) / 100, pct: `${dp.sel} %`, color: "#c9cede" },
-    ...(num(dp.huile) > 0 ? [{ k: "Huile", ic: "oil", v: farineG * num(dp.huile) / 100, pct: `${dp.huile} %`, color: "#7bb661" }] : []),
-    { k: "Levure", ic: "yeast", v: farineG * num(dp.levure) / 100, pct: `${dp.levure} %`, color: "#ff6900" },
-  ];
-
-  // PÂTE : coût par pâton et de la production (calculateur). Les autres fiches : lib/coutFiche.js.
-  const perUnit = doughPerUnit + ingSum;
-  const totalCost = perUnit * effNb;
+  /* PÂTE : le coût et la décomposition viennent de `computeBuild` — farine, sel, huile, levure
+     (et farines de substitution, adjonctions), décidé par l'école le 2026-09-29. C'est le calcul
+     de la fiche imprimée, de la Communauté, et du serveur quand une réalisation importe la pâte
+     (lib/coutFiche.js, `coutPate`). L'éditeur ne comptait que la farine : la même pâte y valait
+     moins que sur sa propre fiche imprimée. Les autres fiches : lib/coutFiche.js. */
+  const build = useMemo(() => computeBuild({ ...r, dough_params: dp }), [r, dp]);
+  const dough = build.dough;
+  const perUnit = build.costPerPaton + ingSum;
+  const totalCost = build.totalCost + ingSum * effNb;
+  const setPrixPate = (k, v) => setDP("prices", { ...(dp.prices || {}), [k]: v });
   const cf = useMemo(() => coutFiche({ ...r, kind }), [r, kind]);
   const estimee = pateEstimeeActive({ ...r, kind });
   const decal = estimee ? 1 : 0;
   const phrase = isPate ? null : phraseCout(cf.lignes);
 
   const sig = signature(r);
-  const modifie = sig !== enregistre.sig;
+  const modifie = sig !== enregistre.sig || !!photo.attente;
   // Fermer l'onglet avec des modifications non enregistrées : le navigateur demande confirmation.
   useEffect(() => {
     if (!modifie) return undefined;
@@ -1153,6 +1219,15 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
       setR((p) => ({ ...p, ...overrides, id, name: String(p.name || "").trim() ? p.name : name }));
       setEnregistre({ sig: signature({ ...merged, id, name: String(merged.name || "").trim() ? merged.name : name }), le: new Date(), session: true });
       setMajPrix([]);
+      // Fiche NOUVELLE : sa photo attendait son identifiant.
+      if (!r.id && id && photo.attente) {
+        try {
+          const ph = await envoyerPhotoFiche(id, photo.attente);
+          setPhoto((p) => ({ ...p, v: (ph.data && ph.data.photo_v) || null, attente: null, apercu: poserApercu(null) }));
+        } catch (e) {
+          setPhoto((p) => ({ ...p, erreur: e.message || "Envoi de la photo échoué." }));
+        }
+      }
     } catch { /* silencieux : la barre d'erreur globale s'affiche */ }
     finally { setBusy(false); }
   }
@@ -1185,6 +1260,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
       setR({ ...charge, ingredients });
       setMajPrix(changes);
       setUsedIn(Array.isArray(d.used_in) ? d.used_in : []);
+      setPhoto((p) => ({ ...p, v: d.photo_v || null, attente: null, apercu: poserApercu(null), erreur: "", indisponible: d.photo_disponible === false }));
     } catch { /* ignore */ }
   }
   const shared = r.visibility === "SHARED";
@@ -1246,10 +1322,11 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 </div>
               ))}
               <div style={{ borderTop: "1px solid rgba(255,255,255,.15)", margin: "16px 0 0" }} />
-              <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "14px 0 0" }}>{euro(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
+              <div style={{ font: "800 30px/1.1 var(--font-d)", margin: "14px 0 0" }}>{euroFixe(perUnit)} <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.7)" }}>/ pâton</span></div>
+              <span className="fe-panel-sub">{["Farine", "sel", num(dp.huile) > 0 && "huile"].filter(Boolean).join(", ")} et levure compris</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
-                <Row label="Coût matière total" value={euro(totalCost)} />
-                <Row label="Coût pâte / pâton" value={euro(doughPerUnit)} accent />
+                <Row label="Coût matière total" value={euroFixe(totalCost)} />
+                <Row label="Coût au kg de pâte" value={euroFixe(build.costPerKg)} accent />
               </div>
               <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une réalisation comme ingrédient, à son coût / pâton.</p>
       <UtiliseeDans liste={usedIn} kind="PATE" coutDe={(u) => (u.unit === "piece" ? num(u.qty) * perUnit : null)} onOpen={ouvrirFiche} />
@@ -1304,19 +1381,30 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     : isPrep ? { t: `${euroFixe(pr.unitPrice)}${garnGrand.u ? ` ${garnGrand.u}` : ""}`, s: `${euroFixe(cf.total)} de matière pour le lot` }
     : { t: `${euroFixe(perUnit)} / pâton`, s: `${effNb} pâtons de ${patonG} g` };
 
+  const photoSlot = (
+    <PhotoFiche src={photo.apercu || (r.id && photo.v ? photoFicheUrl(r.id, photo.v) : null)} occupe={photo.occupe}
+      erreur={photo.erreur} indisponible={photo.indisponible} nouvelle={!r.id} onChoisir={choisirPhoto} onRetirer={retirerPhoto} />
+  );
+  const descriptionChamp = (
+    <div className="fe-field">
+      <label htmlFor="fe-desc">Description <span className="fe-field-aide">· #tags pour catégoriser</span></label>
+      <textarea id="fe-desc" className="inp" rows={isPate ? 3 : 2} maxLength={5000} value={r.description || ""} onChange={set("description")}
+        placeholder={isPate ? "Pointage, apprêt, cuisson… #napolitaine #24h" : isPrep ? "Usage, conservation… #sauce #base" : "Style, histoire, cuisson… #signature #24h"} />
+      <Tags text={r.description} />
+    </div>
+  );
+
   const fiche = (
     <section className="card fe-card" aria-label="La fiche">
-      <div className={"fe-ident" + (isRecette ? " avec-type" : "")}>
-        {isRecette && (
-          <label className="fe-field">Type
-            <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select>
-          </label>
-        )}
-        <div className="fe-field">
-          <label htmlFor="fe-desc">Description <span className="fe-field-aide">· #tags pour catégoriser</span></label>
-          <textarea id="fe-desc" className="inp" rows={2} maxLength={5000} value={r.description || ""} onChange={set("description")}
-            placeholder={isPrep ? "Usage, conservation… #sauce #base" : "Style, histoire, cuisson… #signature #24h"} />
-          <Tags text={r.description} />
+      <div className="fe-ident">
+        {photoSlot}
+        <div className="fe-ident-champs">
+          {isRecette && (
+            <label className="fe-field fe-type">Type
+              <select className="inp" value={r.type} onChange={set("type")}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select>
+            </label>
+          )}
+          {descriptionChamp}
         </div>
       </div>
 
@@ -1428,6 +1516,10 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
         <div className="fe-main">
           {isPate ? (
             <Card className="fe-card" title={<span className="card-ttl"><Icon name="settings" size={16} /> Calculateur de pâte</span>}>
+              <div className="fe-ident">
+                {photoSlot}
+                <div className="fe-ident-champs">{descriptionChamp}</div>
+              </div>
               {/* 1 · Typologie */}
               <div className="ate-lbl"><span className="ate-num">1</span> Typologie de pizza</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
@@ -1579,7 +1671,18 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
               </div>
               {dpMode === "farine" && <p className="hint" style={{ margin: "0 0 8px" }}>→ {effNb} pâtons de {patonG} g{reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</p>}
-              <div className="field" style={{ marginBottom: 16 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
+              <div className="field" style={{ marginBottom: 10 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
+              {/* Le sel, l'huile et la levure entrent dans le coût : leurs prix se règlent ici. Vides,
+                  ce sont les prix indicatifs de l'outil (PRICE_DEFAULT) — les mêmes pour le serveur. */}
+              <div className="fe-prix-pate">
+                <span className="fe-prix-pate-t">Autres prix (€/kg)</span>
+                {[["sel", "Sel"], ...(num(dp.huile) > 0 ? [["huile", "Huile"]] : []), ["levure", "Levure"]].map(([k, l]) => (
+                  <label key={k} className="fe-field">{l}
+                    <input className="inp" type="number" min="0" step="0.1" inputMode="decimal" value={dp.prices?.[k] ?? PRICE_DEFAULT[k]}
+                      onChange={(e) => setPrixPate(k, e.target.value)} />
+                  </label>
+                ))}
+              </div>
 
               {/* Réglages avancés — repliés par défaut (progressive disclosure) */}
               <Collapse title={<><Icon name="thermometer" size={14} /> Température de la pâte (TB 50)</>} hint="eau de coulage">
@@ -1613,11 +1716,6 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                   <div className="field" style={{ marginBottom: 0 }}><label>Température (°C)</label><input className="inp" type="number" value={dp.ctrlT ?? ""} onChange={(e) => setDP("ctrlT", e.target.value)} placeholder="Ex. 4" /></div>
                 </div>
               </Collapse>
-
-              {/* Description */}
-              <div className="field" style={{ marginBottom: 0 }}><label>Description <span className="hint" style={{ fontWeight: 400 }}>· #tags pour catégoriser</span></label>
-                <textarea className="inp" rows={3} value={r.description} onChange={set("description")} placeholder="Pointage/apprêt, cuisson… #napolitaine #24h" />
-                <Tags text={r.description} /></div>
             </Card>
           ) : fiche}
           {!isPate && procede}
