@@ -272,6 +272,10 @@ export function deleteItem(id) {
 export function getInvoices() {
   return request("/factures");
 }
+// Les sessions et leurs stagiaires, pour choisir qui facturer (« déjà facturé » compris).
+export function getSessionsAFacturer() {
+  return request("/factures/sessions");
+}
 export function createInvoice(payload) {
   return request("/factures", { method: "POST", body: JSON.stringify(payload) });
 }

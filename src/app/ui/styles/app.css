@@ -2947,6 +2947,38 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
   .sess-pick-corps{min-width:0;width:100%}
 }
 
+/* ─── Facturation : les stagiaires d'une session, cochés un à un (2026-09-30) ─────────────────
+   Chaque case cochée est une ligne de la facture (lib/lignesFacture.js). « Facturé : … » dit ce
+   qui l'est déjà : recocher un stagiaire facturé le ferait payer deux fois. */
+.fac-qui{border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;background:var(--surface)}
+.fac-qui-tete{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.fac-qui-titre{font-size:13px;font-weight:600}
+.fac-session + .fac-session{border-top:1px solid var(--border-soft);margin-top:8px;padding-top:8px}
+.fac-session-tete{display:flex;align-items:center;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;margin-bottom:2px}
+.fac-tout{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;min-width:0}
+.fac-session-titre{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fac-stagiaire{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"case nom prix" "case info prix";
+  column-gap:10px;align-items:center;padding:6px 8px;border-radius:8px;cursor:pointer}
+.fac-stagiaire:hover{background:var(--surface2)}
+.fac-stagiaire.on{background:color-mix(in srgb,var(--ember1) 8%,transparent)}
+.fac-stagiaire > input{grid-area:case}
+.fac-stagiaire-nom{grid-area:nom;font-size:13.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fac-stagiaire-info{grid-area:info;display:flex;flex-wrap:wrap;gap:2px 10px;font-size:12px;color:var(--dim)}
+.fac-deja{color:var(--green);font-weight:600}
+.fac-stagiaire-prix{grid-area:prix;font-weight:700;color:var(--blue)}
+.fac-lignes{display:flex;flex-direction:column;gap:8px}
+.fac-ligne{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.6fr) minmax(96px,.7fr) auto;
+  grid-template-areas:"qui lib mnt x";gap:8px;align-items:center}
+.fac-ligne-qui{grid-area:qui;font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fac-ligne-lib{grid-area:lib}
+.fac-ligne-mnt{grid-area:mnt}
+.fac-ligne-x{grid-area:x}
+@media (max-width:640px){
+  /* Sur un téléphone : qui, puis le libellé, puis le montant et sa croix. */
+  .fac-ligne{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"qui qui" "lib lib" "mnt x";
+    padding-bottom:8px;border-bottom:1px solid var(--border-soft)}
+}
+
 /* Table de sélection des formations (préparation de document) */
 .enroll-table tbody tr:hover{background:var(--surface2)}
 .enroll-table tbody tr.on{background:var(--blue-bg)}

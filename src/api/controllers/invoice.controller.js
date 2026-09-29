@@ -11,6 +11,7 @@ const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+const { DATE_SESSION, FACTURES_DU_DOSSIER, BROUILLONS_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
@@ -302,6 +303,64 @@ const getInvoices = (req, res) => {
             res.json({ data: rows, totals });
         }
     );
+};
+
+/**
+ * GET /api/factures/sessions — les sessions et leurs stagiaires, pour choisir QUI facturer
+ * (demandé le 2026-09-30 : « sélectionner les stagiaires qui sont dans la session »).
+ *
+ * Chaque ligne de facture se rattachait à un dossier par une liste déroulante de TOUS les dossiers
+ * de l'organisme, « NOM Prénom, RS7404 » à la file : pour facturer une session, il fallait les
+ * retrouver un à un, et rien ne disait lesquels l'étaient déjà. Une facture qui oublie un stagiaire
+ * le laisse hors de la Comptabilité (un stagiaire y compte quand une facture le désigne) ; une
+ * facture qui le reprend le fait payer deux fois.
+ *
+ * Rend donc, session par session (la plus récente d'abord, l'ordre dont `SelecteurSemaine` a
+ * besoin), les stagiaires avec ce qu'ils coûtent (`montantDuDossier`), leur entreprise, et les
+ * factures ÉMISES et BROUILLONS qui les désignent déjà — la même règle que la Comptabilité
+ * (lib/inscriptionsFacturees.js). Les sessions annulées n'y sont pas : on ne facture pas une
+ * session qui n'a pas lieu.
+ */
+const sessionsAFacturer = async (req, res) => {
+    try {
+        const [rows] = await db.promise().query(
+            `SELECT s.id AS session_id, s.year, s.week, p.code AS program_code, p.title AS program_title,
+                    DATE_FORMAT(${DATE_SESSION}, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin,
+                    e.id AS enrollment_id, e.learner_id, l.last_name, l.first_name,
+                    e.company_id, c.name AS company_name, e.price AS prix_dossier, p.price AS tarif,
+                    ${FACTURES_DU_DOSSIER} AS factures, ${BROUILLONS_DU_DOSSIER} AS brouillons
+             FROM enrollment e
+             JOIN training_session s ON s.id = e.session_id AND s.organization_id = e.organization_id
+             JOIN training_program p ON p.id = s.program_id
+             LEFT JOIN learner l ON l.id = e.learner_id
+             LEFT JOIN company c ON c.id = e.company_id AND c.organization_id = e.organization_id
+             WHERE e.organization_id = ? AND s.status <> 'ANNULEE'
+             ORDER BY debut DESC, p.code, s.id, l.last_name, l.first_name`,
+            [req.user.organization_id]
+        );
+        const sessions = [];
+        const parId = new Map();
+        for (const r of rows) {
+            let s = parId.get(r.session_id);
+            if (!s) {
+                s = { id: r.session_id, year: r.year, week: r.week, program_code: r.program_code,
+                    program_title: r.program_title, debut: r.debut, fin: r.fin, inscrits: 0, dossiers: [] };
+                parId.set(r.session_id, s);
+                sessions.push(s);
+            }
+            s.dossiers.push({
+                enrollment_id: r.enrollment_id, learner_id: r.learner_id, nom: r.last_name, prenom: r.first_name,
+                company_id: r.company_id, entreprise: r.company_name,
+                ...montantDuDossier(r.prix_dossier, r.tarif),
+                factures: r.factures || null, brouillons: r.brouillons || null,
+            });
+            s.inscrits = s.dossiers.length;
+        }
+        res.json({ data: sessions });
+    } catch (err) {
+        console.error('Erreur sessions à facturer :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /**
@@ -860,4 +919,4 @@ const getInvoiceFacturX = async (req, res) => {
     }
 };
 
-module.exports = { getInvoices, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX, pickInvoiceTemplate, invoiceCtx };
+module.exports = { getInvoices, sessionsAFacturer, createInvoice, updateInvoice, recordPayment, deleteInvoice, getInvoiceXml, getInvoiceFacturX, pickInvoiceTemplate, invoiceCtx };

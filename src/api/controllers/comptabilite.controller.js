@@ -5,6 +5,9 @@ const { logAudit } = require('../lib/audit.js');
 /* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien (cf. le
    fichier) — une dépense ainsi saisie était refusée, une cible ignorée en silence. */
 const { lireMontant } = require('../lib/montantSaisi.js');
+/* QUAND UN STAGIAIRE EST FACTURÉ, et à quel prix : la règle vit à part, la Facturation dit « déjà
+   facturé » avec elle (cf. le fichier). */
+const { DATE_SESSION, FACTURES_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
     REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
@@ -33,7 +36,8 @@ const currentYear = () => new Date().getFullYear();
  *     le devis et la convention, eux, retombent sur le tarif de la formation ;
  *   · la DATE était celle de la saisie du dossier, pas celle où le stagiaire vient.
  * Désormais un stagiaire compte :
- *   · le MOIS OÙ COMMENCE SA SESSION (`DATE_SESSION`), session annulée exclue ;
+ *   · le MOIS OÙ COMMENCE SA SESSION (`DATE_SESSION`, lib/inscriptionsFacturees.js), session
+ *     annulée exclue ;
  *   · dès qu'une FACTURE ou un ACOMPTE ÉMIS le désigne (`FACTURES_DU_DOSSIER`) — c'est ainsi que
  *     l'école dit qu'il est vendu, en le choisissant sur une facture ;
  *   · au PRIX DE SON DOSSIER s'il en a un, sinon au TARIF DE LA FORMATION — la règle des documents
@@ -47,19 +51,6 @@ const currentYear = () => new Date().getFullYear();
  * `nbSessions` reste compté sur l'ANNÉE DE SESSION (`training_session.year`), pour le « stagiaires
  * moyens par session » de l'onglet Performance, qui est annuel.
  */
-/* LE JOUR OÙ LE STAGIAIRE VIENT : le premier de sa session. Une session sans date de début (import
-   ancien — l'application l'exige depuis) se date au lundi de sa semaine ISO, la semaine 1 étant
-   celle du 4 janvier. MAKEDATE et WEEKDAY seulement (0 = lundi) : toute version de MariaDB les a. */
-const DATE_SESSION = 'COALESCE(s.start_date, DATE_ADD(MAKEDATE(s.year, 4), INTERVAL ((s.week - 1) * 7 - WEEKDAY(MAKEDATE(s.year, 4))) DAY))';
-/* LES FACTURES QUI FONT COMPTER UN DOSSIER : une facture ou un acompte ÉMIS qui le désigne, sur la
-   facture même ou sur l'une de ses lignes (une facture d'entreprise en porte une par stagiaire). Un
-   brouillon n'est pas encore une facture, un devis n'en est pas une, une facture annulée non plus. */
-const FACTURES_DU_DOSSIER = `(SELECT GROUP_CONCAT(DISTINCT i.number ORDER BY i.number SEPARATOR ', ')
-       FROM invoice i
-      WHERE i.organization_id = e.organization_id
-        AND i.type IN ('FACTURE', 'ACOMPTE') AND i.status IN ('EMISE', 'PAYEE', 'IMPAYEE')
-        AND (i.enrollment_id = e.id OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = e.id)))`;
-
 async function computePeriode(conn, orgId, annee, mois = 0) {
     // Le filtre de mois n'existe que pour un vrai mois ; à 0 il disparaît de toutes les requêtes
     // d'un coup — une seule condition, pas deux variantes de chaque requête à garder synchrones.
@@ -78,15 +69,11 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
          ORDER BY debut, l.last_name, l.first_name`,
         arg()
     );
-    const inscriptions = dossiers.map((d) => {
-        const prixDossier = num(d.prix_dossier);
-        return {
-            id: d.id, learner_id: d.learner_id, nom: d.last_name, prenom: d.first_name,
-            formation: d.program_code, debut: d.debut, factures: d.factures || null, facturee: !!d.factures,
-            montant: prixDossier > 0 ? prixDossier : num(d.tarif),
-            source: prixDossier > 0 ? 'dossier' : 'formation',
-        };
-    });
+    const inscriptions = dossiers.map((d) => ({
+        id: d.id, learner_id: d.learner_id, nom: d.last_name, prenom: d.first_name,
+        formation: d.program_code, debut: d.debut, factures: d.factures || null, facturee: !!d.factures,
+        ...montantDuDossier(d.prix_dossier, d.tarif),
+    }));
     const comptees = inscriptions.filter((d) => d.facturee);
     const inscr = {
         ca: comptees.reduce((s, d) => s + d.montant, 0),
