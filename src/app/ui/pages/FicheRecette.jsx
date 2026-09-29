@@ -15,12 +15,13 @@ import FichePrint from "../components/FichePrint.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 
 /**
- * Fiche technique — trois types composables :
- *  • PÂTE (empâtement) : calculée en pourcentage boulanger (calculateur intégré : typologie,
- *                        empâtement direct/indirect, hydratation, sel, huile, levure).
- *  • PRÉPARATION : une base (sauce tomate = tomate + sel + huile) et son rendement.
- *  • RECETTE (réalisation) : une pizza complète = sa pâte + des préparations importées + des
- *                        ingrédients de la mercuriale ou du catalogue.
+ * Fiche technique — trois types composables (les mots de l'école) :
+ *  • EMPÂTEMENT (PATE) : la pâte, calculée en pourcentage boulanger (calculateur intégré :
+ *                        typologie, empâtement direct/indirect, hydratation, sel, huile, levure).
+ *  • PRÉPARATION (PREPARATION) : un ingrédient préparé — une sauce, une crème (sauce tomate =
+ *                        tomate + sel + huile) — et son rendement.
+ *  • RÉALISATION (RECETTE) : la pizza = une pâte + des préparations + les autres ingrédients
+ *                        (mercuriale, catalogue) ; c'est elle qui porte les accords de saveurs.
  *
  * LA MISE EN PAGE (2026-09-29). À gauche, la fiche telle qu'elle s'imprime : identité,
  * composition, procédé. À droite, le résultat, COLLANT, avec les boutons : on règle une quantité
@@ -1718,12 +1719,15 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
               </Collapse>
             </Card>
           ) : fiche}
-          {!isPate && procede}
-          {isPrep && (
-            <Repliable key={r.id || "nouvelle"} defaultOpen={!r.id} titre="Accords de saveurs" sous="ce que l'école associe, chiffré depuis ta mercuriale" icone="star">
-              <PairingSuggest merc={merc} onAdd={addRow} bare />
+          {/* LES ACCORDS DE SAVEURS, sous la composition d'une RÉALISATION (ils vivaient dans la
+              préparation). C'est la réalisation qui assemble la pâte, les préparations et le reste :
+              le guide lit sa base et ce qui est déjà posé, et propose ce qui va avec. */}
+          {isRecette && (
+            <Repliable key={r.id || "nouvelle"} defaultOpen={!r.id} titre="Accords de saveurs" sous="ce que l'école associe à ta base et à tes ingrédients" icone="star">
+              <PairingSuggest lignes={r.ingredients} merc={merc} onAdd={addRow} bare />
             </Repliable>
           )}
+          {!isPate && procede}
           <div className="fe-dock">
             <button type="button" className="fe-dock-info" aria-label="Voir le résultat de la fiche"
               onClick={() => document.getElementById("fe-panneau")?.scrollIntoView({ behavior: "smooth", block: "start" })}>

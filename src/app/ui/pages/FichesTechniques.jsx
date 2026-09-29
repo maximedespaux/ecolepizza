@@ -58,8 +58,8 @@ export default function FichesTechniques() {
 
       <BuilderHub cards={[
         { title: "Empâtement", badge: count("PATE") || "0", desc: "Calcule ta pâte au pourcentage boulanger (hydratation, sel, huile, levure).", icon: "wheat", color: "#e0ac48", onClick: () => setEdit({ mode: "empatement", id: null }) },
-        { title: "Préparation", badge: count("PREPARATION") || "0", desc: "Compose une base, une sauce, une garniture ; chiffrée depuis ta mercuriale.", icon: "list-checks", color: "#3aa0e0", onClick: () => setEdit({ mode: "preparation", id: null }) },
-        { title: "Réalisation", badge: count("RECETTE") || "0", desc: "Assemble une pizza : importe tes fiches et des ingrédients, coût matière et prix.", icon: "pizza", color: "#5f9e3f", onClick: () => setEdit({ mode: "realisation", id: null }) },
+        { title: "Préparation", badge: count("PREPARATION") || "0", desc: "Un ingrédient que tu prépares : une sauce, une base, une crème… Chiffré depuis ta mercuriale.", icon: "list-checks", color: "#3aa0e0", onClick: () => setEdit({ mode: "preparation", id: null }) },
+        { title: "Réalisation", badge: count("RECETTE") || "0", desc: "Ta pizza : une pâte, tes préparations et les autres ingrédients. Coût matière, prix conseillé et accords de saveurs.", icon: "pizza", color: "#5f9e3f", onClick: () => setEdit({ mode: "realisation", id: null }) },
       ]} />
 
       <Card title={<span className="card-ttl"><Icon name="history" size={16} /> Mes fiches enregistrées</span>} style={{ marginTop: 20 }}>
