@@ -30,13 +30,16 @@ const RACINE = path.join(__dirname, '..', '..');
 const lireUi = (f) => fs.readFileSync(path.join(RACINE, 'app/ui', f), 'utf8');
 const NAV = lireUi('lib/nav.js');
 const ROUTES = lireUi('main.jsx');
-const PATE = lireUi('pages/PateWizard.jsx');
+const FICHE = lireUi('pages/FicheRecette.jsx');
 const RECETTES_ROUTES = fs.readFileSync(path.join(__dirname, '..', 'routes/recipe.routes.js'), 'utf8');
 const RECETTES_CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers/recipe.controller.js'), 'utf8');
 
-const OUTILS = ['/empatements', '/garnitures', '/realisations', '/notions'];
+// Les TROIS assistants (empâtements / garnitures / réalisations) ont fusionné dans « Mes fiches
+// techniques » (2026-09-29), et la mercuriale en est sortie comme outil à part. Les outils
+// d'atelier ouverts au bureau sont donc désormais ceux-ci.
+const OUTILS = ['/fiches-techniques', '/mercuriale', '/notions'];
 
-test('les quatre outils figurent au menu du bureau', () => {
+test('les outils d\'atelier figurent au menu du bureau', () => {
     for (const to of OUTILS) {
         assert.match(NAV, new RegExp(`to: "${to}"[^}]*roles: STAFF`),
             `${to} doit être proposé au personnel`);
@@ -81,6 +84,6 @@ test('le bureau garde les options avancées de l\'empâtement', () => {
     /* Elles se débloquent par les formations SUIVIES, et `getMyFormations` répond 404 à qui n'a
        pas de fiche stagiaire. Sans ce cas, un formateur de niveau II se voyait refuser la
        napolitaine dans l'outil qu'il fait utiliser à ses stagiaires. */
-    assert.match(PATE, /const estPersonnel = \[.*"FORMATEUR"\]\.includes\(user\?\.role\)/);
-    assert.match(PATE, /if \(estPersonnel\) \{ setNiv2\(true\); setNapo\(true\); setSpe\(true\); return; \}/);
+    assert.match(FICHE, /const estPersonnel = \[.*"FORMATEUR"\]\.includes\(user\?\.role\)/);
+    assert.match(FICHE, /if \(estPersonnel\) \{ setNiv2\(true\); setNapo\(true\); setSpe\(true\); return; \}/);
 });

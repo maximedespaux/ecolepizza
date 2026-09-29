@@ -521,7 +521,7 @@ export default function Communaute() {
     setBusy(true);
     try {
       await createRecipe({ ...d, id: null, name: `${d.name} (copie)`, visibility: "PRIVATE" });
-      navigate(d.kind === "PATE" ? "/empatements" : d.kind === "PREPARATION" ? "/garnitures" : "/realisations");
+      navigate("/fiches-techniques");
     } catch { /* ignore */ }
     finally { setBusy(false); }
   }

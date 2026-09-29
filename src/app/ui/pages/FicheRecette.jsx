@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getComponents, getRecipe, createRecipe, updateRecipe, getMyFormations, getMercuriale } from "../api/apiClient.js";
 import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel } from "../lib/dough.js";
+import { perWeightUnit } from "../lib/garnitures.js";
+import Mercuriale from "../components/Mercuriale.jsx";
+import MercProductPicker from "../components/MercProductPicker.jsx";
+import PairingSuggest from "../components/PairingSuggest.jsx";
+import FichePrint from "../components/FichePrint.jsx";
+import { UserContext } from "../context/UserContext.jsx";
 
 /**
  * Fiche technique — trois types composables :
@@ -31,13 +36,6 @@ const NEW = () => ({
 // Chaque page (mode) est verrouillée sur un type de fiche — trois builders distincts.
 const MODE_KIND = { empatement: "PATE", garniture: "PREPARATION", realisation: "RECETTE" };
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Garniture", RECETTE: "Réalisation" };
-const SAVED_TITLE = { PATE: "Mes empâtements enregistrés", PREPARATION: "Mes garnitures enregistrées", RECETTE: "Mes réalisations enregistrées" };
-const SAVED_EMPTY = { PATE: "Aucun empâtement enregistré pour l'instant.", PREPARATION: "Aucune garniture enregistrée pour l'instant.", RECETTE: "Aucune réalisation enregistrée pour l'instant." };
-const HEADS = {
-  empatement: { eyebrow: "Outils · mes empâtements", title: "Mes empâtements", lead: "Calcule ton empâtement au pourcentage boulanger : typologie, force de la farine (W), hydratation, sel, huile, levure, température. Obtiens le poids de chaque ingrédient, le nombre de pâtons et le coût, puis enregistre ta pâte pour la réutiliser dans une réalisation." },
-  garniture: { eyebrow: "Outils · mes garnitures", title: "Mes garnitures", lead: "Compose une garniture (sauce, base, topping…) à partir du catalogue Metro : coût matière, rendement, et le déroulé de fabrication. Réutilisable dans une réalisation." },
-  realisation: { eyebrow: "Outils · mes réalisations", title: "Mes réalisations", lead: "Assemble une pizza complète : ton empâtement + tes garnitures + le catalogue, avec la cuisson (four, température, énergie, temps). Calcule le coût matière et fixe ton prix de vente conseillé." },
-};
 // Bloc « cuisson » d'une réalisation (rangé dans dough_params côté back, en attendant sa colonne).
 const COOK_TYPES = ["Four à bois", "Four à gaz", "Four électrique", "Four hybride", "Convoyeur", "Plaque / teglia"];
 const NEW_COOKING = () => ({ type: "", temp: "", energy: "", time: "" });
@@ -367,22 +365,64 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId }) {
   );
 }
 
-function FicheRecette({ mode = "realisation" }) {
+/**
+ * Modale « Depuis ma mercuriale » : choisir un produit de sa mercuriale → ligne d'ingrédient
+ * (prix et unité repris de la mercuriale). Bascule « gestion » pour compléter sa mercuriale
+ * (catalogue Metro + frais/marché) sans quitter la fiche.
+ */
+function MercurialeModal({ items, reload, onClose, onAdd }) {
+  const [view, setView] = useState("pick"); // pick | manage
+  return createPortal(
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <div className="mhead">
+          <h3 style={{ fontSize: 16 }}>{view === "manage" ? "Ma mercuriale" : "Depuis ma mercuriale"}</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          {view === "manage"
+            ? <Mercuriale items={items} reload={reload} onBack={() => setView("pick")} />
+            : <MercProductPicker items={items} onAdd={onAdd} addedKeys={null} onManage={() => setView("manage")} />}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * `mode` verrouille le TYPE de fiche (empâtement / garniture / réalisation). Toujours EMBARQUÉ par
+ * « Mes fiches techniques » (FichesTechniques.jsx), qui gère la liste de toutes les fiches :
+ * l'éditeur reçoit `openId` (la fiche à ouvrir à l'entrée) et `onExit` (retour à la liste), et
+ * ne rend que l'éditeur (barre de retour + formulaire), jamais son propre en-tête ni sa liste.
+ */
+function FicheRecette({ mode = "realisation", openId = null, onExit = null }) {
   const kind = MODE_KIND[mode] || "RECETTE"; // chaque page est verrouillée sur son type de fiche
   const [r, setR] = useState(() => initFor(mode));
-  const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [mercOpen, setMercOpen] = useState(false);
+  const [merc, setMerc] = useState([]); // ma mercuriale : source de prix des ingrédients
+  const [printOpen, setPrintOpen] = useState(false); // aperçu de la fiche imprimable
   const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) → Niveau II ou Expert
   const [napo, setNapo] = useState(false); // typologie Napolitaine → spécialisation Napolitaine
   const [spe, setSpe] = useState(false);   // typologies Teglia/Pala → spécialisation In Teglia & Pala (ou Expert)
   const added = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
   const importedIds = useMemo(() => new Set(r.ingredients.map((i) => i.component_recipe_id).filter(Boolean)), [r.ingredients]);
 
-  const reload = () => getMyRecipes().then((res) => setSaved(res.data || [])).catch(() => {});
-  useEffect(() => { reload(); }, []);
+  // Embarqué pour MODIFIER : on charge la fiche demandée à l'entrée (openRecipe est déclarée plus bas, hoistée).
+  useEffect(() => { if (openId) openRecipe(openId); }, [openId]);
+  const reloadMerc = () => getMercuriale().then((res) => setMerc(res.data || [])).catch(() => {});
+  useEffect(() => { reloadMerc(); }, []);
+  // Options avancées (indirects, napolitaine, teglia/pala) : débloquées par les formations SUIVIES
+  // — SAUF le personnel, qui les a TOUTES. Il enseigne ces empâtements et n'a pas de fiche
+  // stagiaire, si bien que `getMyFormations` lui répond 404 : sans ce raccourci, un formateur de
+  // niveau II se verrait refuser la napolitaine dans l'outil qu'il fait utiliser à ses stagiaires.
+  const { user } = useContext(UserContext) || {};
+  const estPersonnel = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
   useEffect(() => {
+    if (estPersonnel) { setNiv2(true); setNapo(true); setSpe(true); return; }
     getMyFormations().then((r) => {
       const fs = (r.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`.toLowerCase());
       const has = (re) => fs.some((t) => re.test(t));
@@ -390,7 +430,7 @@ function FicheRecette({ mode = "realisation" }) {
       setNapo(has(/napolit/));             // spécialisation Napolitaine
       setSpe(has(/teglia|pala/));          // spécialisation In Teglia & Pala (Expert inclus)
     }).catch(() => {});
-  }, []);
+  }, [estPersonnel]);
 
   const set = (k) => (e) => setR((p) => ({ ...p, [k]: e.target.value }));
   const setIng = (i, patch) => setR((p) => ({ ...p, ingredients: p.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
@@ -409,6 +449,14 @@ function FicheRecette({ mode = "realisation" }) {
     unit: c.unit === "piece" ? "piece" : "g", unit_price: Number(c.unit_price) || 0,
     qty: c.unit === "piece" ? 1 : 80,
   }] }));
+  // Ajoute un ingrédient DEPUIS MA MERCURIALE : prix et unité repris de ma liste de prix (éditables ensuite).
+  const addFromMerc = (m) => setR((p) => ({ ...p, ingredients: [...p.ingredients, {
+    label: m.label, product_id: m.catalog_product_id || null, component_recipe_id: null,
+    unit: perWeightUnit(m.unit) ? "g" : "piece", unit_price: num(m.price),
+    qty: perWeightUnit(m.unit) ? 50 : 1,
+  }] }));
+  // Ligne d'ingrédient générique (accords de saveurs) : complète les valeurs par défaut.
+  const addRow = (row) => setR((p) => ({ ...p, ingredients: [...p.ingredients, { label: "", qty: 0, unit: "g", unit_price: 0, product_id: null, component_recipe_id: null, ...row }] }));
 
   const isRecette = kind === "RECETTE";
   const isPate = kind === "PATE";
@@ -551,7 +599,6 @@ function FicheRecette({ mode = "realisation" }) {
       const res = r.id ? await updateRecipe(r.id, payload) : await createRecipe(payload);
       const id = r.id || (res.data && res.data.id);
       setR((p) => ({ ...p, ...overrides, id }));
-      reload();
     } catch { /* silencieux : la barre d'erreur globale s'affiche */ }
     finally { setBusy(false); }
   }
@@ -568,13 +615,7 @@ function FicheRecette({ mode = "realisation" }) {
         ingredients: d.ingredients?.length ? d.ingredients : [] });
     } catch { /* ignore */ }
   }
-  async function removeRecipe(id) {
-    if (!window.confirm("Supprimer cette fiche ?")) return;
-    try { await deleteRecipe(id); if (r.id === id) setR({ ...NEW(), kind: r.kind }); reload(); } catch { /* ignore */ }
-  }
   const shared = r.visibility === "SHARED";
-  // Liste « mes fiches » : uniquement le type de la page courante.
-  const mine = saved.filter((s) => s.kind === kind);
 
   // Bloc d'actions (créer / partager / nouvelle), réutilisé par les panneaux de résultat.
   const actions = (
@@ -595,7 +636,12 @@ function FicheRecette({ mode = "realisation" }) {
 
   return (
     <>
-      <PageHead {...(HEADS[mode] || HEADS.realisation)} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <button className="btn ghost sm" onClick={onExit}><Icon name="chevron-left" size={14} /> Retour aux fiches</button>
+        <b style={{ fontSize: 16 }}>{r.id ? "Modifier" : "Créer"} · {KIND_LABEL[kind]}</b>
+        <span style={{ flex: 1 }} />
+        <button className="btn ghost sm" onClick={() => setPrintOpen(true)} title="Aperçu imprimable au format fiche technique"><Icon name="printer" size={14} /> Imprimer la fiche</button>
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
@@ -902,11 +948,15 @@ function FicheRecette({ mode = "realisation" }) {
           </div>
         )}
 
+        {/* Accords de saveurs — aide à composer une garniture par affinité (avant les ingrédients) */}
+        {isPrep && <PairingSuggest merc={merc} onAdd={addRow} />}
+
         {/* Ligne 3 — ingrédients / garniture (pas pour la pâte, gérée par le calculateur) */}
         {!isPate && (
         <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> {ingTitle} <span className="hint" style={{ fontWeight: 400 }}>{ingScope}</span></span>}
           more={<span style={{ display: "flex", gap: 8 }}>
-            <button className="btn sm primary" onClick={() => setSearchOpen(true)}><Icon name="search" size={14} aria-hidden="true" /> Rechercher des ingrédients</button>
+            <button className="btn sm primary" onClick={() => setMercOpen(true)}><Icon name="coins" size={14} aria-hidden="true" /> Depuis ma mercuriale</button>
+            <button className="btn sm ghost" onClick={() => setSearchOpen(true)}><Icon name="search" size={14} aria-hidden="true" /> Catalogue Metro</button>
             {isRecette && <button className="btn sm ghost" onClick={() => setImportOpen(true)}><Icon name="plus" size={14} /> Importer une fiche</button>}
             <button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>
           </span>}>
@@ -983,27 +1033,10 @@ function FicheRecette({ mode = "realisation" }) {
           </Card>
         )}
 
-        {/* Ligne 4 — mes fiches enregistrées (du type de la page) */}
-        <Card title={<span className="card-ttl"><Icon name="history" size={16} /> {SAVED_TITLE[kind]}</span>}>
-          {mine.length === 0 ? (
-            <p className="hint" style={{ margin: 0 }}>{SAVED_EMPTY[kind]}</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {mine.map((s) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span className="fiche-tag">{KIND_LABEL[s.kind]}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}><b>{s.name}</b>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{s.kind === "RECETTE" && s.type ? s.type : KIND_LABEL[s.kind]}{s.visibility === "SHARED" ? " · partagée" : ""}</span>
-                    <Tags text={s.description} /></span>
-                  <button className="btn sm ghost" onClick={() => openRecipe(s.id)}>Ouvrir</button>
-                  <button className="iconbtn del" title="Supprimer" onClick={() => removeRecipe(s.id)}><Icon name="trash" size={14} /></button>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
       </div>
 
+      {printOpen && <FichePrint fiche={r} onClose={() => setPrintOpen(false)} />}
+      {mercOpen && <MercurialeModal items={merc} reload={reloadMerc} onClose={() => { setMercOpen(false); reloadMerc(); }} onAdd={addFromMerc} />}
       {searchOpen && <IngredientSearchModal onClose={() => setSearchOpen(false)} onAdd={addProduct} added={added} />}
       {importOpen && <ComponentPickerModal onClose={() => setImportOpen(false)} onAdd={addComponent} added={importedIds} excludeId={r.id} />}
     </>

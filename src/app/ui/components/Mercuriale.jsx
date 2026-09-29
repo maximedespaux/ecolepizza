@@ -11,8 +11,9 @@ const metroUnit = (t) => (t === "Piece" ? "pièce" : t === "L" ? "litre" : "kg")
 const unitPer = (u) => (u === "kg" ? "kg" : u === "litre" ? "L" : u);
 const SOURCE_LABEL = { RNM: "RNM / marché", METRO: "Metro", FOURNISSEUR: "Fournisseur", MANUEL: "Manuel" };
 
-// Ma mercuriale = liste de prix curée, intégrée à « Mes garnitures ». Deux onglets :
-// Catalogue (Metro + frais/marché → Ajouter) et Ma mercuriale (édition prix/unité/source).
+// Ma mercuriale = liste de prix curée. Deux onglets : Catalogue (Metro + frais/marché → Ajouter)
+// et Ma mercuriale (édition prix/unité/source). Outil à part entière (MercurialePage) OU vue
+// interne d'un assistant : sans `onBack`, le bouton de retour ne s'affiche pas (page de plein droit).
 export default function Mercuriale({ items, reload, onBack }) {
   const [tab, setTab] = useState(items.length ? "mine" : "catalogue");
   const refs = new Set(items.map((i) => i.catalog_product_id).filter(Boolean));
@@ -24,7 +25,7 @@ export default function Mercuriale({ items, reload, onBack }) {
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <button className="btn ghost sm" onClick={onBack}><Icon name="chevron-left" size={14} /> Accueil garnitures</button>
+        {onBack && <button className="btn ghost sm" onClick={onBack}><Icon name="chevron-left" size={14} /> Retour</button>}
         <span style={{ flex: 1 }} />
         <div className="src" role="tablist">
           <button className={tab === "mine" ? "on" : ""} onClick={() => setTab("mine")}>Ma mercuriale{items.length ? ` (${items.length})` : ""}</button>
