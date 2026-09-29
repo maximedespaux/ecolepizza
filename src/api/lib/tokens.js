@@ -162,7 +162,11 @@ const TOKEN_CATALOG = [
             { key: 'Prérequis', label: 'Prérequis', sample: 'Savoir lire et écrire le français. Aucun diplôme exigé.' },
             { key: 'Objectifs', label: 'Objectifs', sample: 'Maîtriser la pâte, la cuisson…' },
             { key: 'ObjectifG', label: 'Objectif général', sample: 'Devenir pizzaïolo autonome' },
-            { key: 'DuréeDétail', label: 'Durée (détail)', sample: '35 h sur 5 jours' },
+            /* Le TEXTE LIBRE des horaires (le champ « Détail des horaires » de la formation), jour
+               par jour au besoin — à ne pas confondre avec {Heures}/{Jours}, qui donnent les nombres.
+               La clé reste `DuréeDétail` (un identifiant : la renommer casserait les modèles qui la
+               portent) ; seul le libellé colle enfin au champ. */
+            { key: 'DuréeDétail', label: 'Détail des horaires', sample: 'Lun-Jeu : 8h30-12h30 / 13h30-17h30 · Ven : 8h30-12h30' },
             { key: 'Déroulé', label: 'Programme / déroulé', sample: 'Jour 1 : la pâte…' },
             { key: 'Heures', label: 'Nombre d’heures', sample: '35' },
             { key: 'Jours', label: 'Nombre de jours', sample: '5' },

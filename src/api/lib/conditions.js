@@ -184,7 +184,7 @@ const FR_LABELS = {
     'training_program.code': 'Code formation', 'training_program.level': 'Niveau de formation',
     'training_program.title': 'Intitulé de la formation', 'training_program.price': 'Prix catalogue',
     days: 'Durée (jours)', hours: 'Durée (heures)', audience: 'Public', objectives: 'Objectifs',
-    objective_general: 'Objectif général', duration_detail: 'Détail de durée', program_detail: 'Déroulé du programme',
+    objective_general: 'Objectif général', duration_detail: 'Détail des horaires', program_detail: 'Déroulé du programme',
     rs_code: 'Code RS (certifiante)', hygiene: 'Formation hygiène', active: 'Formation active',
     /* LES PRÉREQUIS S'OFFRAIENT SOUS « Formation · Prerequisites » — la colonne, en anglais, derrière le
        nom de la table : relevé le 2026-09-26 sur cinq modèles (devis, convention, contrat) qui la portent. */

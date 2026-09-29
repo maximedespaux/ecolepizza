@@ -391,7 +391,7 @@ function sampleForField(f, ident) {
        ne testait que le français (`objectif`) : elles passaient à côté de leur propre règle.
        `objective_general` doit précéder `objectives`, sinon le motif général l'attrape le premier. */
     if (/horaire/.test(c)) return '9h00 - 12h30 / 13h30 - 17h00';
-    if (/duration_detail|duree_detail/.test(c)) return '35 h sur 5 jours';
+    if (/duration_detail|duree_detail/.test(c)) return 'Lun-Jeu : 8h30-12h30 / 13h30-17h30 · Ven : 8h30-12h30';
     if (/prerequis|prerequisite/.test(c)) return 'Savoir lire et écrire le français. Aucun diplôme exigé.';
     if (/objectiv\w*_general|objectif\w*_general/.test(c)) return 'Devenir pizzaïolo autonome';
     if (/(objectiv|objectif|programme|deroul|contenu)/.test(c)) return 'Maîtriser la pâte, la cuisson…';
@@ -671,6 +671,10 @@ const ANCIENS_LIBELLES = {
     'Date signature': ['Date de signature'], 'Nom signataire': ['Nom du signataire'],
     'field:enrollment.price': ['Prix'], 'field:enrollment.acompte': ['Acompte'],
     'field:training_program.active': ['Active'],
+    /* Le « Détail des horaires » a longtemps été nommé « durée » — la clé {DuréeDétail} le trahit
+       encore. Une puce posée sous l'ancien nom affiche donc le libellé d'aujourd'hui. */
+    'DuréeDétail': ['Durée (détail)'],
+    'field:training_program.duration_detail': ['Détail de durée'],
 };
 /* Les deux cadres de signature : le bloc « Signatures » de l'éditeur les offre, en cadres. */
 const OFFERTS_PAR_L_EDITEUR = new Set(['Signature stagiaire', 'Signature organisme']);
