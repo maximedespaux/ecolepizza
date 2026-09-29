@@ -20,6 +20,7 @@ import SelecteurSemaine from "../components/SelecteurSemaine.jsx";
 import { grouperParSemaine, semaineParDefaut } from "../lib/sessions.js";
 import { basculer, estCoche, toutCocher, toutEstCoche, aFacturer } from "../lib/lignesFacture.js";
 import { bumpBadges } from "../lib/events.js";
+import { lireMontant, montantEnSaisie } from "../lib/montantSaisi.js";
 
 const TYPES = [["DEVIS", "Devis"], ["ACOMPTE", "Acompte"], ["FACTURE", "Facture"], ["AVOIR", "Avoir"]];
 const STATUS = { BROUILLON: ["Brouillon", "n"], EMISE: ["Émise", "b"], PAYEE: ["Payée", "g"], IMPAYEE: ["Impayée", "r"], ANNULEE: ["Annulée", "n"] };
@@ -30,6 +31,13 @@ const RANG_STATUT = { IMPAYEE: 0, EMISE: 1, BROUILLON: 2, PAYEE: 3, ANNULEE: 4 }
 
 // Une ligne LIBRE, sans dossier ; celles des stagiaires naissent des cases cochées (lib/lignesFacture.js).
 const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" });
+/* LE MONTANT D'UNE LIGNE se TAPE en français (« 315,93 ») et se lit par lireMontant. Le champ était
+   en `type="number"`, lu par `Number(…) || 0` : un champ numérique lit la virgule selon la langue de
+   l'APPAREIL, et là où elle n'est pas le séparateur décimal, « 315,93 » y devient une valeur vide —
+   0 € au total, puis une ligne écartée par le serveur, sans un mot. Vide, il ne compte pas ;
+   illisible, il est signalé et bloque la création. */
+const montantDeLigne = (l) => (l.amount_net === "" || l.amount_net == null ? 0 : lireMontant(l.amount_net));
+const montantIllisible = (l) => !Number.isFinite(montantDeLigne(l));
 const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", template_slug: modele, lines: [] });
 const periodeSession = (s) => (s.fin && s.fin !== s.debut ? `du ${dateFr(s.debut)} au ${dateFr(s.fin)}` : dateFr(s.debut));
 
@@ -41,7 +49,7 @@ function lignesDuReglement(inv, moyens) {
   let parts;
   try { parts = JSON.parse(inv.payment_split || "[]"); } catch { parts = []; }
   if (Array.isArray(parts) && parts.length) {
-    return parts.map((p) => ({ method: p.method || "", amount: String(p.amount ?? ""), bank: p.bank || "", cheque_number: p.cheque_number || "" }));
+    return parts.map((p) => ({ method: p.method || "", amount: montantEnSaisie(p.amount), bank: p.bank || "", cheque_number: p.cheque_number || "" }));
   }
   return [{ method: inv.payment_method || moyens[0] || "", amount: "" }];
 }
@@ -159,21 +167,29 @@ function Factures() {
     for (const x of sessions || []) for (const d of x.dossiers) m.set(d.enrollment_id, { ...d, formation: x.program_code });
     return m;
   }, [sessions]);
-  const formTotal = form.lines.reduce((s, l) => s + (Number(l.amount_net) || 0), 0);
+  const formTotal = form.lines.reduce((s, l) => s + (montantIllisible(l) ? 0 : montantDeLigne(l)), 0);
   const formTtc = ttcDe(formTotal, form.tva_exoneree);
   const modeleUnique = modeles.length === 1 ? modeles[0].slug : "";
 
   async function add(e) {
     e.preventDefault();
     setStatus(null);
+    const fautive = form.lines.find(montantIllisible);
+    if (fautive) {
+      const qui = fautive.enrollment_id ? dossiersParId.get(fautive.enrollment_id) : null;
+      const ligne = qui ? `de ${qui.nom} ${qui.prenom}` : fautive.description ? `« ${fautive.description} »` : "libre";
+      setStatus({ type: "error", message: `Montant illisible sur la ligne ${ligne} : écrivez-le par exemple 315,93.` });
+      return;
+    }
     // Le dernier moyen prend le solde ; une répartition qui DÉPASSE le total ne part pas.
-    const { parts, valid } = resolvePayments(paiements, formTtc);
-    if (!valid) { setStatus({ type: "error", message: "La répartition du règlement dépasse le total à régler." }); return; }
+    const { parts, valid, motif } = resolvePayments(paiements, formTtc);
+    if (!valid) { setStatus({ type: "error", message: motif || "La répartition du règlement dépasse le total à régler." }); return; }
     try {
       const r = await createInvoice({
         type: form.type, company_id: form.company_id || null,
         tva_exoneree: form.tva_exoneree, due_date: form.due_date || null,
-        lines: form.lines,
+        // Le montant LU part, pas la saisie : la base garde le point (cf. lib/montantSaisi.js).
+        lines: form.lines.map((l) => ({ ...l, amount_net: l.amount_net === "" ? "" : montantDeLigne(l) })),
         template_slug: form.template_slug || null,
         payments: parts,
       });
@@ -210,8 +226,8 @@ function Factures() {
   }
   async function enregistrerComplement() {
     const ttc = ttcDe(complement.inv.amount_net, complement.inv.tva_exoneree);
-    const { parts, valid } = resolvePayments(complement.paiements, ttc);
-    if (!valid) { setStatus({ type: "error", message: "La répartition du règlement dépasse le total à régler." }); return; }
+    const { parts, valid, motif } = resolvePayments(complement.paiements, ttc);
+    if (!valid) { setStatus({ type: "error", message: motif || "La répartition du règlement dépasse le total à régler." }); return; }
     try {
       await updateInvoice(complement.inv.id, { template_slug: complement.modele || null, payments: parts });
       setStatus({ type: "success", message: `${complement.inv.number} complété : il peut être émis et édité.` });
@@ -374,7 +390,9 @@ function Factures() {
                       </span>
                       <input className="inp fac-ligne-lib" aria-label="Libellé" placeholder={l.enrollment_id ? "Libellé (par défaut : la formation)" : "Libellé"}
                         value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} />
-                      <input className="inp fac-ligne-mnt" aria-label="Montant HT" type="number" step="0.01" min="0" placeholder="Montant HT"
+                      <input className="inp fac-ligne-mnt" aria-label="Montant HT" inputMode="decimal" autoComplete="off" placeholder="Montant HT"
+                        aria-invalid={montantIllisible(l) || undefined}
+                        style={montantIllisible(l) ? { borderColor: "var(--ember1)" } : undefined}
                         value={l.amount_net} onChange={(e) => setLine(i, "amount_net", e.target.value)} />
                       <button type="button" className="iconbtn del fac-ligne-x" title="Retirer la ligne" aria-label="Retirer la ligne" onClick={() => delLine(i)}><Icon name="x" size={14} /></button>
                     </div>

@@ -12,6 +12,8 @@
 
 const db = require('../config/database.js');
 const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
+// Les montants du règlement se TAPENT en français (« 30,50 ») : cf. lib/montantSaisi.js.
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 /* Colonnes de `invoice` arrivées par migration. Écrire une colonne absente ferait échouer
  * l'INSERT ENTIER : on perdrait la facture pour un choix facultatif d'émettrice ou de modèle. */
@@ -179,6 +181,21 @@ const invoiceShopRequest = async (req, res) => {
         if (!r) return res.status(404).json({ message: 'Demande introuvable.' });
         if (r.invoice_id) return res.status(409).json({ message: 'Cette demande a déjà une facture.' });
 
+        /* LE RÈGLEMENT SE LIT ICI, AVANT LE NUMÉRO : un refus ne doit pas en consommer un — la
+         * séquence des factures ne souffre aucun trou. « 30,50 » se lit en français ; `Number()`
+         * en faisait NaN, et la part DISPARAISSAIT au filtre, sans un mot. Vide, elle ne compte
+         * pas (comme avant) ; illisible, elle est refusée. */
+        const saisies = (Array.isArray(req.body?.payments) ? req.body.payments : [])
+            .map((p) => {
+                const brut = p && p.amount;
+                return { method: String(p && p.method || '').trim().slice(0, 40), amount: brut === '' || brut == null ? 0 : lireMontant(brut) };
+            });
+        const illisible = saisies.find((p) => p.method && !Number.isFinite(p.amount));
+        if (illisible) {
+            return res.status(422).json({ message: `Montant illisible pour « ${illisible.method} » : écrivez-le par exemple 315,93.` });
+        }
+        const parts = saisies.filter((p) => p.method && p.amount > 0);
+
         // La remise stagiaire (125) est figée sur la ligne. Cascade : sans la migration, on
         // facture comme avant, au prix net, sans colonne « Remise ».
         let lines;
@@ -253,10 +270,8 @@ const invoiceShopRequest = async (req, res) => {
          * le reste en carte). Même forme qu'à la caisse — on ne retient que les parts valides,
          * le résumé sert d'affichage et le détail chiffré part dans `payment_split`.
          * Le champ `payment_method` seul ne pouvait dire qu'UN moyen : régler moitié-moitié
-         * obligeait à en choisir un et à taire l'autre. */
-        const parts = (Array.isArray(req.body?.payments) ? req.body.payments : [])
-            .map((p) => ({ method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) }))
-            .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+         * obligeait à en choisir un et à taire l'autre. Les parts sont lues plus haut, avant le
+         * numéro. */
         const moyen = parts.length
             ? parts.map((p) => p.method).join(' + ').slice(0, 30)
             : (String(req.body?.payment_method || '').trim().slice(0, 30) || null);

@@ -1,5 +1,6 @@
 import { Icon } from "./Icon.jsx";
 import { euro } from "../lib/format.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 
 /**
  * Répartition d'un règlement sur PLUSIEURS moyens de paiement.
@@ -14,14 +15,26 @@ import { euro } from "../lib/format.js";
 /** Un moyen est-il un chèque ? On demande alors la banque et le numéro. */
 export const estCheque = (m) => /ch[eè]que/i.test(String(m || ""));
 
-/** Ventile : montants saisis pour toutes les lignes sauf la dernière, qui prend le reste. */
+/** Un montant de ligne TAPÉ (« 300,50 ») : vide → 0 ; illisible → NaN (cf. lib/montantSaisi.js). */
+const montantDe = (r) => (r.amount === "" || r.amount == null ? 0 : lireMontant(r.amount));
+/** … et ce qu'il pèse dans le calcul : rien s'il est illisible — `illisible` le signale à part. */
+const poidsDe = (r) => (Number.isFinite(montantDe(r)) ? montantDe(r) : 0);
+
+/** Ventile : montants saisis pour toutes les lignes sauf la dernière, qui prend le reste.
+ *
+ *  UN MONTANT ILLISIBLE REND LA RÉPARTITION INVALIDE, et `illisible` dit lequel. `Number("300,50")`
+ *  valait NaN, donc 0 : la part disparaissait, et tout le règlement retombait sur le dernier moyen,
+ *  sans un mot — 1000 € « en carte » pour un client qui en avait donné 300,50 en espèces. */
 export function resolvePayments(rows, total) {
   const n = rows.length;
-  const autres = rows.slice(0, n - 1).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const saisies = rows.slice(0, n - 1);
+  const fautive = saisies.find((r) => !Number.isFinite(montantDe(r)));
+  const illisible = fautive ? `Montant illisible pour « ${fautive.method} » : écrivez-le par exemple 300,50.` : null;
+  const autres = saisies.reduce((s, r) => s + poidsDe(r), 0);
   const reste = Math.round((total - autres) * 100) / 100;
   const parts = rows
     .map((r, i) => {
-      const part = { method: r.method, amount: i < n - 1 ? (Number(r.amount) || 0) : reste };
+      const part = { method: r.method, amount: i < n - 1 ? poidsDe(r) : reste };
       // Les infos du chèque ne partent que si elles sont renseignées, et pour un chèque.
       if (estCheque(r.method)) {
         if (String(r.bank || "").trim()) part.bank = String(r.bank).trim();
@@ -30,14 +43,16 @@ export function resolvePayments(rows, total) {
       return part;
     })
     .filter((p) => p.method && p.amount > 0.005);
-  // Valide si le reste n'est pas négatif (pas de dépassement) et chaque ligne a un moyen.
-  const valid = reste >= -0.005 && rows.every((r) => r.method);
-  return { parts, reste, valid };
+  // Valide si le reste n'est pas négatif (pas de dépassement), chaque ligne a un moyen, et chaque
+  // montant se lit. `motif` dit POURQUOI elle ne l'est pas, pour que l'écran ne devine pas.
+  const valid = reste >= -0.005 && rows.every((r) => r.method) && !illisible;
+  const motif = illisible || (reste < -0.005 ? "La répartition du règlement dépasse le total à régler." : null);
+  return { parts, reste, valid, illisible, motif };
 }
 
 export default function PaiementSplit({ options, total, rows, onChange }) {
   const n = rows.length;
-  const { reste } = resolvePayments(rows, total);
+  const { reste, illisible } = resolvePayments(rows, total);
   const depassement = reste < -0.005;
 
   const setRow = (i, patch) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -63,8 +78,15 @@ export default function PaiementSplit({ options, total, rows, onChange }) {
                   {euro(Math.max(0, reste))}
                 </div>
               ) : (
-                <input className="inp mono" type="number" min="0" step="0.01" value={r.amount} placeholder="0,00"
-                  onChange={(e) => setRow(i, { amount: e.target.value })} style={{ width: 104, textAlign: "right" }} />
+                /* TEXTE en `inputMode="decimal"`, plus `type="number"` : un champ numérique ne rend
+                   jamais ce qu'on a tapé — il lit la virgule selon la langue de l'APPAREIL, et là où
+                   elle n'est pas le séparateur décimal, « 300,50 » y devient une valeur VIDE, donc
+                   0 €, sans un mot. En texte, lireMontant la lit partout, et l'illisible se dit. */
+                <input className="inp mono" inputMode="decimal" autoComplete="off" value={r.amount} placeholder="0,00"
+                  aria-label={`Montant réglé en ${r.method || "ce moyen"}`}
+                  aria-invalid={!Number.isFinite(montantDe(r)) || undefined}
+                  onChange={(e) => setRow(i, { amount: e.target.value })}
+                  style={{ width: 104, textAlign: "right", ...(Number.isFinite(montantDe(r)) ? null : { borderColor: "var(--ember1)" }) }} />
               ))}
               {n > 1 && !dernier
                 ? <button type="button" className="iconbtn" onClick={() => remove(i)} aria-label="Retirer ce moyen"><Icon name="x" size={13} /></button>
@@ -87,8 +109,9 @@ export default function PaiementSplit({ options, total, rows, onChange }) {
           <Icon name="plus" size={13} /> Ajouter un moyen
         </button>
         {n > 1 && (
-          <span className="hint" style={{ color: depassement ? "var(--ember1)" : "var(--muted)" }}>
-            {depassement ? `Dépassement de ${euro(-reste)}` : `Solde sur le dernier : ${euro(Math.max(0, reste))}`}
+          <span className="hint" role={illisible ? "alert" : undefined}
+            style={{ color: illisible || depassement ? "var(--ember1)" : "var(--muted)" }}>
+            {illisible || (depassement ? `Dépassement de ${euro(-reste)}` : `Solde sur le dernier : ${euro(Math.max(0, reste))}`)}
           </span>
         )}
       </div>

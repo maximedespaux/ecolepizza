@@ -337,7 +337,10 @@ function FacturerModal({ d, busy, onClose, onValider }) {
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
-          <button className="btn primary" disabled={busy}
+          {/* Un montant ILLISIBLE bloque : il valait 0, sa part disparaissait, et le dernier moyen
+              prenait tout sans un mot. Le composant le dit sous les lignes ; le bouton attend. */}
+          <button className="btn primary" disabled={busy || !!resolvePayments(paiements, totalTtc).illisible}
+            title={resolvePayments(paiements, totalTtc).illisible || undefined}
             onClick={() => onValider({
               bill_to: billTo,
               billing_profile_id: emetteurId || null,

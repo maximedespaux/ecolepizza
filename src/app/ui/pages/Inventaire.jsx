@@ -11,6 +11,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { euro } from "../lib/format.js";
 import ImageLien, { ImagePlaceholder } from "../components/ImageLien.jsx";
 import { bumpBadges } from "../lib/events.js";
+import { lireMontant, montantEnSaisie } from "../lib/montantSaisi.js";
 
 const CATEGORIES = [
   "Four", "Pétrin", "Matière première", "Accessoire", "Livre", "Autre",
@@ -33,7 +34,11 @@ const CAT_ICON = {
 };
 const catIcon = (c) => CAT_ICON[c] || "package";
 
-const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
+/* Le HT se TAPE en français (« 39,90 ») : lu par `Number()`, l'estimation affichait « 0 € ». Le
+   prix et la remise sont désormais des champs TEXTE (`inputMode="decimal"`) : un `type="number"` lit
+   la virgule selon la langue de l'APPAREIL, et là où elle n'est pas le séparateur décimal, il la
+   rend VIDE — le prix partait vide, et la remise stagiaire disparaissait sans un mot. */
+const ttc = (ht, rate) => { const n = lireMontant(ht); return (Number.isFinite(n) ? n : 0) * (1 + Number(rate || 0) / 100); };
 
 function stockState(item) {
   if (item.quantity <= 0) return { tone: "r", label: "Rupture", color: "var(--ember1)" };
@@ -121,9 +126,11 @@ function Inventaire({ embedded = false }) {
   }
 
   function openEdit(item) {
+    setStatus(null); // un ancien refus ne doit pas s'afficher dans la fenêtre qui s'ouvre
     setEditing({
       id: item.id, name: item.name, category: item.category || "", sku: item.sku || "",
-      quantity: item.quantity, unit_price: item.unit_price ?? "", tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
+      // Le prix de la base (« 39.90 ») s'affiche comme on le tape : « 39,90 ».
+      quantity: item.quantity, unit_price: montantEnSaisie(item.unit_price), tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
       /* SANS CETTE LIGNE, la photo existante n'apparaissait pas à l'édition : le champ s'ouvrait
          vide alors que l'article en avait une, et on ne pouvait ni la voir ni la corriger — juste
          en coller une autre à l'aveugle. Le `|| ""` suit la règle du reste de cette fonction :
@@ -131,8 +138,8 @@ function Inventaire({ embedded = false }) {
       image_url: item.image_url || "",
       // Une SEULE valeur + son unité à l'écran : deux champs séparés laisseraient poser 10 %
       // ET 5 €, sans qu'on sache lequel s'applique.
-      remiseValeur: item.learner_discount_eur ? String(item.learner_discount_eur)
-        : (item.learner_discount_pct ? String(item.learner_discount_pct) : ""),
+      remiseValeur: item.learner_discount_eur ? montantEnSaisie(item.learner_discount_eur)
+        : (item.learner_discount_pct ? montantEnSaisie(item.learner_discount_pct) : ""),
       remiseUnite: item.learner_discount_eur ? "€" : "%",
     });
   }
@@ -210,7 +217,7 @@ function Inventaire({ embedded = false }) {
             </div>
             <div className="row3">
               <Field label="Quantité initiale" type="number" min="0" value={form.quantity} onChange={set("quantity")} />
-              <Field label="Prix unitaire HT (€)" type="number" step="0.01" value={form.unit_price} onChange={set("unit_price")} />
+              <Field label="Prix unitaire HT (€)" inputMode="decimal" autoComplete="off" value={form.unit_price} onChange={set("unit_price")} />
               <SelectField label="TVA (%)" value={form.tax_rate} onChange={set("tax_rate")}>
                 {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
               </SelectField>
@@ -241,7 +248,7 @@ function Inventaire({ embedded = false }) {
               <div className="field">
                 <label>Remise stagiaire</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <input className="inp" type="number" min="0" step="0.5" placeholder="aucune"
+                  <input className="inp" inputMode="decimal" autoComplete="off" placeholder="aucune" aria-label="Remise stagiaire"
                     value={form.remiseValeur} onChange={set("remiseValeur")} style={{ flex: 1 }} />
                   <select className="inp" value={form.remiseUnite} onChange={set("remiseUnite")}
                     style={{ width: 78, flex: "0 0 auto" }} aria-label="Unité de la remise">
@@ -251,7 +258,8 @@ function Inventaire({ embedded = false }) {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 10, fontSize: 13, color: "var(--muted)" }}>
-                {form.unit_price ? <span>TTC estimé : <b style={{ color: "var(--text)" }}>{euro(ttc(form.unit_price, form.tax_rate))}</b></span> : null}
+                {/* Seulement si le prix se LIT : « 39,9x » afficherait un TTC de 0 €. */}
+                {Number.isFinite(lireMontant(form.unit_price)) ? <span>TTC estimé : <b style={{ color: "var(--text)" }}>{euro(ttc(form.unit_price, form.tax_rate))}</b></span> : null}
               </div>
             </div>
             <button type="submit" className="btn primary">Ajouter</button>
@@ -348,6 +356,10 @@ function Inventaire({ embedded = false }) {
             </div>
             <form onSubmit={saveEdit}>
               <div className="mbody">
+                {/* Le refus du serveur (« Prix illisible : écrivez-le par exemple 39,90. ») se lit
+                    ICI : le message de page reste derrière la fenêtre, et l'enregistrement
+                    semblait ne rien faire. */}
+                {status?.type === "error" && <StatusMessage status={status} />}
                 <div className="row3">
                   <Field label="Nom" value={editing.name} onChange={setEdit("name")} required />
                   <div className="field">
@@ -358,7 +370,7 @@ function Inventaire({ embedded = false }) {
                 </div>
                 <div className="row3">
                   <Field label="Quantité" type="number" min="0" value={editing.quantity} onChange={setEdit("quantity")} />
-                  <Field label="Prix unitaire HT (€)" type="number" step="0.01" value={editing.unit_price} onChange={setEdit("unit_price")} />
+                  <Field label="Prix unitaire HT (€)" inputMode="decimal" autoComplete="off" value={editing.unit_price} onChange={setEdit("unit_price")} />
                   <SelectField label="TVA (%)" value={String(editing.tax_rate)} onChange={setEdit("tax_rate")}>
                     {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
                   </SelectField>
@@ -390,7 +402,7 @@ function Inventaire({ embedded = false }) {
                   <div className="field">
                     <label>Remise stagiaire</label>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <input className="inp" type="number" min="0" step="0.5" placeholder="aucune"
+                      <input className="inp" inputMode="decimal" autoComplete="off" placeholder="aucune" aria-label="Remise stagiaire"
                         value={editing.remiseValeur} onChange={setEdit("remiseValeur")} style={{ flex: 1 }} />
                       <select className="inp" value={editing.remiseUnite} onChange={setEdit("remiseUnite")}
                         style={{ width: 78, flex: "0 0 auto" }} aria-label="Unité de la remise">
@@ -400,7 +412,7 @@ function Inventaire({ embedded = false }) {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 10, fontSize: 13, color: "var(--muted)" }}>
-                    {editing.unit_price ? <span>TTC : <b style={{ color: "var(--text)" }}>{euro(ttc(editing.unit_price, editing.tax_rate))}</b></span> : null}
+                    {Number.isFinite(lireMontant(editing.unit_price)) ? <span>TTC : <b style={{ color: "var(--text)" }}>{euro(ttc(editing.unit_price, editing.tax_rate))}</b></span> : null}
                   </div>
                 </div>
               </div>

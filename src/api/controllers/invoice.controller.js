@@ -12,14 +12,19 @@ const { htmlToPdf } = require('../lib/docxpdf.js');
 const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { DATE_SESSION, FACTURES_DU_DOSSIER, BROUILLONS_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
+/* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien — une ligne
+   ainsi saisie était refusée, un paiement aussi, et une part de règlement disparaissait (cf. le
+   fichier). */
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 const PREFIX = { DEVIS: 'D', ACOMPTE: 'A', FACTURE: 'F', AVOIR: 'AV' };
 const TYPE_LABEL = { DEVIS: 'Devis', ACOMPTE: 'Facture d\'acompte', FACTURE: 'Facture', AVOIR: 'Avoir' };
 
-// Montant financier valide : fini, >= 0, borné (évite négatifs / NaN / débordements).
+// Montant financier valide : fini, >= 0, borné (évite négatifs / NaN / débordements). Lu en
+// français : « 315,93 » valait NaN, donc « invalide », avec un message qui ne disait pas pourquoi.
 const MAX_AMOUNT = 100000000; // 100 M€ garde-fou
 function validAmount(v) {
-    const n = Number(v);
+    const n = lireMontant(v);
     return Number.isFinite(n) && n >= 0 && n <= MAX_AMOUNT ? n : null;
 }
 
@@ -60,16 +65,23 @@ async function modeleFactureChoisi(orgId, valeur) {
  */
 function reglementDe(body, ttc) {
     const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
-    const parts = (Array.isArray(body && body.payments) ? body.payments : [])
+    const saisies = (Array.isArray(body && body.payments) ? body.payments : [])
         .map((p) => {
-            const part = { method: String((p && p.method) || '').trim().slice(0, 40), amount: Math.round(Number(p && p.amount) * 100) / 100 };
+            /* « 300,50 » se lit en français : `Number()` en faisait NaN, et la part DISPARAISSAIT au
+               filtre — le document imprimait alors un règlement qui ne bouclait pas. Vide, elle ne
+               compte pas (comme avant) ; illisible, elle est refusée. */
+            const brut = p && p.amount;
+            const lu = brut === '' || brut == null ? 0 : lireMontant(brut);
+            const part = { method: String((p && p.method) || '').trim().slice(0, 40), amount: Math.round(lu * 100) / 100 };
             if (estCheque(part.method)) {
                 if (String((p && p.bank) || '').trim()) part.bank = String(p.bank).trim().slice(0, 120);
                 if (String((p && p.cheque_number) || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
             }
             return part;
-        })
-        .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+        });
+    const illisible = saisies.find((p) => p.method && !Number.isFinite(p.amount));
+    if (illisible) return { erreur: `Montant illisible pour « ${illisible.method} » : écrivez-le par exemple 315,93.` };
+    const parts = saisies.filter((p) => p.method && p.amount > 0);
     if (!parts.length) return { vide: true };
     const somme = Math.round(parts.reduce((t, p) => t + p.amount, 0) * 100) / 100;
     if (Math.abs(somme - ttc) > 0.01) {
@@ -375,18 +387,23 @@ const createInvoice = async (req, res) => {
     let cleanLines = [];
     let total;
     if (hasLines) {
+        /* Une ligne est VIDE (et écartée) quand rien n'y est saisi ; un montant tapé mais illisible
+           n'en fait pas une ligne vide — elle était écartée sans un mot, et la facture partait
+           sans elle. */
+        const saisi = (v) => !(v === undefined || v === null || v === '');
         cleanLines = lines
-            .map((l) => ({ enrollment_id: l.enrollment_id || null, description: (l.description || '').trim() || null, amount_net: validAmount(l.amount_net) }))
-            .filter((l) => l.enrollment_id || l.description || l.amount_net !== null);
+            .map((l) => ({ enrollment_id: l.enrollment_id || null, description: (l.description || '').trim() || null,
+                amount_net: validAmount(l.amount_net), montantSaisi: saisi(l.amount_net) }))
+            .filter((l) => l.enrollment_id || l.description || l.montantSaisi);
         if (cleanLines.length === 0) return res.status(422).json({ error: 'Au moins une ligne requise.' });
         if (cleanLines.some((l) => l.amount_net === null)) {
-            return res.status(422).json({ error: 'Montant de ligne invalide (doit être un nombre positif).' });
+            return res.status(422).json({ error: 'Montant de ligne invalide : écrivez un nombre positif, par exemple 315,93.' });
         }
         total = cleanLines.reduce((s, l) => s + l.amount_net, 0);
     } else {
         if (amount_net === undefined || amount_net === '') return res.status(422).json({ error: 'Type et montant requis' });
         total = validAmount(amount_net);
-        if (total === null) return res.status(422).json({ error: 'Montant invalide (doit être un nombre positif).' });
+        if (total === null) return res.status(422).json({ error: 'Montant invalide : écrivez un nombre positif, par exemple 315,93.' });
     }
 
     try {
@@ -432,8 +449,9 @@ const createInvoice = async (req, res) => {
 
         // billing_profile_id peut ne pas exister (migration 113 non jouée) : on réinsère alors
         // sans lui, la facture sortant sous l'organisme comme avant.
+        // La base garde le POINT (`toFixed(2)`) : la virgule n'est qu'une façon de TAPER.
         const base = [invoiceId, req.user.organization_id, mainEnroll, company_id || null, buyer_name || null,
-            type, number, total, tva_exoneree ? 1 : 0, due_date || null];
+            type, number, total.toFixed(2), tva_exoneree ? 1 : 0, due_date || null];
         try {
             await conn.query(
                 `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id)
@@ -453,7 +471,7 @@ const createInvoice = async (req, res) => {
                 const l = cleanLines[i];
                 await conn.query(
                     'INSERT INTO invoice_line (id, invoice_id, enrollment_id, description, amount_net, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-                    [crypto.randomUUID(), invoiceId, l.enrollment_id, l.description, l.amount_net, i]
+                    [crypto.randomUUID(), invoiceId, l.enrollment_id, l.description, l.amount_net.toFixed(2), i]
                 );
             }
         }
@@ -525,7 +543,7 @@ const recordPayment = async (req, res) => {
     const { amount } = req.body;
     if (amount === undefined || amount === '') return res.status(422).json({ error: 'Montant requis' });
     const amt = validAmount(amount);
-    if (amt === null || amt === 0) return res.status(422).json({ error: 'Montant invalide (nombre strictement positif requis).' });
+    if (amt === null || amt === 0) return res.status(422).json({ error: 'Montant invalide : écrivez un nombre strictement positif, par exemple 315,93.' });
     try {
         const conn = db.promise();
         const [inv] = await conn.query(
@@ -537,7 +555,7 @@ const recordPayment = async (req, res) => {
         await conn.query(
             `INSERT INTO payment (id, invoice_id, provider, amount, status, paid_at)
              VALUES (?, ?, 'manuel', ?, 'REUSSI', NOW())`,
-            [crypto.randomUUID(), req.params.id, amt]
+            [crypto.randomUUID(), req.params.id, amt.toFixed(2)]
         );
         const [sum] = await conn.query(
             "SELECT COALESCE(SUM(amount),0) AS paid FROM payment WHERE invoice_id = ? AND status = 'REUSSI'",
