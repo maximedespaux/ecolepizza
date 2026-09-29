@@ -122,17 +122,9 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
        faisable, mais NE COMPTE PAS : ni dans la fraction de l'avancement — des deux côtés, faite ou
        non —, ni comme « prochaine étape ». Décidé par l'école le 2026-09-28 : un dossier dont tout le
        dû est fait est à 100 %, même si un document facultatif attend encore. */
-    /* ADRESSÉE À L'ENTREPRISE (migration 190) : un document dont le jalon vise l'entreprise, quand
-       celle-ci a un espace, sort du décompte du STAGIAIRE — il est compté côté entreprise. Même
-       effet que « facultatif » ici (hors fraction, jamais la prochaine étape), mais il reste visible,
-       marqué « chez l'entreprise ». Un seul champ `destinataire` : il n'est posé que sur les jalons
-       de document (formationSteps), une remise garde son propre chemin (remiseEntreprise). Sans
-       espace entreprise, il revient au stagiaire — comme une remise (pourEntreprise). */
-    const docEntreprise = (r) => !r.s.remise_id && !r.s.piece_id && r.s.destinataire === 'ENTREPRISE' && entreprise;
-    const horsDecompte = (r) => r.s.facultatif || docEntreprise(r);
-    let currentIndex = rows.findIndex((r) => !r.done && !horsDecompte(r));
+    let currentIndex = rows.findIndex((r) => !r.done && !r.s.facultatif);
     if (currentIndex < 0) currentIndex = rows.length;
-    const requises = rows.filter((r) => !horsDecompte(r));
+    const requises = rows.filter((r) => !r.s.facultatif);
     const faites = requises.filter((r) => r.done).length;
 
     const outSteps = rows.map((r, i) => ({
@@ -164,9 +156,6 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
            une, dotée d'un espace. C'est la même règle que `pourEntreprise` (remise.controller.js) —
            l'écran dit « Remis à l'entreprise » là où le serveur réserve l'accusé à son compte. */
         remiseEntreprise: !!(r.s.remise_id && r.s.destinataire === 'ENTREPRISE' && entreprise),
-        /* Document dont le JALON vise l'entreprise (migration 190), qui a un espace : compté côté
-           entreprise, l'écran le dit « chez l'entreprise » et ne le met pas au décompte du stagiaire. */
-        docEntreprise: docEntreprise(r),
         sansObjet: !!r.sansObjet,
         facultatif: !!r.s.facultatif, // hors décompte (migration 188) : l'écran le dit
         /* `status` garde son sens de RANG (faite / en cours / à venir) pour ceux qui s'en servent
@@ -186,7 +175,7 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
         /* LE RANG DE LA PROCHAINE ÉTAPE DUE, parmi les dues — le « Étape 3/10 » du pipeline, lu sur
            `total`. `currentIndex` compte aussi les facultatives qui la précèdent : « Étape 5/10 » pour
            un dossier à sa troisième étape due mêlerait deux listes. Sans facultative, ils sont égaux. */
-        rang: rows.slice(0, currentIndex).filter((r) => !horsDecompte(r)).length,
+        rang: rows.slice(0, currentIndex).filter((r) => !r.s.facultatif).length,
         currentIndex,
         currentKey: currentIndex < outSteps.length ? outSteps[currentIndex].key : null,
     };

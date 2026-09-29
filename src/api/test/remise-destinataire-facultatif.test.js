@@ -410,8 +410,8 @@ const ui = (rel) => fs.readFileSync(path.join(__dirname, '../../app/ui', rel), '
 
 test('Formations : une case « Facultatif » par jalon, envoyée pour toutes les natures', () => {
     const src = ui('pages/Formations.jsx');
-    assert.match(src, /\{ slug: s\.slug, active: s\.active, applies_when: s\.applies_when \|\| null, facultatif: !!s\.facultatif[,}]/, 'pièces');
-    assert.match(src, /: \{ slug: s\.slug, active: s\.active, facultatif: !!s\.facultatif[,}]/, 'et tout le reste');
+    assert.match(src, /\{ slug: s\.slug, active: s\.active, applies_when: s\.applies_when \|\| null, facultatif: !!s\.facultatif \}/, 'pièces');
+    assert.match(src, /: \{ slug: s\.slug, active: s\.active, facultatif: !!s\.facultatif \}\)\)/, 'et tout le reste');
     // Une case par JALON : le dossier n'en suivra qu'une variante, cocher l'une sans l'autre n'aurait pas de sens.
     assert.match(src, /<CaseFacultatif etapes=\{g\.steps\} onToggle=\{onToggleFacultatif\} \/>/);
     assert.match(src, /<CaseFacultatif etapes=\{\[s\]\} onToggle=\{onToggleFacultatif\} \/>/, 'et dans la section entreprise');
