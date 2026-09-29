@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { euro } from "../lib/format.js";
-import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations } from "../api/apiClient.js";
+import { searchCatalog, getCatalogFamilies, getCatalogBrands, getMyRecipes, getComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, getMyFormations, getMercuriale } from "../api/apiClient.js";
 import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT, INDIRECT_WMIN, NAPO_SPECS, napoSpecOf, DP_DEFAULT, gfmt, addPctOf, LEVURE_TYPES, recoLevure, yeastLabel } from "../lib/dough.js";
+import { perWeightUnit } from "../lib/garnitures.js";
+import Mercuriale from "../components/Mercuriale.jsx";
+import MercProductPicker from "../components/MercProductPicker.jsx";
+import PairingSuggest from "../components/PairingSuggest.jsx";
+import { UserContext } from "../context/UserContext.jsx";
 
 /**
  * Fiche technique — trois types composables :
@@ -367,13 +372,46 @@ function ComponentPickerModal({ onClose, onAdd, added, excludeId }) {
   );
 }
 
-function FicheRecette({ mode = "realisation" }) {
+/**
+ * Modale « Depuis ma mercuriale » : choisir un produit de sa mercuriale → ligne d'ingrédient
+ * (prix et unité repris de la mercuriale). Bascule « gestion » pour compléter sa mercuriale
+ * (catalogue Metro + frais/marché) sans quitter la fiche.
+ */
+function MercurialeModal({ items, reload, onClose, onAdd }) {
+  const [view, setView] = useState("pick"); // pick | manage
+  return createPortal(
+    <div className="overlay">
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <div className="mhead">
+          <h3 style={{ fontSize: 16 }}>{view === "manage" ? "Ma mercuriale" : "Depuis ma mercuriale"}</h3>
+          <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="mbody">
+          {view === "manage"
+            ? <Mercuriale items={items} reload={reload} onBack={() => setView("pick")} />
+            : <MercProductPicker items={items} onAdd={onAdd} addedKeys={null} onManage={() => setView("manage")} />}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * `mode` verrouille le TYPE de fiche (empâtement / garniture / réalisation). Embarqué par
+ * « Mes fiches techniques » (FichesTechniques.jsx), l'éditeur reçoit `embedded` (masque l'en-tête
+ * de page et la liste des fiches, que le hub gère déjà), `openId` (la fiche à ouvrir à l'entrée)
+ * et `onExit` (retour à la liste). Sans ces props, il reste une page autonome comme avant.
+ */
+function FicheRecette({ mode = "realisation", openId = null, embedded = false, onExit = null }) {
   const kind = MODE_KIND[mode] || "RECETTE"; // chaque page est verrouillée sur son type de fiche
   const [r, setR] = useState(() => initFor(mode));
   const [saved, setSaved] = useState([]);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [mercOpen, setMercOpen] = useState(false);
+  const [merc, setMerc] = useState([]); // ma mercuriale : source de prix des ingrédients
   const [niv2, setNiv2] = useState(false); // empâtements indirects (biga/poolish) → Niveau II ou Expert
   const [napo, setNapo] = useState(false); // typologie Napolitaine → spécialisation Napolitaine
   const [spe, setSpe] = useState(false);   // typologies Teglia/Pala → spécialisation In Teglia & Pala (ou Expert)
@@ -382,7 +420,18 @@ function FicheRecette({ mode = "realisation" }) {
 
   const reload = () => getMyRecipes().then((res) => setSaved(res.data || [])).catch(() => {});
   useEffect(() => { reload(); }, []);
+  // Embarqué pour MODIFIER : on charge la fiche demandée à l'entrée (openRecipe est déclarée plus bas, hoistée).
+  useEffect(() => { if (openId) openRecipe(openId); }, [openId]);
+  const reloadMerc = () => getMercuriale().then((res) => setMerc(res.data || [])).catch(() => {});
+  useEffect(() => { reloadMerc(); }, []);
+  // Options avancées (indirects, napolitaine, teglia/pala) : débloquées par les formations SUIVIES
+  // — SAUF le personnel, qui les a TOUTES. Il enseigne ces empâtements et n'a pas de fiche
+  // stagiaire, si bien que `getMyFormations` lui répond 404 : sans ce raccourci, un formateur de
+  // niveau II se verrait refuser la napolitaine dans l'outil qu'il fait utiliser à ses stagiaires.
+  const { user } = useContext(UserContext);
+  const estPersonnel = ["SUPER_ADMIN", "ADMIN_ORGANISME", "SECRETARIAT", "FORMATEUR"].includes(user?.role);
   useEffect(() => {
+    if (estPersonnel) { setNiv2(true); setNapo(true); setSpe(true); return; }
     getMyFormations().then((r) => {
       const fs = (r.data || []).filter((f) => f.enrolled).map((f) => `${f.program_title} ${f.program_code}`.toLowerCase());
       const has = (re) => fs.some((t) => re.test(t));
@@ -390,7 +439,7 @@ function FicheRecette({ mode = "realisation" }) {
       setNapo(has(/napolit/));             // spécialisation Napolitaine
       setSpe(has(/teglia|pala/));          // spécialisation In Teglia & Pala (Expert inclus)
     }).catch(() => {});
-  }, []);
+  }, [estPersonnel]);
 
   const set = (k) => (e) => setR((p) => ({ ...p, [k]: e.target.value }));
   const setIng = (i, patch) => setR((p) => ({ ...p, ingredients: p.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
@@ -409,6 +458,14 @@ function FicheRecette({ mode = "realisation" }) {
     unit: c.unit === "piece" ? "piece" : "g", unit_price: Number(c.unit_price) || 0,
     qty: c.unit === "piece" ? 1 : 80,
   }] }));
+  // Ajoute un ingrédient DEPUIS MA MERCURIALE : prix et unité repris de ma liste de prix (éditables ensuite).
+  const addFromMerc = (m) => setR((p) => ({ ...p, ingredients: [...p.ingredients, {
+    label: m.label, product_id: m.catalog_product_id || null, component_recipe_id: null,
+    unit: perWeightUnit(m.unit) ? "g" : "piece", unit_price: num(m.price),
+    qty: perWeightUnit(m.unit) ? 50 : 1,
+  }] }));
+  // Ligne d'ingrédient générique (accords de saveurs) : complète les valeurs par défaut.
+  const addRow = (row) => setR((p) => ({ ...p, ingredients: [...p.ingredients, { label: "", qty: 0, unit: "g", unit_price: 0, product_id: null, component_recipe_id: null, ...row }] }));
 
   const isRecette = kind === "RECETTE";
   const isPate = kind === "PATE";
@@ -595,7 +652,14 @@ function FicheRecette({ mode = "realisation" }) {
 
   return (
     <>
-      <PageHead {...(HEADS[mode] || HEADS.realisation)} />
+      {embedded ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <button className="btn ghost sm" onClick={onExit}><Icon name="chevron-left" size={14} /> Retour aux fiches</button>
+          <b style={{ fontSize: 16 }}>{r.id ? "Modifier" : "Créer"} · {KIND_LABEL[kind]}</b>
+        </div>
+      ) : (
+        <PageHead {...(HEADS[mode] || HEADS.realisation)} />
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {/* Ligne 1 — identité + empâtement (pâte/recette) ou rendement (préparation) */}
@@ -902,11 +966,15 @@ function FicheRecette({ mode = "realisation" }) {
           </div>
         )}
 
+        {/* Accords de saveurs — aide à composer une garniture par affinité (avant les ingrédients) */}
+        {isPrep && <PairingSuggest merc={merc} onAdd={addRow} />}
+
         {/* Ligne 3 — ingrédients / garniture (pas pour la pâte, gérée par le calculateur) */}
         {!isPate && (
         <Card className="fr-garniture" title={<span className="card-ttl" style={{ fontSize: 17 }}><Icon name="list-checks" size={18} /> {ingTitle} <span className="hint" style={{ fontWeight: 400 }}>{ingScope}</span></span>}
           more={<span style={{ display: "flex", gap: 8 }}>
-            <button className="btn sm primary" onClick={() => setSearchOpen(true)}><Icon name="search" size={14} aria-hidden="true" /> Rechercher des ingrédients</button>
+            <button className="btn sm primary" onClick={() => setMercOpen(true)}><Icon name="coins" size={14} aria-hidden="true" /> Depuis ma mercuriale</button>
+            <button className="btn sm ghost" onClick={() => setSearchOpen(true)}><Icon name="search" size={14} aria-hidden="true" /> Catalogue Metro</button>
             {isRecette && <button className="btn sm ghost" onClick={() => setImportOpen(true)}><Icon name="plus" size={14} /> Importer une fiche</button>}
             <button className="btn sm ghost" onClick={addIng}><Icon name="plus" size={14} /> Ligne manuelle</button>
           </span>}>
@@ -983,8 +1051,8 @@ function FicheRecette({ mode = "realisation" }) {
           </Card>
         )}
 
-        {/* Ligne 4 — mes fiches enregistrées (du type de la page) */}
-        <Card title={<span className="card-ttl"><Icon name="history" size={16} /> {SAVED_TITLE[kind]}</span>}>
+        {/* Ligne 4 — mes fiches enregistrées (masquée quand « Mes fiches techniques » gère déjà la liste) */}
+        {!embedded && <Card title={<span className="card-ttl"><Icon name="history" size={16} /> {SAVED_TITLE[kind]}</span>}>
           {mine.length === 0 ? (
             <p className="hint" style={{ margin: 0 }}>{SAVED_EMPTY[kind]}</p>
           ) : (
@@ -1001,9 +1069,10 @@ function FicheRecette({ mode = "realisation" }) {
               ))}
             </div>
           )}
-        </Card>
+        </Card>}
       </div>
 
+      {mercOpen && <MercurialeModal items={merc} reload={reloadMerc} onClose={() => { setMercOpen(false); reloadMerc(); }} onAdd={addFromMerc} />}
       {searchOpen && <IngredientSearchModal onClose={() => setSearchOpen(false)} onAdd={addProduct} added={added} />}
       {importOpen && <ComponentPickerModal onClose={() => setImportOpen(false)} onAdd={addComponent} added={importedIds} excludeId={r.id} />}
     </>

@@ -39,9 +39,8 @@ export const NAV = [
          Seule la coquille d'écran les réservait à l'espace stagiaire, et la bascule vers cet
          espace exige `has_learner` : un formateur sans fiche de stagiaire n'y entrait pas.
          Absurde pour qui ENSEIGNE l'empâtement et doit préparer ses exemples. */
-      { to: "/empatements", ic: "wheat", label: "Empâtements", roles: STAFF },
-      { to: "/garnitures", ic: "list-checks", label: "Garnitures", roles: STAFF },
-      { to: "/realisations", ic: "pizza", label: "Réalisations", roles: STAFF },
+      { to: "/fiches-techniques", ic: "file-text", label: "Fiches techniques", roles: STAFF },
+      { to: "/mercuriale", ic: "coins", label: "Mercuriale", roles: STAFF },
       { to: "/notions", ic: "book-open", label: "Notions & lexique", roles: STAFF },
     ],
   },
@@ -155,9 +154,8 @@ export const PAGE_TITLES = {
   "/carte": "Carte des stagiaires",
   "/partenaires": "Partenaires",
   "/communaute": "Communauté",
-  "/empatements": "Empâtements",
-  "/garnitures": "Garnitures",
-  "/realisations": "Réalisations",
+  "/fiches-techniques": "Fiches techniques",
+  "/mercuriale": "Mercuriale",
   "/notions": "Notions & lexique",
   "/inventaire": "Inventaire",
   "/ventes": "Ventes de Matériels et Inventaire",
@@ -275,8 +273,7 @@ const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
   "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/communaute": "/communaute",
-  "/empatements": "/empatements", "/garnitures": "/garnitures",
-  "/realisations": "/realisations", "/notions": "/notions",
+  "/fiches-techniques": "/fiches-techniques", "/mercuriale": "/mercuriale", "/notions": "/notions",
   "/pizza-quest-admin": "/pizza-quest-admin",
   "/ventes": "/ventes", "/inventaire": "/ventes", "/factures": "/factures",
   /* `/demandes-boutique` manquait aussi : sa base API est pourtant cartographiée côté serveur

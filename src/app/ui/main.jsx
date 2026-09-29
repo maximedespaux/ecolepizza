@@ -62,9 +62,8 @@ import StudentFormationDetail from "./pages/StudentFormationDetail.jsx";
 import PizzaQuest from "./pages/PizzaQuest.jsx";
 import Boutique from "./pages/Boutique.jsx";
 import DemandesBoutique from "./pages/DemandesBoutique.jsx";
-import PateWizard from "./pages/PateWizard.jsx";
-import GarnitureWizard from "./pages/GarnitureWizard.jsx";
-import RealisationWizard from "./pages/RealisationWizard.jsx";
+import FichesTechniques from "./pages/FichesTechniques.jsx";
+import MercurialePage from "./pages/MercurialePage.jsx";
 import Communaute from "./pages/Communaute.jsx";
 import Notions from "./pages/Notions.jsx";
 import NotFound from "./pages/NotFound.jsx";
@@ -209,9 +208,12 @@ function AppRoutes() {
           <Route path="emargement" element={<EmargementStagiaire />} />
           <Route path="formations" element={<Navigate to="/mon-espace" replace />} />
           <Route path="formations/:id" element={<StudentFormationDetail />} />
-          <Route path="empatements" element={<PateWizard />} />
-          <Route path="garnitures" element={<GarnitureWizard />} />
-          <Route path="realisations" element={<RealisationWizard />} />
+          <Route path="fiches-techniques" element={<FichesTechniques />} />
+          {/* Les trois anciens assistants sont fondus dans « Mes fiches techniques » : leurs URL redirigent. */}
+          <Route path="empatements" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="garnitures" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="realisations" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="mercuriale" element={<MercurialePage />} />
           <Route path="communaute" element={<Communaute />} />
           <Route path="notions" element={<Notions />} />
           <Route path="pizza-quest" element={<PizzaQuest />} />
@@ -248,9 +250,11 @@ function AppRoutes() {
               à l'espace stagiaire — et la bascule vers cet espace exige `has_learner`, qu'un
               formateur n'a pas. Celui qui ENSEIGNE l'empâtement ne pouvait pas préparer ses
               exemples dans l'outil qu'il fait utiliser. Deux chemins, une seule page. */}
-          <Route path="empatements" element={<Guard nav="/empatements" roles={STAFF}><PateWizard /></Guard>} />
-          <Route path="garnitures" element={<Guard nav="/garnitures" roles={STAFF}><GarnitureWizard /></Guard>} />
-          <Route path="realisations" element={<Guard nav="/realisations" roles={STAFF}><RealisationWizard /></Guard>} />
+          <Route path="fiches-techniques" element={<Guard nav="/fiches-techniques" roles={STAFF}><FichesTechniques /></Guard>} />
+          <Route path="empatements" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="garnitures" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="realisations" element={<Navigate to="/fiches-techniques" replace />} />
+          <Route path="mercuriale" element={<Guard nav="/mercuriale" roles={STAFF}><MercurialePage /></Guard>} />
           <Route path="notions" element={<Guard nav="/notions" roles={STAFF}><Notions /></Guard>} />
           <Route path="ventes" element={<Guard nav="/ventes" roles={ADMIN}><Ventes /></Guard>} />
           <Route path="inventaire" element={<Guard nav="/ventes" roles={ADMIN}><Inventaire /></Guard>} />
