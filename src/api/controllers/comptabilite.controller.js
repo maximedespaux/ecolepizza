@@ -110,6 +110,92 @@ async function loadSettings(conn, orgId) {
     };
 }
 
+/* La table des apports en nature arrive avec la migration 065 : sans elle, rien à lister. */
+const sansTable = (e) => e && e.code === 'ER_NO_SUCH_TABLE';
+
+/**
+ * LES APPORTS EN NATURE de la période — un pétrin, un four, de la farine offerts par un partenaire.
+ *
+ * Ils se saisissent sur la page Partenaires, au même formulaire que les commissions, et ne
+ * paraissaient NULLE PART ici : l'école a relevé, le 2026-09-29, des apports « qui ne remontent
+ * pas en comptabilité ». Ils n'entrent toujours PAS dans le chiffre d'affaires, et c'est voulu :
+ * rien n'a été encaissé, et leur valeur compterait sinon dans le résultat, donc dans les
+ * dividendes « possibles » — un pétrin ne se distribue pas. `computePeriode` ne les lit donc
+ * jamais ; ils sont listés À PART, pour la même période que tout le reste.
+ *
+ * Le nom du partenaire est joint DANS l'organisme : `createContribution` ne vérifiait pas le
+ * partenaire reçu, et une ligne d'avant ce contrôle pourrait en désigner un d'ailleurs.
+ */
+async function apportsEnNature(conn, orgId, annee, mois) {
+    try {
+        const [rows] = await conn.query(
+            `SELECT c.id, DATE_FORMAT(c.date, '%Y-%m-%d') AS date, c.type, c.label, c.value, p.name AS partner_name
+             FROM partner_contribution c
+             LEFT JOIN partner p ON p.id = c.partner_id AND p.organization_id = c.organization_id
+             WHERE c.organization_id = ? AND YEAR(c.date) = ?${mois ? ' AND MONTH(c.date) = ?' : ''}
+             ORDER BY c.date DESC, c.created_at DESC`,
+            mois ? [orgId, annee, mois] : [orgId, annee]
+        );
+        return rows.map((r) => ({ ...r, value: num(r.value) }));
+    } catch (e) {
+        if (sansTable(e)) return [];
+        throw e;
+    }
+}
+
+/**
+ * CE QUE LE MOIS AFFICHÉ CACHE : pour chaque liste, les AUTRES mois de l'année qui ont des lignes.
+ *
+ * La page s'ouvre sur le mois courant. Un apport saisi avec la date où il a été reçu — juillet,
+ * pour une commission de juillet — n'y paraît donc pas, et rien ne disait où le trouver : la
+ * liste disait « aucun », ce qui est vrai du mois et faux de l'année. L'écran nomme maintenant
+ * les mois où chercher. Rien à dire sur l'année entière, qui montre déjà tout.
+ */
+const LISTES_DATEES = [['depenses', 'expense'], ['revenus', 'revenue_extra'], ['enNature', 'partner_contribution']];
+async function autresMois(conn, orgId, annee, mois) {
+    const out = { depenses: [], revenus: [], enNature: [] };
+    if (!mois) return out;
+    await Promise.all(LISTES_DATEES.map(async ([cle, table]) => {
+        try {
+            const [rows] = await conn.query(
+                `SELECT MONTH(date) AS mois, COUNT(*) AS nb FROM ${table}
+                 WHERE organization_id = ? AND YEAR(date) = ? AND MONTH(date) <> ?
+                 GROUP BY MONTH(date) ORDER BY mois`,
+                [orgId, annee, mois]
+            );
+            out[cle] = rows.map((r) => ({ mois: num(r.mois), nb: num(r.nb) }));
+        } catch (e) {
+            if (!sansTable(e)) throw e;
+        }
+    }));
+    return out;
+}
+
+/**
+ * LES ANNÉES À PROPOSER : celles des sessions, et celles de tout ce qui se SAISIT à une date libre.
+ * La liste ne venait que des sessions : une subvention de 2024, dans une année sans session,
+ * était enregistrée sans qu'aucune année du sélecteur ne permette de la revoir.
+ */
+async function anneesSaisies(conn, orgId) {
+    const annees = [];
+    const [rows] = await conn.query(
+        `SELECT YEAR(date) AS year FROM revenue_extra WHERE organization_id = ?
+         UNION SELECT YEAR(date) FROM expense WHERE organization_id = ?
+         UNION SELECT YEAR(date) FROM material_sale WHERE organization_id = ?
+         UNION SELECT YEAR(created_at) FROM enrollment WHERE organization_id = ?`,
+        [orgId, orgId, orgId, orgId]
+    );
+    annees.push(...rows.map((r) => num(r.year)));
+    try {
+        const [nature] = await conn.query(
+            'SELECT DISTINCT YEAR(date) AS year FROM partner_contribution WHERE organization_id = ?', [orgId]);
+        annees.push(...nature.map((r) => num(r.year)));
+    } catch (e) {
+        if (!sansTable(e)) throw e;
+    }
+    return annees.filter((a) => a > 0);
+}
+
 /**
  * GET /api/comptabilite?annee=YYYY — tableau de gestion (module A).
  */
@@ -141,16 +227,22 @@ const getGestion = async (req, res) => {
              ORDER BY date DESC, created_at DESC`,
             argListe
         );
+        /* Le partenaire d'un produit divers est nommé dans la liste : « Commission partenaire »
+           ne disait pas LEQUEL. Sous-requête bornée à l'organisme, comme la jointure des apports. */
         const [revenus] = await conn.query(
-            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note
+            `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note,
+                    (SELECT p.name FROM partner p
+                      WHERE p.id = revenue_extra.partner_id AND p.organization_id = revenue_extra.organization_id) AS partner_name
              FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
              ORDER BY date DESC, created_at DESC`,
             argListe
         );
-        const [yearsRows] = await conn.query(
-            'SELECT DISTINCT year FROM training_session WHERE organization_id = ? ORDER BY year DESC',
-            [orgId]
-        );
+        const [enNature, ailleurs, [yearsRows], saisies] = await Promise.all([
+            apportsEnNature(conn, orgId, annee, mois),
+            autresMois(conn, orgId, annee, mois),
+            conn.query('SELECT DISTINCT year FROM training_session WHERE organization_id = ? ORDER BY year DESC', [orgId]),
+            anneesSaisies(conn, orgId),
+        ]);
 
         const ca = year.caTotal;
         const postes = EXPENSE_CATEGORIES.map((cat) => {
@@ -176,7 +268,8 @@ const getGestion = async (req, res) => {
                     ? `Objectif atteignable : la marge couvre les ${dividendeCible}% visés.`
                     : `Distribution réaliste plafonnée par la marge (${dividendeRealiste.toLocaleString('fr-FR')} € sur ${dividendeVise.toLocaleString('fr-FR')} € visés).`;
 
-        const annees = Array.from(new Set([annee, currentYear(), ...yearsRows.map((r) => r.year)])).sort((a, b) => b - a);
+        const annees = Array.from(new Set([annee, currentYear(), ...yearsRows.map((r) => num(r.year)), ...saisies]))
+            .filter((a) => a > 0).sort((a, b) => b - a);
 
         res.json({
             data: {
@@ -195,6 +288,10 @@ const getGestion = async (req, res) => {
                 targets: settings.targets,
                 depenses: depenses.map((d) => ({ ...d, amount_ht: num(d.amount_ht) })),
                 revenus: revenus.map((r) => ({ ...r, amount: num(r.amount) })),
+                // Hors chiffre d'affaires, et hors résultat : cf. `apportsEnNature`.
+                enNature,
+                totalEnNature: enNature.reduce((s, c) => s + c.value, 0),
+                autresMois: ailleurs,
                 annees,
             },
         });

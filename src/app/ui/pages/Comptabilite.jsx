@@ -11,6 +11,7 @@ import DataTable from "../components/DataTable.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { dateFr } from "../lib/format.js";
+import { apportType } from "../lib/apports.js";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
@@ -122,7 +123,7 @@ function Comptabilite() {
         // opposable. Le reste décrivait ce qui est maintenant lisible juste en dessous.
         lead="Tableau de gestion, ce n'est pas une comptabilité légale."
         actions={
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <MoneyToggle />
             {/* `.inp` impose width:100% aux <select> ; dans cette barre horizontale, deux selects
                 pleine largeur écrasaient le bouton Masquer voisin. On les laisse tenir la largeur
@@ -149,10 +150,13 @@ function Comptabilite() {
 
       {tab === "performance" ? (
         <Performance annee={annee} />
-      ) : loading || !data ? (
+      ) : !data ? (
         <p className="lead">Chargement…</p>
       ) : (
-        <div className="grid" style={{ gap: 16 }}>
+        /* UN CHANGEMENT DE PÉRIODE GARDE LA PAGE EN PLACE, grisée le temps du chargement. Elle
+           laissait place à « Chargement… » : la page se vidait, le défilement revenait en haut, et
+           un clic sur « juillet (2) », au pied de la page, montrait… le haut de la page. */
+        <div className="grid" style={{ gap: 16, opacity: loading ? 0.55 : 1, transition: "opacity .15s" }} aria-busy={loading}>
           {/* UN SEUL CHIFFRE DOMINANT : LE RÉSULTAT.
               Cinq indicateurs se partageaient le premier écran — chiffre d'affaires, dépenses,
               marge, dividendes, gain du mois — et TROIS D'ENTRE EUX SE DÉDUISENT DES AUTRES.
@@ -177,6 +181,15 @@ function Comptabilite() {
                 <b className="tnum">{euro(data.dividendeRealiste)}</b> de dividendes réalistes
                 <i> ({data.partRealistePct}% du CA)</i>
               </span>
+              {/* Les apports en nature ne sont ni des recettes ni du résultat (cf. comptabilite.
+                  controller.js, `apportsEnNature`) ; nommés ici quand il y en a, pour qu'on sache
+                  en tête de page qu'ils ont été reçus, et qu'ils ne sont pas comptés au-dessus. */}
+              {data.totalEnNature > 0 && (
+                <span>
+                  <b className="tnum">{euro(data.totalEnNature)}</b> d'apports en nature
+                  <i> (hors chiffre d'affaires)</i>
+                </span>
+              )}
               {/* LA LIGNE « GAIN DU MOIS » A DISPARU. Elle existait parce qu'elle était le SEUL
                   chiffre à suivre le sélecteur, avec sa propre règle d'attribution. Maintenant que
                   toute la page suit le mois — et avec la même règle — elle répéterait mot pour mot
@@ -222,7 +235,7 @@ function Comptabilite() {
               <SourceCA n={2} color={CA_COLORS.mat} titre="Ventes de matériel" montant={euro(data.ca.materiel)}
                 desc="Fours, pétrins, matières premières… vendus aux stagiaires." href="/ventes" lien="Enregistrer une vente →" />
               <SourceCA n={3} color={CA_COLORS.extra} titre="Produits divers" montant={euro(data.ca.extra)}
-                desc="Commissions, subventions, remboursements. Se saisit sur la page Partenaires." href="/partenaires" lien="Enregistrer une commission →" />
+                desc="Commissions, subventions, remboursements, saisis sur la page Partenaires. Les apports en nature n'y entrent pas : ils sont listés à part." href="/partenaires" lien="Enregistrer une commission →" />
             </div>
           </Card>
 
@@ -305,7 +318,8 @@ function Comptabilite() {
             </Card>
           </div>
 
-          {/* Listes dépenses + produits divers */}
+          {/* Listes : dépenses à gauche ; à droite, ce qui vient des partenaires — les produits
+              divers (dans le CA) puis les apports en nature (hors CA), l'un sous l'autre. */}
           <div className="grid cols-2">
             <Card title={T("receipt", `Dépenses ${periode}`)}>
               {data.depenses.length === 0 ? (
@@ -316,17 +330,43 @@ function Comptabilite() {
                   <ListRow key={d.id} titre={d.label} sous={`${CATS.find((c) => c.v === d.category)?.label ?? d.category} · ${dateFr(d.date)}`} montant={euro(d.amount_ht)} onDel={() => delDep(d)} />
                 ))}</div>
               )}
+              <Ailleurs liste={data.autresMois?.depenses} annee={annee} onMois={setMois} />
             </Card>
-            <Card title={T("coins", `Produits divers ${periode} · ${euro(data.ca.extra)}`)}>
-              {(!data.revenus || data.revenus.length === 0) ? (
-                <EmptyState icon="handshake" title="Aucun produit divers"
-                  text="Les commissions et apports des partenaires se saisissent depuis la page Partenaires ; ils remontent ici automatiquement." />
-              ) : (
-                <div>{data.revenus.map((r) => (
-                  <ListRow key={r.id} titre={r.label} sous={`${REV_LABEL[r.category] ?? r.category} · ${dateFr(r.date)}`} montant={euro(r.amount)} onDel={() => delRev(r)} />
-                ))}</div>
-              )}
-            </Card>
+            <div className="grid" style={{ gap: 16, alignContent: "start" }}>
+              {/* Les montants des titres passent par `.tnum` : écrits en texte, ils restaient
+                  lisibles sous le masque des montants, seuls de la page. Le titre tient dans UN
+                  <span> : `.card-ttl` est un flex, et le montant seul y devenait une colonne. */}
+              <Card title={T("coins", <span>Produits divers {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.ca.extra)}</span></span>)}>
+                {(!data.revenus || data.revenus.length === 0) ? (
+                  <EmptyState icon="handshake" title="Aucun produit divers"
+                    text="Commissions, subventions et autres produits se saisissent sur la page Partenaires. Chacun compte au mois de sa date." />
+                ) : (
+                  <div>{data.revenus.map((r) => (
+                    <ListRow key={r.id} titre={r.label}
+                      sous={[REV_LABEL[r.category] ?? r.category, r.partner_name, dateFr(r.date)].filter(Boolean).join(" · ")}
+                      montant={euro(r.amount)} onDel={() => delRev(r)} />
+                  ))}</div>
+                )}
+                <Ailleurs liste={data.autresMois?.revenus} annee={annee} onMois={setMois} />
+              </Card>
+              <Card title={T("handshake", <span>Apports en nature {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.totalEnNature ?? 0)}</span></span>)}>
+                {(!data.enNature || data.enNature.length === 0) ? (
+                  <EmptyState icon="handshake" title="Aucun apport en nature"
+                    text="Matériel, équipement ou consommables offerts par un partenaire : ils se saisissent sur la page Partenaires, avec leur valeur." />
+                ) : (
+                  <div>{data.enNature.map((c) => (
+                    <ListRow key={c.id} titre={c.label}
+                      sous={[apportType(c.type).label, c.partner_name, dateFr(c.date)].filter(Boolean).join(" · ")}
+                      montant={euro(c.value)} />
+                  ))}</div>
+                )}
+                <Ailleurs liste={data.autresMois?.enNature} annee={annee} onMois={setMois} />
+                <p className="sub" style={{ margin: "12px 0 0", color: "var(--dim)" }}>
+                  Hors chiffre d'affaires : rien n'a été encaissé, leur valeur ne compte ni dans le résultat ni dans les dividendes.{" "}
+                  <Link to="/partenaires" className="src-link">Gérer les apports →</Link>
+                </p>
+              </Card>
+            </div>
           </div>
         </div>
       )}
@@ -373,8 +413,30 @@ function ListRow({ titre, sous, montant, onDel }) {
         <div className="sub" style={{ color: "var(--dim)" }}>{sous}</div>
       </div>
       <b className="tnum" style={{ color: "var(--blue)" }}>{montant}</b>
-      <button type="button" className="iconbtn del" title="Supprimer" onClick={onDel}><Icon name="trash" size={15} /></button>
+      {onDel && <button type="button" className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${titre}`} onClick={onDel}><Icon name="trash" size={15} /></button>}
     </div>
+  );
+}
+
+/**
+ * CE QUE LE MOIS AFFICHÉ CACHE : « Ailleurs en 2026 : juillet (2), août (1) · voir l'année entière ».
+ * La page s'ouvre sur le mois courant ; une ligne datée d'un autre mois n'y paraît pas, et la liste
+ * disait « aucun » sans dire où chercher. Chaque mois nommé y mène d'un clic.
+ */
+function Ailleurs({ liste, annee, onMois }) {
+  if (!liste || liste.length === 0) return null;
+  return (
+    <p className="sub" style={{ margin: "10px 0 0", color: "var(--dim)" }}>
+      Ailleurs en {annee} :{" "}
+      {liste.map((m, i) => (
+        <span key={m.mois}>
+          {i > 0 && ", "}
+          <button type="button" className="lien-nu" onClick={() => onMois(m.mois)}>{MOIS[m.mois - 1].toLowerCase()} ({m.nb})</button>
+        </span>
+      ))}
+      {" · "}
+      <button type="button" className="lien-nu" onClick={() => onMois(0)}>voir l'année entière</button>
+    </p>
   );
 }
 

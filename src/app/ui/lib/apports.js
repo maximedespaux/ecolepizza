@@ -32,3 +32,18 @@ export function apportsOfPartner(p) {
   }));
   return [...commissions, ...contributions].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
+
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+/**
+ * « septembre 2026 » : le mois où un apport paraît en Comptabilité — celui de SA DATE, pas du jour
+ * de la saisie. La Comptabilité s'ouvre sur le mois courant : un apport daté de juillet n'y paraît
+ * qu'en juillet, et c'est ce que le formulaire dit après l'enregistrement.
+ * La date se lit en texte (AAAA-MM-JJ), sans `new Date` : lue en UTC, elle reculerait d'un jour
+ * sur un fuseau négatif, et le 1er du mois passerait au mois d'avant.
+ */
+export function moisDeLApport(date) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(date || ""));
+  const nom = m ? MOIS[Number(m[2]) - 1] : null;
+  return nom ? `${nom} ${m[1]}` : "";
+}
