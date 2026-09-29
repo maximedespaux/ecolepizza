@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
+const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
 const { appliquerReferent, nomReferent } = require('../lib/referentEntreprise.js');
 const { MAX_LIGNES, analyserEntreprises, bilan } = require('../lib/importFiches.js');
 const bcrypt = require('bcrypt');
@@ -179,7 +180,10 @@ const COMPANY_COLS = ['name', 'siret', 'naf_ape', 'legal_status', 'address', 'zi
    un dossier OPCO ou un contrôle. */
 /* `representative_first_name` et `representative_learner_id` (migration 174) : le prénom du
    référent, et le stagiaire choisi comme référent (lib/referentEntreprise.js). */
-const COMPANY_COLS_OPT = ['vat_number', 'date_creation', 'representative_first_name', 'representative_learner_id'];
+/* `note_libre` (migration 189) : la note en texte simple sur la fiche entreprise, 128 mots au plus
+   (cf. refusNote), pendant du `learner.note_libre` (168). Facultative comme les autres : gatee par
+   `colonnesEntreprise`, donc absente tant que la 189 n'est pas jouee, et alors signalee (`ignores`). */
+const COMPANY_COLS_OPT = ['vat_number', 'date_creation', 'representative_first_name', 'representative_learner_id', 'note_libre'];
 async function colonnesEntreprise(conn) {
     const dispo = [];
     for (const c of COMPANY_COLS_OPT) {
@@ -231,8 +235,27 @@ function normaliserEntreprise(b) {
     /* Un `<input type="date">` vidé envoie la CHAÎNE VIDE, que MariaDB range en '0000-00-00' ou
        refuse selon son mode strict. Vide veut dire inconnue : on écrit NULL. */
     if (out.date_creation != null) out.date_creation = String(out.date_creation).trim() || null;
+    if (out.note_libre != null) out.note_libre = String(out.note_libre).trim();
     return out;
 }
+
+/* LA NOTE LIBRE DE L'ENTREPRISE : 128 MOTS AU PLUS (migration 189), même règle et même compte que
+   la note du stagiaire (learner.controller, refusNote). Vérifiée ICI et pas seulement à l'écran :
+   la route n'est pas le seul chemin d'entrée. Le garde-fou en caractères tient pour un texte collé
+   sans espace, qui ne compterait qu'un « mot ». */
+const NOTE_MOTS_MAX = 128;
+function refusNote(body) {
+    if (body.note_libre == null || body.note_libre === '') return null;
+    const texte = String(body.note_libre);
+    const mots = compterMots(texte);
+    if (mots > NOTE_MOTS_MAX) return `La note dépasse ${NOTE_MOTS_MAX} mots (${mots}) : raccourcissez-la.`;
+    if (texte.length > CARACTERES_MAX) return `La note dépasse ${CARACTERES_MAX} caractères.`;
+    return null;
+}
+/* Une note tapée mais que la base ne peut pas garder (189 pas encore jouée) : on l'ajoute à ce que
+   la réponse signale déjà (le référent), plutôt qu'un succès qui ment — même logique que la 174. */
+const ignoresAvecNote = (base, b, colonnes) =>
+    (b.note_libre && !colonnes.includes('note_libre')) ? [...base, 'note_libre'] : base;
 
 /* Renvoie le message d'erreur, ou null. Le champ reste FACULTATIF : beaucoup d'entreprises
    n'en fournissent pas, et l'exiger rendrait irréparables les quatre cent soixante-neuf fiches
@@ -270,6 +293,8 @@ const createCompany = async (req, res) => {
     if (b.email && !RE_EMAIL_ENT.test(b.email)) return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     const mauvaiseTva = erreurTva(b.vat_number);
     if (mauvaiseTva) return res.status(422).json({ error: mauvaiseTva });
+    const noteTropLongue = refusNote(b);
+    if (noteTropLongue) return res.status(422).json({ error: noteTropLongue });
     try {
         const id = crypto.randomUUID();
         const colonnes = await colonnesEntreprise(db.promise());
@@ -281,7 +306,8 @@ const createCompany = async (req, res) => {
             [id, req.user.organization_id, ...cols.map((k) => clean(b[k]))]
         );
         logAudit(req, 'company.create', 'Company', id);
-        res.status(201).json({ message: 'Entreprise créée', data: { id }, ...(referent.ignores.length ? { ignores: referent.ignores } : {}) });
+        const ignores = ignoresAvecNote(referent.ignores, b, colonnes);
+        res.status(201).json({ message: 'Entreprise créée', data: { id }, ...(ignores.length ? { ignores } : {}) });
     } catch (err) {
         console.error('Erreur création entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -296,6 +322,8 @@ const updateCompany = async (req, res) => {
        mal formé y entrerait sans rien rencontrer — puis ressortirait sur une facture Factur-X. */
     const mauvaiseTva = erreurTva(b.vat_number);
     if (mauvaiseTva) return res.status(422).json({ error: mauvaiseTva });
+    const noteTropLongue = refusNote(b);
+    if (noteTropLongue) return res.status(422).json({ error: noteTropLongue });
     try {
         const conn = db.promise();
         const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
@@ -311,8 +339,9 @@ const updateCompany = async (req, res) => {
             );
         }
         logAudit(req, 'company.update', 'Company', req.params.id);
-        // Ce qui n'a pu être gardé (migration 174 non jouée) : l'écran le dit, plutôt qu'un succès qui ment.
-        res.json({ success: true, ...(referent.ignores.length ? { ignores: referent.ignores } : {}) });
+        // Ce qui n'a pu être gardé (migration 174 ou 189 non jouée) : l'écran le dit, plutôt qu'un succès qui ment.
+        const ignores = ignoresAvecNote(referent.ignores, b, colonnes);
+        res.json({ success: true, ...(ignores.length ? { ignores } : {}) });
     } catch (err) {
         console.error('Erreur mise à jour entreprise :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -746,6 +775,14 @@ const getCompanyParcours = async (req, res) => {
         const docSteps = intakeSet.size
             ? intakeOrder.map((sl) => bySlug.get(sl)).filter((s) => s && s.doc_type !== 'EMARGEMENT')
             : grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
+        /* ADRESSÉ À L'ENTREPRISE (migration 190) : un jalon de document dont le parcours vise
+           l'entreprise paraît ICI même s'il n'est pas dans la section « entreprise » — c'est tout le
+           sens du choix. On l'ajoute (actif, non émargement, sans doublon), dans l'ordre du parcours. */
+        for (const s of grp.allSteps) {
+            if (s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT' && s.destinataire === 'ENTREPRISE' && !docSteps.includes(s)) {
+                docSteps.push(s);
+            }
+        }
 
         /* LES DOSSIERS QU'UNE ÉTAPE « STAGIAIRE » CONCERNE — la règle de `generateGroupDocuments` : une
            étape « entreprise seulement » (inactive au parcours du dossier, présente dans la section) vise

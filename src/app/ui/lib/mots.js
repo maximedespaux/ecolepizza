@@ -12,6 +12,9 @@ export const MOTS_MAX_DEFAUT = 128;
 /* La note libre de la fiche stagiaire : sa PROPRE limite, demandée à 128 mots le 2026-09-21. Égale
    à celle d'un QCM aujourd'hui, mais elle n'en dépend pas — le serveur a la même (NOTE_MOTS_MAX). */
 export const NOTE_STAGIAIRE_MOTS_MAX = 128;
+/* La note libre de la fiche ENTREPRISE (migration 189, demandée le 2026-09-29) : même limite, sa
+   propre constante — le serveur a la sienne (NOTE_MOTS_MAX dans company.controller). */
+export const NOTE_ENTREPRISE_MOTS_MAX = 128;
 
 export function compterMots(texte) {
   const t = String(texte == null ? "" : texte).trim();
