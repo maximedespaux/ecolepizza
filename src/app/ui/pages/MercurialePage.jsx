@@ -7,8 +7,8 @@ import { getMercuriale } from "../api/apiClient.js";
  * Ma mercuriale — OUTIL À PART ENTIÈRE (sortie de « Mes garnitures » le 2026-09-29).
  * La liste de prix curée du compte : ses produits (Metro, frais, marché) avec prix, unité et
  * source. Les FICHES TECHNIQUES y puisent pour chiffrer leurs ingrédients. Le composant
- * `Mercuriale` gère les deux onglets (catalogue général / ma liste) ; on le charge et l'habille.
- * Sans `onBack`, il n'affiche pas le bouton « Accueil garnitures » : ici c'est une page de plein droit.
+ * `Mercuriale` gère les deux onglets (ma mercuriale / prix du marché) ; on le charge et l'habille.
+ * Sans `onBack`, il n'affiche pas de bouton de retour : ici c'est une page de plein droit.
  */
 export default function MercurialePage() {
   const [items, setItems] = useState([]);

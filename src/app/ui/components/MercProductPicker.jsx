@@ -7,7 +7,7 @@ import { num, unitShort } from "../lib/garnitures.js";
  * Sélecteur de produits DANS MA MERCURIALE — la liste de prix curée du compte, filtrable et
  * groupée par famille, prix/unité affichés. Partagé (extrait de l'ancien assistant garniture) :
  * « Mes fiches techniques » s'en sert pour chiffrer un ingrédient depuis la mercuriale.
- * `onAdd(m)` reçoit l'item mercuriale choisi ; `onManage` mène à sa gestion (ajout depuis le catalogue).
+ * `onAdd(m)` reçoit l'item mercuriale choisi ; `onManage` mène à sa gestion (compléter la mercuriale).
  */
 export default function MercProductPicker({ items, onAdd, addedKeys, onManage, filter, emptyLabel }) {
   const [q, setQ] = useState("");
@@ -26,10 +26,10 @@ export default function MercProductPicker({ items, onAdd, addedKeys, onManage, f
           <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={15} /></span>
           <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer dans ma mercuriale…" style={{ paddingLeft: 34, width: "100%" }} />
         </div>
-        <button className="btn sm ghost" onClick={onManage}><Icon name="plus" size={13} /> depuis le catalogue</button>
+        <button className="btn sm ghost" onClick={onManage}><Icon name="plus" size={13} /> compléter ma mercuriale</button>
       </div>
       <div className="cat-results">
-        {list.length === 0 ? <div className="cat-empty">{emptyLabel || "Aucun produit ici, ajoute-en depuis le catalogue."}</div>
+        {list.length === 0 ? <div className="cat-empty">{emptyLabel || "Aucun produit ici, complète ta mercuriale."}</div>
           : Object.entries(byFam).map(([fam, ms]) => (
             <div key={fam}>
               <div className="ate-lbl" style={{ margin: "4px 0", fontSize: 11 }}>{fam}</div>
