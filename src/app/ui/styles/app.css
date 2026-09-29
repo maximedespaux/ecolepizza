@@ -3218,6 +3218,26 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .comm-foot{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border-soft);background:var(--surface2)}
 .comm-foot .btn{padding:5px 10px}
+/* Le PROCÉDÉ d'une fiche partagée, replié sous la carte : « Procédé · 4 étapes › » (2026-09-29).
+   Un <details> natif ; le chevron tourne d'un quart de tour à l'ouverture. */
+.comm-procede{border-top:1px solid var(--border-soft)}
+.comm-procede > summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;list-style:none;cursor:pointer;
+  font-size:13.5px;font-weight:700;color:var(--text);transition:background .15s var(--ease)}
+.comm-procede > summary::-webkit-details-marker{display:none}
+.comm-procede > summary:hover{background:var(--hover)}
+.comm-procede > summary:focus-visible{outline:2px solid var(--ember1);outline-offset:-2px}
+.comm-procede > summary > svg:first-child{color:var(--ember1)}
+.comm-procede > summary > svg:last-child{margin-left:auto;color:var(--dim);transition:transform .15s var(--ease)}
+.comm-procede[open] > summary > svg:last-child{transform:rotate(90deg)}
+.comm-procede-n{font-size:12.5px;font-weight:500;color:var(--dim)}
+.comm-procede ol{display:flex;flex-direction:column;gap:6px;margin:0;padding:2px 16px 12px 36px;font-size:13px;line-height:1.45;color:var(--muted)}
+.comm-procede li b{color:var(--text)}
+.comm-procede-cuisson{display:flex;align-items:center;gap:6px;margin:0;padding:0 16px 12px;font-size:12.5px;color:var(--muted)}
+/* Dans le détail d'une fiche : pas de filet de carte, l'alignement du texte de la fenêtre. */
+.comm-procede.dans-detail{margin-top:14px;border:1px solid var(--border-soft);border-radius:12px;overflow:hidden}
+.comm-procede.dans-detail > summary{padding:0 12px}
+.comm-procede.dans-detail ol{padding:2px 14px 12px 32px}
+.comm-procede.dans-detail .comm-procede-cuisson{padding:0 14px 12px}
 .comm-save{margin-left:auto}
 
 /* Fiche technique — tableau de garniture aligné et espacé */

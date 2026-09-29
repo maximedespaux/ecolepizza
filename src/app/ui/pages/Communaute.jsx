@@ -9,6 +9,7 @@ import AvatarCadre from "../components/AvatarCadre.jsx";
 import Distinctions from "../components/Distinctions.jsx";
 import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
 import { coutFiche } from "../lib/coutFiche.js";
+import { procedeDe } from "../lib/procede.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
@@ -288,6 +289,34 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
 function costs(d) {
   const c = coutFiche(d);
   return { per: c.total, price: c.prix ?? c.total, nb: Math.max(1, num(d.servings)), lignes: c.lignes, ingSum: c.total };
+}
+
+/**
+ * LE PROCÉDÉ D'UNE FICHE PARTAGÉE, replié : « Procédé · 4 étapes › ». Le procédé d'une préparation
+ * ou d'une réalisation ne se voyait nulle part dans la Communauté (relevé sur un « saumon gravlax »,
+ * 2026-09-29) — seul le déroulé d'une pâte, et seulement dans le détail. Un `<details>` natif :
+ * clavier et lecteur d'écran sans rien ajouter. Rien à montrer, rien d'affiché.
+ */
+function ProcedeRepli({ fiche, dansDetail = false }) {
+  const { etapes, cuisson } = procedeDe(fiche);
+  if (!etapes.length && !cuisson) return null;
+  const compte = etapes.length ? `${etapes.length} étape${etapes.length > 1 ? "s" : ""}` : "cuisson";
+  return (
+    <details className={"comm-procede" + (dansDetail ? " dans-detail" : "")}>
+      <summary>
+        <Icon name="list-ordered" size={15} />
+        <span>Procédé</span>
+        <span className="comm-procede-n">{compte}</span>
+        <Icon name="chevron-right" size={16} />
+      </summary>
+      {etapes.length > 0 && (
+        <ol>
+          {etapes.map((e, i) => <li key={i}>{e.titre && <b>{e.titre}. </b>}{e.texte}</li>)}
+        </ol>
+      )}
+      {cuisson && <p className="comm-procede-cuisson"><Icon name="flame" size={13} /> Cuisson : {cuisson}</p>}
+    </details>
+  );
 }
 
 // Fil de commentaires — défini AU NIVEAU MODULE (hors de Communaute). S'il était défini dans
@@ -697,6 +726,8 @@ export default function Communaute() {
                       {/* La photo de la fiche (migration 191), en vignette comme celle d'une question. */}
                       {s.photo_v && <img className="q-vignette" src={photoFicheUrl(s.id, s.photo_v)} alt="" loading="lazy" />}
                     </div>
+                    {/* Le procédé, replié HORS du corps cliquable : l'ouvrir ne doit pas ouvrir la fiche. */}
+                    <ProcedeRepli fiche={s} />
                     <div className="comm-foot">
                       <button className={"btn sm " + (lk.liked ? "primary" : "ghost")} onClick={() => toggleLike(s.id)} title={lk.liked ? "Je n'aime plus" : "J'aime"}>
                         <Icon name="heart" size={13} fill={lk.liked ? "currentColor" : "none"} /> {lk.count}
@@ -771,12 +802,6 @@ export default function Communaute() {
                             </div>
                           ))}
                           {B.dp.shareCost !== false && <p className="hint" style={{ marginTop: 10 }}>Coût matière : <b>{euro(B.costPerPaton)}</b> / pâton · <b>{euro(B.costPerKg)}</b> / kg</p>}
-                          <details style={{ marginTop: 8 }}>
-                            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Déroulé des étapes ({B.steps.length})</summary>
-                            <ol style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 12.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 6 }}>
-                              {B.steps.map((s, i) => <li key={i}><b style={{ color: "var(--text)" }}>{s.t}.</b> {s.d}</li>)}
-                            </ol>
-                          </details>
                         </div>
                       );
                     })()}
@@ -846,6 +871,9 @@ export default function Communaute() {
                     ) : (detail.ingredients || []).length > 0 ? (
                       <p className="hint" style={{ marginTop: 12 }}>Coût des ingrédients : <b>{euro(c.ingSum)}</b></p>
                     ) : null}
+
+                    {/* Le procédé — celui de TOUTES les fiches, déroulé généré compris pour une pâte. */}
+                    <ProcedeRepli fiche={detail} dansDetail />
 
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
