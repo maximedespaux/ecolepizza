@@ -12,7 +12,7 @@ import { GARN_BASES, pairSuggestions, num } from "../lib/garnitures.js";
  */
 const stars = (s) => "★".repeat(s >= 3 ? 3 : s >= 2 ? 2 : 1);
 
-export default function PairingSuggest({ merc, onAdd }) {
+export default function PairingSuggest({ merc, onAdd, bare = false }) {
   const [base, setBase] = useState("");
   const [picked, setPicked] = useState([]); // clés de produits déjà ajoutés via les accords
 
@@ -27,8 +27,11 @@ export default function PairingSuggest({ merc, onAdd }) {
   const baseObj = GARN_BASES.find((b) => b.key === base);
   const sugg = base ? pairSuggestions(picked, base) : [];
 
+  // `bare` : sans sa carte ni son titre, quand l'appelant l'enveloppe déjà (section repliable
+  // de l'éditeur de fiche).
+  const Cadre = bare ? Nu : Card;
   return (
-    <Card title={<span className="card-ttl"><Icon name="star" size={16} /> Accords de saveurs <span className="hint" style={{ fontWeight: 400 }}>· ce que l'école associe</span></span>}>
+    <Cadre title={<span className="card-ttl"><Icon name="star" size={16} /> Accords de saveurs <span className="hint" style={{ fontWeight: 400 }}>· ce que l'école associe</span></span>}>
       {!base ? (
         <>
           <p className="hint" style={{ marginTop: 0 }}>Choisis une base : elle s'ajoute à la fiche, puis les produits suggérés (chiffrés depuis ta mercuriale) s'ajoutent d'un clic.</p>
@@ -57,6 +60,8 @@ export default function PairingSuggest({ merc, onAdd }) {
           )}
         </>
       )}
-    </Card>
+    </Cadre>
   );
 }
+
+function Nu({ children }) { return <>{children}</>; }

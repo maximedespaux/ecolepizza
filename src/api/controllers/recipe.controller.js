@@ -6,6 +6,7 @@ const db = require('../config/database.js');
 const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
 const { peutModerer } = require('../lib/moderation.js');
 const { logAudit } = require('../lib/audit.js');
+const { coutLigne, poidsIngredients, prixUnitairePreparation } = require('../lib/coutFiche.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -106,26 +107,24 @@ function doughRatio(r) {
     return 1.68;
 }
 
-const lineCost = (t) => (t.unit === 'piece' ? Number(t.qty || 0) * Number(t.unit_price || 0)
-    : (Number(t.qty || 0) / 1000) * Number(t.unit_price || 0)); // 'g' → prix €/kg
-const MASS_VOL = { g: 1000, kg: 1, mg: 1e6, l: 1, ml: 1000, cl: 100 }; // diviseur → kg (L≈kg)
-
 // Coût unitaire d'une fiche (pour l'importer dans une recette) : { unit:'g'|'piece', unitPrice, total }.
-// PÂTE = coût par pâton (farine + ingrédients) ; PRÉPARATION = coût total ÷ rendement.
+// PÂTE = coût par pâton (farine + ingrédients) ; PRÉPARATION = coût total ÷ rendement déclaré,
+// ou ÷ poids des ingrédients s'il n'y en a pas — la règle de lib/coutFiche.js, la même qu'à
+// l'écran et à l'impression.
 async function ficheUnitCost(conn, r) {
     const [ings] = await conn.query('SELECT qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ?', [r.id]);
-    const ingCost = ings.reduce((s, t) => s + lineCost(t), 0);
+    const ingCost = ings.reduce((s, t) => s + coutLigne(t), 0);
     if (r.kind === 'PATE') {
         const perPaton = ((Number(r.paton_g) / 1000) / doughRatio(r)) * Number(r.flour_price || 0) + ingCost;
         return { unit: 'piece', unitPrice: perPaton, total: perPaton * Math.max(1, Number(r.servings) || 1) };
     }
-    const total = ingCost;
-    const y = Number(r.yield_qty) || 0;
-    const yu = String(r.yield_unit || '').toLowerCase();
-    if (y > 0 && MASS_VOL[yu]) { const kg = y / MASS_VOL[yu]; return { unit: 'g', unitPrice: kg > 0 ? total / kg : 0, total }; }
-    if (y > 0) return { unit: 'piece', unitPrice: total / y, total };
-    return { unit: 'piece', unitPrice: total, total };
+    const p = prixUnitairePreparation(ingCost, poidsIngredients(ings), r.yield_qty, r.yield_unit);
+    return { unit: p.unit, unitPrice: p.unitPrice, total: ingCost };
 }
+
+// Poids d'une pièce d'une fiche importée : le pâton d'une fiche Pâte. Sans lui, « 1 pâton »
+// n'a pas de poids, et le coût au kg d'une pizza se calculait sans sa pâte.
+const poidsPiece = (r) => (r.kind === 'PATE' ? Number(r.paton_g) || null : null);
 
 /** GET /api/recipes/mine?kind= — mes fiches techniques (filtrées par type si fourni). */
 const listMine = async (req, res) => {
@@ -160,7 +159,7 @@ const listComponents = async (req, res) => {
         const out = [];
         for (const r of rows) {
             const c = await ficheUnitCost(conn, r);
-            out.push({ id: r.id, name: r.name, kind: r.kind, unit: c.unit, unit_price: Number(c.unitPrice.toFixed(4)), yield_qty: r.yield_qty, yield_unit: r.yield_unit });
+            out.push({ id: r.id, name: r.name, kind: r.kind, unit: c.unit, unit_price: Number(c.unitPrice.toFixed(4)), piece_g: poidsPiece(r), yield_qty: r.yield_qty, yield_unit: r.yield_unit });
         }
         res.json({ data: out });
     } catch (err) {
@@ -319,6 +318,41 @@ const listShared = async (req, res) => {
     }
 };
 
+/**
+ * Les fiches importées dans une recette, décrites telles qu'elles sont AUJOURD'HUI.
+ *
+ * Une ligne importée garde le prix du jour de l'import : corriger la sauce ne changeait rien aux
+ * pizzas qui l'utilisent, et la réalisation annonçait un coût que plus rien ne justifiait. On rend
+ * donc, à côté du prix enregistré, le prix actuel de la fiche (`component_unit_price`) : l'éditeur
+ * l'applique, et le dit.
+ *
+ * Le TYPE (`component_kind`) est rendu pour toute fiche qui existe encore : c'est lui qui dit
+ * qu'une pâte est déjà comptée, et sans lui la Communauté recompterait la pâte d'une réalisation
+ * dont la fiche Pâte est restée privée. Le PRIX actuel, seulement pour une fiche que le lecteur
+ * peut ouvrir (la sienne, ou une fiche partagée de son organisme).
+ */
+async function decrireFichesImportees(conn, ings, user) {
+    const ids = [...new Set(ings.map((i) => i.component_recipe_id).filter(Boolean))];
+    if (!ids.length) return;
+    const [fiches] = await conn.query(
+        `SELECT ${RECIPE_COLS}, organization_id FROM recipe WHERE id IN (?) AND organization_id = ?`,
+        [ids, user.organization_id]);
+    const parId = new Map();
+    for (const f of fiches) {
+        const lisible = f.author_user_id === user.id || f.visibility === 'SHARED';
+        const d = { kind: f.kind, piece_g: poidsPiece(f) };
+        if (lisible) { const c = await ficheUnitCost(conn, f); d.unit = c.unit; d.unit_price = Number(c.unitPrice.toFixed(4)); }
+        parId.set(f.id, d);
+    }
+    for (const i of ings) {
+        const d = parId.get(i.component_recipe_id);
+        if (!d) continue;
+        i.component_kind = d.kind;
+        i.component_piece_g = d.piece_g;
+        if (d.unit_price != null) { i.component_unit = d.unit; i.component_unit_price = d.unit_price; }
+    }
+}
+
 /** GET /api/recipes/:id — une recette + ses ingrédients (auteur, ou partagée du même org). */
 const getRecipe = async (req, res) => {
     try {
@@ -335,6 +369,18 @@ const getRecipe = async (req, res) => {
         const [ings] = await conn.query(
             `SELECT id, product_id, component_recipe_id, label, qty, unit, unit_price FROM recipe_ingredient WHERE recipe_id = ? ORDER BY sort_order, id`,
             [req.params.id]);
+        await decrireFichesImportees(conn, ings, req.user);
+        // Où sert cette fiche : les réalisations DE SON AUTEUR qui l'importent. Celles des autres
+        // stagiaires (une fiche partagée peut être importée par tous) restent les leurs : leur
+        // nom n'a pas à s'afficher ici.
+        let usedIn = [];
+        if (mine && (r.kind === 'PATE' || r.kind === 'PREPARATION')) {
+            const [us] = await conn.query(
+                `SELECT p.id, p.name, p.kind, i.qty, i.unit FROM recipe_ingredient i JOIN recipe p ON p.id = i.recipe_id
+                  WHERE i.component_recipe_id = ? AND p.author_user_id = ? ORDER BY p.name LIMIT 50`,
+                [req.params.id, req.user.id]);
+            usedIn = us;
+        }
         delete r.organization_id;
         // Interactions communauté (cœur + commentaires) — dégradent en douceur si migration 074 non lancée.
         let likeCount = 0, liked = false, comments = [];
@@ -359,7 +405,7 @@ const getRecipe = async (req, res) => {
         /* `can_moderate` : sans lui, le bouton de suppression ne s'affichait que sur `mine` et
          * l'école n'avait aucun moyen de retirer le commentaire d'un tiers — sinon supprimer la
          * fiche entière, ce qui punit son auteur pour le message d'un autre. */
-        res.json({ data: { ...r, mine, ingredients: ings, like_count: likeCount, liked, comments,
+        res.json({ data: { ...r, mine, ingredients: ings, used_in: usedIn, like_count: likeCount, liked, comments,
             can_moderate: await peutModerer(req.user) } });
     } catch (err) {
         if (noTable(err)) return res.status(404).json({ message: 'Espace recettes non initialisé (migration 071).' });
@@ -367,6 +413,16 @@ const getRecipe = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+/* Taille maximale de `dough_params` (JSON) : réglages de pâte, procédure, cuisson.
+ *
+ * Elle était COUPÉE à 2 000 caractères (`.slice(0, 2000)`) — or un JSON coupé n'est plus du
+ * JSON : la colonne (type JSON, donc `JSON_VALID`) refuse l'écriture et la fiche entière ne
+ * s'enregistrait plus, ou, sans cette contrainte, la procédure se perdait au rechargement. Il
+ * suffisait d'une procédure de huit étapes détaillées. Au-delà de la borne, on REFUSE (422) en
+ * le disant, on ne tronque jamais. */
+const DP_MAX = 20000;
+const PARAMS_TROP_LONGS = 'Fiche trop longue : raccourcis la procédure pour pouvoir l\'enregistrer.';
 
 function normRecipe(b) {
     return {
@@ -380,7 +436,7 @@ function normRecipe(b) {
         margin_pct: Math.max(0, Math.min(1000, parseInt(b.margin_pct, 10) || 0)),
         yield_qty: (b.yield_qty != null && b.yield_qty !== '') ? Math.max(0, Number(b.yield_qty) || 0) : null,
         yield_unit: b.yield_unit ? String(b.yield_unit).slice(0, 20) : null,
-        dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(b.dough_params).slice(0, 2000) : null,
+        dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(b.dough_params) : null,
         visibility: b.visibility === 'SHARED' ? 'SHARED' : 'PRIVATE',
     };
 }
@@ -405,6 +461,7 @@ const createRecipe = async (req, res) => {
     try {
         const conn = db.promise();
         const r = normRecipe(req.body || {});
+        if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         const id = crypto.randomUUID();
         await conn.query(
             `INSERT INTO recipe (id, organization_id, author_user_id, author_name, kind, name, type, description, servings, paton_g, flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility)
@@ -428,6 +485,7 @@ const updateRecipe = async (req, res) => {
         if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
         if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
         const r = normRecipe(req.body || {});
+        if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         await conn.query(
             `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=?, visibility=? WHERE id=?`,
             [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, r.visibility, req.params.id]

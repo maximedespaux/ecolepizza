@@ -8,6 +8,7 @@ import DoughBar from "../components/DoughBar.jsx";
 import AvatarCadre from "../components/AvatarCadre.jsx";
 import Distinctions from "../components/Distinctions.jsx";
 import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
+import { coutFiche } from "../lib/coutFiche.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
 import { useEchap } from "../lib/useEchap.js";
@@ -280,14 +281,13 @@ function ProfileModal({ profile, loading, cadre: cadreProfil, onClose }) {
   );
 }
 
-// Coûts d'une fiche (pour le détail) : coût matière par pizza + prix conseillé.
+// Coûts d'une fiche (pour le détail) : coût matière par pizza + prix conseillé — LE calcul de
+// l'éditeur (lib/coutFiche.js). Celui d'ici ajoutait une pâte estimée à toute fiche, y compris à
+// une réalisation qui importe déjà son empâtement : la pâte y était comptée deux fois, et la
+// Communauté annonçait un autre prix que la fiche de son auteur.
 function costs(d) {
-  const nb = Math.max(1, num(d.servings));
-  const dough = ((num(d.paton_g) / 1000) / 1.68) * num(d.flour_price);
-  const line = (t) => (t.unit === "g" ? (num(t.qty) / 1000) * num(t.unit_price) : num(t.qty) * num(t.unit_price));
-  const topping = (d.ingredients || []).reduce((s, t) => s + line(t), 0);
-  const per = dough + topping;
-  return { per, price: per * (1 + num(d.margin_pct) / 100), nb, line, ingSum: topping };
+  const c = coutFiche(d);
+  return { per: c.total, price: c.prix ?? c.total, nb: Math.max(1, num(d.servings)), lignes: c.lignes, ingSum: c.total };
 }
 
 // Fil de commentaires — défini AU NIVEAU MODULE (hors de Communaute). S'il était défini dans
@@ -824,10 +824,12 @@ export default function Communaute() {
 
                     {(detail.ingredients || []).length > 0 && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "14px 0 0" }}>
-                        {detail.ingredients.map((t, i) => (
+                        {/* Les lignes CHIFFRÉES, pâte estimée comprise : sans elle, la liste ne
+                            tombait pas sur le coût annoncé juste en dessous. */}
+                        {c.lignes.map((t, i) => (
                           <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-soft)", paddingBottom: 4 }}>
-                            <span>{t.label} <span className="hint">· {num(t.qty)} {t.unit}</span></span>
-                            <span className="mono">{euro(c.line(t))}</span>
+                            <span>{t.label} <span className="hint">· {num(t.qty)} {t.unit === "piece" ? "pc" : "g"}</span></span>
+                            <span className="mono">{euro(t.cout)}</span>
                           </div>
                         ))}
                       </div>

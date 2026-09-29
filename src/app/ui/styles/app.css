@@ -6168,3 +6168,359 @@ label .requis {
   .no-print { display: none !important; }
   .fp-table { font-size: 11px; }
 }
+
+/* ── Fiche technique — ÉDITEUR (2026-09-29) ─────────────────────────────────────────────
+   La fiche à gauche, telle qu'elle s'imprime ; le résultat à droite, COLLANT, avec ses boutons.
+   Les colonnes dépendent de la place RÉELLEMENT disponible, pas de l'écran : le menu du bureau
+   (258 px) en prend une part que l'espace stagiaire n'a pas. D'où des requêtes de CONTENEUR
+   (`fe` pour la page, `compo` pour la composition) plutôt que des @media : la même page se
+   replie au bon moment dans les deux coquilles. */
+.fe{container:fe / inline-size;display:flex;flex-direction:column;gap:18px}
+/* L'espace stagiaire borne son contenu à 1 060 px (en ligne, dans StudentLayout) : l'éditeur
+   n'y aurait JAMAIS eu ses deux colonnes. Il s'élargit donc, lui seul, le temps qu'il est
+   affiché — un outil de travail à deux volets, pas une page de lecture. */
+.stu-app .content:has(.fe){max-width:1320px!important}
+.fe-head{display:flex;flex-direction:column;gap:10px}
+.fe-head-top{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.fe-back{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px 0 6px;margin-left:-6px;border:none;border-radius:12px;background:none;color:var(--muted);font:600 14px/1 var(--font-b);cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.fe-back:hover{background:var(--hover);color:var(--text)}
+.fe-etat{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--dim)}
+/* Des modifications à enregistrer : le point ambre le dit sans alarmer — rien n'est perdu. */
+.fe-etat.modifie{color:#8a5300}
+[data-theme="dark"] .fe-etat.modifie{color:#f0b84e}
+.fe-etat-pt{width:8px;height:8px;border-radius:50%;background:#f0a020;box-shadow:0 0 0 3px color-mix(in srgb,#f0a020 25%,transparent)}
+.fe-head-titre{display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap}
+
+/* Les TYPES de fiche ont chacun leur couleur (--k) et leur encre lisible (--k-t), partout :
+   pastille de l'en-tête, pastille d'une ligne importée, liste des fiches, champ d'ajout. */
+.fe-k-PATE{--k:#e0ac48;--k-t:#7d5a10}
+.fe-k-PREPARATION{--k:#3aa0e0;--k-t:#1d628f}
+.fe-k-RECETTE{--k:#5f9e3f;--k-t:#356420}
+[data-theme="dark"] .fe-k-PATE{--k-t:#f0c46c}
+[data-theme="dark"] .fe-k-PREPARATION{--k-t:#86c8f0}
+[data-theme="dark"] .fe-k-RECETTE{--k-t:#a5d98a}
+.fe-kind{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;flex:none;
+  background:color-mix(in srgb,var(--k,#8b91ad) 18%,var(--surface));color:var(--k-t,var(--muted));font-size:12.5px;font-weight:700;white-space:nowrap}
+.fe-kind.sm{height:24px;padding:0 9px;gap:5px;font-size:11.5px}
+
+/* Le NOM de la fiche est son titre, modifiable sur place : un champ sans cadre, qui se montre
+   au survol et au focus. Le crayon dit qu'on peut écrire. */
+/* Le champ épouse son texte : une copie invisible du nom (`::after`, même police, même marge)
+   occupe la même case de grille et lui donne sa largeur. `field-sizing` ferait la même chose,
+   mais pas encore partout. Le crayon et la pastille de partage suivent ainsi le nom, au lieu de
+   partir au bout d'un champ de toute la largeur. */
+.fe-nom{--fe-nom-fs:34px;position:relative;display:inline-grid;grid-template-columns:minmax(0,1fr);align-items:center;flex:0 1 auto;min-width:0;max-width:100%;margin-left:-8px}
+.fe-nom::after,.fe-nom input{grid-area:1 / 1;padding:4px 40px 4px 8px;border:1.5px solid transparent;font:700 var(--fe-nom-fs)/1.2 var(--font-d);letter-spacing:-.01em}
+.fe-nom::after{content:attr(data-valeur) " ";min-width:8ch;overflow:hidden;white-space:pre;visibility:hidden}
+.fe-nom input{width:100%;min-width:0;border-radius:12px;background:transparent;color:var(--text);text-overflow:ellipsis;
+  transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .15s var(--ease)}
+.fe-nom input::placeholder{color:var(--dim);font-weight:600}
+.fe-nom:hover input{border-color:var(--border)}
+.fe-nom input:focus{outline:none;border-color:var(--ember1);background:var(--surface);box-shadow:0 0 0 4px color-mix(in srgb,var(--ember1) 14%,transparent)}
+.fe-nom > svg{position:absolute;right:12px;color:var(--dim);pointer-events:none;transition:opacity .15s var(--ease)}
+.fe-nom input:focus + svg{opacity:0}
+@container fe (max-width:640px){.fe-nom{--fe-nom-fs:26px}}
+/* Le zoom iOS impose 16 px à TOUT champ sur écran tactile (règle `pointer:coarse`, plus haut) :
+   le titre, plus grand, n'a pas à être ramené à 16 px pour autant. */
+@media(pointer:coarse){.fe .fe-nom input{font-size:var(--fe-nom-fs)!important}}
+.fe-vis{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;background:var(--surface3);color:var(--muted);font-size:12px;font-weight:700;white-space:nowrap}
+.fe-vis.on{background:var(--green-bg);color:var(--green)}
+
+.fe-note{display:flex;align-items:flex-start;gap:10px;padding:10px 8px 10px 14px;border-radius:14px;background:var(--blue-bg);color:var(--text);font-size:13.5px;line-height:1.45}
+.fe-note > svg{flex:none;margin-top:2px;color:var(--blue)}
+.fe-note > span{flex:1;min-width:0;padding-top:1px}
+.fe-note .fe-icobtn{width:34px;height:34px;margin-top:-6px}
+
+/* Deux colonnes dès qu'il y a la place pour la composition ET le panneau ; sinon une, et le
+   dock (plus bas) prend le relais du panneau. Le panneau colle sous la barre du haut (63 px +
+   respiration), et défile pour lui-même s'il est plus haut que l'écran — le résultat d'un
+   empâtement l'est souvent. */
+.fe-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
+.fe-main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.fe-side{position:sticky;top:76px;max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
+  min-width:0;margin:0 -12px;padding:0 12px 26px}
+/* Une boîte qui défile COUPE l'ombre de ce qu'elle contient : l'ombre du panneau est donc
+   ramenée dans la marge intérieure de la colonne (12 px sur les côtés, 26 px en bas). */
+.fe-side > .fe-panel{box-shadow:0 12px 24px -14px rgba(30,30,80,.6)}
+@container fe (max-width:1099px){
+  .fe-layout{grid-template-columns:minmax(0,1fr)}
+  .fe-side{position:static;max-height:none;overflow:visible;margin:0;padding:0}
+}
+
+.fe-card{padding:24px}
+@container fe (max-width:640px){.fe-card{padding:18px 14px}}
+.fe-h2{margin:0;font:600 21px/1.25 var(--font-d);color:var(--text)}
+.fe-h3{display:flex;align-items:center;gap:8px;margin:0;font:600 17px/1.25 var(--font-d);color:var(--text)}
+.fe-scope{margin-left:8px;font:500 13px/1.3 var(--font-b);color:var(--dim)}
+.fe-sec-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 0;margin-bottom:14px}
+.fe-field{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:12.5px;font-weight:700;color:var(--muted)}
+.fe-field > .inp,.fe-field > select,.fe-field > textarea{font-size:14.5px;font-weight:500;color:var(--text)}
+.fe-field-aide{font-weight:500;color:var(--dim)}
+.fe-ident{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-bottom:22px;margin-bottom:22px;border-bottom:1px solid var(--border-soft)}
+.fe-ident.avec-type{grid-template-columns:220px minmax(0,1fr)}
+@container fe (max-width:640px){.fe-ident.avec-type{grid-template-columns:minmax(0,1fr)}}
+.fe-ident textarea{resize:vertical;min-height:64px}
+
+/* ── Composition : un tableau où la place le permet, des cartes sinon ── */
+.fe-compo{container:compo / inline-size}
+.fe-compo-head{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-bottom:14px}
+.fe-ings{display:flex;flex-direction:column}
+.fe-ing{display:grid;grid-template-columns:minmax(0,1fr) 64px 124px 112px 96px 40px;gap:12px;align-items:center;
+  padding:12px 6px;border-bottom:1px solid var(--border-soft);transition:background .15s var(--ease)}
+.fe-ing:not(.fe-ing-head):not(.fe-ing-total):hover{background:var(--surface2)}
+.fe-ing.est{background:color-mix(in srgb,#e0ac48 8%,transparent)}
+.fe-ing-head{padding:0 6px 10px;border-bottom:1px solid var(--border);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.fe-r{text-align:right}
+.fe-ing-nom{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.fe-ing-titre{display:flex;align-items:center;gap:4px;max-width:100%;min-width:0;font-size:15px;font-weight:700;color:var(--text)}
+.fe-ing-titre > span:first-child{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.fe-ing-src{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+.fe-ing-label{width:100%;min-width:0;height:34px;padding:0 8px;margin-left:-8px;border:1px solid transparent;border-radius:10px;background:transparent;
+  color:var(--text);font:700 15px/1 var(--font-b);text-overflow:ellipsis;transition:border-color .15s var(--ease),background .15s var(--ease)}
+.fe-ing-label:hover{border-color:var(--border)}
+.fe-ing-label:focus{outline:none;border-color:var(--ember1);background:var(--surface);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember1) 14%,transparent)}
+.fe-ing-label::placeholder{color:var(--dim);font-weight:600}
+/* D'où vient le PRIX d'une ligne : une fiche (couleur de son type), la mercuriale, Metro, la main. */
+.fe-src{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;white-space:nowrap;
+  background:color-mix(in srgb,var(--k,#8b91ad) 16%,var(--surface));color:var(--k-t,var(--muted));font-size:11px;font-weight:700}
+.fe-src.s-merc{--k:#2c3371;--k-t:var(--blue)}
+.fe-src.s-metro{--k:#ff6900;--k-t:#9a4100}
+[data-theme="dark"] .fe-src.s-metro{--k-t:#ffa061}
+.fe-src.s-est{--k:#e0ac48;--k-t:#7d5a10}
+[data-theme="dark"] .fe-src.s-est{--k-t:#f0c46c}
+.fe-ing-mes,.fe-ing-prix,.fe-ing-qte{min-width:0}
+.fe-ing-u{font-size:14px;color:var(--muted)}
+.fe-ing-mes select{width:100%;height:38px;padding:0 6px}
+.fe-num{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.fe .fe-num .inp{width:68px;height:38px;padding:0 9px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.fe-num > span{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.fe-ing-note{display:block;margin-top:3px;font-size:11px;color:var(--dim)}
+.fe-prix-fixe{display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fe-lock{display:inline-grid;place-items:center;width:28px;height:28px;flex:none;border:none;border-radius:8px;background:none;color:var(--dim)}
+button.fe-lock{cursor:pointer}
+button.fe-lock:hover{background:var(--hover);color:var(--text)}
+.fe-ing-cout{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
+.fe-ing-cout > b{font-size:15px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fe-part{display:flex;align-items:center;gap:6px;width:100%}
+.fe-part-bar{flex:1;height:5px;border-radius:99px;background:var(--surface3);overflow:hidden}
+.fe-part-bar > span{display:block;height:100%;border-radius:99px;background:color-mix(in srgb,var(--muted) 45%,transparent);transition:width .3s var(--ease)}
+.fe-part-pct{min-width:30px;font-size:11.5px;font-weight:700;color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fe-icobtn{display:inline-grid;place-items:center;width:40px;height:40px;flex:none;border:1px solid transparent;border-radius:11px;background:none;color:var(--dim);cursor:pointer;
+  transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
+.fe-icobtn:hover{background:var(--hover);color:var(--text)}
+.fe-icobtn.del:hover{background:var(--rosso-bg);border-color:color-mix(in srgb,var(--ember1) 30%,transparent);color:var(--ember1)}
+.fe-open{display:inline-grid;place-items:center;width:28px;height:28px;flex:none;border:none;border-radius:8px;background:none;color:var(--dim);cursor:pointer}
+.fe-open:hover{background:var(--hover);color:var(--ember1)}
+.fe-lien{padding:2px 0;border:none;background:none;color:var(--ember1);font:600 12.5px/1.3 var(--font-b);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.fe-lien:hover{color:var(--text)}
+.fe-back:focus-visible,.fe-icobtn:focus-visible,.fe-lock:focus-visible,.fe-open:focus-visible,.fe-lien:focus-visible,.fe-grip:focus-visible,
+.fe-add-pied button:focus-visible,.fe-repli-t:focus-visible,.fe-dock-info:focus-visible,.fe-used button:focus-visible,.fe-add-step:focus-visible{outline:2px solid var(--ember1);outline-offset:2px}
+.fe-ing-total{margin-top:2px;padding-top:14px;border-top:2px solid var(--text);border-bottom:none}
+.fe-total-t{font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+.fe-total-poids{font-size:14px;font-weight:700;color:var(--text)}
+.fe-total-poids em{margin-left:5px;font-size:11.5px;font-style:normal;font-weight:500;color:var(--dim)}
+.fe-total-cout{font-size:16px;font-weight:800;color:var(--text);text-align:right;white-space:nowrap}
+.fe-coutkg{display:flex;justify-content:flex-end;align-items:baseline;gap:8px;margin:6px 6px 0;font-size:13.5px;font-weight:600;color:var(--muted)}
+.fe-coutkg b{font-size:15.5px;font-weight:800;color:var(--text)}
+.fe-vide{margin:14px 6px;color:var(--muted);font-size:14px;line-height:1.5}
+.fe-sanspate{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:10px 0 0;padding:11px 14px;border-radius:12px;background:var(--gold-bg);color:var(--text);font-size:13.5px}
+.fe-insight{display:flex;align-items:flex-start;gap:10px;margin:18px 0 0;padding:12px 15px;border-radius:14px;background:var(--gold-bg);color:var(--text);font-size:14px;font-weight:600;line-height:1.45}
+.fe-sanspate > svg,.fe-insight > svg{flex:none;color:#946800}
+[data-theme="dark"] .fe-sanspate > svg,[data-theme="dark"] .fe-insight > svg{color:var(--gold)}
+
+/* Sous ~660 px de composition, chaque ligne devient une CARTE : le nom a toute la largeur (il
+   tombait à 24 px de large sur téléphone, et la ligne débordait de sa carte). L'ordre des
+   cellules est réglé par `order` ; le coût passe en `display:contents` pour que son montant
+   rejoigne la première rangée et sa barre de part la dernière. */
+@container compo (max-width:660px){
+  .fe-ing{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin-bottom:8px;padding:12px 10px 8px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
+  .fe-ing:not(.fe-ing-head):not(.fe-ing-total):hover{background:var(--surface)}
+  .fe-ing.est{background:color-mix(in srgb,#e0ac48 8%,var(--surface))}
+  .fe-ing-nom{order:1;flex:1 1 calc(100% - 110px)}
+  .fe-ing-cout{display:contents}
+  .fe-ing-cout > b{order:2;margin-left:auto;align-self:flex-start;padding-top:8px}
+  .fe-ing-qte{order:3}
+  .fe-ing-mes{order:4}
+  .fe-ing-mes select{width:auto}
+  .fe-ing-prix{order:5;margin-left:auto}
+  .fe-part{order:6;flex:1 1 calc(100% - 56px);width:auto}
+  .fe-ing-del{order:7}
+  .fe-ing-total{display:flex;align-items:baseline;gap:10px;margin:4px 0 0;padding:12px 14px;border:none;border-radius:var(--r-sm);background:var(--surface3)}
+  .fe-ing-total > span:empty{display:none}
+  .fe-total-cout{margin-left:auto}
+  .fe-ings .fe-ing-head{display:none}
+  /* Sur une carte, l'unité se lit déjà après la quantité et le prix : la colonne « Mesure »
+     ne reste que là où elle se CHOISIT (ligne à la main). */
+  .fe-ing-mes.fixe{display:none}
+}
+
+/* ── Le champ d'ajout unique ── */
+.fe-add-slot{position:relative;flex:0 1 400px;min-width:min(100%,260px)}
+.fe-add{position:relative}
+.fe-add-top{display:none}
+.fe-add-champ{position:relative;display:flex;align-items:center}
+.fe-add-champ > svg{position:absolute;left:14px;color:var(--dim);pointer-events:none}
+.fe .fe-add-champ input{width:100%;height:44px;padding:0 44px 0 42px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);
+  color:var(--text);font:500 14.5px/1 var(--font-b);transition:border-color .15s var(--ease),box-shadow .15s var(--ease),background .15s var(--ease)}
+.fe .fe-add-champ input:hover{border-color:var(--dim)}
+.fe .fe-add-champ input:focus{outline:none;border-color:var(--ember1);background:var(--surface);box-shadow:0 0 0 4px color-mix(in srgb,var(--ember1) 14%,transparent)}
+.fe-add-effacer{position:absolute;right:2px;display:inline-grid;place-items:center;width:40px;height:40px;border:none;border-radius:12px;background:none;color:var(--dim);cursor:pointer}
+.fe-add-effacer:hover{color:var(--text)}
+.fe-add-pop{position:absolute;z-index:45;top:calc(100% + 6px);right:0;width:max(100%,440px);max-width:calc(100vw - 32px);max-height:min(470px,62vh);overflow-y:auto;
+  padding:8px;border:1px solid var(--border);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-3);animation:rise .14s var(--ease) backwards}
+.fe-add-grp + .fe-add-grp{margin-top:6px;padding-top:6px;border-top:1px solid var(--border-soft)}
+.fe-add-grp-t{display:flex;align-items:center;gap:6px;padding:6px 8px 4px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)}
+.fe-add-opt{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 10px;border-radius:11px;cursor:pointer}
+.fe-add-opt:hover,.fe-add-opt.actif{background:var(--hover)}
+.fe-add-opt.actif{box-shadow:inset 3px 0 0 var(--ember1)}
+.fe-add-opt.deja{cursor:default}
+.fe-add-opt.deja:hover{background:none}
+.fe-add-opt.deja .fe-add-opt-t b{color:var(--muted)}
+.fe-add-opt-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.fe-add-opt-t b{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-add-opt-t > span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-add-opt-t > .fe-add-k{display:inline-flex;align-items:center;gap:6px;color:var(--k-t);font-weight:600}
+.fe-add-k::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--k)}
+.fe-add-prix{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+.fe-add-deja{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;background:var(--green-bg);color:var(--green);font-size:11.5px;font-weight:700;white-space:nowrap}
+.fe-add-opt.manuel{margin-top:6px;border:1.5px dashed var(--border)}
+.fe-add-opt.manuel > svg{flex:none;color:var(--muted)}
+.fe-add-pied{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-soft)}
+.fe-add-pied button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 10px;border:none;border-radius:10px;background:none;color:var(--muted);font:600 12.5px/1 var(--font-b);cursor:pointer}
+.fe-add-pied button:hover{background:var(--hover);color:var(--text)}
+.fe-add-voile{display:none}
+/* Sur téléphone, la liste s'ouvre en FEUILLE depuis le bas de l'écran : le champ y monte avec
+   elle (c'est le même élément, il garde le focus et le clavier), et un voile couvre la page. */
+@media(max-width:640px){
+  .fe-add-slot{flex:1 1 100%}
+  .fe-add.ouvert{position:fixed;z-index:61;left:0;right:0;bottom:0;top:72px;display:flex;flex-direction:column;gap:12px;padding:10px 16px 16px;
+    border-radius:22px 22px 0 0;background:var(--surface);box-shadow:0 -20px 50px -20px rgba(15,17,40,.5);animation:rise .18s var(--ease) backwards}
+  .fe-add.ouvert .fe-add-top{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:14px;font:600 19px/1.2 var(--font-d);color:var(--text)}
+  .fe-add-poignee{position:absolute;top:0;left:50%;width:40px;height:5px;margin-left:-20px;border-radius:99px;background:var(--border)}
+  .fe .fe-add.ouvert .fe-add-champ input{height:50px}
+  .fe-add.ouvert .fe-add-pop{position:static;flex:1;width:auto;max-width:none;max-height:none;padding:0;border:none;box-shadow:none;animation:none}
+  .fe-add-voile{display:block;position:fixed;inset:0;z-index:60;background:rgba(15,17,40,.45)}
+}
+
+/* ── Procédé : étapes numérotées, déplaçables à la poignée ── */
+.fe-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.fe-step{display:flex;align-items:flex-start;gap:8px;padding:4px 6px;border-radius:14px;transition:background .15s var(--ease),box-shadow .15s var(--ease)}
+.fe-step:hover,.fe-step:focus-within{background:var(--surface2)}
+.fe-step.tire{background:var(--surface2);box-shadow:var(--shadow-2);-webkit-user-select:none;user-select:none}
+.fe-grip{display:inline-grid;place-items:center;width:32px;height:40px;flex:none;border:none;border-radius:9px;background:none;color:var(--dim);cursor:grab;touch-action:none}
+.fe-grip:hover{background:var(--hover);color:var(--text)}
+.fe-step.tire .fe-grip{color:var(--ember1);cursor:grabbing}
+.fe-step-n{display:inline-grid;place-items:center;flex:none;width:26px;height:26px;margin-top:7px;border-radius:50%;
+  background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:12.5px;font-weight:800}
+.fe .fe-step-txt{flex:1;min-width:0;min-height:40px;padding:9px 12px;border-color:transparent;background:transparent;font-size:15px;line-height:1.45;resize:none;field-sizing:content}
+.fe .fe-step-txt:hover{border-color:var(--border)}
+.fe .fe-step-txt:focus{border-color:var(--ember1);background:var(--surface)}
+.fe-add-step{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:10px;padding:0 16px;border:1.5px dashed var(--border);border-radius:14px;background:none;
+  color:var(--muted);font:600 14px/1 var(--font-b);cursor:pointer;transition:border-color .15s var(--ease),color .15s var(--ease)}
+.fe-add-step:hover{border-color:var(--ember1);color:var(--ember1)}
+@container fe (max-width:640px){
+  .fe-step{gap:6px;padding:4px 2px}
+  .fe-grip{width:26px}
+  .fe .fe-step-txt{padding:9px 8px}
+}
+.fe-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.fe-cuisson{display:flex;flex-direction:column;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--border-soft)}
+.fe-cuisson-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+
+/* ── Rendement d'une garniture ── */
+.fe-rdt{display:flex;flex-direction:column;gap:14px;margin-top:22px;padding:20px;border-radius:18px;
+  background:color-mix(in srgb,#3aa0e0 7%,var(--surface));border:1px solid color-mix(in srgb,#3aa0e0 24%,var(--border))}
+.fe-rdt .fe-sec-head{margin-bottom:0}
+.fe-rdt-ligne{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px 18px}
+.fe-rdt-in,.fe-rdt-out{display:flex;flex-direction:column;gap:7px}
+.fe-rdt-in > span,.fe-rdt-out > label{font-size:12.5px;font-weight:700;color:var(--muted)}
+.fe-rdt-in > b{font:700 24px/44px var(--font-d);color:var(--text)}
+.fe-rdt-fl{margin-bottom:12px;color:var(--dim)}
+.fe-rdt-champs{display:flex;gap:8px}
+.fe .fe-rdt-champs input{width:112px;height:44px;font-size:17px;font-weight:700;text-align:right}
+.fe .fe-rdt-champs select{width:auto;height:44px}
+.fe-rdt-chip{display:inline-flex;align-items:center;gap:6px;height:32px;margin-bottom:6px;padding:0 12px;border-radius:999px;background:var(--amber-bg);color:#8f3210;font-size:13px;font-weight:700;white-space:nowrap}
+[data-theme="dark"] .fe-rdt-chip{color:#f6a66a}
+.fe-rdt-chip.gain{background:var(--green-bg);color:var(--green)}
+.fe-rdt-barres{display:flex;flex-direction:column;gap:7px}
+.fe-rdt-b{display:flex;align-items:center;gap:12px}
+.fe-rdt-b i{width:92px;flex:none;font-size:12.5px;font-style:normal;font-weight:600;color:var(--muted)}
+.fe-rdt-b > span{flex:1;height:10px;border-radius:99px;background:color-mix(in srgb,#3aa0e0 12%,var(--surface3));overflow:hidden}
+.fe-rdt-b > span > span{display:block;height:100%;border-radius:99px;background:color-mix(in srgb,var(--muted) 35%,transparent)}
+.fe-rdt-b.fini > span > span{background:#3aa0e0}
+.fe-rdt-note{margin:0;font-size:13.5px;line-height:1.5;color:var(--text)}
+.fe-rdt-alerte{display:flex;align-items:flex-start;gap:8px;margin:0;font-size:13px;line-height:1.45;color:#8f3210}
+.fe-rdt-alerte > svg{flex:none;margin-top:1px}
+[data-theme="dark"] .fe-rdt-alerte{color:#f6a66a}
+
+/* ── Carte repliable (accords de saveurs) ── */
+.fe-repli{padding:0}
+.fe-repli-t{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;width:100%;min-height:64px;padding:12px 20px 12px 24px;border:none;border-radius:inherit;
+  background:none;color:var(--text);text-align:left;cursor:pointer}
+.fe-repli-t:hover{background:var(--hover)}
+.fe-repli-t > svg:first-child{color:var(--gold)}
+.fe-repli-t .fe-scope{margin-left:0}
+.fe-repli-ch{margin-left:auto;color:var(--dim)}
+.fe-repli-c{padding:0 24px 24px}
+@container fe (max-width:640px){.fe-repli-t{padding:12px 14px}.fe-repli-c{padding:0 14px 18px}}
+
+/* ── Le panneau de résultat (bleu nuit), à droite ── */
+.fe-panel{display:flex;flex-direction:column;gap:18px;padding:24px;border-radius:22px}
+.fe-panel-eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#ffa294}
+.fe-panel-kpi{display:flex;flex-direction:column;gap:6px}
+.fe-panel-lbl{font-size:13px;font-weight:600;color:rgba(255,255,255,.75)}
+.fe-panel-big{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px}
+.fe-panel-big b{font:700 46px/1 var(--font-d);letter-spacing:-.01em;color:#fff}
+.fe-panel-big span{font-size:14.5px;font-weight:600;color:rgba(255,255,255,.75)}
+.fe-panel-sub{font-size:13px;line-height:1.4;color:rgba(255,255,255,.75)}
+.fe-marge{display:flex;flex-direction:column;gap:8px}
+.fe-marge-t{display:flex;justify-content:space-between;font-size:13px;font-weight:600;color:rgba(255,255,255,.8)}
+.fe-marge-t b{font-weight:800;color:#fff}
+.fe-marge input{width:100%;min-height:24px;margin:0;accent-color:var(--gold)}
+.fe-rep{display:flex;flex-direction:column;gap:10px}
+.fe-rep-bar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.fe-rep-bar > span{display:block;height:100%}
+.fe-rep-bar > .autres,.fe-rep-leg i.autres{background:rgba(255,255,255,.38)}
+.fe-rep-leg{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
+.fe-rep-leg li{display:flex;align-items:center;gap:9px;min-width:0;font-size:13px;font-weight:600;color:rgba(255,255,255,.88)}
+.fe-rep-leg i{width:10px;height:10px;flex:none;border-radius:3px}
+.fe-rep-leg span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-rep-leg b{color:#fff}
+.fe-rows{display:flex;flex-direction:column;gap:8px}
+.fe-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 13px;border-radius:12px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.06);font-size:13.5px;color:rgba(255,255,255,.85)}
+.fe-row b{font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
+.fe-row b.acc{color:var(--gold)}
+.fe-panel .dough-line{margin-bottom:0}
+.fe-lot{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 13px;border-radius:14px;background:rgba(255,255,255,.07);font-size:13.5px;font-weight:600;color:rgba(255,255,255,.85)}
+.fe .fe-lot input{width:60px;height:38px;padding:0 9px;border:1px solid rgba(255,255,255,.25);border-radius:10px;background:rgba(255,255,255,.12);color:#fff;font:700 15px/1 var(--font-b);text-align:right}
+.fe .fe-lot input:focus{outline:2px solid var(--gold);outline-offset:1px;box-shadow:none}
+.fe-lot b{margin-left:auto;font-weight:800;color:#fff}
+.fe-used{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.07)}
+.fe-used-t{font-size:13px;font-weight:700;color:rgba(255,255,255,.85)}
+.fe-used ul{margin:0;padding:0;list-style:none}
+.fe-used li > button,.fe-used li > span{display:flex;align-items:center;gap:9px;width:calc(100% + 16px);min-height:40px;margin:0 -8px;padding:0 8px;border:none;border-radius:10px;
+  background:none;color:#fff;font:600 13.5px/1.2 var(--font-b);text-align:left}
+.fe-used li > button{cursor:pointer}
+.fe-used li > button:hover{background:rgba(255,255,255,.1)}
+.fe-used li svg{flex:none;color:#a5d98a}
+.fe-used-n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-used-q{font-size:12.5px;color:rgba(255,255,255,.72);white-space:nowrap}
+.fe-actions{display:flex;flex-direction:column;gap:10px}
+.fe-save{justify-content:center;min-height:50px;font-size:15.5px}
+.fe-actions-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn.fe-ghost{justify-content:center;min-height:44px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.28);color:#fff}
+.btn.fe-ghost:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.45)}
+.btn.fe-ghost.on{background:rgba(95,192,142,.22);border-color:rgba(95,192,142,.55)}
+
+/* ── Le dock (une colonne) : le chiffre clé et « Enregistrer » restent sous le pouce. Il vit au
+   bas de la colonne de la fiche : arrivé au panneau complet, il s'en va avec elle. ── */
+.fe-dock{display:none}
+@container fe (max-width:1099px){
+  .fe-dock{display:flex;align-items:center;gap:12px;position:sticky;bottom:10px;z-index:25;padding:8px 8px 8px 16px;border-radius:18px;color:#fff;
+    background:radial-gradient(120% 140% at 100% 0%,var(--navy-2) 0%,var(--navy) 50%,var(--navy-dark) 100%);
+    box-shadow:0 12px 32px -8px rgba(15,17,40,.6),inset 0 0 0 1px rgba(255,255,255,.1)}
+}
+.fe-dock-info{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;padding:4px 0;border:none;border-radius:10px;background:none;color:#fff;text-align:left;cursor:pointer}
+.fe-dock-t{font:700 20px/1.1 var(--font-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-dock-s{font-size:12px;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-dock-save{flex:none;min-height:46px}
