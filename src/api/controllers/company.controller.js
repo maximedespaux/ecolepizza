@@ -775,14 +775,6 @@ const getCompanyParcours = async (req, res) => {
         const docSteps = intakeSet.size
             ? intakeOrder.map((sl) => bySlug.get(sl)).filter((s) => s && s.doc_type !== 'EMARGEMENT')
             : grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
-        /* ADRESSÉ À L'ENTREPRISE (migration 190) : un jalon de document dont le parcours vise
-           l'entreprise paraît ICI même s'il n'est pas dans la section « entreprise » — c'est tout le
-           sens du choix. On l'ajoute (actif, non émargement, sans doublon), dans l'ordre du parcours. */
-        for (const s of grp.allSteps) {
-            if (s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT' && s.destinataire === 'ENTREPRISE' && !docSteps.includes(s)) {
-                docSteps.push(s);
-            }
-        }
 
         /* LES DOSSIERS QU'UNE ÉTAPE « STAGIAIRE » CONCERNE — la règle de `generateGroupDocuments` : une
            étape « entreprise seulement » (inactive au parcours du dossier, présente dans la section) vise
