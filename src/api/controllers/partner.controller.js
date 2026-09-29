@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { belongsToOrg } = require('../lib/tenancy.js');
 const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { validerImage } = require('../lib/imageDistante.js');
@@ -306,26 +307,34 @@ const deletePartner = (req, res) => {
     );
 };
 
-/** POST /api/partenaires/contributions — apport EN NATURE (matériel/équipement). */
-const createContribution = (req, res) => {
+/**
+ * POST /api/partenaires/contributions — apport EN NATURE (matériel/équipement).
+ *
+ * Le partenaire reçu est vérifié : il ne l'était pas. Or la Comptabilité liste désormais ces
+ * apports avec le NOM de leur partenaire — un identifiant d'un autre organisme y aurait affiché
+ * le partenaire d'un autre (cf. lib/tenancy.js ; les commissions, elles, le vérifiaient déjà).
+ */
+const createContribution = async (req, res) => {
     const b = req.body || {};
     if (!b.partner_id) return res.status(422).json({ error: 'Partenaire requis' });
     if (!b.label) return res.status(422).json({ error: 'Libellé requis' });
     const id = crypto.randomUUID();
-    db.query(
-        `INSERT INTO partner_contribution (id, organization_id, partner_id, date, type, label, value, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
-         b.type || 'MATERIEL', b.label, b.value === '' || b.value == null ? 0 : Number(b.value), b.note || null],
-        (err) => {
-            if (err) {
-                console.error('Erreur création contribution :', err);
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
-            logAudit(req, 'partner.contribution.create', 'PartnerContribution', id);
-            res.status(201).json({ message: 'Contribution enregistrée', id });
+    try {
+        if (!await belongsToOrg(db.promise(), 'partner', b.partner_id, req.user.organization_id)) {
+            return res.status(422).json({ error: 'Partenaire inconnu.' });
         }
-    );
+        await db.promise().query(
+            `INSERT INTO partner_contribution (id, organization_id, partner_id, date, type, label, value, note)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
+             b.type || 'MATERIEL', b.label, b.value === '' || b.value == null ? 0 : Number(b.value), b.note || null]
+        );
+        logAudit(req, 'partner.contribution.create', 'PartnerContribution', id);
+        res.status(201).json({ message: 'Contribution enregistrée', id });
+    } catch (err) {
+        console.error('Erreur création contribution :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
 
 /** DELETE /api/partenaires/contributions/:id */

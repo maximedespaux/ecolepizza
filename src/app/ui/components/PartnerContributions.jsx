@@ -2,7 +2,7 @@ import { useState } from "react";
 import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
 import { createRevenue, createContribution } from "../api/apiClient.js";
-import { APPORT_TYPES, apportType } from "../lib/apports.js";
+import { APPORT_TYPES, apportType, moisDeLApport } from "../lib/apports.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -10,10 +10,16 @@ const today = () => new Date().toISOString().slice(0, 10);
  * Saisie UNIFIÉE d'un apport partenaire : commission cash (→ CA, revenue_extra) OU
  * contribution en nature (matériel/équipement → suivi, partner_contribution).
  * Une seule case, une valeur TOUJOURS renseignée. `onSaved` recharge la liste.
+ *
+ * L'enregistrement DIT OÙ L'APPORT PARAÎT (2026-09-29). L'école a saisi des apports « qui ne
+ * remontaient pas en comptabilité » : un apport en nature n'y paraissait nulle part, et un apport
+ * daté d'un autre mois n'y paraît qu'à ce mois-là, quand la Comptabilité s'ouvre sur le mois
+ * courant. La formule « suivi seul » ne disait ni l'un ni l'autre.
  */
 export default function ApportForm({ partners = [], onSaved }) {
   const [form, setForm] = useState({ partner_id: "", type: "COMMISSION", label: "", value: "", date: today() });
   const [error, setError] = useState("");
+  const [ok, setOk] = useState("");
   const [saving, setSaving] = useState(false);
   const isCash = apportType(form.type).cash;
 
@@ -21,13 +27,18 @@ export default function ApportForm({ partners = [], onSaved }) {
     if (!form.partner_id) return setError("Choisissez le partenaire.");
     if (!form.label.trim()) return setError("Indiquez la commission ou ce qui a été reçu.");
     if (form.value === "" || Number.isNaN(Number(form.value))) return setError("La valeur est obligatoire (même pour une contribution en nature).");
-    setError(""); setSaving(true);
+    setError(""); setOk(""); setSaving(true);
     try {
       if (isCash) {
         await createRevenue({ label: form.label, categorie: form.type, montant: form.value, date: form.date, partner_id: form.partner_id });
       } else {
         await createContribution({ partner_id: form.partner_id, type: form.type, label: form.label, value: form.value, date: form.date });
       }
+      // Sans date, le serveur date du jour : le message aussi.
+      const mois = moisDeLApport(form.date || today());
+      setOk(isCash
+        ? `Apport enregistré : il compte dans le chiffre d'affaires de ${mois} (Comptabilité).`
+        : `Apport enregistré : il paraît dans Comptabilité en ${mois}, hors chiffre d'affaires.`);
       setForm((f) => ({ ...f, label: "", value: "", date: today() }));
       onSaved?.();
     } catch (e) {
@@ -43,7 +54,7 @@ export default function ApportForm({ partners = [], onSaved }) {
       style={{ marginBottom: 16 }}
     >
       <p className="sub" style={{ marginTop: -4, marginBottom: 12 }}>
-        Une seule saisie : une <b>commission</b> (cash → chiffre d'affaires) ou une <b>contribution en nature</b>
+        Une seule saisie : une <b>commission</b> (cash → chiffre d'affaires) ou une <b>contribution en nature</b>{" "}
         (pétrin, four, farine offerte…). La <b>valeur est toujours indiquée</b>, même en nature.
       </p>
 
@@ -58,7 +69,7 @@ export default function ApportForm({ partners = [], onSaved }) {
             <optgroup label="Cash (→ chiffre d'affaires)">
               {APPORT_TYPES.filter((t) => t.cash).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
             </optgroup>
-            <optgroup label="En nature (suivi seul)">
+            <optgroup label="En nature (hors chiffre d'affaires)">
               {APPORT_TYPES.filter((t) => !t.cash).map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
             </optgroup>
           </select></div>
@@ -73,11 +84,14 @@ export default function ApportForm({ partners = [], onSaved }) {
         <div className="field"><label htmlFor="ap-date">Date</label>
           <input id="ap-date" className="inp" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <button className="btn primary" onClick={submit} disabled={saving}><Icon name="plus" size={15} /> {saving ? "Enregistrement…" : "Ajouter l'apport"}</button>
-        <span className="hint">{isCash ? "Sera ajouté au chiffre d'affaires." : "Suivi seul (non ajouté au CA)."}</span>
+        <span className="hint">{isCash
+          ? "Compte dans le chiffre d'affaires du mois de sa date."
+          : "Hors chiffre d'affaires : listé à part dans Comptabilité, au mois de sa date."}</span>
         {error && <span className="hint" style={{ color: "var(--ember1)" }}>{error}</span>}
       </div>
+      {ok && !error && <p className="hint" role="status" style={{ color: "var(--green)", margin: "10px 0 0" }}>{ok}</p>}
     </Card>
   );
 }

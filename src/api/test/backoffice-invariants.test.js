@@ -102,6 +102,8 @@ test('les clés étrangères reçues dans un corps de requête sont vérifiées'
         'controllers/enrollment.controller.js': ['company'],
         'controllers/sale.controller.js': ['learner'],
         'controllers/comptabilite.controller.js': ['partner'],
+        // L'apport EN NATURE, dont la Comptabilité affiche le partenaire (2026-09-29).
+        'controllers/partner.controller.js': ['partner'],
         'controllers/invoice.controller.js': ['company'],
     };
     for (const [f, tables] of Object.entries(attendu)) {
