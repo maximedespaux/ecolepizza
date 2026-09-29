@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
+/* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien (cf. le
+   fichier) — une dépense ainsi saisie était refusée, une cible ignorée en silence. */
+const { lireMontant } = require('../lib/montantSaisi.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
     REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
@@ -20,29 +23,76 @@ const currentYear = () => new Date().getFullYear();
  * les douze mois ne s'additionnaient pas en l'année, et le sélecteur de mois ne pouvait donc
  * piloter qu'une seule tuile — d'où l'impression, juste, que changer de mois ne changeait rien.
  *
- * Tout est passé à l'ENCAISSEMENT : une inscription compte le mois où elle a été ENREGISTRÉE.
- * C'est la seule règle qui a un sens à l'échelle du mois (un mois n'a pas d'année de session), et
- * c'est celle qui répond à la question qu'on pose à cet écran — combien est entré, combien est
- * sorti. Conséquence à connaître : une inscription saisie en décembre pour une session de l'an
- * prochain compte en décembre, plus dans l'année de la session. Le résultat annuel affiché peut
- * donc différer de ce qu'il montrait avant ce changement.
+ * Tout était passé à l'« encaissement » : une inscription comptait le mois où le dossier avait été
+ * ENREGISTRÉ (`enrollment.created_at`) — ce qui n'est pas un encaissement, seulement une saisie.
  *
- * `nbSessions` et `stagiairesMoyens` restent comptés sur l'ANNÉE DE SESSION : une session n'est
- * pas un encaissement, elle a lieu à sa date, et un « nombre de sessions de mars » n'aurait aucun
- * rapport avec les inscriptions encaissées en mars.
+ * LA RÈGLE D'AUJOURD'HUI — décidée par l'école le 2026-09-29, après « les stagiaires venus ce mois-ci
+ * comptent 0 € en Inscriptions ». Deux défauts s'additionnaient :
+ *   · la SOMME portait sur `enrollment.price`, que l'application n'écrit JAMAIS (ni l'inscription, ni
+ *     l'inscription par une entreprise, ni aucun écran) : tout dossier créé ici comptait 0 €, quand
+ *     le devis et la convention, eux, retombent sur le tarif de la formation ;
+ *   · la DATE était celle de la saisie du dossier, pas celle où le stagiaire vient.
+ * Désormais un stagiaire compte :
+ *   · le MOIS OÙ COMMENCE SA SESSION (`DATE_SESSION`), session annulée exclue ;
+ *   · dès qu'une FACTURE ou un ACOMPTE ÉMIS le désigne (`FACTURES_DU_DOSSIER`) — c'est ainsi que
+ *     l'école dit qu'il est vendu, en le choisissant sur une facture ;
+ *   · au PRIX DE SON DOSSIER s'il en a un, sinon au TARIF DE LA FORMATION — la règle des documents
+ *     (`enroll_price || price`, lib/tokens.js). Le montant de la facture n'est PAS repris : un acompte
+ *     n'en porte qu'une part, et une facture de solde peut déduire l'acompte ou non.
+ * Les douze mois s'additionnent toujours exactement en l'année : chaque dossier n'a qu'une date.
+ * Les dossiers des sessions de la période qui n'ont pas encore de facture sont rendus aussi
+ * (`inscriptions`, `facturee: false`) : l'écran les nomme, un total qui cache ce qu'il écarte ne
+ * se vérifie pas.
+ *
+ * `nbSessions` reste compté sur l'ANNÉE DE SESSION (`training_session.year`), pour le « stagiaires
+ * moyens par session » de l'onglet Performance, qui est annuel.
  */
+/* LE JOUR OÙ LE STAGIAIRE VIENT : le premier de sa session. Une session sans date de début (import
+   ancien — l'application l'exige depuis) se date au lundi de sa semaine ISO, la semaine 1 étant
+   celle du 4 janvier. MAKEDATE et WEEKDAY seulement (0 = lundi) : toute version de MariaDB les a. */
+const DATE_SESSION = 'COALESCE(s.start_date, DATE_ADD(MAKEDATE(s.year, 4), INTERVAL ((s.week - 1) * 7 - WEEKDAY(MAKEDATE(s.year, 4))) DAY))';
+/* LES FACTURES QUI FONT COMPTER UN DOSSIER : une facture ou un acompte ÉMIS qui le désigne, sur la
+   facture même ou sur l'une de ses lignes (une facture d'entreprise en porte une par stagiaire). Un
+   brouillon n'est pas encore une facture, un devis n'en est pas une, une facture annulée non plus. */
+const FACTURES_DU_DOSSIER = `(SELECT GROUP_CONCAT(DISTINCT i.number ORDER BY i.number SEPARATOR ', ')
+       FROM invoice i
+      WHERE i.organization_id = e.organization_id
+        AND i.type IN ('FACTURE', 'ACOMPTE') AND i.status IN ('EMISE', 'PAYEE', 'IMPAYEE')
+        AND (i.enrollment_id = e.id OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = e.id)))`;
+
 async function computePeriode(conn, orgId, annee, mois = 0) {
     // Le filtre de mois n'existe que pour un vrai mois ; à 0 il disparaît de toutes les requêtes
     // d'un coup — une seule condition, pas deux variantes de chaque requête à garder synchrones.
     const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
     const arg = () => (mois ? [orgId, annee, mois] : [orgId, annee]);
-    const [[inscr]] = await conn.query(
-        `SELECT COALESCE(SUM(e.price), 0) AS ca, COUNT(*) AS nb,
-                COUNT(DISTINCT e.learner_id) AS nb_stagiaires
+    const [dossiers] = await conn.query(
+        `SELECT e.id, e.learner_id, l.last_name, l.first_name, p.code AS program_code,
+                DATE_FORMAT(${DATE_SESSION}, '%Y-%m-%d') AS debut,
+                e.price AS prix_dossier, p.price AS tarif, ${FACTURES_DU_DOSSIER} AS factures
          FROM enrollment e
-         WHERE e.organization_id = ? AND YEAR(e.created_at) = ?${parMois('e.created_at')}`,
+         JOIN training_session s ON s.id = e.session_id AND s.organization_id = e.organization_id
+         JOIN training_program p ON p.id = s.program_id
+         LEFT JOIN learner l ON l.id = e.learner_id
+         WHERE e.organization_id = ? AND s.status <> 'ANNULEE'
+           AND YEAR(${DATE_SESSION}) = ?${parMois(DATE_SESSION)}
+         ORDER BY debut, l.last_name, l.first_name`,
         arg()
     );
+    const inscriptions = dossiers.map((d) => {
+        const prixDossier = num(d.prix_dossier);
+        return {
+            id: d.id, learner_id: d.learner_id, nom: d.last_name, prenom: d.first_name,
+            formation: d.program_code, debut: d.debut, factures: d.factures || null, facturee: !!d.factures,
+            montant: prixDossier > 0 ? prixDossier : num(d.tarif),
+            source: prixDossier > 0 ? 'dossier' : 'formation',
+        };
+    });
+    const comptees = inscriptions.filter((d) => d.facturee);
+    const inscr = {
+        ca: comptees.reduce((s, d) => s + d.montant, 0),
+        nb: comptees.length,
+        nb_stagiaires: new Set(comptees.map((d) => d.learner_id)).size,
+    };
     const [[mat]] = await conn.query(
         `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
          FROM material_sale
@@ -55,9 +105,8 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
          WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
         arg()
     );
-    /* Les SESSIONS restent annuelles : une session a lieu à sa date, pas au moment où on encaisse.
-       Les rapporter au mois donnerait un « stagiaires par session » qui divise des inscriptions
-       encaissées en mars par des sessions tenues en mars — deux populations sans rapport. */
+    /* Le NOMBRE de sessions reste annuel : il ne sert qu'au « stagiaires moyens par session » de
+       l'onglet Performance, qui compare deux années entières. */
     const [[sess]] = await conn.query(
         'SELECT COUNT(*) AS nb FROM training_session WHERE organization_id = ? AND year = ?',
         [orgId, annee]
@@ -91,6 +140,9 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
         depensesTotal,
         marge: caTotal - depensesTotal,
         postes,
+        // Les dossiers de la période, facturés ou non : l'écran de gestion les nomme. Des noms de
+        // stagiaires — `getPerformance` ne les renvoie donc pas (`sansListes`).
+        inscriptions,
     };
 }
 
@@ -181,9 +233,8 @@ async function anneesSaisies(conn, orgId) {
     const [rows] = await conn.query(
         `SELECT YEAR(date) AS year FROM revenue_extra WHERE organization_id = ?
          UNION SELECT YEAR(date) FROM expense WHERE organization_id = ?
-         UNION SELECT YEAR(date) FROM material_sale WHERE organization_id = ?
-         UNION SELECT YEAR(created_at) FROM enrollment WHERE organization_id = ?`,
-        [orgId, orgId, orgId, orgId]
+         UNION SELECT YEAR(date) FROM material_sale WHERE organization_id = ?`,
+        [orgId, orgId, orgId]
     );
     annees.push(...rows.map((r) => num(r.year)));
     try {
@@ -288,6 +339,10 @@ const getGestion = async (req, res) => {
                 targets: settings.targets,
                 depenses: depenses.map((d) => ({ ...d, amount_ht: num(d.amount_ht) })),
                 revenus: revenus.map((r) => ({ ...r, amount: num(r.amount) })),
+                /* Les stagiaires venus dans la période : ceux qui comptent (une facture ou un acompte
+                   émis les désigne), et ceux qui attendent leur facture — cf. `computePeriode`. */
+                inscriptions: year.inscriptions.filter((d) => d.facturee),
+                aFacturer: year.inscriptions.filter((d) => !d.facturee),
                 // Hors chiffre d'affaires, et hors résultat : cf. `apportsEnNature`.
                 enNature,
                 totalEnNature: enNature.reduce((s, c) => s + c.value, 0),
@@ -309,10 +364,13 @@ const getPerformance = async (req, res) => {
     const annee = Number(req.query.annee) || currentYear();
     try {
         const conn = db.promise();
-        const [current, previous] = await Promise.all([
+        /* Deux années entières : sans la liste des dossiers, qui porte des noms de stagiaires et
+           que cet onglet n'affiche pas. */
+        const sansListes = (periode) => { const reste = { ...periode }; delete reste.inscriptions; return reste; };
+        const [current, previous] = (await Promise.all([
             computePeriode(conn, orgId, annee),
             computePeriode(conn, orgId, annee - 1),
-        ]);
+        ])).map(sansListes);
         const postesLabels = EXPENSE_CATEGORIES.map((c) => ({ categorie: c, label: CATEGORY_LABELS[c] }));
         res.json({ data: { annee, anneePrec: annee - 1, current, previous, postesLabels } });
     } catch (err) {
@@ -327,7 +385,7 @@ const getPerformance = async (req, res) => {
 const createExpense = async (req, res) => {
     const { label, categorie, montantHT, date, note } = req.body;
     const cat = EXPENSE_CATEGORIES.includes(categorie) ? categorie : 'DIVERS';
-    const amount = Number(montantHT);
+    const amount = lireMontant(montantHT);
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
@@ -397,7 +455,7 @@ const listRevenues = async (req, res) => {
 const createRevenue = async (req, res) => {
     const { label, categorie, montant, date, note, partner_id } = req.body;
     const cat = REVENU_CATEGORIES.includes(categorie) ? categorie : 'COMMISSION';
-    const amount = Number(montant);
+    const amount = lireMontant(montant);
     if (!label || !String(label).trim() || !Number.isFinite(amount) || amount < 0) {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
@@ -434,7 +492,13 @@ const updateRevenue = async (req, res) => {
     const fields = {};
     if (b.label !== undefined) fields.label = String(b.label).trim().slice(0, 255);
     if (b.categorie !== undefined) fields.category = REVENU_CATEGORIES.includes(b.categorie) ? b.categorie : 'COMMISSION';
-    if (b.montant !== undefined) { const a = Number(b.montant); if (Number.isFinite(a) && a >= 0) fields.amount = a.toFixed(2); }
+    /* Un montant illisible est REFUSÉ : il était ignoré, et la correction répondait « Produit mis
+       à jour » en gardant l'ancien montant — le libellé changeait, pas la somme. */
+    if (b.montant !== undefined) {
+        const a = lireMontant(b.montant);
+        if (!Number.isFinite(a) || a < 0) return res.status(422).json({ error: 'Montant illisible : écrivez-le par exemple 315,93.' });
+        fields.amount = a.toFixed(2);
+    }
     if (b.date !== undefined) fields.date = b.date || null;
     if (b.partner_id !== undefined) fields.partner_id = b.partner_id || null;
     if (b.note !== undefined) fields.note = b.note ? String(b.note).slice(0, 255) : null;
@@ -486,7 +550,7 @@ const deleteRevenue = async (req, res) => {
  */
 const saveTargets = async (req, res) => {
     const targets = mergeTargets(req.body.targets);
-    let dividende = Number(req.body.dividendeCible);
+    let dividende = lireMontant(req.body.dividendeCible);
     if (!Number.isFinite(dividende) || dividende < 0 || dividende > 100) dividende = DEFAULT_DIVIDENDE_CIBLE;
     try {
         const conn = db.promise();

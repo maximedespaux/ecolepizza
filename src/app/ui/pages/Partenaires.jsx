@@ -19,6 +19,7 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import PartnerProduits from "../components/PartnerProduits.jsx";
 import { APPORT_TYPES, apportType, apportsOfPartner } from "../lib/apports.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 import { euro, dateFr } from "../lib/format.js";
 
 /* LA LISTE N'EST PLUS ÉCRITE ICI — elle vient du serveur (migration 129), qui la rend gérable par
@@ -718,11 +719,12 @@ function ApportModal({ apport, partners, onClose, onSaved, onError }) {
   async function save() {
     if (!form.partner_id) return onError("Choisissez le partenaire.");
     if (!form.label.trim()) return onError("Libellé requis.");
-    if (form.value === "" || Number.isNaN(Number(form.value))) return onError("Montant invalide.");
+    const valeur = lireMontant(form.value);
+    if (form.value === "" || !Number.isFinite(valeur) || valeur < 0) return onError("Montant illisible : écrivez-le par exemple 315,93.");
     setSaving(true);
     try {
       await updateRevenue(apport.srcId, {
-        label: form.label, categorie: form.type, montant: form.value,
+        label: form.label, categorie: form.type, montant: valeur,
         date: form.date, partner_id: form.partner_id,
       });
       onSaved();

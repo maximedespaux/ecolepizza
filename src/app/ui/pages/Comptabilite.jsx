@@ -12,6 +12,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import MoneyToggle from "../components/MoneyToggle.jsx";
 import { dateFr } from "../lib/format.js";
 import { apportType } from "../lib/apports.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
 const CATS = [
@@ -73,9 +74,12 @@ function Comptabilite() {
 
   async function submitDep() {
     if (!dep.label.trim() || !dep.montantHT) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
+    // « 315,93 » : le clavier français ne propose que la virgule (cf. lib/montantSaisi.js).
+    const montant = lireMontant(dep.montantHT);
+    if (!Number.isFinite(montant) || montant < 0) { setStatus({ type: "error", message: "Montant illisible : écrivez-le par exemple 315,93." }); return; }
     setSavingDep(true);
     try {
-      await createExpense(dep);
+      await createExpense({ ...dep, montantHT: montant });
       setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today() });
       setStatus({ type: "success", message: "Dépense enregistrée." });
       load(annee, mois, { silent: true });
@@ -95,9 +99,9 @@ function Comptabilite() {
 
   async function saveCibles() {
     const targets = {};
-    for (const c of CATS) { const n = Number(cibleForm[c.v]); if (Number.isFinite(n)) targets[c.v] = n; }
+    for (const c of CATS) { const n = lireMontant(cibleForm[c.v]); if (Number.isFinite(n)) targets[c.v] = n; }
     try {
-      await saveComptaTargets({ targets, dividendeCible: Number(dividendeForm) });
+      await saveComptaTargets({ targets, dividendeCible: lireMontant(dividendeForm) });
       setEditCibles(false);
       setStatus({ type: "success", message: "Cibles enregistrées." });
       load(annee, mois, { silent: true });
@@ -231,7 +235,7 @@ function Comptabilite() {
             <p className="lead" style={{ marginTop: 0 }}>Le CA ne se saisit pas à la main : il s'additionne automatiquement à partir de trois sources.</p>
             <div className="grid cols-3">
               <SourceCA n={1} color={CA_COLORS.insc} titre="Inscriptions" montant={euro(data.ca.inscriptions)}
-                desc="Somme des prix des inscriptions (tarif de la formation)." href="/sessions" lien="Voir les sessions →" />
+                desc="Les stagiaires venus dans la période et facturés (facture ou acompte émis), au prix du dossier, sinon au tarif de la formation." href="/factures" lien="Émettre une facture →" />
               <SourceCA n={2} color={CA_COLORS.mat} titre="Ventes de matériel" montant={euro(data.ca.materiel)}
                 desc="Fours, pétrins, matières premières… vendus aux stagiaires." href="/ventes" lien="Enregistrer une vente →" />
               <SourceCA n={3} color={CA_COLORS.extra} titre="Produits divers" montant={euro(data.ca.extra)}
@@ -317,6 +321,45 @@ function Comptabilite() {
               </button>
             </Card>
           </div>
+
+          {/* LES STAGIAIRES DE LA PÉRIODE : ce que « Inscriptions » additionne, et ce qu'il laisse de
+              côté. Le total ne se vérifiait pas — il portait sur un prix que rien n'écrivait, et
+              comptait 0 € pour des stagiaires bien venus (relevé le 2026-09-29). Les dossiers sans
+              facture sont nommés à côté : c'est la liste de ce qui reste à facturer. */}
+          <Card title={T("user-plus", <span>Inscriptions {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.ca.inscriptions)}</span></span>)}>
+            <p className="sub" style={{ margin: "-4px 0 12px", color: "var(--dim)" }}>
+              Un stagiaire compte le mois où commence sa session, dès qu'une facture ou un acompte émis le désigne : au prix de son dossier, sinon au tarif de la formation.
+            </p>
+            {!(data.inscriptions?.length || data.aFacturer?.length) ? (
+              <EmptyState icon="users" title="Aucun stagiaire sur cette période" text="Aucune session ne commence sur cette période." />
+            ) : (
+              <div className="grid cols-2" style={{ gap: 24 }}>
+                <div>
+                  <div className="sub" style={{ fontWeight: 700, marginBottom: 2 }}>Comptés ({data.inscriptions.length})</div>
+                  {data.inscriptions.length === 0 ? (
+                    <p className="sub" style={{ margin: "6px 0 0", color: "var(--dim)" }}>Aucun encore : il faut une facture ou un acompte émis.</p>
+                  ) : data.inscriptions.map((d) => (
+                    <ListRow key={d.id} titre={<Link to={`/stagiaires/${d.learner_id}`}>{d.nom} {d.prenom}</Link>}
+                      sous={[d.formation, `session du ${dateFr(d.debut)}`, d.factures].filter(Boolean).join(" · ")}
+                      montant={euro(d.montant)} />
+                  ))}
+                </div>
+                <div>
+                  <div className="sub" style={{ fontWeight: 700, marginBottom: 2 }}>Pas encore facturés ({data.aFacturer.length})</div>
+                  {data.aFacturer.length === 0 ? (
+                    <p className="sub" style={{ margin: "6px 0 0", color: "var(--dim)" }}>Tous les stagiaires de la période sont facturés.</p>
+                  ) : data.aFacturer.map((d) => (
+                    <ListRow key={d.id} titre={<Link to={`/stagiaires/${d.learner_id}`}>{d.nom} {d.prenom}</Link>}
+                      sous={[d.formation, `session du ${dateFr(d.debut)}`].filter(Boolean).join(" · ")}
+                      montant={<span style={{ color: "var(--dim)" }}>{euro(d.montant)}</span>} />
+                  ))}
+                  {data.aFacturer.length > 0 && (
+                    <p style={{ margin: "10px 0 0" }}><Link to="/factures" className="src-link">Émettre une facture →</Link></p>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
 
           {/* Listes : dépenses à gauche ; à droite, ce qui vient des partenaires — les produits
               divers (dans le CA) puis les apports en nature (hors CA), l'un sous l'autre. */}

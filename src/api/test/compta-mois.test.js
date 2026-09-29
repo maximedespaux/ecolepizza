@@ -23,6 +23,10 @@
  * entré, combien est sorti. Conséquence assumée : une inscription saisie en décembre pour une
  * session de l'an prochain compte en décembre.
  *
+ * ⚠️ LA RÈGLE A CHANGÉ LE 2026-09-29 (cf. le deuxième test) : un stagiaire compte désormais le mois
+ * où commence sa SESSION, dès qu'une facture ou un acompte émis le désigne. L'invariant ci-dessous,
+ * lui, n'a pas bougé.
+ *
  * L'INVARIANT QUI COMPTE : les douze mois somment EXACTEMENT en l'année. Il ne tient qu'à une
  * chose — que ce soit la même fonction, avec la même règle, à qui l'on ajoute ou retire un filtre
  * de mois. Toute duplication de ce calcul le casse en silence. Vérifié en base sur l'année en
@@ -51,16 +55,21 @@ test('un seul calcul sert le mois ET l\'année', () => {
         'Une seule fonction, paramétrée par le mois — 0 valant l\'année entière.');
 });
 
-test('le CA des inscriptions est daté à l\'encaissement, sur le mois comme sur l\'année', () => {
+test('le CA des inscriptions est daté au mois où le stagiaire VIENT, sur le mois comme sur l\'année', () => {
+    /* LA RÈGLE A CHANGÉ LE 2026-09-29, décidée par l'école après « les stagiaires venus ce mois-ci
+       comptent 0 € en Inscriptions ». La date de SAISIE du dossier (`enrollment.created_at`) n'était
+       pas un encaissement, et n'avait rien à voir avec le mois où le stagiaire vient. Ce qui reste
+       de l'ancien contrat, et qui compte : UNE date par dossier, la même pour le mois et pour
+       l'année — c'est elle qui fait sommer les douze mois exactement en l'année. L'« année de
+       session » (`training_session.year`) ne revient pas, elle ne se découpe pas en mois : c'est
+       le PREMIER JOUR de la session qui date le dossier (cf. inscriptions-comptabilite.test.js). */
     const bloc = PERIODE();
-    const inscr = bloc.slice(bloc.indexOf('FROM enrollment'), bloc.indexOf('FROM enrollment') + 220);
-    assert.match(inscr, /YEAR\(e\.created_at\) = \?/,
-        "L'encaissement est la seule règle qui ait un sens à l'échelle du mois.");
-    assert.match(inscr, /parMois\('e\.created_at'\)/, 'et le filtre de mois porte sur la même colonne');
-    /* LA JOINTURE SUR LA SESSION A DISPARU. Tant qu'elle était là, le CA annuel suivait l'année de
-       session et ne pouvait pas se découper en mois. */
-    assert.doesNotMatch(inscr, /training_session/,
-        "La règle « année de session » ne doit pas revenir : elle est indécoupable en mois.");
+    const inscr = bloc.slice(bloc.indexOf('FROM enrollment'), bloc.indexOf('FROM enrollment') + 600);
+    assert.match(inscr, /YEAR\(\$\{DATE_SESSION\}\) = \?\$\{parMois\(DATE_SESSION\)\}/,
+        "l'année et le mois se lisent sur la MÊME date, celle de la session");
+    assert.doesNotMatch(bloc, /created_at/, 'la date de saisie du dossier ne date plus rien');
+    assert.doesNotMatch(inscr, /s\.year = \?/, "l'année de session, indécoupable en mois, ne revient pas");
+    assert.match(SRC, /const DATE_SESSION = 'COALESCE\(s\.start_date, /, 'le premier jour de la session, d\'abord');
 });
 
 test('le filtre de mois est factorisé, et couvre toutes les sources', () => {

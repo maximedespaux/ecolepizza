@@ -1,6 +1,9 @@
 // Module Comptabilité / Gestion — cibles et règles d'analyse (pas de compta légale).
 // Chaque poste de dépense est comparé à une cible en % du CA → code couleur + conseil.
 
+// Une cible se TAPE (« 12,5 ») : lue en français, sinon elle était ignorée en silence.
+const { lireMontant } = require('./montantSaisi.js');
+
 const EXPENSE_CATEGORIES = [
     'MATIERES_PREMIERES',
     'SALAIRES',
@@ -62,7 +65,7 @@ function mergeTargets(saved) {
     const out = { ...DEFAULT_TARGETS };
     if (saved && typeof saved === 'object') {
         for (const cat of EXPENSE_CATEGORIES) {
-            const v = Number(saved[cat]);
+            const v = lireMontant(saved[cat]);
             if (Number.isFinite(v) && v >= 0 && v <= 100) out[cat] = v;
         }
     }
