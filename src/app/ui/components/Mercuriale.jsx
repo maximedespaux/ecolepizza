@@ -11,16 +11,19 @@ const metroUnit = (t) => (t === "Piece" ? "pièce" : t === "L" ? "litre" : "kg")
 const unitPer = (u) => (u === "kg" ? "kg" : u === "litre" ? "L" : u);
 const SOURCE_LABEL = { RNM: "RNM / marché", METRO: "Metro", FOURNISSEUR: "Fournisseur", MANUEL: "Manuel" };
 
-// Ma mercuriale = liste de prix curée. Deux onglets : Catalogue (Metro + frais/marché → Ajouter)
-// et Ma mercuriale (édition prix/unité/source). Outil à part entière (MercurialePage) OU vue
-// interne d'un assistant : sans `onBack`, le bouton de retour ne s'affiche pas (page de plein droit).
+// Ma mercuriale = liste de prix curée. Deux onglets : « Ma mercuriale » (ma liste éditable, avec un
+// AJOUT UNIFIÉ en tête : on cherche un produit, il vient des « Prix du marché » en un clic ou se crée
+// à la main s'il n'y est pas) et « Prix du marché » (le catalogue Metro + frais/marché, à parcourir).
+// Outil à part entière (MercurialePage) OU vue interne d'un assistant : sans `onBack`, pas de retour.
 export default function Mercuriale({ items, reload, onBack }) {
-  const [tab, setTab] = useState(items.length ? "mine" : "catalogue");
+  const [tab, setTab] = useState("mine"); // on arrive sur sa liste, avec la recherche d'ajout en tête
   const refs = new Set(items.map((i) => i.catalog_product_id).filter(Boolean));
 
   async function addItem(payload) { try { await addMercurialeItem(payload); reload(); } catch { /* barre globale */ } }
   const addFresh = (p) => addItem({ label: p.label, family: p.family, origin: p.origin, calibre: p.calibre, conditionnement: p.cond, market: p.market, unit: p.unit, price: p.price, source: p.market === "Fournisseur" ? "FOURNISSEUR" : "RNM", catalog_product_id: p.id });
   const addMetro = (p) => { const { label, origin } = parseMetroName(p.name); addItem({ label, origin, family: (p.family || ""), brand: p.brand, unit: metroUnit(p.type_unity), price: num(p.unit_ht ?? p.price_ht), market: "Metro", source: "METRO", catalog_product_id: p.id }); };
+  // Produit HORS catalogue, créé à la main depuis la recherche d'ajout (prix/unité à compléter ensuite).
+  const addManual = (label) => addItem({ label, source: "MANUEL", unit: "kg", price: 0, market: "Manuel" });
 
   return (
     <>
@@ -29,18 +32,18 @@ export default function Mercuriale({ items, reload, onBack }) {
         <span style={{ flex: 1 }} />
         <div className="src" role="tablist">
           <button className={tab === "mine" ? "on" : ""} onClick={() => setTab("mine")}>Ma mercuriale{items.length ? ` (${items.length})` : ""}</button>
-          <button className={tab === "catalogue" ? "on" : ""} onClick={() => setTab("catalogue")}>Catalogue général</button>
+          <button className={tab === "catalogue" ? "on" : ""} onClick={() => setTab("catalogue")}>Prix du marché</button>
         </div>
       </div>
 
       {tab === "catalogue"
         ? <CatalogueTab refs={refs} onAddFresh={addFresh} onAddMetro={addMetro} />
-        : <MineTab items={items} reload={reload} goCatalogue={() => setTab("catalogue")} />}
+        : <MineTab items={items} reload={reload} refs={refs} onAddFresh={addFresh} onAddMetro={addMetro} onAddManual={addManual} />}
     </>
   );
 }
 
-// --- Onglet Catalogue général : Metro (catalog_product) + Frais/Marché (RNM) ---
+// --- Onglet Prix du marché : Metro (catalog_product) + Frais/Marché (RNM), à parcourir ---
 function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
   const [src, setSrc] = useState("frais"); // frais | metro
   const [fam, setFam] = useState("");      // filtre famille (frais) ou rayon (metro)
@@ -153,24 +156,11 @@ function ProductBubble({ r, anchor }) {
   );
 }
 
-// --- Onglet Ma mercuriale : cartes éditables (prix, unité, source, usage) + produit manuel ---
-function MineTab({ items, reload, goCatalogue }) {
+// --- Onglet Ma mercuriale : recherche d'ajout unifiée en tête + cartes éditables (prix, unité, source) ---
+function MineTab({ items, reload, refs, onAddFresh, onAddMetro, onAddManual }) {
   const [busy, setBusy] = useState(false);
   const patch = async (id, body) => { setBusy(true); try { await updateMercurialeItem(id, body); reload(); } catch { /* ignore */ } finally { setBusy(false); } };
   const remove = async (id) => { if (!window.confirm("Retirer ce produit de ta mercuriale ?")) return; try { await deleteMercurialeItem(id); reload(); } catch { /* ignore */ } };
-  const addManual = async () => {
-    const label = (window.prompt("Nom du produit :", "") || "").trim(); if (!label) return;
-    try { await addMercurialeItem({ label, source: "MANUEL", unit: "kg", price: 0, market: "Manuel" }); reload(); } catch { /* ignore */ }
-  };
-
-  if (!items.length) return (
-    <Card><div className="empty" style={{ textAlign: "center", padding: "38px 20px" }}>
-      <div style={{ fontSize: 40, marginBottom: 10 }}>🧺</div>
-      <h3 style={{ margin: "0 0 6px" }}>Ta mercuriale est vide</h3>
-      <p className="hint" style={{ margin: "0 0 14px" }}>Ajoute les produits que tu utilises depuis le catalogue général.</p>
-      <button className="btn primary" onClick={goCatalogue}><Icon name="plus" size={14} /> Ouvrir le catalogue</button>
-    </div></Card>
-  );
 
   // Regroupe par famille (rayon).
   const byFam = {};
@@ -178,10 +168,16 @@ function MineTab({ items, reload, goCatalogue }) {
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <p className="hint" style={{ margin: 0 }}>{items.length} produit{items.length > 1 ? "s" : ""} · prix réels, éditables. Les recettes piochent ici.</p>
-        <button className="btn sm" onClick={addManual}><Icon name="plus" size={13} /> Produit manuel</button>
-      </div>
+      <QuickAdd refs={refs} onAddFresh={onAddFresh} onAddMetro={onAddMetro} onAddManual={onAddManual} />
+
+      {items.length === 0 ? (
+        <Card><div className="empty" style={{ textAlign: "center", padding: "30px 20px" }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🧺</div>
+          <h3 style={{ margin: "0 0 6px" }}>Ta mercuriale est vide</h3>
+          <p className="hint" style={{ margin: 0 }}>Cherche un produit ci-dessus : il vient des prix du marché, ou tu l'ajoutes à la main.</p>
+        </div></Card>
+      ) : (<>
+        <p className="hint" style={{ margin: "0 0 12px" }}>{items.length} produit{items.length > 1 ? "s" : ""} · prix réels, éditables. Les recettes piochent ici.</p>
       {Object.entries(byFam).map(([fam, list]) => (
         <div key={fam} style={{ marginBottom: 16 }}>
           <div className="ate-lbl" style={{ marginBottom: 8 }}>{fam}</div>
@@ -217,6 +213,55 @@ function MineTab({ items, reload, goCatalogue }) {
           </div>
         </div>
       ))}
+      </>)}
     </>
+  );
+}
+
+// Recherche d'ajout UNIFIÉE (2026-09-29) : un seul champ. Ce qu'on tape est cherché dans les PRIX DU
+// MARCHÉ (frais/marché local + Metro via l'API) — un clic ajoute le produit à sa mercuriale (prix et
+// unité repris). Rien ne correspond ? « Ajouter « X » à la main » crée un produit HORS catalogue, dont
+// on fixe le prix et l'unité ensuite dans sa carte. Une seule action pour les deux cas.
+function QuickAdd({ refs, onAddFresh, onAddMetro, onAddManual }) {
+  const [q, setQ] = useState("");
+  const [metro, setMetro] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const ql = q.trim();
+  useEffect(() => {
+    if (ql.length < 2) { setMetro([]); return; }
+    setLoading(true);
+    const t = setTimeout(() => searchCatalog({ q: ql, limit: 8 }).then((d) => setMetro((d.data || []).filter(isRawProduct))).catch(() => setMetro([])).finally(() => setLoading(false)), 260);
+    return () => clearTimeout(t);
+  }, [ql]);
+  const l = ql.toLowerCase();
+  const fresh = ql.length >= 2 ? FRESH_PRODUCE.filter((p) => (p.label + (p.origin || "")).toLowerCase().includes(l)).slice(0, 6) : [];
+  const results = [
+    ...fresh.map((p) => ({ key: "f-" + p.id, id: p.id, label: p.label, sub: [p.origin, p.market].filter(Boolean).join(" · "), price: p.price, unit: p.unit, add: () => onAddFresh(p) })),
+    ...metro.map((p) => { const { label, origin } = parseMetroName(p.name); return { key: "m-" + p.id, id: p.id, label, sub: [p.brand && p.brand !== "NO BRAND" ? p.brand : null, origin, "Metro"].filter(Boolean).join(" · "), price: num(p.unit_ht ?? p.price_ht), unit: metroUnit(p.type_unity), add: () => onAddMetro(p) }; }),
+  ];
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <div style={{ position: "relative" }}>
+        <span style={{ position: "absolute", left: 12, top: 12, color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={16} /></span>
+        <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ajouter un produit — cherche dans les prix du marché…" style={{ paddingLeft: 38, paddingRight: 32, width: "100%" }} />
+        {q && <button className="gs-clear" title="Effacer" onClick={() => setQ("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)" }}><Icon name="x" size={14} /></button>}
+      </div>
+      {ql.length >= 2 && (
+        <div className="cat-results" style={{ marginTop: 10 }}>
+          {results.map((r) => { const added = refs.has(r.id); return (
+            <button key={r.key} className={"cat-row" + (added ? " added" : "")} onClick={() => !added && r.add()} disabled={added} style={{ marginBottom: 4, width: "100%" }}>
+              <Icon name={added ? "check" : "plus"} size={15} />
+              <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}><b style={{ fontSize: 13, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</b><span style={{ fontSize: 11, color: "var(--muted)" }}>{r.sub || "-"}</span></div>
+              <span className="tnum" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{euro(num(r.price))}/{unitPer(r.unit)}</span>
+            </button>
+          ); })}
+          {loading && results.length === 0 && <div className="cat-empty">Recherche…</div>}
+          <button className="cat-row" onClick={() => { onAddManual(ql); setQ(""); }} style={{ width: "100%", marginTop: results.length ? 6 : 0, borderTop: results.length ? "1px dashed var(--border)" : "none", paddingTop: results.length ? 10 : undefined }}>
+            <Icon name="plus" size={15} />
+            <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}><b style={{ fontSize: 13 }}>Ajouter « {ql} » à la main</b><span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>Produit hors catalogue — tu fixeras le prix et l'unité.</span></div>
+          </button>
+        </div>
+      )}
+    </Card>
   );
 }
