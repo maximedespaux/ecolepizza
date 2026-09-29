@@ -67,7 +67,9 @@ function baseDeSeptembre({ tableNature = true } = {}) {
             { id: 'pc1', date: '2026-09-12', type: 'MATERIEL', label: 'Pétrin 20 L', value: '2000.00', partner_name: 'Moulins Bourgeois' },
             { id: 'pc2', date: '2026-09-03', type: 'CONSOMMABLE', label: 'Farine T65, 50 kg', value: '500.00', partner_name: 'Moulins Bourgeois' },
         ]])],
-        [/SUM\(e\.price\)/, [[{ ca: '1000.00', nb: 2, nb_stagiaires: 2 }]]],
+        // Un stagiaire facturé, au tarif de sa formation (cf. inscriptions-comptabilite.test.js).
+        [/FROM enrollment e JOIN training_session s/, [[{ id: 'e1', learner_id: 'l1', last_name: 'DUPONT', first_name: 'Jean',
+            program_code: 'RS7404', debut: '2026-09-14', prix_dossier: null, tarif: '1000.00', factures: 'F-2026-001' }]]],
         [/SUM\(amount \* quantity\)/, [[{ ca: '200.00' }]]],
         [/COALESCE\(SUM\(amount\), 0\) AS ca FROM revenue_extra/, [[{ ca: '300.00' }]]],
         [/COUNT\(\*\) AS nb FROM training_session/, [[{ nb: 1 }]]],
