@@ -316,6 +316,10 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
      la même, cochée dans le parcours du dossier ou dans la section entreprise, l'est dans les deux.
      Un jalon « OU » se coche d'un geste pour toutes ses variantes — d'où une LISTE de slugs. */
   const toggleFacultatif = (slugs, valeur) => setSteps((ss) => ss.map((s) => (slugs.includes(s.slug) ? { ...s, facultatif: valeur } : s)));
+  /* ADRESSÉ À L'ENTREPRISE (migration 190) : le document part à l'entreprise du stagiaire au lieu du
+     stagiaire — compté de son côté, hors du décompte du stagiaire. Porté par l'ÉTAPE, comme « OU » :
+     un jalon se règle d'un geste pour toutes ses variantes. `valeur` vaut 'ENTREPRISE' ou 'STAGIAIRE'. */
+  const toggleDestinataire = (slugs, valeur) => setSteps((ss) => ss.map((s) => (slugs.includes(s.slug) ? { ...s, destinataire: valeur } : s)));
 
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
@@ -336,8 +340,8 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
         const rs = await saveFormationSteps(program.id, steps.map((s) => (s.doc_type === "PIECE"
           // Plus de `or_group` : une pièce n'a plus de « OU ». Le serveur l'ignore de toute façon
             // (lib/groupesPieces.js) ; ne pas l'envoyer évite d'entretenir une valeur morte.
-            ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null, facultatif: !!s.facultatif }
-          : { slug: s.slug, active: s.active, facultatif: !!s.facultatif })), breakSlug || null, companySteps, companyBreakSlug || null);
+            ? { slug: s.slug, active: s.active, applies_when: s.applies_when || null, facultatif: !!s.facultatif, destinataire: s.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE" }
+          : { slug: s.slug, active: s.active, facultatif: !!s.facultatif, destinataire: s.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE" })), breakSlug || null, companySteps, companyBreakSlug || null);
         /* LES DEUX AVERTISSEMENTS : la fiche, et le parcours (une étape « facultative » que la base
            ne sait pas encore garder, migration 188 non jouée). */
         const avert = [ru?.avertissement, rs?.avertissement].filter(Boolean).join(" ");
@@ -475,7 +479,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
                   eqDe={(slug) => { const g = eqMap.get(slug); return g ? equivs.find((e) => e.key === g.group) : null; }}
                   onRetirerOu={retirerVariante}
                   onSetPieceCondition={setPieceCondition} conditions={conditions}
-                  onToggleFacultatif={toggleFacultatif} />
+                  onToggleFacultatif={toggleFacultatif} onToggleDestinataire={toggleDestinataire} />
               )}
             </>
           ) : (
@@ -641,10 +645,34 @@ function CaseFacultatif({ etapes, onToggle }) {
   );
 }
 
+/* « CHEZ L'ENTREPRISE » SUR UN JALON DE DOCUMENT (migration 190) : le document est adressé à
+   l'entreprise du stagiaire au lieu du stagiaire — compté de son côté, hors du décompte du
+   stagiaire, et le stagiaire ne le voit pas dans son avancement. Une case, comme « Facultatif ».
+   N'a de sens que sur un DOCUMENT (pas une pièce, une remise, un QCM, une feuille d'émargement) :
+   une pièce vient du stagiaire, une remise a son propre destinataire (188). */
+function estDocumentAdressable(s) {
+  return !s.quiz_id && s.doc_type !== "QCM" && s.doc_type !== "PIECE" && s.doc_type !== "REMISE" && s.doc_type !== "EMARGEMENT";
+}
+function ChoixDestinataire({ etapes, onToggle }) {
+  if (typeof onToggle !== "function" || !etapes.length || !etapes.every(estDocumentAdressable)) return null;
+  const coche = etapes.every((e) => e.destinataire === "ENTREPRISE");
+  // MIXTE : une variante d'un jalon « OU » chez l'entreprise, l'autre non — la case le montre.
+  const mixte = !coche && etapes.some((e) => e.destinataire === "ENTREPRISE");
+  return (
+    <label className={"pf-fac" + (coche ? " on" : "")}
+      title={mixte
+        ? "Adressé à l'entreprise pour une partie des variantes seulement : cochez pour l'appliquer à tout le jalon"
+        : "Adressé à l'entreprise du stagiaire : compté de son côté, hors du décompte du stagiaire. Sans espace entreprise, il revient au stagiaire."}>
+      <input type="checkbox" checked={coche} ref={(el) => { if (el) el.indeterminate = mixte; }}
+        onChange={() => onToggle(etapes.map((e) => e.slug), coche ? "STAGIAIRE" : "ENTREPRISE")} /> Chez l'entreprise
+    </label>
+  );
+}
+
 // Vue « parcours » : jalons enchaînés par des flèches, variantes empilées en « OU ».
 // Les étapes incluses forment le flux (bouton ✕ pour retirer) ; un bouton
 // « ＋ Ajouter une étape » propose les étapes disponibles (retirées).
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onSetPieceCondition, conditions, onToggleFacultatif }) {
+function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onAddOu, refusOu, onEffacerRefus, eqDe, onRetirerOu, onSetPieceCondition, conditions, onToggleFacultatif, onToggleDestinataire }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -736,6 +764,7 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               ))}
               {/* Une case par JALON, pas par variante : le dossier n'en suivra qu'une. */}
               <CaseFacultatif etapes={g.steps} onToggle={onToggleFacultatif} />
+              <ChoixDestinataire etapes={g.steps} onToggle={onToggleDestinataire} />
               {/* Ajouter une variante « OU » à ce jalon (regroupe via équivalence).
                   LE MENU FLOTTANT A ÉTÉ RETIRÉ : il vivait dans `.parcours-flow`, qui défile en
                   `overflow:auto`. Mesuré — il s'arrêtait pile au bord du conteneur (708 px des

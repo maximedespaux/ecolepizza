@@ -30,22 +30,29 @@ async function formationSteps(conn, orgId, program) {
     /* `facultatif` (migration 188) : sondé une fois, puis demandé dans chaque forme de la cascade
        ci-dessous — sans la colonne, `0`, et toutes les étapes comptent comme avant. */
     const fac = await colonneExiste(conn, 'program_step', 'facultatif') ? ', facultatif' : ', 0 AS facultatif';
+    /* `destinataire` (migration 190) : sondé une fois, ajouté à chaque forme de la cascade AVANT
+       `${fac}` (pour que la chaîne « ${fac} FROM » reste intacte). Sans la colonne, 'STAGIAIRE',
+       et tout va au stagiaire comme avant. */
+    const dest = await colonneExiste(conn, 'program_step', 'destinataire') ? ', destinataire' : ", 'STAGIAIRE' AS destinataire";
     try {
-        [rows] = await conn.query(`SELECT slug, sort_order, active, or_group, applies_when${fac} FROM program_step WHERE program_id = ?`, [program.id]);
+        [rows] = await conn.query(`SELECT slug, sort_order, active, or_group, applies_when${dest}${fac} FROM program_step WHERE program_id = ?`, [program.id]);
     } catch (e) {
         if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
         // applies_when (migration 140) absente : on relit sans. Puis, si or_group (052) manque
         // aussi, on retombe sur le minimum. Le parcours doit rester lisible sans ces colonnes.
         try {
-            [rows] = await conn.query(`SELECT slug, sort_order, active, or_group${fac} FROM program_step WHERE program_id = ?`, [program.id]);
+            [rows] = await conn.query(`SELECT slug, sort_order, active, or_group${dest}${fac} FROM program_step WHERE program_id = ?`, [program.id]);
         } catch (e2) {
             if (!(e2 && e2.code === 'ER_BAD_FIELD_ERROR')) throw e2;
-            [rows] = await conn.query(`SELECT slug, sort_order, active${fac} FROM program_step WHERE program_id = ?`, [program.id]);
+            [rows] = await conn.query(`SELECT slug, sort_order, active${dest}${fac} FROM program_step WHERE program_id = ?`, [program.id]);
         }
     }
     const overlay = new Map(rows.map((r) => [r.slug, r]));
     // Facultative DANS CETTE FORMATION (migration 188) : visible, faisable, hors décompte.
     const facultatif = (slug) => !!(overlay.get(slug) && Number(overlay.get(slug).facultatif));
+    /* Adressée à l'entreprise DANS CETTE FORMATION (migration 190) : comptée du côté entreprise,
+       hors du décompte du stagiaire. Sans la colonne, 'STAGIAIRE' (défaut du SELECT ci-dessus). */
+    const destinataire = (slug) => { const d = overlay.get(slug) && overlay.get(slug).destinataire; return d === 'ENTREPRISE' ? 'ENTREPRISE' : 'STAGIAIRE'; };
 
     // Étapes documentaires classiques. or_group : surcharge program_step sinon défaut.
     const docSteps = candidates.map((s) => {
@@ -66,6 +73,9 @@ async function formationSteps(conn, orgId, program) {
                jamais imposées d'office à toutes les formations. */
             active: o ? !!o.active : s.parcours_defaut !== 0,
             facultatif: facultatif(s.slug),
+            /* Destinataire du document (migration 190) : au stagiaire par défaut, ou à son
+               entreprise. Porté par le jalon, à part du destinataire d'une remise (188). */
+            destinataire: destinataire(s.slug),
         };
     });
 
@@ -801,6 +811,9 @@ const saveFormationSteps = async (req, res) => {
         // `facultatif` (migration 188) : sans la colonne, le parcours s'enregistre, et on le DIT.
         const hasFacultatif = await colonneExiste(conn, 'program_step', 'facultatif');
         let facultatifsEcartes = 0;
+        // `destinataire` (migration 190) : même règle — sans la colonne, « entreprise » va au stagiaire, et on le DIT.
+        const hasDestinataire = await colonneExiste(conn, 'program_step', 'destinataire');
+        let destinatairesEcartes = 0;
         // Même règle à l'écriture : un groupe devenu solitaire ne doit pas être réenregistré,
         // sinon il ressurgit au prochain chargement et le nettoyage ne finit jamais.
         const aEcrire = normaliserGroupesPieces(steps);
@@ -852,6 +865,15 @@ const saveFormationSteps = async (req, res) => {
             } else if (aEcrire[i].facultatif) {
                 facultatifsEcartes += 1;
             }
+            /* ADRESSÉE À L'ENTREPRISE DANS CETTE FORMATION (migration 190) : comptée du côté
+               entreprise, hors du décompte du stagiaire. Sans la colonne, on garde 'STAGIAIRE' et
+               on signale ce qui n'a pas tenu, plutôt qu'un « entreprise » perdu en silence. */
+            if (hasDestinataire) {
+                await conn.query('UPDATE program_step SET destinataire = ? WHERE program_id = ? AND slug = ?',
+                    [aEcrire[i].destinataire === 'ENTREPRISE' ? 'ENTREPRISE' : 'STAGIAIRE', req.params.id, slug]);
+            } else if (aEcrire[i].destinataire === 'ENTREPRISE') {
+                destinatairesEcartes += 1;
+            }
             // QCM ajouté au parcours et rattaché à AUCUNE formation : on le lie à celle-ci.
             if (aEcrire[i].active && slug.startsWith('quiz:')) {
                 await rattacherSiOrphelin(conn, req.user.organization_id, slug.slice(5), req.params.id).catch(() => {});
@@ -887,12 +909,20 @@ const saveFormationSteps = async (req, res) => {
                     [cbs, req.params.id, req.user.organization_id]);
             } catch (e) { if (!e || e.code !== 'ER_BAD_FIELD_ERROR') throw e; } // migration 100 non jouée
         }
+        // Ce que la base ne sait pas encore garder — chaque migration nommée. « Facultatif » (188)
+        // reste en tête : un test épingle ce début de message.
+        const avertissements = [];
+        if (facultatifsEcartes) {
+            avertissements.push(`${facultatifsEcartes} étape(s) cochée(s) « facultative » ne le sont pas encore : `
+                + "la migration 188 n'est pas jouée.");
+        }
+        if (destinatairesEcartes) {
+            avertissements.push(`${destinatairesEcartes} étape(s) adressée(s) à l'entreprise vont au stagiaire : `
+                + "la migration 190 n'est pas jouée.");
+        }
         res.json({
             success: true, message: 'Parcours enregistré.',
-            ...(facultatifsEcartes ? {
-                avertissement: `${facultatifsEcartes} étape(s) cochée(s) « facultative » ne le sont pas encore : `
-                    + "la migration 188 n'est pas jouée.",
-            } : {}),
+            ...(avertissements.length ? { avertissement: avertissements.join(' ') } : {}),
         });
     } catch (err) {
         console.error('Erreur enregistrement parcours :', err);
