@@ -1401,6 +1401,10 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 .dough-seg:hover .dough-seg-tip,.dough-seg:focus-visible .dough-seg-tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
 .ate-lbl{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .ate-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1);font-size:11px;font-weight:800;flex:none}
+/* Sous-titre d'une étape (les sous-sections de « La pâte » : force, empâtement, hydratation).
+   Un petit filet devant, pour qu'on les lise comme des enfants de l'étape, pas comme des étapes. */
+.ate-sub{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text);margin:14px 0 9px}
+.ate-sub::before{content:"";width:3px;height:14px;border-radius:2px;background:color-mix(in srgb,var(--ember1) 55%,var(--surface));flex:none}
 .ate-step{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
 /* Curseur d'hydratation — repère du minimum recommandé (manuel) */
 .hydra-track{position:relative;height:6px;border-radius:99px;background:var(--surface2);margin:0 0 7px}

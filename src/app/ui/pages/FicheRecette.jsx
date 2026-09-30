@@ -1530,8 +1530,8 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 {photoSlot}
                 <div className="fe-ident-champs">{descriptionChamp}</div>
               </div>
-              {/* 1 · Typologie */}
-              <div className="ate-lbl"><span className="ate-num">1</span> Typologie de pizza</div>
+              {/* 1 · Quelle pizza (la typologie) */}
+              <div className="ate-lbl"><span className="ate-num">1</span> Quelle pizza</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
                 {PRESETS.map((p) => {
                   const locked = presetLocked(p);
@@ -1573,8 +1573,27 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 </div>
               )}
 
-              {/* 2 · Force de la farine (W) — Manuel École Pizza + plage par typologie */}
-              <div className="ate-lbl"><span className="ate-num">2</span> Force de la farine</div>
+              {/* 2 · Combien — les quantités, remontées ici (demandé le 2026-09-30) : on décide
+                  COMBIEN de pâtons avant d'entrer dans la recette de la pâte. */}
+              <div className="ate-lbl"><span className="ate-num">2</span> Combien</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                <button className={`btn sm ${dpMode === "patons" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "patons")}>Par pâtons</button>
+                <button className={`btn sm ${dpMode === "farine" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "farine")}>Par farine</button>
+              </div>
+              <div className="grid cols-2" style={{ gap: 12, marginBottom: 4 }}>
+                {dpMode === "farine" ? (
+                  <div className="field" style={{ marginBottom: 8 }}><label>Farine disponible (kg)</label><input className="inp" type="number" min="0" step="0.5" value={dp.flourKg ?? 10} onChange={(e) => setDP("flourKg", Number(e.target.value))} /></div>
+                ) : (
+                  <div className="field" style={{ marginBottom: 8 }}><label>Nombre de pâtons</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
+                )}
+                <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
+              </div>
+              {dpMode === "farine" && <p className="hint" style={{ margin: "0 0 4px" }}>→ {effNb} pâtons de {patonG} g{reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</p>}
+
+              {/* 3 · La pâte — la recette : quelle force, quel empâtement, quelle hydratation. Les
+                  anciennes étapes 2-4 réunies sous une seule (demandé le 2026-09-30), en sous-sections. */}
+              <div className="ate-lbl" style={{ marginTop: 18 }}><span className="ate-num">3</span> La pâte</div>
+              <div className="ate-sub" style={{ marginTop: 4 }}>Force de la farine</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                 {W_BRACKETS.map((b) => {
                   const reco = wOk(b.w);
@@ -1594,8 +1613,8 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                   : <span style={{ color: "var(--ember1)" }}>Hors de la plage conseillée ({wRangeLabel}).</span>}
               </p>
 
-              {/* 3 · Empâtement (+ Autolyse) */}
-              <div className="ate-lbl"><span className="ate-num">3</span> Empâtement</div>
+              {/* Empâtement (+ Autolyse) — sous-section de « La pâte » */}
+              <div className="ate-sub">Empâtement</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
                 {curPreset.methods.map((m) => {
                   const locked = methodLocked(m);
@@ -1615,8 +1634,8 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 </button>
               </div>
 
-              {/* 4 · Hydratation (plage recommandée) + assaisonnement en % boulanger */}
-              <div className="ate-lbl"><span className="ate-num">4</span> Hydratation &amp; assaisonnement</div>
+              {/* Hydratation (plage recommandée) + assaisonnement — sous-section de « La pâte » */}
+              <div className="ate-sub">Hydratation &amp; assaisonnement</div>
               <HydraSlider val={num(dp.hydra)} recoMin={recoMin} recoMax={recoMax} eauPerKg={eauPerKg} set={setHydra} confirmed={napoLevFixed} />
               {/* Bassinage & hydratation totale — masqués pour un cahier confirmé (valeur unique fixée) */}
               {!napoLevFixed && (<>
@@ -1668,26 +1687,10 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 bounded={napoLevFixed ? { min: napoSpec.levureMin, max: napoSpec.levureMax, note: <>Cahier <b>{napoSpec.label}</b>, {napoSpec.levureNote}</> } : null} />
               {!napoLevFixed && yeastType === "seche_active" && <p className="hint" style={{ margin: "-2px 0 6px", fontSize: 11.5 }}>À réhydrater dans l'eau à ≈ 38 °C (jamais &gt; 50 °C, sinon elle meurt).</p>}
 
-              {/* 5 · Production : quantités & prix */}
-              <div className="ate-lbl" style={{ marginTop: 4 }}><span className="ate-num">5</span> Production</div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                <button className={`btn sm ${dpMode === "patons" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "patons")}>Par pâtons</button>
-                <button className={`btn sm ${dpMode === "farine" ? "primary" : "ghost"}`} onClick={() => setDP("mode", "farine")}>Par farine</button>
-              </div>
-              <div className="grid cols-2" style={{ gap: 12, marginBottom: 4 }}>
-                {dpMode === "farine" ? (
-                  <div className="field" style={{ marginBottom: 8 }}><label>Farine disponible (kg)</label><input className="inp" type="number" min="0" step="0.5" value={dp.flourKg ?? 10} onChange={(e) => setDP("flourKg", Number(e.target.value))} /></div>
-                ) : (
-                  <div className="field" style={{ marginBottom: 8 }}><label>Nombre de pâtons</label><input className="inp" type="number" min="1" value={r.servings} onChange={set("servings")} /></div>
-                )}
-                <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
-              </div>
-              {dpMode === "farine" && <p className="hint" style={{ margin: "0 0 8px" }}>→ {effNb} pâtons de {patonG} g{reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</p>}
-              {/* Les prix (farine, sel, huile, levure) sont descendus dans « Prix des ingrédients »
-                  ci-dessous : la Production ne garde que les quantités. */}
-
-              {/* Réglages avancés — repliés par défaut (progressive disclosure). Le coût / pâton reste
-                  calculé et affiché en direct dans le panneau, avec les prix indicatifs par défaut. */}
+              {/* 4 · Compléments — les réglages optionnels, repliés (progressive disclosure). Le
+                  coût / pâton reste calculé en direct dans le panneau, prix indicatifs par défaut.
+                  Les quantités sont remontées à l'étape 2 « Combien ». */}
+              <div className="ate-lbl" style={{ marginTop: 18, marginBottom: 10 }}><span className="ate-num">4</span> Compléments</div>
               <Collapse title={<><Icon name="coins" size={14} /> Prix des ingrédients</>} hint="sinon, prix indicatifs">
                 <div className="field" style={{ marginBottom: 10 }}><label>Prix de la farine (€/kg)</label><ChampMontant value={r.flour_price} onChange={set("flour_price")} exemple="1,20" /></div>
                 <div className="fe-prix-pate">
