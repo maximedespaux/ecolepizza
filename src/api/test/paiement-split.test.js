@@ -109,10 +109,23 @@ test('le serveur revérifie que la somme des paiements tombe sur le TTC', () => 
     // Le front peut se tromper ou être contourné : le contrôleur refuse une répartition qui ne
     // correspond pas au total. C'est la garde qui compte.
     const src = net('controllers/sale.controller.js');
-    assert.match(src, /Math\.abs\(somme - ttc\) > 0\.01/, 'la somme n\'est pas comparée au TTC');
+    /* EN CENTIMES ENTIERS. `Math.abs(somme - ttc) > 0.01` n'était pas une tolérance d'un centime :
+       en flottant, 120,01 − 120 vaut 0,01000000000000512 (refusé), 60,01 − 60 vaut
+       0,00999999999999801 (accepté). caisse-reglement.test.js l'éprouve sur le vrai contrôleur. */
+    assert.match(src, /Math\.abs\(Math\.round\(somme \* 100\) - Math\.round\(ttc \* 100\)\) > 1/,
+        'la somme n\'est pas comparée au TTC en centimes entiers');
+    assert.doesNotMatch(src, /Math\.abs\(somme - ttc\) > 0\.01/, 'une tolérance flottante n\'est pas un centime');
     assert.match(src, /ne correspond pas au total à régler/, 'aucun message clair de refus');
     // Vérifié seulement quand la vente est payée : une vente impayée n'a pas de règlement.
     assert.match(src, /status === 'PAYEE' && parts\.length/, 'la vérification n\'est pas conditionnée au paiement');
+    /* ET AVANT TOUTE ÉCRITURE. Placé après le numéro, le stock et la vente, le refus laissait un
+       trou dans la séquence des factures, un stock faux et une vente fantôme. */
+    const checkout = src.slice(src.indexOf('const checkout'));
+    const refus = checkout.indexOf('ne correspond pas au total à régler');
+    for (const ecriture of ['nextNumberForEmitter(conn, emetteur)', 'UPDATE shop_settings SET next_number', 'UPDATE inventory_item', 'INSERT INTO material_sale']) {
+        const i = checkout.indexOf(ecriture);
+        assert.ok(i > 0 && refus < i, `le refus doit précéder « ${ecriture} »`);
+    }
 });
 
 test('le détail n\'est stocké qu\'à partir de deux moyens, et si la colonne existe', () => {

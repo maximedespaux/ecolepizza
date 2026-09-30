@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~5 s** (282 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2336 tests — 2329 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~5 s** (283 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-09-30** : **2348 tests — 2341 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -231,10 +231,15 @@ panier à deux taux sur quatre, le total ENCAISSÉ est à un centime du total FA
 48,19 € encaissés, 48,20 € sur la facture) — jamais à deux. La facturation d'une demande boutique le tolère
 (`invoiceShopRequest`, qui vérifie que le règlement tombe sur le total du PDF, AVANT de prendre un numéro). Tests :
 `boutique-reglement.test.js`. /factures compare encore en flottant, sans effet : son écran (`ttcDe`) calcule comme le
-PDF, un test le tient. ⚠️ **LA CAISSE, NON CORRIGÉE (relevé le 2026-09-30)** : elle compare en flottant, et APRÈS avoir
-pris le numéro, décrémenté le stock et écrit la vente. Son écran arrondit par `Math.round`, son serveur par
-`toFixed` : ils se séparent quand la TVA tombe sur un demi-centime, et la vente d'UN article à 1,00 € ou 29,00 € HT
-à 5,5 % (0,45 € à 10 %) est refusée, écritures faites. À 20 %, jamais.
+PDF, un test le tient. **LA CAISSE, CORRIGÉE LE MÊME JOUR** : elle comparait en flottant, et APRÈS avoir pris le
+numéro, décrémenté le stock et écrit la vente ; son écran arrondissait par `Math.round`, son serveur par `toFixed`, et
+la vente d'UN article à 1,00 € ou 29,00 € HT à 5,5 % (0,45 € à 10 %) était refusée, écritures faites. Désormais tout se
+vérifie AVANT le numéro, en centimes entiers, et l'écran comme le serveur calculent le total par la MÊME règle
+(`lib/totalCaisse.js`, une copie de chaque côté : centimes entiers, TVA arrondie une fois, le demi-centime vers le haut
+— l'arrondi du PDF, qu'un article seul encaisse exactement). Tests : `caisse-reglement.test.js`. Reste, non tranché :
+sur plusieurs taux, la caisse arrondit la TVA une fois et la facture par taux (le centime ci-dessus) ; et sur plusieurs
+lignes d'un même taux, `ventilerTva` arrondit une somme FLOTTANTE, qui passe parfois sous un demi-centime — le PDF
+imprime alors un centime de moins (0,26 % de paniers tirés au hasard).
 
 ---
 
