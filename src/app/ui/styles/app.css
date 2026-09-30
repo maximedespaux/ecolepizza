@@ -6224,8 +6224,22 @@ label .requis {
 .mail-regle-form{border:1px dashed var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
 /* Les cinq champs du « quand » sur une ligne, et qui se replient : « 3 mois après la fin de la
    session, formation NIV1 » se lit comme une phrase, pas comme un formulaire. */
-.mail-regle-quand{display:grid;grid-template-columns:90px 120px 110px 1fr 1fr;gap:10px;align-items:end}
-@media(max-width:820px){ .mail-regle-quand{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} }
+/* La ligne « quand » porte 3 champs (date : combien / unité / sens) OU 2 (document : modèle /
+   destinataire) : un flex qui s'enroule s'adapte aux deux sans grille figée. */
+.mail-regle-quand{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.mail-regle-quand .field{flex:1 1 160px;min-width:0}
+.mail-regle-quand .field:first-child{flex-basis:110px}
+/* Ciblage d'une règle : formation / stagiaire / entreprise. */
+.mail-regle-cible{margin:12px 0 4px}
+.mail-cible-seg{display:flex;gap:6px;flex-wrap:wrap}
+.mail-cible-search{position:relative}
+.mail-cible-res{list-style:none;margin:4px 0 0;padding:4px;position:absolute;z-index:6;left:0;right:0;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-1);max-height:230px;overflow:auto}
+.mail-cible-res li{margin:0}
+.mail-cible-res li button{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 9px;border-radius:7px;font-size:13px;color:var(--text);cursor:pointer}
+.mail-cible-res li button:hover{background:var(--surface3)}
+.mail-cible-chip{display:inline-flex;align-items:center;gap:12px;padding:6px 12px;border-radius:99px;background:var(--surface3);font-size:13px}
+@media(max-width:820px){ .mail-regle-quand .field{flex-basis:calc(50% - 5px)} }
 @media(max-width:520px){ .mail-regle-quand{grid-template-columns:minmax(0,1fr)} }
 /* « Parcours complet, formation pas encore marquée terminée » : un constat et un geste, sur la
    carte du parcours. Ton neutre et non vert : ce n'est pas une réussite de plus à célébrer,

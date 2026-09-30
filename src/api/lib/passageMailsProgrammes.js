@@ -24,6 +24,7 @@
 const { FUSEAU } = require('./fuseau.js');
 const { DECLENCHEURS, MAX_PAR_PASSAGE, dateCible, jourDe } = require('./mailsProgrammes.js');
 const { rendre } = require('./mailsPersonnalises.js');
+const { colonneExiste } = require('./colonnes.js');
 
 /** Aujourd'hui, dans le fuseau de l'organisme — le serveur, lui, tourne en UTC. */
 function aujourdhuiA(zone = FUSEAU, instant = new Date()) {
@@ -38,8 +39,9 @@ const JOURS_MAX = { jour: 1, mois: 31, annee: 366 };
 const decale = (jour, n) => new Date(Date.UTC(...jour.split('-').map(Number).map((v, i) => (i === 1 ? v - 1 : v))) + n * 86400000)
     .toISOString().slice(0, 10);
 
-/** Les jetons qu'un message programmé peut porter. L'écran propose exactement ceux-là. */
-const JETONS_REGLE = ['Prénom', 'Nom', 'Organisme', 'Formation', 'Session', 'Date de fin', 'Date de début'];
+/** Les jetons qu'un message programmé peut porter. L'écran propose exactement ceux-là. {Document}
+   ne se remplit que pour une règle d'événement (le titre du document) ; ailleurs il sort vide. */
+const JETONS_REGLE = ['Prénom', 'Nom', 'Organisme', 'Formation', 'Session', 'Date de fin', 'Date de début', 'Document'];
 
 /**
  * Un passage. `envoyer` et `notifierEchec` sont injectés : le test n'ouvre ni base ni SMTP.
@@ -47,10 +49,15 @@ const JETONS_REGLE = ['Prénom', 'Nom', 'Organisme', 'Formation', 'Session', 'Da
  */
 async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, instant = new Date() }) {
     const aujourdhui = aujourdhuiA(zone, instant);
+    /* Le ciblage stagiaire / entreprise arrive avec la 196 : sans les colonnes, on lit les règles
+       comme avant (aucun ciblage). Les règles d'ÉVÉNEMENT, elles, sont ignorées ici quoi qu'il
+       arrive — leur déclencheur n'est pas dans DECLENCHEURS (voir la boucle : `if (!d) continue`). */
+    const aCible = await colonneExiste(conn, 'mail_regle', 'learner_id');
+    const colsCible = aCible ? ', learner_id, company_id' : '';
     let regles;
     try {
         [regles] = await conn.query(
-            `SELECT id, organization_id, nom, declencheur, sens, decalage, unite, program_id,
+            `SELECT id, organization_id, nom, declencheur, sens, decalage, unite, program_id${colsCible},
                     objet, corps, DATE_FORMAT(depuis, '%Y-%m-%d') AS depuis
                FROM mail_regle WHERE actif = 1`);
     } catch (err) {
@@ -68,6 +75,10 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
         const haut = decale(aujourdhui, r.sens === 'avant' ? marge : 2);
         const params = [r.organization_id, bas, haut];
         if (r.program_id) params.push(r.program_id);
+        /* CIBLAGE (migration 196) : un stagiaire précis, ou une entreprise précise (tous ses
+           dossiers), au lieu d'une formation entière. NULL = pas de restriction de ce côté. */
+        if (aCible && r.learner_id) params.push(r.learner_id);
+        if (aCible && r.company_id) params.push(r.company_id);
         const [lignes] = await conn.query(
             `SELECT e.id AS enrollment_id, l.id AS learner_id, l.first_name, l.last_name, l.email,
                     p.title AS formation, p.code AS code,
@@ -80,6 +91,8 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
                LEFT JOIN training_program p ON p.id = s.program_id
               WHERE e.organization_id = ? AND ${d.colonne} BETWEEN ? AND ?
                     ${r.program_id ? 'AND s.program_id = ?' : ''}
+                    ${aCible && r.learner_id ? 'AND e.learner_id = ?' : ''}
+                    ${aCible && r.company_id ? 'AND e.company_id = ?' : ''}
               ORDER BY ${d.colonne}`, params);
         if (!lignes.length) continue;
 

@@ -4,6 +4,8 @@ const { logAudit } = require('../lib/audit.js');
 const { colonneExiste, colonneOuNull } = require('../lib/colonnes.js');
 // Réponse libre (type TEXT, migration 164) : compte des mots et limite, les mêmes partout.
 const { compterMots, motsMaxDe, reponseLibreDisponible, CARACTERES_MAX } = require('../lib/reponseLibre.js');
+// Crochet des règles d'e-mail déclenchées par un document (migration 196) — jamais bloquant.
+const { declencherPuisOublier } = require('../lib/crochetMailsDocument.js');
 // Un QCM peut servir à PLUSIEURS formations (migration 163) : toute lecture du rattachement passe par là.
 const { formationsDesQcm, jourPour, formationsDemandees, enregistrerFormations } = require('../lib/qcmFormations.js');
 
@@ -797,6 +799,9 @@ const submitQuiz = async (req, res) => {
             // Le document est considéré fait (signé) une fois le QCM rempli.
             await cx.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW() WHERE id = ?", [req.params.documentId]);
             await cx.commit();
+            /* APRÈS le commit seulement : un e-mail ne doit pas partir pour un QCM dont la transaction
+               aurait été annulée. Crochet à part, jamais bloquant (migration 196). */
+            declencherPuisOublier(db, { orgId: req.user.organization_id, documentId: req.params.documentId, evenement: 'document_signe' });
         } catch (e) {
             await cx.rollback().catch(() => {});
             throw e;

@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2439 tests — 2432 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-01** : **2451 tests — 2444 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,29 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**196 est À JOUER** (`196_mail_regles_document.sql`, les règles d'e-mail déclenchées par un DOCUMENT + le CIBLAGE d'un
+stagiaire/entreprise — demandé le 2026-09-30, en prolongement des envois programmés (178/179)). Une règle partait jusqu'ici
+d'une DATE (fin de session, début, inscription) décalée, filtrée au plus par formation, et allait au stagiaire. On ajoute
+deux déclencheurs d'ÉVÉNEMENT — `document_envoye`, `document_signe` (valeurs de la colonne `declencheur` qui existe déjà) —
+qui partent À L'INSTANT où le document change d'état, pour un MODÈLE au choix (`template_slug`) ; et, sur toutes les règles,
+`destinataire` ('stagiaire' / 'entreprise' / 'stagiaire_entreprise') + `learner_id` / `company_id` (viser une personne ou une
+entreprise précise). Une table `mail_regle_doc` (regle, document, destinataire) déduplique les événements — `mail_regle_envoi`
+reste pour les règles de date. **Décidé avec l'école (AskUserQuestion) : les deux événements, filtrables par modèle ; le
+stagiaire ET/OU l'entreprise ; à l'instant.** LE CROCHET (`lib/crochetMailsDocument.js`, `declencherPuisOublier`) est appelé
+après CHAQUE transition d'envoi/signature (sendDocument, sendPreparedDoc, signDocument via `applyLearnerSignature` /
+`applySlotSignature`, et le QCM APRÈS son commit), à part et JAMAIS bloquant : un e-mail raté ne fait pas échouer une
+signature. L'envoyeur est partagé avec le passage (`lib/envoiGroupe.js`, une seule copie — server.js le disait déjà). Le
+destinataire « entreprise » = l'e-mail du compte du représentant (`user.email` via `company.user_id`), sinon `company.email`.
+Le jeton {Document} (titre du document) s'ajoute aux jetons des règles. Sans la migration, rien ne casse : les règles de
+date marchent comme avant, créer une règle d'événement ou avec ciblage répond 503, et le crochet ne trouve pas de colonnes
+(il sort). **Elle se vérifie par l'API, sans SQL** : `GET /api/mailing/regles` rend `destinataire` sur une règle ; créer une
+règle « document signé » répond 200 (et non 503). Ou une requête, qui doit rendre 5 (4 colonnes + la table) :
+`SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='mail_regle' AND column_name IN ('template_slug','destinataire','learner_id','company_id')) + (SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='mail_regle_doc');`
+⚠️ Son revert retire les colonnes et la table : les règles d'événement déjà créées deviennent inertes (le passage ignore un
+déclencheur inconnu), les règles de date repartent au stagiaire sans ciblage. Tests : `reglesDocument` + `crochet-mails-document`
+(le cœur), `mails-programmes` (lireRegle événement), et l'envoyeur partagé (`mails-programmes`, `mailing-personnalise`).
 
 **195 est À JOUER** (`195_reglement_moyen_paiement.sql`, le MOYEN DE PAIEMENT du règlement — demandé le 2026-09-30, dans la
 foulée de la carte « Règlement » (194) : « le type de paiement, et si chèque un n°, si virement une référence »). Quatre

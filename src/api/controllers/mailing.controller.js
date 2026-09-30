@@ -8,6 +8,9 @@ const {
 } = require('../lib/mailsPersonnalises.js');
 const { DECLENCHEURS, UNITES, SENS, phraseRegle, lireRegle } = require('../lib/mailsProgrammes.js');
 const { JETONS_REGLE } = require('../lib/passageMailsProgrammes.js');
+/* Les règles déclenchées par un document + le ciblage stagiaire/entreprise (migration 196). */
+const { DECLENCHEURS_DOC, DESTINATAIRES, estDeclencheurDoc } = require('../lib/reglesDocument.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 const modeles = require('../lib/mailTemplates.js');
 
 /**
@@ -489,40 +492,74 @@ const supprimerImage = async (req, res) => {
 /* ── LES ENVOIS PROGRAMMÉS (migration 179) ─────────────────────────────────────────────────── */
 
 const MIGRATION_179 = 'Migration 179 non jouée : les envois programmés ne sont pas encore disponibles.';
+const MIGRATION_196 = 'Migration 196 non jouée : les règles par document et le ciblage stagiaire/entreprise ne sont pas encore disponibles.';
+
+/* LE VOCABULAIRE DE L'ÉCRAN, au même endroit que les règles (pas une liste recopiée à côté) :
+   déclencheurs de date ET d'événement, destinataires, unités, sens, modèles de document, jetons. */
+function catalogueRegles(modeles = []) {
+    return {
+        declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
+        /* Les deux déclencheurs d'événement (document envoyé / signé), à part : l'écran cache le
+           décalage pour eux, et montre le filtre par modèle. */
+        declencheursDoc: Object.entries(DECLENCHEURS_DOC).map(([cle, d]) => ({ cle, libelle: d.libelle })),
+        destinataires: Object.entries(DESTINATAIRES).map(([cle, libelle]) => ({ cle, libelle })),
+        unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
+        sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
+        modeles,
+        jetons: JETONS_REGLE,
+    };
+}
 
 /** GET /api/mailing/regles — les règles, leur phrase, et ce qu'elles ont déjà envoyé. */
 const getRegles = async (req, res) => {
     try {
-        const [rows] = await db.promise().query(
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        /* Les modèles de document, pour filtrer une règle d'événement (« quand CE modèle est signé »). */
+        let modeles = [];
+        try {
+            const [ms] = await conn.query(
+                "SELECT slug, COALESCE(label, slug) AS label FROM document_template WHERE organization_id = ? AND deleted = 0 ORDER BY label",
+                [orgId]);
+            modeles = ms;
+        } catch (e) { if (!sansTable(e)) throw e; }
+        /* Le ciblage et le destinataire arrivent avec la 196 : sans les colonnes, on lit les règles
+           d'avant (stagiaire, aucun ciblage) et les envois des règles d'événement n'existent pas. */
+        const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
+        const cols196 = a196
+            ? `, r.template_slug, r.destinataire, r.learner_id, r.company_id,
+               tp.label AS modele_titre,
+               NULLIF(TRIM(CONCAT_WS(' ', tl.civility, tl.first_name, tl.last_name)), '') AS cible_stagiaire,
+               tc.name AS cible_entreprise`
+            : '';
+        const join196 = a196
+            ? `LEFT JOIN document_template tp ON tp.organization_id = r.organization_id AND tp.slug = r.template_slug AND tp.deleted = 0
+               LEFT JOIN learner tl ON tl.id = r.learner_id
+               LEFT JOIN company tc ON tc.id = r.company_id`
+            : '';
+        /* Les envois d'une règle d'ÉVÉNEMENT vivent dans mail_regle_doc, ceux d'une règle de DATE dans
+           mail_regle_envoi ; une règle n'est que de l'une des deux familles, donc on additionne. */
+        const envDoc = a196 ? "+ (SELECT COUNT(*) FROM mail_regle_doc y WHERE y.regle_id = r.id AND y.statut = 'envoye')" : '';
+        const echDoc = a196 ? "+ (SELECT COUNT(*) FROM mail_regle_doc y WHERE y.regle_id = r.id AND y.statut = 'echec')" : '';
+        const [rows] = await conn.query(
             `SELECT r.id, r.nom, r.declencheur, r.sens, r.decalage, r.unite, r.program_id,
                     r.objet, r.corps, r.actif, DATE_FORMAT(r.depuis, '%Y-%m-%d') AS depuis,
-                    p.code AS formation_code, p.title AS formation_titre,
-                    (SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'envoye') AS envoyes,
-                    (SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'echec') AS echecs,
+                    p.code AS formation_code, p.title AS formation_titre${cols196},
+                    ((SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'envoye') ${envDoc}) AS envoyes,
+                    ((SELECT COUNT(*) FROM mail_regle_envoi x WHERE x.regle_id = r.id AND x.statut = 'echec') ${echDoc}) AS echecs,
                     (SELECT DATE_FORMAT(MAX(x.envoye_le), '%Y-%m-%d %H:%i') FROM mail_regle_envoi x WHERE x.regle_id = r.id) AS dernier
-               FROM mail_regle r LEFT JOIN training_program p ON p.id = r.program_id
-              WHERE r.organization_id = ? ORDER BY r.created_at DESC`, [req.user.organization_id]);
+               FROM mail_regle r
+               LEFT JOIN training_program p ON p.id = r.program_id
+               ${join196}
+              WHERE r.organization_id = ? ORDER BY r.created_at DESC`, [orgId]);
         res.json({
             data: rows.map((r) => ({ ...r, phrase: phraseRegle(r) })),
-            /* L'ÉCRAN A BESOIN DU VOCABULAIRE, pas d'une liste recopiée à côté : déclencheurs,
-               unités, sens et jetons viennent d'ici, donc du même endroit que la règle. */
-            catalogue: {
-                declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
-                unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
-                sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
-                jetons: JETONS_REGLE,
-            },
+            catalogue: catalogueRegles(modeles),
             disponible: true,
         });
     } catch (err) {
         if (sansTable(err)) {
-            return res.json({ data: [], disponible: false, message: MIGRATION_179,
-                catalogue: {
-                    declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
-                    unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
-                    sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
-                    jetons: JETONS_REGLE,
-                } });
+            return res.json({ data: [], disponible: false, message: MIGRATION_179, catalogue: catalogueRegles() });
         }
         console.error('Erreur lecture règles mail :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -541,13 +578,28 @@ const creerRegle = async (req, res) => {
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
     const v = lu.valeurs;
     try {
+        const conn = db.promise();
+        const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
+        /* Une règle d'ÉVÉNEMENT, ou qui cible / choisit un destinataire, a besoin des colonnes de la
+           196 : le dire (503) plutôt que d'écrire une règle amputée. Une règle de DATE ordinaire passe. */
+        const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
+        if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO mail_regle (id, organization_id, nom, declencheur, sens, decalage, unite,
-                    program_id, objet, corps, actif, depuis, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)`,
-            [id, req.user.organization_id, v.nom, v.declencheur, v.sens, v.decalage, v.unite,
-                v.program_id, v.objet, v.corps, v.actif, req.user.id]);
+        if (a196) {
+            await conn.query(
+                `INSERT INTO mail_regle (id, organization_id, nom, declencheur, sens, decalage, unite,
+                        program_id, template_slug, destinataire, learner_id, company_id, objet, corps, actif, depuis, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)`,
+                [id, req.user.organization_id, v.nom, v.declencheur, v.sens, v.decalage, v.unite,
+                    v.program_id, v.template_slug, v.destinataire, v.learner_id, v.company_id, v.objet, v.corps, v.actif, req.user.id]);
+        } else {
+            await conn.query(
+                `INSERT INTO mail_regle (id, organization_id, nom, declencheur, sens, decalage, unite,
+                        program_id, objet, corps, actif, depuis, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)`,
+                [id, req.user.organization_id, v.nom, v.declencheur, v.sens, v.decalage, v.unite,
+                    v.program_id, v.objet, v.corps, v.actif, req.user.id]);
+        }
         logAudit(req, 'mail.regle', 'MailRegle', id);
         res.status(201).json({ data: { id, ...v, phrase: phraseRegle(v) } });
     } catch (err) {
@@ -563,12 +615,25 @@ const modifierRegle = async (req, res) => {
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
     const v = lu.valeurs;
     try {
-        const [r] = await db.promise().query(
-            `UPDATE mail_regle SET nom = ?, declencheur = ?, sens = ?, decalage = ?, unite = ?,
-                    program_id = ?, objet = ?, corps = ?, actif = ?
-              WHERE id = ? AND organization_id = ?`,
-            [v.nom, v.declencheur, v.sens, v.decalage, v.unite, v.program_id, v.objet, v.corps,
-                v.actif, req.params.id, req.user.organization_id]);
+        const conn = db.promise();
+        const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
+        const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
+        if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
+        const [r] = a196
+            ? await conn.query(
+                `UPDATE mail_regle SET nom = ?, declencheur = ?, sens = ?, decalage = ?, unite = ?,
+                        program_id = ?, template_slug = ?, destinataire = ?, learner_id = ?, company_id = ?,
+                        objet = ?, corps = ?, actif = ?
+                  WHERE id = ? AND organization_id = ?`,
+                [v.nom, v.declencheur, v.sens, v.decalage, v.unite, v.program_id, v.template_slug,
+                    v.destinataire, v.learner_id, v.company_id, v.objet, v.corps, v.actif,
+                    req.params.id, req.user.organization_id])
+            : await conn.query(
+                `UPDATE mail_regle SET nom = ?, declencheur = ?, sens = ?, decalage = ?, unite = ?,
+                        program_id = ?, objet = ?, corps = ?, actif = ?
+                  WHERE id = ? AND organization_id = ?`,
+                [v.nom, v.declencheur, v.sens, v.decalage, v.unite, v.program_id, v.objet, v.corps,
+                    v.actif, req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Règle introuvable.' });
         logAudit(req, 'mail.regle', 'MailRegle', req.params.id);
         res.json({ data: { id: req.params.id, ...v, phrase: phraseRegle(v) } });

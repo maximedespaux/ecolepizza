@@ -332,7 +332,8 @@ test('un message écrit par l\'école n\'est pas « automatique », et la répon
     /* L'APERÇU MONTRE LE MÊME PIED que le courrier : une école qui relit son message doit voir la
        phrase que le stagiaire lira, pas une autre. */
     assert.match(src, /repondreA: orgContext\.orgInfo\(\)\.email \|\| null,/);
-    /* MÊME RÈGLE POUR UN ENVOI PROGRAMMÉ : il est déclenché par une date, mais son texte a été
-       écrit par quelqu'un — une relance « trois mois après la fin » appelle une réponse. */
-    assert.match(sansCommentaires(lire(path.join(API, 'server.js'))), /const repondreA = org\.orgInfo\(\)\.email \|\| null;/);
+    /* MÊME RÈGLE POUR UN ENVOI AUTOMATIQUE : il est déclenché par une date (ou un document, 196),
+       mais son texte a été écrit par quelqu'un — une relance appelle une réponse. L'envoyeur est
+       désormais partagé (lib/envoiGroupe.js) entre le passage et le crochet des documents. */
+    assert.match(sansCommentaires(lire(path.join(API, 'lib/envoiGroupe.js'))), /const repondreA = org\.orgInfo\(\)\.email \|\| null;/);
 });
