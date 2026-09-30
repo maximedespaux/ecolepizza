@@ -198,7 +198,7 @@ test('l\'écran dit qu\'une règle ne rattrape pas le passé, et montre ce qu\'e
     /* SUPPRIMER SE CONFIRME : la mémoire des envois part avec la règle. */
     assert.match(page, /window\.confirm\(`Supprimer « \$\{r\.nom\} » \?/);
     const css = lire(path.join(UI, 'styles/app.css'));
-    assert.match(css, /\.mail-regles li\.off\{opacity/, 'une règle en pause se voit sans se lire');
+    assert.match(css, /\.mail-regle\.off\{opacity/, 'une règle en pause se voit sans se lire');
 });
 
 test('la 179 crée les deux tables, avec la clé qui empêche le doublon', () => {
