@@ -76,3 +76,18 @@ test('fillHtml : un jeton perso QUI EST un bloc est développé quand on le réf
   assert.match(out, /1\. M\. Jean DUPONT/);
   assert.match(out, /2\. Mme Marie MARTIN/);
 });
+
+test('fillHtml : un jeton perso QUI EST un bloc, appelé en PUCE, s\'insère tel qu\'on l\'a écrit — « $ » compris', () => {
+  /* Relevé le 2026-09-30. Son modèle s'insérait dans le document en chaîne de remplacement, où
+     `replace` lit `$$` (un seul « $ »), `$'` (toute la SUITE du document), « $` » (tout son début)
+     et `$&` (la puce, remplie ensuite avec le stagiaire DU DOSSIER). Seule la puce y était exposée :
+     la forme {custom:clé} du test ci-dessus passe par split/join. */
+  const doc = '<p>Avant</p><p><span data-token="custom:liste">liste</span></p><p>Après</p>';
+  for (const debut of ['Tarif 10 $$ :', 'Lot $& :', 'Fin $\' :', 'Début $` :']) {
+    const ctx = {
+      groupStagiaires: [{ last_name: 'DUPONT' }], learner: { last_name: 'DOSSIER' },
+      customTokens: [{ token_key: 'liste', template: `${debut} {#Stagiaires}{Nom}<br>{/Stagiaires}` }],
+    };
+    assert.equal(fillHtml(doc, ctx), `<p>Avant</p><p>${debut} DUPONT<br></p><p>Après</p>`, debut);
+  }
+});
