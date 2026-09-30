@@ -213,6 +213,17 @@ function Demande({ d, onChange, onErreur }) {
 }
 
 /**
+ * Ce qui empêche de créer la facture, en toutes lettres — ou `null`. DEUX cas, et pas `valid` :
+ *   · un montant ILLISIBLE : il valait 0, sa part disparaissait, et le dernier moyen prenait tout ;
+ *   · un DÉPASSEMENT : le composant l'affichait en rouge (« Dépassement de 90 € »)… et la facture
+ *     partait quand même, avec des « Moyens et montants réglés » au-dessus de son total.
+ * `valid` est faux dans un TROISIÈME cas, qui ne doit PAS bloquer : aucun moyen de paiement n'est
+ * configuré, la ligne n'a donc pas de moyen. Aucune part ne part alors, et la facture naît payée
+ * sans règlement détaillé — on doit pouvoir facturer ainsi, et le serveur l'accepte.
+ */
+const blocageReglement = (reglement) => reglement.illisible || (reglement.reste < -0.005 ? reglement.motif : null);
+
+/**
  * Choix avant émission : destinataire, entité émettrice, modèle.
  *
  * Les trois se décident ICI, et pas au panier du stagiaire : lui demander qui paie l'obligerait à
@@ -236,6 +247,7 @@ function FacturerModal({ d, busy, onClose, onValider }) {
   const totalTtc = (d.lines || [])
     .filter((l) => l.source === "ECOLE" && l.unit_price_ht != null)
     .reduce((s2, l) => s2 + l.unit_price_ht * l.qty * (1 + l.tax_rate / 100), 0);
+  const blocage = blocageReglement(resolvePayments(paiements, totalTtc));
   /* Échéance au JOUR MÊME par défaut : à ce stade le paiement a déjà eu lieu (« Payé » précède
    * « Facturé »), la facture ne fait que le constater — rien n'est dû plus tard. Modifiable pour
    * le cas où l'on facture une entreprise qui règlera à réception. */
@@ -337,10 +349,10 @@ function FacturerModal({ d, busy, onClose, onValider }) {
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Annuler</button>
-          {/* Un montant ILLISIBLE bloque : il valait 0, sa part disparaissait, et le dernier moyen
-              prenait tout sans un mot. Le composant le dit sous les lignes ; le bouton attend. */}
-          <button className="btn primary" disabled={busy || !!resolvePayments(paiements, totalTtc).illisible}
-            title={resolvePayments(paiements, totalTtc).illisible || undefined}
+          {/* Un montant ILLISIBLE ou un DÉPASSEMENT bloque (cf. blocageReglement). Le composant le
+              dit sous les lignes ; le bouton attend, et son info-bulle dit pourquoi. */}
+          <button className="btn primary" disabled={busy || !!blocage}
+            title={blocage || undefined}
             onClick={() => onValider({
               bill_to: billTo,
               billing_profile_id: emetteurId || null,

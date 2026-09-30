@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~5 s** (280 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2318 tests — 2311 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~5 s** (281 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-09-30** : **2328 tests — 2321 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -221,6 +221,20 @@ React ni le navigateur ne préviennent. Or mysql2 rend un DECIMAL en CHAÎNE, av
 TTC calculé au vrai taux ; seul l'article à 20 % s'affichait juste, par hasard. Une valeur de la base se ramène à
 l'écriture des options AVANT d'entrer dans l'état (`tauxEnListe`, Inventaire.jsx), et une valeur enregistrée hors de
 la liste y reste proposée (`tauxProposes` ; même idée pour la forme juridique, Reglages.jsx). Tests : `inventaire-tva.test.js`.
+
+**« Un centime de tolérance » se compte en centimes ENTIERS — et ce centime existe** (2026-09-30).
+`Math.abs(somme - ttc) > 0.01` n'est pas une tolérance d'un centime : en flottant, 120,01 − 120 vaut
+0,01000000000000512 (refusé) et 60,01 − 60 vaut 0,00999999999999801 (accepté). Comparer `Math.round(x * 100)`.
+Et l'écart n'a rien de théorique : la facture arrondit la TVA PAR TAUX (`ventilerTva`), quand le panier du stagiaire,
+la carte d'une demande, la fenêtre « Facturer la demande » et la caisse additionnent les TTC de ligne. Sur près d'un
+panier à deux taux sur quatre, le total ENCAISSÉ est à un centime du total FACTURÉ (33,33 € à 20 % et 7,77 € à 5,5 % :
+48,19 € encaissés, 48,20 € sur la facture) — jamais à deux. La facturation d'une demande boutique le tolère
+(`invoiceShopRequest`, qui vérifie que le règlement tombe sur le total du PDF, AVANT de prendre un numéro). Tests :
+`boutique-reglement.test.js`. /factures compare encore en flottant, sans effet : son écran (`ttcDe`) calcule comme le
+PDF, un test le tient. ⚠️ **LA CAISSE, NON CORRIGÉE (relevé le 2026-09-30)** : elle compare en flottant, et APRÈS avoir
+pris le numéro, décrémenté le stock et écrit la vente. Son écran arrondit par `Math.round`, son serveur par
+`toFixed` : ils se séparent quand la TVA tombe sur un demi-centime, et la vente d'UN article à 1,00 € ou 29,00 € HT
+à 5,5 % (0,45 € à 10 %) est refusée, écritures faites. À 20 %, jamais.
 
 ---
 

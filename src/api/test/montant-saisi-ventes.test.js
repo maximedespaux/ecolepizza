@@ -314,9 +314,14 @@ test('L\'ÉCRAN — le règlement ventilé (caisse, factures, boutique) lit « 3
     assert.match(src, /<input className="inp mono" inputMode="decimal"/);
 
     /* LES DEMANDES BOUTIQUE envoyaient les parts sans regarder : une part illisible, lue 0, y
-       disparaissait, et le dernier moyen prenait tout. Le bouton attend désormais. */
-    assert.match(lireUi('pages/DemandesBoutique.jsx'),
-        /disabled=\{busy \|\| !!resolvePayments\(paiements, totalTtc\)\.illisible\}/);
+       disparaissait, et le dernier moyen prenait tout. Le bouton attend désormais — par
+       `blocageReglement`, qui arrête aussi un dépassement (cf. boutique-reglement.test.js). */
+    const { blocageReglement } = bloc('pages/DemandesBoutique.jsx', 'const blocageReglement', 'function FacturerModal', ['blocageReglement']);
+    assert.strictEqual(blocageReglement(ko), ko.illisible, 'l\'illisible bloque, et c\'est lui que le bouton dit');
+    assert.strictEqual(blocageReglement(ok), null);
+    const page = lireUi('pages/DemandesBoutique.jsx');
+    assert.match(page, /const blocage = blocageReglement\(resolvePayments\(paiements, totalTtc\)\);/);
+    assert.match(page, /disabled=\{busy \|\| !!blocage\}/);
 });
 
 test('L\'ÉCRAN — la caisse lit « 12,5 », borne sous les yeux, et bloque l\'encaissement sur l\'illisible', () => {
