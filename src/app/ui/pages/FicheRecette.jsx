@@ -1305,6 +1305,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
 
   const panneau = isPate ? (
     <div className="card dough-result fe-panel">
+      <div className="fe-panel-corps">
               <div className="eyebrow" style={{ color: "rgba(255,255,255,.7)", WebkitTextFillColor: "rgba(255,255,255,.7)" }}>{curPreset.nom} · empâtement {String(dp.method).toLowerCase()}{dp.autolyse ? " + autolyse" : ""}</div>
               <div style={{ font: "800 24px/1.1 var(--font-d)", margin: "4px 0 2px" }}>{gfmt(totalDough)} de pâte</div>
               <div style={{ color: "rgba(255,255,255,.7)", fontSize: 12, marginBottom: 12 }}>{effNb} pâtons de {patonG} g{dpMode === "farine" && reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</div>
@@ -1334,10 +1335,12 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
               </div>
               <p className="hint" style={{ color: "rgba(255,255,255,.75)", margin: "12px 0 0" }}>Importable dans une réalisation comme ingrédient, à son coût / pâton.</p>
       <UtiliseeDans liste={usedIn} kind="PATE" coutDe={(u) => (u.unit === "piece" ? num(u.qty) * perUnit : null)} onOpen={ouvrirFiche} />
+      </div>
       {actions}
     </div>
   ) : isPrep ? (
     <div className="card dough-result fe-panel">
+      <div className="fe-panel-corps">
       <span className="fe-panel-eyebrow">Préparation</span>
       <div className="fe-panel-kpi">
         <span className="fe-panel-lbl">{garnGrand.lbl}</span>
@@ -1351,10 +1354,12 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
         {cf.perte != null && Math.abs(cf.perte) >= 0.005 && <Row label={cf.perte < 0 ? "Perte à la préparation" : "Gain à la préparation"} value={pctSigne(cf.perte)} accent />}
       </div>
       <UtiliseeDans liste={usedIn} kind="PREPARATION" coutDe={coutPrepDe} onOpen={ouvrirFiche} />
+      </div>
       {actions}
     </div>
   ) : (
     <div className="card dough-result fe-panel">
+      <div className="fe-panel-corps">
       <span className="fe-panel-eyebrow">Réalisation · {r.type}</span>
       <div className="fe-panel-kpi">
         <span className="fe-panel-lbl">Prix conseillé</span>
@@ -1376,6 +1381,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
         <span>pizzas</span>
         <b className="chiffres">{euroFixe(cf.lot)} de matière</b>
       </label>
+      </div>
       {actions}
     </div>
   );
