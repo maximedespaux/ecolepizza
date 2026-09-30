@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2429 tests — 2422 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2439 tests — 2432 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,30 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**195 est À JOUER** (`195_reglement_moyen_paiement.sql`, le MOYEN DE PAIEMENT du règlement — demandé le 2026-09-30, dans la
+foulée de la carte « Règlement » (194) : « le type de paiement, et si chèque un n°, si virement une référence »). Quatre
+colonnes sur `enrollment` : `acompte_moyen` / `acompte_ref` / `solde_moyen` / `solde_ref` (varchar, non enum : un moyen de
+plus ne demandera pas de migration). **SÉPARÉMENT acompte et solde** (un acompte par chèque, un solde par virement). La
+LISTE des moyens (ESPECES, CHEQUE, VIREMENT, CARTE) vit dans `lib/moyensPaiement.js`, en DEUX exemplaires tenus d'accord par
+un test (serveur `src/api/lib`, écran `src/app/ui/lib`) ; seuls le chèque et le virement demandent une référence. Ça se
+saisit sur la carte « Règlement » (fiche stagiaire), à côté du « payé le … » de la 194, et ça s'imprime par QUATRE JETONS
+NOUVEAUX du groupe « Stagiaire » : {Moyen acompte}, {Réf acompte}, {Moyen solde}, {Réf solde} ({Moyen…} imprime le LIBELLÉ
+« Chèque », pas le code). ⚠️ **{Acompte} et {Reste à payer} ont été DÉPLACÉS** du groupe de palette « Prix et financement »
+vers « Stagiaire » à cette occasion (même valeur, même résolution — seule leur place dans la palette change ; les deux
+modèles de facture sont `company_level=0`, donc le groupe « Stagiaire » reste visible dans leur éditeur). Les colonnes sont
+ÉCARTÉES des « Champs documents » (`EXCLUDED_EXACT`, lib/conditions.js) : offertes comme champs, elles imprimeraient le code
+brut. Sans la migration, rien ne casse : la carte n'affiche pas le sélecteur et le dit (« migration 195 non jouée »), la
+saisie répond 503, et les jetons sortent vides (donc facultatifs, `OPTIONAL_TOKENS`). Sur une facture de groupe, le moyen
+est celui du PREMIER dossier (règlement global). **Elle se vérifie par l'API, sans SQL** : choisir « Chèque » + un n° pour
+l'acompte d'un dossier répond 200 (et non 503), puis `GET /api/stagiaires/:id/reglements` rend `acompte.moyen: "CHEQUE"` et
+`acompte.ref`. Ou une requête, qui doit rendre 4 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='enrollment' AND column_name IN ('acompte_moyen','acompte_ref','solde_moyen','solde_ref');`
+⚠️ Son revert efface les moyens et références saisis ; les montants et les dates (194) restent. Tests :
+`moyens-paiement.test.js` (les deux listes d'accord + validation), `reglement-dossier.test.js` (le moyen traverse le calcul),
+`reglement-fiche.test.js` (503 sans la 195, moyen inconnu refusé), `facture-formation-tokens.test.js` (les jetons sur la
+facture), `palette-complete.test.js` (le déplacement de groupe).
 
 **194 est À JOUER** (`194_enrollment_reglement.sql`, le SUIVI DU RÈGLEMENT d'un dossier — carte « Règlement » de la
 fiche stagiaire, demandée le 2026-09-30 : « savoir si le stagiaire a payé l'acompte et le reste »). Deux colonnes DATE

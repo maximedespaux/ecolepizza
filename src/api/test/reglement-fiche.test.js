@@ -91,12 +91,38 @@ test('UNE DATE MAL FORMÉE : refusée (422)', async () => {
     assert.strictEqual(res.code, 422);
 });
 
+test('LE MOYEN SANS LA 195 : 503, et non un plantage', async () => {
+    reponses = [REP_ENR_OK, [/information_schema.columns/, [[]]]]; // colonnes absentes
+    const res = await patch({ acompte_moyen: 'CHEQUE' });
+    assert.strictEqual(res.code, 503);
+    assert.match(res.corps.error, /195/);
+});
+
+test('AVEC LA 195 : le moyen et sa référence partent dans l\'UPDATE', async () => {
+    reponses = [REP_ENR_OK, [/information_schema.columns/, [[{ 1: 1 }]]], [/UPDATE enrollment SET/, [[]]]];
+    const res = await patch({ acompte_moyen: 'CHEQUE', acompte_ref: ' 12345 ' });
+    assert.strictEqual(res.code, 200);
+    const upd = requetes.find((r) => /UPDATE enrollment SET/.test(r.q));
+    assert.match(upd.q, /acompte_moyen = \?/);
+    assert.match(upd.q, /acompte_ref = \?/);
+    assert.strictEqual(upd.params[0], 'CHEQUE');
+    assert.strictEqual(upd.params[1], '12345', 'la référence est rognée');
+});
+
+test('UN MOYEN INCONNU : refusé (422)', async () => {
+    reponses = [REP_ENR_OK, [/information_schema.columns/, [[{ 1: 1 }]]]];
+    const res = await patch({ solde_moyen: 'PAYPAL' });
+    assert.strictEqual(res.code, 422);
+    assert.ok(!requetes.some((r) => /UPDATE enrollment/.test(r.q)), 'aucun UPDATE');
+});
+
 test('GET : un dossier, son acompte payé d\'après la facture', async () => {
     reponses = [
         [/id FROM learner WHERE id = \? AND organization_id/, [[{ id: 'l1' }]]],
         [/information_schema.columns/, [[{ 1: 1 }]]],
         [/FROM enrollment e JOIN training_session/, [[{
             enrollment_id: 'e1', enroll_price: null, acompte: 450, acompte_paye_le: null, solde_paye_le: null,
+            acompte_moyen: 'CHEQUE', acompte_ref: '12345', solde_moyen: null, solde_ref: null,
             program_title: 'CAP Pizzaïolo', program_code: 'RS7404', tarif: '1500.00', year: 2026, week: 12,
         }]]],
         [/FROM invoice i/, [[{ numero: 'ACPT-1', type: 'ACOMPTE', statut: 'PAYEE', montant: '450.00', paye: '450.00', dernier_paiement: '2026-03-12' }]]],
@@ -111,4 +137,9 @@ test('GET : un dossier, son acompte payé d\'après la facture', async () => {
     assert.strictEqual(d.reste, 1050);
     assert.strictEqual(d.solde.paye, false);
     assert.strictEqual(d.migration_194, true);
+    // Le moyen de paiement (195) remonte jusqu'à la carte, séparément acompte / solde.
+    assert.strictEqual(d.migration_195, true);
+    assert.strictEqual(d.acompte.moyen, 'CHEQUE');
+    assert.strictEqual(d.acompte.ref, '12345');
+    assert.strictEqual(d.solde.moyen, null);
 });

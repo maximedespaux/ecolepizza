@@ -40,6 +40,13 @@ const EXCLUDED_EXACT = new Set([
     'company_break_slug', 'needs_emargement', 'partner_fields',
     'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications',
     'avatar', 'profile_visibility', 'cadre', 'cadres_exclusifs',
+    /* LE MOYEN DE PAIEMENT DU RÈGLEMENT (migration 195) : `enrollment.acompte_moyen` / `_ref` /
+       `solde_moyen` / `_ref`. Ce ne sont pas des « Champs documents » — ils se saisissent sur la carte
+       « Règlement » et s'impriment par les jetons nommés {Moyen acompte}/{Réf acompte}/{Moyen solde}/
+       {Réf solde}. Offerts comme champs, ils imprimeraient le CODE brut (« CHEQUE », pas « Chèque ») et,
+       en condition, ne diraient rien d'un dossier. Les dates du règlement (194) sont déjà écartées, en
+       tant que colonnes `date`. */
+    'acompte_moyen', 'acompte_ref', 'solde_moyen', 'solde_ref',
 ]);
 function isExcludedColumn(name) {
     if (EXCLUDED_EXACT.has(name)) return true;

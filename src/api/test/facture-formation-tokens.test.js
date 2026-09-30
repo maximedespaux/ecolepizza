@@ -111,6 +111,23 @@ test('SANS ACOMPTE, la facture NE BLOQUE PAS : {Acompte} vide est facultatif', (
     assert.deepStrictEqual(manquants, [], `un acompte (ou coût horaire) vide ne doit pas bloquer : ${manquants.join(', ')}`);
 });
 
+test('LE MOYEN DE PAIEMENT (migration 195) s\'imprime sur la facture, et vide ne bloque pas', () => {
+    // Le moyen vient du PREMIER dossier (règlement global sur une facture de groupe) → formations[0].
+    const dossier = { ...FORMATION, acompte_moyen: 'CHEQUE', acompte_ref: '12345', solde_moyen: 'VIREMENT', solde_ref: 'VIR-2026-07' };
+    const ctx = invoiceCtx(ORG, dataFacture({ formation: dossier }));
+    const t = resolveTokens(ctx);
+    assert.strictEqual(t['Moyen acompte'], 'Chèque', 'le LIBELLÉ, pas le code « CHEQUE »');
+    assert.strictEqual(t['Réf acompte'], '12345');
+    assert.strictEqual(t['Moyen solde'], 'Virement');
+    assert.strictEqual(t['Réf solde'], 'VIR-2026-07');
+    // Rien de noté : vides, et FACULTATIFS (une facture ne se bloque pas faute de moyen).
+    const t0 = resolveTokens(invoiceCtx(ORG, dataFacture()));
+    assert.strictEqual(t0['Moyen acompte'], '');
+    assert.strictEqual(t0['Réf solde'], '');
+    const corps = '<p>Réglé par {Moyen acompte} {Réf acompte}, solde par {Moyen solde} {Réf solde}</p>';
+    assert.deepStrictEqual(findMissingTokens([corps], invoiceCtx(ORG, dataFacture())).map((m) => m.key), []);
+});
+
 test('SANS formation (vente boutique) : rien n\'est ajouté — les factures existantes ne changent pas', () => {
     const ctx = invoiceCtx(ORG, dataFacture({ formation: null, acompteTotal: 0, groupStagiaires: [], buyer: { name: 'Client', siret: null, address: {} }, amountNet: 30, lines: [{ name: 'Article', amount: 30 }] }));
     assert.deepStrictEqual(ctx.formations, []);

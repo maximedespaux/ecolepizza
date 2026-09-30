@@ -173,7 +173,13 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 s.year, s.week, s.trainer,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                 DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                e.financing, e.price AS enroll_price, e.acompte, e.company_id
+                e.financing, e.price AS enroll_price, e.acompte, e.company_id,
+                /* Le moyen de paiement du règlement (migration 195) → {Moyen acompte}/{Réf acompte}/
+                   {Moyen solde}/{Réf solde}. Colonnes optionnelles : NULL tant que la 195 n'est pas jouée. */
+                ${await colonneOuNull(conn, 'enrollment', 'acompte_moyen', 'e.')},
+                ${await colonneOuNull(conn, 'enrollment', 'acompte_ref', 'e.')},
+                ${await colonneOuNull(conn, 'enrollment', 'solde_moyen', 'e.')},
+                ${await colonneOuNull(conn, 'enrollment', 'solde_ref', 'e.')}
          FROM document_formation df
          JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
@@ -207,7 +213,8 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                             s.year, s.week, s.trainer,
                             DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                             DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
-                            NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id
+                            NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id,
+                            NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref
                        FROM training_session s
                        LEFT JOIN training_program p ON p.id = s.program_id
                       WHERE s.id = ? AND s.organization_id = ?`,

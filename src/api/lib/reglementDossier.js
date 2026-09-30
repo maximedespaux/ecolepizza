@@ -34,7 +34,8 @@ const jourMax = (liste) => liste.map(jour).filter(Boolean).sort().pop() || null;
  * @param {Array} o.factures  [{ type:'ACOMPTE'|'FACTURE', numero, montant, paye, dernier_paiement, statut }]
  * @returns {object} { prix, acompte, solde, reste, totalPaye, factures }
  */
-function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = null, soldePayeLe = null, factures = [] } = {}) {
+function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = null, soldePayeLe = null,
+    acompteMoyen = null, acompteRef = null, soldeMoyen = null, soldeRef = null, factures = [] } = {}) {
     const prixC = cents(prix);
     // Une facture ANNULÉE ne compte plus, ni pour un montant ni pour un paiement.
     const actives = (Array.isArray(factures) ? factures : []).filter((f) => f && f.statut !== 'ANNULEE');
@@ -57,6 +58,8 @@ function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = nu
         montantPayeC: acPayeFactureC,
         payeLe: acomptePayeLe,
         aUneFacture: acompteFactures.length > 0,
+        moyen: acompteMoyen,
+        ref: acompteRef,
     });
 
     // ── Solde (le reste) ─────────────────────────────────────────────────────────────────────
@@ -76,6 +79,8 @@ function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = nu
         montantPayeC: soFactureC > 0 ? soPayeFactureC : Math.max(0, totalPayeC - acMontantC),
         payeLe: soldePayeLe,
         aUneFacture: soldeFactures.length > 0,
+        moyen: soldeMoyen,
+        ref: soldeRef,
     });
 
     return {
@@ -91,7 +96,7 @@ function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = nu
 /* Une ligne (acompte ou solde) : payée dès qu'une facture la couvre OU qu'on l'a cochée ; la facture
    donne alors la date et la source, sinon c'est la coche. Une ligne sans facture pour la porter reste
    « saisissable à la main » — c'est ce que l'écran a besoin de savoir. */
-function ligne({ montantC, payeParFacture, dateFacture, montantPayeC, payeLe, aUneFacture }) {
+function ligne({ montantC, payeParFacture, dateFacture, montantPayeC, payeLe, aUneFacture, moyen = null, ref = null }) {
     const payeManuel = !!payeLe;
     const paye = payeParFacture || payeManuel;
     return {
@@ -102,6 +107,10 @@ function ligne({ montantC, payeParFacture, dateFacture, montantPayeC, payeLe, aU
         montantPaye: euros(montantPayeC || 0),
         // L'écran ne propose la coche/saisie manuelle que si aucune facture ne porte déjà la ligne.
         saisissable: !aUneFacture,
+        // Le moyen de paiement noté à la main (migration 195) et son n° / référence — passifs ici, ils
+        // ne changent rien au calcul ; l'écran et les jetons les lisent tels quels.
+        moyen: moyen || null,
+        ref: ref || null,
     };
 }
 
