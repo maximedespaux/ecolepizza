@@ -1101,13 +1101,25 @@ function empilerDansLaLigne(ligne, nom, list, rowTokens, mini) {
     }).join('') + queue;
 }
 
-/** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */
+/**
+ * Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}.
+ *
+ * LA VALEUR EST DU TEXTE, ÉCHAPPÉE (`escCell`) comme dans les tableaux {Articles} et {Règlements},
+ * qui impriment les mêmes valeurs, et comme dans les blocs {#Stagiaires}. Elle entrait telle quelle
+ * dans le HTML du document : un « < » ou un « & » dans une désignation ou une banque y devenait du
+ * balisage. Or la désignation d'une demande boutique reprend la personnalisation que le STAGIAIRE
+ * tape dans son panier : une balise écrite là était interprétée dans la facture qu'émet l'école.
+ *
+ * ET ELLE S'INSÈRE PAR UNE FONCTION, jamais en chaîne de remplacement : `replace` y lit `$&`, `$'`,
+ * `$$`… « Lot $& promo » réinsérait la puce elle-même, et « $' » recopiait la fin de la ligne,
+ * `</td></tr>` compris — le tableau sortait cassé. La forme {Clé} (split/join) n'y était pas exposée.
+ */
 function remplirLigne(gabarit, vals) {
     let out = gabarit;
     for (const [k, v] of Object.entries(vals)) {
         const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const val = String(v == null ? '' : v);
-        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), val);
+        const val = escCell(v);
+        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), () => val);
         out = out.split(`{${k}}`).join(val);
     }
     return out;
