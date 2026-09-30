@@ -397,9 +397,33 @@ export function getMemos() {
 export function getMemosCompte() {
   return request("/memos/compte", { silent: true });
 }
-export function createMemo(payload) {
-  return request("/memos", { method: "POST", body: JSON.stringify(payload) });
+/* AVEC DES PIÈCES JOINTES (migration 193), le mémo part en multipart — texte et fichiers dans le
+   MÊME envoi : le serveur ne crée pas un mémo sans ce qu'on y a joint. Sans fichier, il reste en
+   JSON, comme avant. Les noms voyagent À PART (`noms`) : le serveur lit les noms de fichier en
+   latin1, et « Relevé.pdf » y perdrait son accent. */
+export async function createMemo({ fichiers = [], ...payload }) {
+  if (!fichiers.length) return request("/memos", { method: "POST", body: JSON.stringify(payload) });
+  const fd = new FormData();
+  fd.append("texte", payload.texte || "");
+  if (payload.echeance) fd.append("echeance", payload.echeance);
+  fd.append("partage", payload.partage ? "true" : "false");
+  fd.append("liens", JSON.stringify(payload.liens || []));
+  fd.append("noms", JSON.stringify(fichiers.map((f) => f.nom)));
+  fichiers.forEach((f, i) => fd.append("fichiers", f.blob, `fichier-${i + 1}`));
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/memos`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi du mémo échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
 }
+/* Une pièce jointe, servie par une route authentifiée : utilisable en `src` d'image, ou en lien
+   (un PDF s'ouvre dans l'onglet). */
+export function memoFichierUrl(memoId, fichierId) { return `${API_BASE_URL}/memos/${memoId}/fichiers/${fichierId}`; }
 /* `{ fait }` pour cocher ou décocher, `{ partage }` pour partager ou reprendre (l'auteur seul). */
 export function updateMemo(id, payload) {
   return request(`/memos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });

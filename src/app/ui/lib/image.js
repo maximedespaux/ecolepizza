@@ -75,6 +75,10 @@ export const PROFILS = {
      budget reste le vrai mur — c'est la limite du corps JSON qu'il faudrait relever, pas ce
      profil. */
   quiz: { maxPx: 1000, maxKo: 140, maxDur: 250, fond: '#fff', qualiteMin: 0.45 },
+  /* Pièce jointe d'un mémo (migration 193) : souvent une CAPTURE D'ÉCRAN, qu'on rouvre pour y relire
+     un nom ou un montant. Large en pixels, plancher de qualité haut — c'est du texte, pas un plat.
+     Le serveur refuse une image au-delà de 1 Mo (MAX_IMAGE_MEMO, lib/memoFichiers.js). */
+  memo: { maxPx: 1800, maxKo: 450, maxDur: 900, fond: '#fff', qualiteMin: 0.6 },
 };
 
 /* Ce que le navigateur sait rouvrir et réencoder. Un HEIC d'iPhone n'en fait PAS partie : Safari

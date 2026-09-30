@@ -59,6 +59,8 @@ const faux = {
             etat.requetes.push({ q, params });
             const touche177 = /memo_lien/.test(q);
             if (etat.absente177 && touche177) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
+            // Les pièces jointes (migration 193) ont leur fichier, `memos-fichiers.test.js` : ici, la table manque.
+            if (/memo_fichier/.test(q)) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
             if (/^SELECT nav_access FROM user WHERE id = \?/.test(q)) return [[{ nav_access: etat.navAccess }]];
             if (/^INSERT INTO memo \(/.test(q)) { etat.ecrites.push({ q, params }); return [{ affectedRows: 1 }]; }
             if (/^INSERT INTO memo_lien/.test(q)) { etat.ecrites.push({ q, params }); return [{ affectedRows: 1 }]; }
@@ -304,7 +306,8 @@ test('la liste propose, la flèche choisit, Entrée n\'envoie pas le mémo', () 
     assert.match(src, /role="listbox"/);
     assert.match(src, /if \(e\.key === "Enter"\) \{ e\.preventDefault\(\); choisir\(suggestions\[actif\]\); \}/);
     assert.match(src, /setTimeout\(\(\) => \{\s*chercherCiblesMemo/, 'une lettre tapée ne vaut pas une requête');
-    assert.match(src, /createMemo\(\{ texte, echeance: echeance \|\| null, partage, liens \}\)/);
+    // Les pièces jointes (migration 193) partent dans le même envoi : cf. memos-fichiers.test.js.
+    assert.match(src, /createMemo\(\{ texte, echeance: echeance \|\| null, partage, liens, fichiers \}\)/);
     /* Le lien d'un membre ne mène nulle part : la puce reste une puce. */
     assert.match(src, /t\.lien\s*\?\s*<Link/);
 });

@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { lireNouveauMemo, lireModification, lireLiens, TYPES_LIEN, GENRES } = require('../lib/memos.js');
 const { aLaCapacite } = require('../lib/capacites.js');
+const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // pièces jointes chiffrées au repos
+const { lireFichiers, lireNoms, PIECES_INDISPONIBLES } = require('../lib/memoFichiers.js');
 const { STAFF_ROLES } = require('../middlewares/auth.middleware.js');
 
 /**
@@ -28,6 +30,32 @@ const TABLE_ABSENTE = (e) => e && e.code === 'ER_NO_SUCH_TABLE';
 const PAS_ENCORE = 'Les mémos ne sont pas encore disponibles (migration 176 non jouée).';
 const PAS_DE_LIENS = 'Les liens des mémos arrivent avec la migration 177 (non jouée).';
 
+/* LES PIÈCES JOINTES (migration 193) — deux au plus par mémo : une image ou un PDF.
+ *
+ * Elles suivent la règle de leur mémo, sans en ajouter une : qui VOIT le mémo ouvre ses pièces
+ * (`memoVisible`), et elles partent avec lui. Elles se posent à la CRÉATION et ne se retouchent
+ * plus — comme le texte, qu'aucune route ne modifie.
+ *
+ * MÊME CASCADE QUE LES LIENS : sans la 193, la table manque, la liste rend des mémos sans pièce et
+ * dit que les pièces ne sont pas disponibles (`pieces_jointes: false`, l'écran cache alors le
+ * bouton « Joindre »), et un mémo envoyé AVEC un fichier n'est pas créé à moitié. */
+async function piecesDisponibles(conn) {
+    try { await conn.query('SELECT 1 FROM memo_fichier LIMIT 1'); return true; }
+    catch (e) { if (TABLE_ABSENTE(e)) return false; throw e; }
+}
+
+/* UN ENVOI AVEC FICHIERS ARRIVE EN MULTIPART, où tout champ est du TEXTE : « true » n'y est pas
+   `true`, et les liens y sont un tableau écrit en JSON. On les remet dans la forme que le JSON
+   donnait — `lireNouveauMemo` garde sa règle stricte (un mémo ne se partage que sur un vrai `true`),
+   et c'est ici, et seulement pour cette forme d'envoi, que le texte est relu. */
+function corpsDuMemo(req) {
+    const b = req.body || {};
+    if (!Array.isArray(req.files)) return b;
+    let liens = b.liens;
+    if (typeof liens === 'string' && liens) { try { liens = JSON.parse(liens); } catch { liens = 'illisible'; } }
+    return { ...b, partage: b.partage === true || b.partage === 'true', liens };
+}
+
 /* LES MENTIONS (migration 177) — @ pour qui, # pour quoi.
  *
  * Mentionner un COLLÈGUE lui montre le mémo, même non partagé avec l'équipe, et allume une pastille
@@ -46,9 +74,11 @@ const nom = (prenom, nomFamille) => [prenom, nomFamille].filter(Boolean).join(' 
 
 /* Une ligne → ce que l'écran affiche. `mien` décide des boutons : supprimer et partager ne
    s'offrent qu'à l'auteur. Le nom de l'auteur n'est donné que pour les mémos des AUTRES. */
-function versEcran(r, moi, liens = []) {
+function versEcran(r, moi, liens = [], fichiers = []) {
     const mien = String(r.auteur_id) === String(moi);
     return {
+        // Le nom, le type et le poids seulement : les octets ne voyagent qu'à l'ouverture.
+        fichiers,
         /* MENTIONNÉ ET PAS ENCORE OUVERT : ce que compte la pastille, et ce que la liste met en tête. */
         nouveau: !!r.ping && !r.ping_vu && !r.fait_le,
         liens,
@@ -115,7 +145,29 @@ const listMemos = async (req, res) => {
             if (!parMemo.has(l.memo_id)) parMemo.set(l.memo_id, []);
             parMemo.get(l.memo_id).push({ type: l.type, id: l.cible_id, libelle: l.libelle });
         }
-        res.json({ data: rows.map((r) => versEcran(r, req.user.id, parMemo.get(r.id) || [])) });
+        /* LES PIÈCES JOINTES (193), sans leurs octets. Sans la table, aucune — et l'écran le sait. */
+        let pieces = true;
+        const fichiersDe = new Map();
+        if (rows.length) {
+            try {
+                const [fichiers] = await conn.query(
+                    'SELECT id, memo_id, nom, mime, octets FROM memo_fichier WHERE memo_id IN (?) ORDER BY memo_id, rang',
+                    [rows.map((r) => r.id)]);
+                for (const f of fichiers) {
+                    if (!fichiersDe.has(f.memo_id)) fichiersDe.set(f.memo_id, []);
+                    fichiersDe.get(f.memo_id).push({ id: f.id, nom: f.nom, mime: f.mime, octets: Number(f.octets) || 0 });
+                }
+            } catch (e) {
+                if (!TABLE_ABSENTE(e)) throw e;
+                pieces = false;
+            }
+        } else {
+            pieces = await piecesDisponibles(conn);
+        }
+        res.json({
+            data: rows.map((r) => versEcran(r, req.user.id, parMemo.get(r.id) || [], fichiersDe.get(r.id) || [])),
+            pieces_jointes: pieces,
+        });
     } catch (e) {
         if (TABLE_ABSENTE(e)) return res.json({ data: null, message: PAS_ENCORE });
         return echec(res, e, 'liste');
@@ -177,12 +229,17 @@ const marquerVus = async (req, res) => {
     }
 };
 
-/** POST /api/memos — { texte, echeance?, partage? }. Un mémo naît privé, sauf demande explicite. */
+/** POST /api/memos — { texte, echeance?, partage?, liens? }, en JSON ; ou en multipart avec
+ *  `fichiers` (deux au plus). Un mémo naît privé, sauf demande explicite. */
 const createMemo = async (req, res) => {
-    const lu = lireNouveauMemo(req.body || {});
+    const corps = corpsDuMemo(req);
+    const lu = lireNouveauMemo(corps);
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
-    const lus = lireLiens((req.body || {}).liens);
+    const lus = lireLiens(corps.liens);
     if (lus.erreur) return res.status(422).json({ message: lus.erreur });
+    /* Les pièces sont lues AVANT toute écriture : un fichier refusé ne doit pas laisser un mémo. */
+    const joints = lireFichiers(req.files, lireNoms(corps.noms));
+    if (joints.erreur) return res.status(joints.statut).json({ message: joints.erreur });
     const { texte, echeance, partage } = lu.valeurs;
     /* ON NE SE MENTIONNE PAS SOI-MÊME : le mémo est déjà le sien, et la pastille s'allumerait pour
        son propre auteur. Le lien est retiré en silence — c'est un clic de trop, pas une faute. */
@@ -206,6 +263,20 @@ const createMemo = async (req, res) => {
                    personne mentionnée — donc la raison même du mémo. */
                 await conn.query('DELETE FROM memo WHERE id = ? AND organization_id = ?', [id, req.user.organization_id]);
                 return res.status(503).json({ message: PAS_DE_LIENS });
+            }
+        }
+        if (joints.fichiers.length) {
+            try {
+                await conn.query(
+                    'INSERT INTO memo_fichier (id, memo_id, nom, mime, octets, bytes, rang) VALUES ?',
+                    [joints.fichiers.map((f, i) => [crypto.randomUUID(), id, f.nom, f.mime, f.octets, encryptBytes(f.contenu), i])]);
+            } catch (e) {
+                /* UN MÉMO N'EST PAS CRÉÉ SANS CE QU'ON Y A JOINT : « voir la capture » sans la
+                   capture ne veut plus rien dire. On retire celui qu'on vient d'écrire (ses liens
+                   partent avec lui), que la table manque ou que l'écriture ait échoué. */
+                await conn.query('DELETE FROM memo WHERE id = ? AND organization_id = ?', [id, req.user.organization_id]);
+                if (TABLE_ABSENTE(e)) return res.status(503).json({ message: PIECES_INDISPONIBLES });
+                throw e;
             }
         }
         res.status(201).json({ data: { id } });
@@ -307,6 +378,35 @@ async function memoVisible(conn, req) {
     }
 }
 
+/**
+ * GET /api/memos/:id/fichiers/:fichier — une pièce jointe, à qui VOIT son mémo : l'auteur, l'équipe
+ * s'il est partagé, le collègue mentionné. 404 pour tout le reste, sans dire si elle existe.
+ *
+ * Servie sous le type PROUVÉ à l'envoi (lib/memoFichiers.js), `nosniff` pour que le navigateur ne
+ * le rediscute pas, et « inline » : une image s'affiche, un PDF s'ouvre dans l'onglet. Aucun cache
+ * — la règle de toute l'API (server.js) : c'est une note privée, elle ne reste pas sur le poste.
+ */
+const getFichier = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const m = await memoVisible(conn, req);
+        if (!m) return res.status(404).end();
+        const [[f]] = await conn.query(
+            'SELECT nom, mime, bytes FROM memo_fichier WHERE id = ? AND memo_id = ?', [req.params.fichier, m.id]);
+        if (!f) return res.status(404).end();
+        const clair = decryptBytes(f.bytes);
+        if (clair === null) return res.status(404).end();
+        res.set('Content-Type', f.mime);
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(f.nom)}`);
+        res.send(clair);
+    } catch (e) {
+        if (TABLE_ABSENTE(e)) return res.status(404).end();
+        console.error('Erreur mémos (pièce jointe) :', e);
+        res.status(500).end();
+    }
+};
+
 /** PATCH /api/memos/:id — { fait? } (cocher : l'auteur, ou n'importe qui sur un mémo partagé)
  *  et/ou { partage? } (l'auteur seul). */
 const updateMemo = async (req, res) => {
@@ -369,4 +469,4 @@ const clearDoneMemos = async (req, res) => {
     }
 };
 
-module.exports = { listMemos, countMemos, createMemo, updateMemo, deleteMemo, clearDoneMemos, marquerVus, chercherCibles, PAS_ENCORE, PAS_DE_LIENS };
+module.exports = { listMemos, countMemos, createMemo, getFichier, updateMemo, deleteMemo, clearDoneMemos, marquerVus, chercherCibles, PAS_ENCORE, PAS_DE_LIENS };

@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
-import { getMemos, createMemo, updateMemo, deleteMemo, clearMemosFaits, chercherCiblesMemo } from "../api/apiClient.js";
+import { getMemos, createMemo, updateMemo, deleteMemo, clearMemosFaits, chercherCiblesMemo, memoFichierUrl } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
 import { Icon } from "./Icon.jsx";
-import { etatEcheance, trierMemos, mentionEnCours, insererMention, blocsMemo, continuerPuce, resumeMemo, TYPES_LIEN, MAX_TEXTE } from "../lib/memos.js";
+import {
+  etatEcheance, trierMemos, mentionEnCours, insererMention, blocsMemo, continuerPuce, resumeMemo, TYPES_LIEN, MAX_TEXTE,
+  MAX_FICHIERS, genreFichier, refusDeFichier, poidsLisible, fichiersColles,
+} from "../lib/memos.js";
+import { lireBrouillon, abonnerBrouillon, ecrireBrouillon, viderBrouillon, brouillonVide } from "../lib/brouillonMemo.js";
+import { reduireSiImage, PROFILS } from "../lib/image.js";
 import { annoncerMemos, onMemosChange } from "../lib/events.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 
@@ -29,20 +35,39 @@ import { useAutoRefresh } from "../lib/useAutoRefresh.js";
  * la ligne — l'inverse serait piégeux dans une liste où l'on ajoute vingt fois pour une fois qu'on
  * rédige. Une ligne qui commence par « * » ou « - » est une puce, et Maj + Entrée la continue toute
  * seule ; une puce laissée vide ferme la liste. Rien d'autre n'est interprété : ni gras, ni titre.
+ *
+ * CE QU'ON ÉCRIT NE SE PERD PLUS (2026-09-30). Le mémo en cours vivait dans ce composant : fermer le
+ * panneau — la croix, Échap, un clic à côté — le jetait, et l'on rouvrait un champ vide. Le texte,
+ * les liens, l'échéance, le partage et les pièces jointes vivent désormais HORS de l'écran
+ * (lib/brouillonMemo.js), jusqu'à l'envoi ou jusqu'à « Effacer » : le panneau et la carte du
+ * tableau de bord lisent le même brouillon, et il tient aussi au rechargement de la page.
+ *
+ * DEUX PIÈCES JOINTES AU PLUS (migration 193) : une image collée dans le champ (Ctrl + V sur une
+ * capture d'écran), une image ou un PDF choisis par le trombone. L'image est réduite AVANT de
+ * partir ; le serveur revérifie le type et le poids dans les octets.
  */
 export default function MemoListe({ autoFocus = false, onNaviguer }) {
+  const { user } = useContext(UserContext);
+  const uid = user?.id || null;
   const [memos, setMemos] = useState(undefined); // undefined : chargement · null : migration 176 absente
   const [indispo, setIndispo] = useState(null);
-  const [texte, setTexte] = useState("");
-  const [liens, setLiens] = useState([]);
-  const [echeance, setEcheance] = useState("");
-  const [partage, setPartage] = useState(false);
+  // Les pièces jointes n'existent qu'avec la migration 193 : sans elle, pas de trombone.
+  const [pieces, setPieces] = useState(false);
+  /* LE BROUILLON, hors du composant : il survit à sa fermeture. Les quatre « set » gardent la forme
+     qu'avaient les états qu'ils remplacent, pour que le reste de l'écran n'ait pas à le savoir. */
+  const brouillon = useSyncExternalStore(abonnerBrouillon, () => lireBrouillon(uid));
+  const { texte, liens, echeance, partage, fichiers } = brouillon;
+  const setTexte = (v) => ecrireBrouillon({ texte: v });
+  const setLiens = (f) => ecrireBrouillon({ liens: typeof f === "function" ? f(lireBrouillon(uid).liens) : f });
+  const setEcheance = (v) => ecrireBrouillon({ echeance: v });
+  const setPartage = (v) => ecrireBrouillon({ partage: v });
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [mention, setMention] = useState(null);
   const [suggestions, setSuggestions] = useState(null);  // null : fermé
   const [actif, setActif] = useState(0);
   const champRef = useRef(null);
+  const choixRef = useRef(null);
   const minuteur = useRef(null);
   const [saisieOuverte, setSaisieOuverte] = useState(false);
 
@@ -50,11 +75,21 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
     .then((r) => {
       setMemos(Array.isArray(r?.data) ? trierMemos(r.data) : null);
       setIndispo(r?.message || null);
+      setPieces(r?.pieces_jointes === true);
     })
     .catch((e) => { setErreur(e.message); setMemos((m) => (m === undefined ? [] : m)); });
   useEffect(() => { charger(); return onMemosChange(charger); }, []);
   useAutoRefresh(charger, { interval: 60000 });
   useEffect(() => () => clearTimeout(minuteur.current), []);
+
+  /* ON REPREND LÀ OÙ ON S'ÉTAIT ARRÊTÉ : rouvert sur un brouillon, le champ prend le focus avec le
+     curseur au DÉBUT — et le premier mot tapé se glisserait devant la phrase. On le pose à la fin. */
+  useEffect(() => {
+    const el = champRef.current;
+    if (autoFocus && el && el.value) el.setSelectionRange(el.value.length, el.value.length);
+    // Une seule fois, à l'ouverture : ensuite le curseur appartient à qui écrit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memos === undefined]);
 
   /* LE CHAMP GRANDIT AVEC CE QU'ON ÉCRIT, jusqu'à un plafond : une liste de huit puces ne doit pas
      se lire par une fente de deux lignes, et le panneau de la barre du haut ne doit pas devenir
@@ -143,13 +178,62 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
     ajouter(e);
   }
 
+  /* JOINDRE — une image collée, ou des fichiers choisis. Deux au plus : ce qui dépasse est écarté,
+     et dit. L'image est réduite ICI (profil `memo`) ; un PDF part tel quel. `apercu` est une adresse
+     locale vers l'image, que le brouillon libère quand la pièce s'en va. */
+  async function joindre(recus) {
+    const liste = [...(recus || [])];
+    if (!liste.length) return;
+    setErreur(null);
+    const place = MAX_FICHIERS - lireBrouillon(uid).fichiers.length;
+    const refus = liste.length > place ? [`${MAX_FICHIERS} pièces jointes au plus par mémo.`] : [];
+    const ajoutes = [];
+    for (const f of liste.slice(0, Math.max(0, place))) {
+      if (!genreFichier(f.type)) { refus.push(`« ${f.name || "fichier"} » : une image ou un PDF seulement.`); continue; }
+      const blob = await reduireSiImage(f, PROFILS.memo);
+      const non = refusDeFichier(blob);
+      if (non) { refus.push(`« ${f.name || "image"} » : ${non}`); continue; }
+      ajoutes.push({
+        cle: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        nom: f.name || (blob.type === "application/pdf" ? "document.pdf" : "image"),
+        type: blob.type, octets: blob.size, blob,
+        apercu: genreFichier(blob.type) === "image" ? URL.createObjectURL(blob) : null,
+      });
+    }
+    // Relu APRÈS les réductions : une autre pièce a pu arriver pendant qu'on réduisait celle-ci.
+    if (ajoutes.length) ecrireBrouillon({ fichiers: [...lireBrouillon(uid).fichiers, ...ajoutes].slice(0, MAX_FICHIERS) });
+    if (refus.length) setErreur(refus.join(" "));
+  }
+
+  function retirerFichier(cle) {
+    const f = fichiers.find((x) => x.cle === cle);
+    if (f?.apercu) URL.revokeObjectURL(f.apercu);
+    ecrireBrouillon({ fichiers: fichiers.filter((x) => x.cle !== cle) });
+  }
+
+  /* COLLER UNE CAPTURE D'ÉCRAN LA JOINT. Du texte collé reste du texte (cf. `fichiersColles`). */
+  function surCollage(e) {
+    if (!pieces) return;
+    const recus = fichiersColles(e.clipboardData);
+    if (!recus.length) return;
+    e.preventDefault();
+    joindre(recus);
+  }
+
+  function effacerBrouillon() {
+    viderBrouillon();
+    setSuggestions(null); setMention(null); setErreur(null);
+    champRef.current?.focus();
+  }
+
   async function ajouter(e) {
     e.preventDefault();
     if (!texte.trim() || busy) return;
     setBusy(true);
     await agir(async () => {
-      await createMemo({ texte, echeance: echeance || null, partage, liens });
-      setTexte(""); setEcheance(""); setPartage(false); setLiens([]); setSuggestions(null); setMention(null);
+      await createMemo({ texte, echeance: echeance || null, partage, liens, fichiers });
+      // Envoyé : le brouillon a fini sa vie, en mémoire comme dans la réserve de l'onglet.
+      viderBrouillon(); setSuggestions(null); setMention(null);
     });
     setBusy(false);
   }
@@ -174,7 +258,7 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
           {/* UN `textarea` ET NON UN `input` : un pense-bête tient souvent en une ligne, mais « ce
               qu'il faut faire » tient en trois. Il commence à la hauteur d'un champ ordinaire et
               grandit avec le texte, pour ne pas promettre un formulaire là où une phrase suffit. */}
-          <textarea ref={champRef} className="inp memo-saisie" rows={1} value={texte} onChange={surSaisie} onKeyDown={surTouche}
+          <textarea ref={champRef} className="inp memo-saisie" rows={1} value={texte} onChange={surSaisie} onKeyDown={surTouche} onPaste={surCollage}
             onFocus={() => setSaisieOuverte(true)} onBlur={() => setSaisieOuverte(false)} maxLength={MAX_TEXTE}
             placeholder="Nouveau mémo. @ pour un stagiaire, # pour une session" aria-label="Nouveau mémo" autoFocus={autoFocus}
             autoComplete="off" role="combobox" aria-expanded={!!(suggestions && suggestions.length)} aria-controls="memo-suggestions" />
@@ -218,6 +302,19 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
           </div>
         )}
 
+        {fichiers.length > 0 && (
+          <div className="memo-fichiers-choisis">
+            {fichiers.map((f) => (
+              <span key={f.cle} className="memo-fichier">
+                {f.apercu ? <img src={f.apercu} alt="" /> : <Icon name="file-text" size={15} aria-hidden="true" />}
+                <span className="memo-fichier-nom" title={f.nom}>{f.nom}</span>
+                <span className="memo-fichier-poids">{poidsLisible(f.octets)}</span>
+                <button type="button" onClick={() => retirerFichier(f.cle)} aria-label={`Retirer la pièce jointe ${f.nom}`}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="memo-form-options">
           <label className="memo-date" title="Échéance (facultatif)">
             <Icon name="calendar" size={14} aria-hidden="true" />
@@ -227,9 +324,28 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
             <input type="checkbox" checked={partage} onChange={(e) => setPartage(e.target.checked)} />
             Partager avec l'équipe
           </label>
-          <button type="submit" className="btn primary sm" disabled={busy || !texte.trim()}>
-            <Icon name="plus" size={14} aria-hidden="true" /> Ajouter
-          </button>
+          {pieces && (
+            <>
+              {/* `e.target.value = ""` : sans lui, rechoisir LE MÊME fichier après l'avoir retiré ne
+                  déclenche aucun `change`, et le trombone paraît mort. */}
+              <input ref={choixRef} type="file" accept="image/*,application/pdf" multiple hidden
+                onChange={(e) => { joindre(e.target.files); e.target.value = ""; }} />
+              <button type="button" className="memo-joindre" onClick={() => choixRef.current?.click()} disabled={fichiers.length >= MAX_FICHIERS}
+                title={fichiers.length >= MAX_FICHIERS ? `${MAX_FICHIERS} pièces jointes au plus` : "Joindre une image ou un PDF (ou coller une capture dans le champ)"}
+                aria-label="Joindre une image ou un PDF">
+                <Icon name="paperclip" size={15} />
+              </button>
+            </>
+          )}
+          <span className="memo-form-fin">
+            {/* Le brouillon tient à la fermeture : il lui faut une sortie en un geste. */}
+            {!brouillonVide(brouillon) && (
+              <button type="button" className="btn ghost sm" onClick={effacerBrouillon}>Effacer</button>
+            )}
+            <button type="submit" className="btn primary sm" disabled={busy || !texte.trim()}>
+              <Icon name="plus" size={14} aria-hidden="true" /> Ajouter
+            </button>
+          </span>
         </div>
       </form>
 
@@ -285,6 +401,25 @@ function LigneMemo({ m, agir, onNaviguer }) {
               return t.lien
                 ? <Link key={`${l.type}-${l.id}`} to={t.lien(l.id)} className="memo-lien" onClick={onNaviguer} title={t.mot}>{contenu}</Link>
                 : <span key={`${l.type}-${l.id}`} className="memo-lien" title={t.mot}>{contenu}</span>;
+            })}
+          </span>
+        )}
+        {/* LES PIÈCES JOINTES : l'image en vignette, le PDF par son nom. Un clic les ouvre dans un
+            nouvel onglet — la route ne les sert qu'à qui voit le mémo. */}
+        {(m.fichiers || []).length > 0 && (
+          <span className="memo-pieces">
+            {m.fichiers.map((f) => {
+              const url = memoFichierUrl(m.id, f.id);
+              const titre = `${f.nom} · ${poidsLisible(f.octets)}`;
+              return f.mime === "application/pdf" ? (
+                <a key={f.id} href={url} target="_blank" rel="noopener noreferrer" className="memo-piece" title={titre}>
+                  <Icon name="file-text" size={13} aria-hidden="true" />{f.nom}
+                </a>
+              ) : (
+                <a key={f.id} href={url} target="_blank" rel="noopener noreferrer" className="memo-piece image" title={titre}>
+                  <img src={url} alt={f.nom} loading="lazy" />
+                </a>
+              );
             })}
           </span>
         )}

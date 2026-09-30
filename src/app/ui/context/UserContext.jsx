@@ -1,6 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { getCurrentUser, logout as apiLogout, API_BASE_URL } from "../api/apiClient.js";
 import { clearRevealConfirmSkip, clearMoneyReveal } from "../lib/moneyPrivacy.js";
+import { oublierBrouillon } from "../lib/brouillonMemo.js";
 
 export const UserContext = createContext();
 
@@ -63,6 +64,7 @@ export function UserProvider({ children }) {
     }
     clearRevealConfirmSkip(); // oublie le « ne plus demander » à la déconnexion
     clearMoneyReveal();       // …et le masque revient : la session suivante repart confidentielle
+    oublierBrouillon();       // le mémo en cours d'écriture est une note privée : il part aussi
     setUser(null);
   };
 
