@@ -1,6 +1,7 @@
 const express = require('express');
 const {
     getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword, deleteStagiaireAccount, importLearners,
+    getReglements, updateReglement,
 } = require('../controllers/learner.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -17,6 +18,10 @@ router.get('/distinctions', authorizeRoles(...ADMIN_ROLES), getDistinctions);
    délégué sur la rubrique Stagiaires y donne droit, comme partout ailleurs. */
 router.get('/a-recontacter', authorizeRoles(...ADMIN_ROLES), getARecontacter);
 router.get('/:id', authorizeRoles(...STAFF_ROLES), getLearner);
+/* Le suivi du règlement (acompte / solde) : lecture par tout le personnel comme la fiche ; la
+   saisie (montant de l'acompte, coche « payé le… ») par le bureau, qui encaisse. */
+router.get('/:id/reglements', authorizeRoles(...STAFF_ROLES), getReglements);
+router.patch('/:id/reglement/:enrollmentId', authorizeRoles(...ADMIN_ROLES), updateReglement);
 // Écriture / comptes : bureau uniquement (pas le formateur).
 router.post('/', authorizeRoles(...ADMIN_ROLES), createLearner);
 // L'import CSV : mêmes rôles que la création d'une fiche (lib/importFiches.js).
