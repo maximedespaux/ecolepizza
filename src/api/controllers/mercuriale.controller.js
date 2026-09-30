@@ -5,11 +5,16 @@
 // L'API expose des noms propres (label/family/brand/unit/price/usage_note) mappés ci-dessous.
 const crypto = require('crypto');
 const db = require('../config/database.js');
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const SOURCES = ['RNM', 'METRO', 'FOURNISSEUR', 'MANUEL'];
 const str = (v, max) => { const s = (v == null ? '' : String(v)).trim(); return s ? s.slice(0, max) : null; };
-const numv = (v) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+/* UN PRIX SE LIT EN FRANÇAIS (lib/montantSaisi.js) : « 12,50 € », « 1 234,5 ». `Number(v.replace(',',
+   '.'))` ne défaisait que la virgule : un « € », une espace, un séparateur de milliers donnaient NaN,
+   donc un prix de 0 €, sans un mot. Absent → 0, comme avant ; illisible → NaN, que l'appelant REFUSE. */
+const numv = (v) => (v === undefined || v === null || v === '' ? 0 : lireMontant(v));
+const PRIX_ILLISIBLE = 'Prix illisible : écrivez-le par exemple 12,50.';
 const enumSource = (v) => (SOURCES.includes(String(v)) ? String(v) : 'MANUEL');
 
 // SELECT qui renomme les colonnes FR en noms d'API propres.
@@ -38,6 +43,8 @@ const createItem = async (req, res) => {
         const b = req.body || {};
         const label = str(b.label, 255);
         if (!label) return res.status(400).json({ message: 'Libellé requis.' });
+        const prix = numv(b.price);
+        if (!Number.isFinite(prix)) return res.status(422).json({ message: PRIX_ILLISIBLE });
         const id = crypto.randomUUID();
         await conn.query(
             `INSERT INTO mercuriale_item
@@ -45,7 +52,7 @@ const createItem = async (req, res) => {
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [id, req.user.organization_id, req.user.id, label,
              str(b.family, 120), str(b.brand, 160), str(b.origin, 120), str(b.calibre, 60), str(b.conditionnement, 80), str(b.market, 120),
-             str(b.unit, 40) || 'kg', numv(b.price), enumSource(b.source), b.auto_update ? 1 : 0, b.catalog_product_id || null, str(b.usage_note, 500)]);
+             str(b.unit, 40) || 'kg', prix, enumSource(b.source), b.auto_update ? 1 : 0, b.catalog_product_id || null, str(b.usage_note, 500)]);
         const [[row]] = await conn.query(`${SEL} WHERE id = ?`, [id]);
         res.status(201).json({ data: row });
     } catch (err) {
@@ -81,6 +88,7 @@ const updateItem = async (req, res) => {
             if (b[k] === undefined) continue;
             const [col, val] = fn(b[k]);
             if (k === 'label' && !val) return res.status(400).json({ message: 'Libellé requis.' });
+            if (k === 'price' && !Number.isFinite(val)) return res.status(422).json({ message: PRIX_ILLISIBLE });
             sets.push(`${col} = ?`); params.push(val);
         }
         if (!sets.length) return res.status(400).json({ message: 'Rien à modifier.' });

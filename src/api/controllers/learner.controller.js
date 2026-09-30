@@ -21,6 +21,7 @@ const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
 const { champsManquants } = require('../lib/ficheIncomplete.js');
 const { PRECISIONS_FOUR, COLONNES_PHRASE, colonnesProjetSql } = require('../lib/projet.js');
 const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js');
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -137,12 +138,24 @@ const LARGEUR_CHIFFRE = 255;
 async function franceTravailChiffrable(conn) {
     return (await largeurColonne(conn, 'learner', 'france_travail_id')) >= LARGEUR_CHIFFRE;
 }
-// Ce que la base reçoit pour un champ : chiffré pour les deux identifiants, tel quel sinon.
+// Ce que la base reçoit pour un champ : chiffré pour les deux identifiants, le montant CPF lu en
+// français (et vérifié avant, cf. refusMontantCpf), tel quel sinon.
 function valeurStockee(champ, valeur, chiffrerFT) {
     if (valeur === null || valeur === undefined || valeur === '') return valeur === '' ? null : valeur;
     if (champ === 'social_security') return encrypt(valeur);
     if (champ === 'france_travail_id' && chiffrerFT) return encrypt(valeur);
+    if (champ === 'cpf_amount') return lireMontant(valeur).toFixed(2);
     return valeur;
+}
+/* LE MONTANT CPF se TAPE en français (« 1 500,00 ») : il partait TEL QUEL dans l'INSERT, et MariaDB,
+   en mode strict, refuse « 1500,00 » dans un DECIMAL — la fiche entière ne s'enregistrait pas, sur
+   un message qui ne disait pas pourquoi. Vérifié ici, avant toute écriture. */
+function refusMontantCpf(body) {
+    const v = body.cpf_amount;
+    if (v == null || v === '') return null;
+    const n = lireMontant(v);
+    if (!Number.isFinite(n) || n < 0) return 'Montant CPF illisible : écrivez-le par exemple 1500,00.';
+    return null;
 }
 /* BORNÉ POUR TENIR, UNE FOIS CHIFFRÉ, DANS LES 255 : 96 octets de clair donnent 62 + 192 = 254
    caractères. Un vrai identifiant en compte 8 à 11 ; 60 caractères, c'est l'ancienne colonne. */
@@ -449,7 +462,7 @@ const createLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
-    const refus = refusNote(body) || refusFranceTravail(body);
+    const refus = refusNote(body) || refusFranceTravail(body) || refusMontantCpf(body);
     if (refus) return res.status(422).json({ error: refus });
 
     try {
@@ -530,7 +543,7 @@ const updateLearner = async (req, res) => {
     if (body.email && !RE_EMAIL.test(body.email)) {
         return res.status(422).json({ error: 'Adresse e-mail invalide.' });
     }
-    const refus = refusNote(body) || refusFranceTravail(body);
+    const refus = refusNote(body) || refusFranceTravail(body) || refusMontantCpf(body);
     if (refus) return res.status(422).json({ error: refus });
 
     try {

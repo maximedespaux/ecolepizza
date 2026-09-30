@@ -15,8 +15,22 @@ import EmptyState from "../components/EmptyState.jsx";
 import Inventaire from "./Inventaire.jsx";
 import { euro, initials } from "../lib/format.js";
 import { bumpBadges } from "../lib/events.js";
+import { lireMontant } from "../lib/montantSaisi.js";
 
 const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
+
+/* UNE REMISE TAPÉE (« 12,5 ») se lit en français, comme les montants (cf. lib/montantSaisi.js).
+   Les deux champs étaient en `type="number"`, lus par `Number(v) || 0` : un champ numérique lit la
+   virgule selon la langue de l'APPAREIL, et là où elle n'est pas le séparateur décimal, « 12,5 »
+   y devient une valeur vide — donc une remise de 0 %, et la vente partait au prix plein sans un
+   mot. En texte (`inputMode="decimal"`), la saisie arrive telle quelle : vide, elle vaut 0 ;
+   illisible, NaN, que la caisse SIGNALE et refuse d'encaisser. */
+const remiseSaisie = (v) => (v === "" || v == null ? 0 : lireMontant(v));
+/** Le taux APPLIQUÉ : borné à [0, 100], comme au serveur ; une saisie illisible n'en applique aucun. */
+const tauxApplique = (v) => { const n = remiseSaisie(v); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0; };
+/** Une remise hors bornes est ramenée à sa borne SOUS LES YEUX, comme le faisait le champ
+ *  numérique ; une saisie en cours (« 12, ») ou illisible reste telle quelle. */
+const borneRemise = (v) => { const n = lireMontant(v); return Number.isFinite(n) && (n < 0 || n > 100) ? String(Math.min(100, Math.max(0, n))) : v; };
 const TABS = [
   { v: "caisse", label: "Caisse" },
   { v: "historique", label: "Historique des ventes" },
@@ -155,14 +169,21 @@ function Ventes() {
   const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
   // Une remise de ligne exclut la remise globale, et réciproquement (cf. sale.controller.js) :
   // les deux se cumulaient, et 10 % sur l'article plus 5 % sur la vente faisaient 14,5 %.
-  const remiseDeLigne = useMemo(() => cart.some((l) => Number(l.disc) > 0), [cart]);
-  const remiseGlobale = Math.min(100, Math.max(0, Number(discount) || 0));
+  const remiseDeLigne = useMemo(() => cart.some((l) => tauxApplique(l.disc) > 0), [cart]);
+  const remiseGlobale = tauxApplique(discount);
+  /* Ce qui ne se lit pas est DIT, et bloque l'encaissement : une remise illisible valait 0 %.
+     La globale ne compte pas en mode ligne — le champ est vidé et son ancienne saisie ignorée. */
+  const ligneIllisible = cart.find((l) => !Number.isFinite(remiseSaisie(l.disc)));
+  const remiseIllisible = ligneIllisible
+    ? `Remise illisible sur « ${ligneIllisible.name} » : écrivez-la par exemple 12,5.`
+    : !remiseDeLigne && !Number.isFinite(remiseSaisie(discount))
+      ? "Remise globale illisible : écrivez-la par exemple 12,5." : null;
 
   const totals = useMemo(() => {
     let ht = 0, tva = 0;
     for (const l of cart) {
       // Le taux qui s'applique vraiment : celui de la ligne en mode ligne, sinon le global.
-      const taux = remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale;
+      const taux = remiseDeLigne ? tauxApplique(l.disc) : remiseGlobale;
       // MÊME ARRONDI QUE LE SERVEUR : prix unitaire arrondi d'abord, puis multiplié. La caisse
       // arrondissait après la multiplication et pouvait donc afficher un centime de moins que
       // la facture émise — un ticket qui ne tombe pas sur le montant encaissé.
@@ -177,6 +198,8 @@ function Ventes() {
   async function validate() {
     if (cart.length === 0) return;
     if (!factureSlug) { setStatus({ type: "error", message: "Choisissez le modèle de facture avant d'encaisser." }); return; }
+    const illisible = remiseIllisible || resolvePayments(payments, totals.ttc).illisible;
+    if (illisible) { setStatus({ type: "error", message: illisible }); return; }
     setStatus(null);
     try {
       // Entreprise : elle est l'acheteur (company_id) ; le stagiaire n'est envoyé QUE si on l'a
@@ -200,7 +223,7 @@ function Ventes() {
         payment_method: parts[0]?.method || null,   // rétro-compat : moyen principal
         payments: parts,
         status: paid ? "PAYEE" : "IMPAYEE",
-        lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: Number(l.disc) || 0 })),
+        lines: cart.map((l) => ({ item_id: l.item_id, quantity: l.quantity, discount_pct: tauxApplique(l.disc) })),
       });
       setCart([]); switchBuyerType("stagiaire"); setDiscount(""); setDueDate("");
       setPayments([{ method: payOptions[0] || "", amount: "" }]);
@@ -448,18 +471,21 @@ function Ventes() {
                         <input type="number" min="1" max={l.stock} value={l.quantity} title={`Quantité (max ${l.stock} en stock)`}
                           onChange={(e) => setLine(l.item_id, { quantity: Math.min(Number(l.stock) || 1, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
                           className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} />
-                        <input type="number" min="0" max="100" value={l.disc}
+                        <input inputMode="decimal" autoComplete="off" value={l.disc}
                           disabled={remiseGlobale > 0}
                           title={remiseGlobale > 0
                             ? "Une remise globale est saisie : les deux ne se cumulent pas."
                             : "Remise %"}
-                          onChange={(e) => { const v = e.target.value; setLine(l.item_id, { disc: v === "" ? "" : Math.min(100, Math.max(0, Number(v) || 0)) }); }}
-                          className="inp" style={{ width: 76, flex: "0 0 auto", textAlign: "center" }} placeholder="%" />
+                          aria-label={`Remise en % sur ${l.name}`}
+                          aria-invalid={!Number.isFinite(remiseSaisie(l.disc)) || undefined}
+                          onChange={(e) => setLine(l.item_id, { disc: borneRemise(e.target.value) })}
+                          className="inp" placeholder="%"
+                          style={{ width: 76, flex: "0 0 auto", textAlign: "center", ...(Number.isFinite(remiseSaisie(l.disc)) ? null : { borderColor: "var(--ember1)" }) }} />
                         {/* Le montant de ligne suit le MÊME arrondi que le serveur (prix unitaire
                             d'abord), sinon le ticket ne tombe pas sur ce qui est facturé. */}
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>
                           {euro(ttc(
-                            Number((l.unit_price * (1 - (remiseDeLigne ? (Number(l.disc) || 0) : remiseGlobale) / 100)).toFixed(2)) * l.quantity,
+                            Number((l.unit_price * (1 - (remiseDeLigne ? tauxApplique(l.disc) : remiseGlobale) / 100)).toFixed(2)) * l.quantity,
                             tvaApplies ? l.tax_rate : 0))}
                         </span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
@@ -468,11 +494,13 @@ function Ventes() {
                   </div>
                   <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
                     <label>Remise globale (%)</label>
-                    <input className="inp" type="number" min="0" max="100" step="0.1" placeholder="0"
+                    <input className="inp" inputMode="decimal" autoComplete="off" placeholder="0"
                       value={remiseDeLigne ? "" : discount}
                       disabled={remiseDeLigne}
                       title={remiseDeLigne ? "Un article porte déjà une remise : les deux ne se cumulent pas." : undefined}
-                      onChange={(e) => setDiscount(e.target.value)} style={{ maxWidth: 140 }} />
+                      aria-invalid={(!remiseDeLigne && !Number.isFinite(remiseSaisie(discount))) || undefined}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      style={{ maxWidth: 140, ...(!remiseDeLigne && !Number.isFinite(remiseSaisie(discount)) ? { borderColor: "var(--ember1)" } : null) }} />
                     {remiseDeLigne && (
                       <p className="hint" style={{ margin: "6px 0 0" }}>
                         Un article porte une remise : la remise globale ne s'applique pas en plus.
@@ -481,22 +509,30 @@ function Ventes() {
                     )}
                   </div>
                   <div style={{ marginTop: 12, fontSize: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>Total HT{totals.discount > 0 ? ` (remise ${totals.discount}%)` : ""}</span><span className="mono">{euro(totals.ht)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>Total HT{totals.discount > 0 ? ` (remise ${totals.discount.toLocaleString("fr-FR")} %)` : ""}</span><span className="mono">{euro(totals.ht)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}><span>TVA{tvaApplies ? "" : " (exonérée)"}</span><span className="mono">{euro(totals.tva)}</span></div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, marginTop: 4 }}><span>Total TTC</span><span className="mono">{euro(totals.ttc)}</span></div>
                   </div>
                   {/* On bloque l'encaissement si le règlement dépasse le total : une répartition
-                      qui ne boucle pas ne doit pas partir. (Sans surcoût quand c'est payé.) */}
+                      qui ne boucle pas ne doit pas partir. (Sans surcoût quand c'est payé.) Une
+                      remise ou un montant ILLISIBLE bloque aussi, et le dit : il valait 0. */}
                   {(() => {
-                    const trop = paid && !resolvePayments(payments, totals.ttc).valid;
+                    const reglement = resolvePayments(payments, totals.ttc);
+                    const trop = paid && !reglement.valid;
                     const sansModele = !factureSlug; // modèle de facture obligatoire
-                    const motif = trop ? "La répartition des paiements dépasse le total"
-                      : sansModele ? "Choisissez le modèle de facture" : undefined;
+                    const illisible = remiseIllisible || reglement.illisible;
+                    const motif = illisible || (trop ? "La répartition des paiements dépasse le total"
+                      : sansModele ? "Choisissez le modèle de facture" : undefined);
                     return (
-                      <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
-                        onClick={validate} disabled={trop || sansModele} title={motif}>
-                        Encaisser → créer la facture
-                      </button>
+                      <>
+                        {remiseIllisible && (
+                          <p className="hint" role="alert" style={{ margin: "10px 0 0", color: "var(--ember1)" }}>{remiseIllisible}</p>
+                        )}
+                        <button className="btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
+                          onClick={validate} disabled={!!illisible || trop || sansModele} title={motif}>
+                          Encaisser → créer la facture
+                        </button>
+                      </>
                     );
                   })()}
                 </>

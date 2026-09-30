@@ -2,6 +2,21 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { prixStagiaire } = require('../lib/remise.js');
+/* Prix et remises arrivent TAPÉS, en français : « 39,90 », « 12,5 ». `Number("12,5")` vaut NaN
+   — la remise stagiaire saisie à la création disparaissait, sans un mot (cf. lib/montantSaisi.js). */
+const { lireMontant } = require('../lib/montantSaisi.js');
+
+/** Ce qu'on dit quand un montant de l'article ne se lit pas : COMMENT l'écrire, pas seulement
+ *  « invalide ». Les champs absents d'ici (quantité, seuil) sont des entiers : `Number()` suffit. */
+const ILLISIBLE = {
+    unit_price: 'Prix illisible : écrivez-le par exemple 39,90.',
+    tax_rate: 'Taux de TVA illisible : écrivez-le par exemple 5,5.',
+    learner_discount_pct: 'Remise stagiaire illisible : écrivez-la par exemple 12,5.',
+    learner_discount_eur: 'Remise stagiaire illisible : écrivez-la par exemple 5,50.',
+};
+
+/** Un montant FACULTATIF de l'article : vide → `null` ; sinon lu en français (NaN si illisible). */
+const montantFacultatif = (v) => (v === undefined || v === null || v === '' ? null : lireMontant(v));
 
 /**
  * GET /api/inventaire — articles en stock + totaux (valeur, ruptures).
@@ -77,12 +92,25 @@ const createItem = async (req, res) => {
     // photo sans qu'on sache que le lien était en cause.
     const image = validerImage(req.body[CHAMP_IMAGE]);
     if (!image.ok) return res.status(422).json({ message: image.message });
+    /* LE PRIX, LA TVA ET LA REMISE, lus en français et vérifiés AVANT toute écriture. Prix et TVA
+       partaient TELS QUELS dans l'INSERT : « 39,90 » n'est pas un décimal SQL. La remise, lue par
+       `Number()`, devenait NaN, donc `null` : l'article était créé SANS elle, sans rien dire. */
+    const prix = montantFacultatif(unit_price);
+    const taux = montantFacultatif(tax_rate) ?? 20;
+    const pct = montantFacultatif(req.body.learner_discount_pct);
+    const eur = montantFacultatif(req.body.learner_discount_eur);
+    for (const [champ, n] of [['unit_price', prix], ['tax_rate', taux], ['learner_discount_pct', pct], ['learner_discount_eur', eur]]) {
+        if (n !== null && !Number.isFinite(n)) return res.status(422).json({ message: ILLISIBLE[champ] });
+    }
+    if (prix !== null && (prix < 0 || prix > 1e8)) return res.status(422).json({ message: 'Valeur invalide pour unit_price.' });
+    if (taux < 0 || taux > 100) return res.status(422).json({ message: 'Valeur invalide pour tax_rate.' });
     try {
         const conn = db.promise();
         const cols = ['id', 'organization_id', 'name', 'category', 'sku', 'quantity', 'unit_price', 'tax_rate', 'threshold'];
+        // La base garde le POINT (`toFixed(2)`) : la virgule n'est qu'une façon de TAPER.
         const vals = [crypto.randomUUID(), req.user.organization_id, name, category || null, sku || null,
-            Math.max(0, parseInt(quantity, 10) || 0), unit_price || null,
-            tax_rate === '' || tax_rate == null ? 20 : tax_rate, parseInt(threshold, 10) || 0];
+            Math.max(0, parseInt(quantity, 10) || 0), prix === null ? null : prix.toFixed(2),
+            taux.toFixed(2), parseInt(threshold, 10) || 0];
 
         /* Remise stagiaire (125). Elle était ignorée À LA CRÉATION : on pouvait la saisir dans le
          * formulaire d'ajout, elle disparaissait, et il fallait rouvrir l'article pour la reposer.
@@ -93,12 +121,10 @@ const createItem = async (req, res) => {
             cols.push(CHAMP_IMAGE); vals.push(image.valeur);
         }
         if (await colRemise(conn, 'learner_discount_eur')) {
-            const pct = Number(req.body.learner_discount_pct);
-            const eur = Number(req.body.learner_discount_eur);
             cols.push('learner_discount_pct', 'learner_discount_eur');
             vals.push(
-                Number.isFinite(pct) && pct > 0 ? Math.min(100, pct) : null,
-                Number.isFinite(eur) && eur > 0 ? eur : null);
+                pct > 0 ? Math.min(100, pct).toFixed(2) : null,
+                eur > 0 ? eur.toFixed(2) : null);
         }
         await conn.query(
             `INSERT INTO inventory_item (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
@@ -181,12 +207,15 @@ const updateItem = async (req, res) => {
         }
         let v = req.body[f];
         if (numericBounds[f]) {
-            const n = Number(v);
+            // Un montant se lit en français (« 39,90 ») ; illisible, on dit comment l'écrire.
+            const n = ILLISIBLE[f] ? lireMontant(v) : Number(v);
+            if (ILLISIBLE[f] && !Number.isFinite(n)) return res.status(422).json({ message: ILLISIBLE[f] });
             const [min, max] = numericBounds[f];
             if (!Number.isFinite(n) || n < min || n > max) {
                 return res.status(422).json({ message: `Valeur invalide pour ${f}.` });
             }
-            v = n;
+            // La base garde le POINT (`toFixed(2)`) ; quantité et seuil restent des entiers.
+            v = ILLISIBLE[f] ? n.toFixed(2) : n;
         }
         champs.push({ sql: `${f} = ?`, valeur: v, remise: f.startsWith('learner_discount_') });
     }

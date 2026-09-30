@@ -5,6 +5,8 @@ const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { mergeEmargConfig } = require('../lib/emargement.js');
 const { estSignatureValide } = require('../lib/signatures.js');
+// Le taux de TVA se TAPE en français (« 5,5 ») : cf. lib/montantSaisi.js.
+const { lireMontant } = require('../lib/montantSaisi.js');
 
 /**
  * GET /api/organisation — l'organisme de l'utilisateur connecté.
@@ -128,7 +130,14 @@ const updateOrganization = async (req, res) => {
         let v = req.body[f];
         if (f === 'qualiopi') v = v ? 1 : 0;
         else if (f.startsWith('mail_')) v = v ? 1 : 0;
-        else if (f === 'vat_rate') v = Math.max(0, Math.min(100, Number(v) || 0));
+        /* LE TAUX DE TVA se lit en français. `Number("5,5") || 0` en faisait 0 % EN SILENCE : tous
+           les documents perdaient leur TVA, et l'écran disait « Organisme enregistré ». Vide, il
+           vaut 0 comme avant (exonéré) ; illisible, il est refusé ; la base garde le point. */
+        else if (f === 'vat_rate') {
+            const taux = v === '' || v == null ? 0 : lireMontant(v);
+            if (!Number.isFinite(taux)) return res.status(422).json({ message: 'Taux de TVA illisible : écrivez-le par exemple 5,5.' });
+            v = Math.max(0, Math.min(100, taux)).toFixed(2);
+        }
         else if (f === 'code') v = String(v).trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 24) || null;
         /* EN CAPITALES, comme la ville des stagiaires et des entreprises (lib/saisie.js) — et la forme
            juridique, choisie dans une liste en capitales (SAS, SARL…) : l'écran la propose ainsi, le

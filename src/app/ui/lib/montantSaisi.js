@@ -21,3 +21,37 @@ export function lireMontant(v) {
   }
   return /^-?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : NaN;
 }
+
+/**
+ * L'INVERSE, pour PRÉ-REMPLIR un champ texte avec un montant venu de la base : « 39.90 » → « 39,90 ».
+ *
+ * Les champs d'argent sont en texte (`inputMode="decimal"`), plus en `type="number"` : un champ
+ * numérique lit la virgule selon la langue de l'APPAREIL, et là où elle n'est pas le séparateur
+ * décimal, « 12,5 » y devient une valeur vide — donc 0, sans un mot. Mais le champ numérique
+ * AFFICHAIT la virgule ; un champ texte montre ce qu'on lui donne, et la base parle avec un point.
+ * Mêmes chiffres, seul le séparateur change : lireMontant relit les deux formes.
+ */
+export function montantEnSaisie(v) {
+  return v == null ? "" : String(v).replace(".", ",");
+}
+
+/**
+ * POUR UN CHAMP QUI GARDE CE QU'ON TAPE (components/ChampMontant.jsx) : ce que le parent reçoit
+ * pour un texte — "" (champ vidé), la valeur lue écrite avec un point (« 12.5 »), ou `null` : rien,
+ * quand le texte ne se lit pas. Le parent garde alors sa dernière valeur lisible.
+ */
+export function valeurTransmise(texte) {
+  if (String(texte ?? "").trim() === "") return "";
+  const n = lireMontant(texte);
+  return Number.isFinite(n) ? String(n) : null;
+}
+
+/**
+ * … et le texte à montrer quand la valeur change PAR AILLEURS (un prix repris de la mercuriale) :
+ * le texte en cours s'il la dit déjà — « 12, » en cours de frappe vaut 12 —, sinon la valeur.
+ */
+export function texteAJour(texte, value) {
+  const attendu = value === "" || value == null ? NaN : Number(value);
+  if (String(texte ?? "").trim() === "" ? Number.isNaN(attendu) : lireMontant(texte) === attendu) return texte;
+  return montantEnSaisie(value);
+}

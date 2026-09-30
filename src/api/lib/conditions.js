@@ -5,6 +5,7 @@
 // évalue ces conditions en plus des conditions intégrées (financement, RS, hygiène…).
 const { parseApplies } = require('./documents.js');
 const { resultatsParDossier } = require('./evaluationDossiers.js');
+const { lireMontant } = require('./montantSaisi.js');
 
 // Tables réellement rattachées à UN dossier (inscription). Alias SQL utilisés par
 // loadDossierFactsMap (jointures depuis enrollment).
@@ -443,10 +444,21 @@ function validateCondition(catalog, { field, op, value }) {
         const arr = Array.isArray(value) ? value
             : String(value || '').split(',').map((s) => s.trim()).filter(Boolean);
         if (!arr.length) return { ok: false, error: 'Renseignez au moins une valeur.' };
-        return { ok: true, value: f.type === 'number' ? arr.map(Number) : arr };
+        if (f.type !== 'number') return { ok: true, value: arr };
+        /* La virgule y SÉPARE les valeurs : une liste de nombres s'écrit donc avec des points
+           (« 12.5, 20 »). Une valeur illisible est refusée — elle partait en `null`, et la
+           condition comparait à rien. */
+        const nombres = arr.map(Number);
+        if (nombres.some((n) => !Number.isFinite(n))) return { ok: false, error: 'Valeur illisible : séparez les nombres par des virgules, par exemple 12.5, 20.' };
+        return { ok: true, value: nombres };
     }
     if (value === undefined || value === null || value === '') return { ok: false, error: 'Valeur requise.' };
-    return { ok: true, value: f.type === 'number' ? Number(value) : value };
+    if (f.type !== 'number') return { ok: true, value };
+    /* UN SEUIL se TAPE en français (« 1 500 », « 12,5 ») : `Number()` en faisait NaN, enregistré
+       `null`, et la condition — un document qui s'applique ou non — comparait à rien, sans un mot. */
+    const n = lireMontant(value);
+    if (!Number.isFinite(n)) return { ok: false, error: 'Valeur illisible : écrivez-la par exemple 1500 ou 12,5.' };
+    return { ok: true, value: n };
 }
 
 // Conditions personnalisées d'un organisme -> Map slug => { field, op, value }.

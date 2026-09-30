@@ -4,6 +4,7 @@ import { Icon } from "./Icon.jsx";
 import { euro } from "../lib/format.js";
 import { searchCatalog, addMercurialeItem, updateMercurialeItem, deleteMercurialeItem } from "../api/apiClient.js";
 import { num, FRESH_PRODUCE, FRESH_FAMS, parseMetroName } from "../lib/mercuriale.js";
+import { lireMontant, montantEnSaisie } from "../lib/montantSaisi.js";
 import { RAYONS, rayonOf, isRawProduct } from "../lib/garnitures.js";
 
 // Unité Metro (Kg/L/Piece) → unité mercuriale (kg/litre/pièce).
@@ -155,6 +156,28 @@ function ProductBubble({ r, anchor }) {
   );
 }
 
+/* LE PRIX D'UNE CARTE se TAPE en français : « 12,50 », « 1 234,5 € ». Il était lu par
+   `Number(v.replace(",", "."))`, qui ne défait que la virgule : un « € », une espace, un séparateur
+   de milliers donnaient NaN, parti en `null` — et le serveur en faisait un prix de 0 €, sans un
+   mot. Lu par lireMontant ; l'illisible n'est PAS envoyé, et il est dit sous le champ. Vide : rien
+   à enregistrer. */
+function PrixMercuriale({ m, patch }) {
+  const [illisible, setIllisible] = useState(false);
+  return (
+    <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Prix (€)</label>
+      <input className="inp tnum" inputMode="decimal" autoComplete="off" defaultValue={montantEnSaisie(num(m.price))}
+        aria-invalid={illisible || undefined} style={illisible ? { borderColor: "var(--ember1)" } : undefined}
+        onBlur={(e) => {
+          const saisie = e.target.value.trim();
+          const v = lireMontant(saisie);
+          setIllisible(saisie !== "" && !Number.isFinite(v));
+          if (Number.isFinite(v) && v !== num(m.price)) patch(m.id, { price: v, source: "MANUEL" });
+        }} />
+      {illisible && <span className="hint" role="alert" style={{ color: "var(--ember1)" }}>Prix illisible : écrivez-le par exemple 12,50.</span>}
+    </div>
+  );
+}
+
 // --- Onglet Ma mercuriale : recherche d'ajout unifiée en tête + cartes éditables (prix, unité) ---
 // La « source du prix » (RNM/Metro/Fournisseur/Manuel) n'est plus un réglage par carte : elle est
 // posée à l'ajout, et une saisie de prix à la main la bascule sur MANUEL. La montrer par item
@@ -197,7 +220,7 @@ function MineTab({ items, reload, refs, onAddFresh, onAddMetro, onAddManual }) {
                   <button className="iconbtn del" title="Retirer" onClick={() => remove(m.id)}><Icon name="trash" size={14} /></button>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Prix (€)</label><input className="inp tnum" defaultValue={num(m.price)} onBlur={(e) => { const v = Number(String(e.target.value).replace(",", ".")); if (v !== num(m.price)) patch(m.id, { price: v, source: "MANUEL" }); }} /></div>
+                  <PrixMercuriale m={m} patch={patch} />
                   <div className="field" style={{ width: 92, marginBottom: 0 }}><label>Unité</label>
                     <select className="inp" value={m.unit || "kg"} onChange={(e) => patch(m.id, { unit: e.target.value })}>
                       {["kg", "litre", "pièce", "botte", "plateau"].map((u) => <option key={u} value={u}>{u}</option>)}

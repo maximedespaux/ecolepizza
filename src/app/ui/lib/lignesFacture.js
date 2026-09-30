@@ -9,12 +9,14 @@
  *
  * Tout est PUR (ni React ni réseau) : factures-par-session.test.js l'éprouve directement.
  */
+import { montantEnSaisie } from "./montantSaisi.js";
 
-/** La ligne d'un dossier : son montant par défaut (prix du dossier, sinon tarif de la formation). */
+/** La ligne d'un dossier : son montant par défaut (prix du dossier, sinon tarif de la formation),
+ *  écrit comme on le tape — « 1234,5 » : le champ est en texte, et lireMontant le relit. */
 export const ligneDuDossier = (d) => ({
   enrollment_id: d.enrollment_id,
   description: "",
-  amount_net: d.montant > 0 ? String(d.montant) : "",
+  amount_net: d.montant > 0 ? montantEnSaisie(d.montant) : "",
 });
 
 export const estCoche = (lignes, d) => lignes.some((l) => l.enrollment_id && l.enrollment_id === d.enrollment_id);

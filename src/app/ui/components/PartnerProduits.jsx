@@ -3,6 +3,7 @@ import { Icon } from "./Icon.jsx";
 import ImageLien, { ImagePlaceholder } from "./ImageLien.jsx";
 import Badge from "./Badge.jsx";
 import { euro, listeCategories } from "../lib/format.js";
+import { montantEnSaisie } from "../lib/montantSaisi.js";
 import {
   getPartenaireProduits, createPartenaireProduit, updatePartenaireProduit, deletePartenaireProduit,
 } from "../api/apiClient.js";
@@ -58,7 +59,9 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
      fois en pensant que le bouton est cassé. */
   function modifier(p) {
     setEdite(p.id);
-    setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k, p[k] ?? ""])) });
+    // Les prix de la base (« 39.90 ») s'affichent comme on les tape : « 39,90 ».
+    setForm({ ...VIDE, ...Object.fromEntries(Object.keys(VIDE).map((k) => [k,
+      k === "price_public" || k === "price_school" ? montantEnSaisie(p[k]) : p[k] ?? ""])) });
     setSaisie(true);
   }
   function fermerSaisie() { setEdite(null); setForm(VIDE); setSaisie(false); }
@@ -225,11 +228,14 @@ function PartnerProduits({ partnerId, nbInitial = null, onErreur }) {
             <div className="row3" style={{ gap: 8 }}>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Prix public (€)</label>
-                <input className="inp" type="number" min="0" step="0.01" value={form.price_public} onChange={set("price_public")} />
+                {/* TEXTE en `inputMode="decimal"` : le champ numérique rendait « 39,90 » VIDE là où
+                    la virgule n'est pas le séparateur de l'appareil — et un prix vide s'EFFACE
+                    (« tarif sur demande »). Le serveur lit la virgule, et refuse l'illisible. */}
+                <input className="inp" inputMode="decimal" autoComplete="off" value={form.price_public} onChange={set("price_public")} />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Tarif école (€)</label>
-                <input className="inp" type="number" min="0" step="0.01" value={form.price_school} onChange={set("price_school")}
+                <input className="inp" inputMode="decimal" autoComplete="off" value={form.price_school} onChange={set("price_school")}
                   placeholder="négocié" />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>

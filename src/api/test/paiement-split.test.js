@@ -16,14 +16,16 @@ const net = (f) => fs.readFileSync(path.join(DIR, f), 'utf8')
 
 /** Charge resolvePayments + estCheque (module UI ESM) dans ce contexte. On prend le bloc entre
  *  `export const estCheque` et `export default` — les deux helpers purs, sans le composant React
- *  ni ses imports. Un scan d'accolade naïf casserait sur les blocs imbriqués du .map. */
+ *  ni ses imports. Un scan d'accolade naïf casserait sur les blocs imbriqués du .map.
+ *  Son seul import utile, `lireMontant`, lui est PASSÉ : la copie du serveur, que
+ *  montant-saisi.test.js tient d'accord avec celle de l'écran sur les mêmes cas. */
 const resolvePayments = (() => {
     const src = fs.readFileSync(path.join(DIR, '..', 'app/ui/components/PaiementSplit.jsx'), 'utf8');
     const début = src.indexOf('export const estCheque');
     const fin = src.indexOf('export default');
     const code = src.slice(début, fin).replace(/export /g, '') + '\nmodule.exports = resolvePayments;';
     const m = { exports: {} };
-    new Function('module', 'exports', code)(m, m.exports);
+    new Function('module', 'exports', 'lireMontant', code)(m, m.exports, require('../lib/montantSaisi.js').lireMontant);
     return m.exports;
 })();
 

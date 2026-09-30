@@ -12,6 +12,9 @@ import Mercuriale from "../components/Mercuriale.jsx";
 import MercProductPicker from "../components/MercProductPicker.jsx";
 import PairingSuggest from "../components/PairingSuggest.jsx";
 import FichePrint from "../components/FichePrint.jsx";
+/* Les PRIX se tapent en français (« 12,5 ») : le champ garde le texte, l'état reçoit « 12.5 »,
+   et tous les calculs de coût, qui lisent l'état par `num()`, restent tels quels. */
+import ChampMontant from "../components/ChampMontant.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 
 /**
@@ -508,7 +511,7 @@ function LigneCompo({ t, i, c, source, onChange, onRemove, onOuvrir }) {
           </span>
         ) : (
           <span className="fe-num">
-            <input className="inp" type="number" step="0.01" min="0" inputMode="decimal" data-champ="prix" value={t.unit_price}
+            <ChampMontant data-champ="prix" value={t.unit_price}
               onChange={(e) => onChange({ unit_price: e.target.value })} aria-label={`Prix de ${nom}, en euros par ${piece ? "pièce" : "kilo"}`} />
             <span>€/{uPrix}</span>
           </span>
@@ -551,7 +554,7 @@ function LignePateEstimee({ r, c, set, onRetirer, onChoisir }) {
       <div className="fe-ing-mes fixe"><span className="fe-ing-u">pâton</span></div>
       <div className="fe-ing-prix">
         <span className="fe-num">
-          <input className="inp" type="number" step="0.01" min="0" inputMode="decimal" value={r.flour_price} onChange={set("flour_price")}
+          <ChampMontant value={r.flour_price} onChange={set("flour_price")} exemple="1,20"
             aria-label="Prix de la farine, en euros par kilo" />
           <span>€/kg</span>
         </span>
@@ -1672,14 +1675,14 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
                 <div className="field" style={{ marginBottom: 8 }}><label>Poids d'un pâton (g)</label><input className="inp" type="number" min="100" value={r.paton_g} onChange={set("paton_g")} /></div>
               </div>
               {dpMode === "farine" && <p className="hint" style={{ margin: "0 0 8px" }}>→ {effNb} pâtons de {patonG} g{reste > 5 ? ` · reste ${gfmt(reste)}` : ""}</p>}
-              <div className="field" style={{ marginBottom: 10 }}><label>Prix de la farine (€/kg)</label><input className="inp" type="number" step="0.01" value={r.flour_price} onChange={set("flour_price")} /></div>
+              <div className="field" style={{ marginBottom: 10 }}><label>Prix de la farine (€/kg)</label><ChampMontant value={r.flour_price} onChange={set("flour_price")} exemple="1,20" /></div>
               {/* Le sel, l'huile et la levure entrent dans le coût : leurs prix se règlent ici. Vides,
                   ce sont les prix indicatifs de l'outil (PRICE_DEFAULT) — les mêmes pour le serveur. */}
               <div className="fe-prix-pate">
                 <span className="fe-prix-pate-t">Autres prix (€/kg)</span>
                 {[["sel", "Sel"], ...(num(dp.huile) > 0 ? [["huile", "Huile"]] : []), ["levure", "Levure"]].map(([k, l]) => (
                   <label key={k} className="fe-field">{l}
-                    <input className="inp" type="number" min="0" step="0.1" inputMode="decimal" value={dp.prices?.[k] ?? PRICE_DEFAULT[k]}
+                    <ChampMontant value={dp.prices?.[k] ?? PRICE_DEFAULT[k]} exemple="0,50"
                       onChange={(e) => setPrixPate(k, e.target.value)} />
                   </label>
                 ))}

@@ -9,6 +9,11 @@ const { validerImage } = require('../lib/imageDistante.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 
+/** La remise d'un partenaire, en % : vide → `null` (aucune) ; sinon lue en français — NaN si
+ *  illisible, que l'appelant REFUSE. La colonne est un FLOAT : le nombre part tel quel. */
+const remiseLue = (v) => (v === '' || v == null ? null : lireMontant(v));
+const REMISE_ILLISIBLE = 'Remise illisible : écrivez-la par exemple 12,5.';
+
 const PARTNER_FIELDS = [
     'name', 'category', 'contact_name', 'contact_email', 'contact_phone',
     'website', 'town', 'discount_pct', 'offer', 'notes',
@@ -166,13 +171,16 @@ const createPartner = async (req, res) => {
        silence donnerait une fiche sans logo sans qu'on sache que le lien était en cause. */
     const logo = validerImage(b[CHAMP_LOGO]);
     if (!logo.ok) return res.status(422).json({ message: logo.message });
+    /* LA REMISE se lit en français (« 12,5 ») : `Number()` en faisait NaN, parti tel quel dans
+       l'INSERT — une erreur 500, et le partenaire n'était pas créé. */
+    const remise = remiseLue(b.discount_pct);
+    if (Number.isNaN(remise)) return res.status(422).json({ message: REMISE_ILLISIBLE });
     const id = crypto.randomUUID();
     const base = ['id', 'organization_id', 'name', 'category', 'contact_name', 'contact_email',
         'contact_phone', 'website', 'town', 'discount_pct', 'offer', 'notes'];
     const vals = [id, req.user.organization_id, b.name, b.category || 'AUTRE', b.contact_name || null,
         b.contact_email || null, b.contact_phone || null, b.website || null, b.town || null,
-        b.discount_pct === '' || b.discount_pct == null ? null : Number(b.discount_pct),
-        b.offer || null, b.notes || null];
+        remise, b.offer || null, b.notes || null];
     /* LE CONTRAT À LA CRÉATION AUSSI (migration 131). Sans cela, un partenaire créé avec ses dates
        les perdait en silence : le formulaire les affichait, l'INSERT les ignorait, et il fallait
        rouvrir la fiche pour les ressaisir — sans jamais comprendre pourquoi.
@@ -238,6 +246,11 @@ const updatePartner = async (req, res) => {
     }
     const logo = validerImage(req.body[CHAMP_LOGO]);
     if (!logo.ok) return res.status(422).json({ message: logo.message });
+    /* LA REMISE, lue AVANT d'écrire : `Number("12,5")` partait en NaN dans l'UPDATE, que MariaDB
+       refusait — et le refus passait pour « Migration 133 non jouée », qui n'y était pour rien. */
+    if (req.body.discount_pct !== undefined && Number.isNaN(remiseLue(req.body.discount_pct))) {
+        return res.status(422).json({ message: REMISE_ILLISIBLE });
+    }
 
     const sets = [];
     const values = [];
@@ -248,7 +261,7 @@ const updatePartner = async (req, res) => {
     for (const f of [...PARTNER_FIELDS, ...CONTRAT_FIELDS]) {
         if (req.body[f] === undefined) continue;
         let v = req.body[f];
-        if (f === 'discount_pct') v = v === '' || v == null ? null : Number(v);
+        if (f === 'discount_pct') v = remiseLue(v);
         /* `contrat` EST UN BOOLÉEN, PAS UNE CHAÎNE. Sans cette ligne, un `false` venu du
            formulaire tomberait dans le `v === ''` ci-dessous — non, mais `0` serait écrit tel
            quel et une case décochée arriverait en `false`, que MySQL accepte en TINYINT. Le
@@ -375,13 +388,28 @@ const deleteContribution = (req, res) => {
 const PRODUCT_FIELDS = ['name', 'category', 'reference', 'price_public', 'price_school',
     'url', 'image_url', 'note', 'active', 'sort_order'];
 
+/** Les deux prix d'un produit, et ce qu'on dit quand l'un ne se LIT pas. */
+const PRIX_PRODUIT = { price_public: 'Prix public', price_school: 'Tarif école' };
+
+/** Un prix illisible, dit AVANT toute écriture. `Number("39,90")` valait NaN, que `cleanProduct`
+ *  changeait en `null` : le prix s'EFFAÇAIT — « tarif sur demande » à la place du tarif négocié —
+ *  et l'écran disait « enregistré ». Rend le message de refus, ou `null`. */
+function prixIllisible(b) {
+    for (const [champ, nom] of Object.entries(PRIX_PRODUIT)) {
+        const v = b[champ];
+        if (v === undefined || v === null || v === '') continue;
+        if (!Number.isFinite(lireMontant(v))) return `${nom} illisible : écrivez-le par exemple 39,90.`;
+    }
+    return null;
+}
+
 /** Normalise une valeur de produit : bornes numériques, longueurs, drapeaux. */
 function cleanProduct(champ, brut) {
     if (brut === '' || brut === null || brut === undefined) return null;
     if (champ === 'active') return brut ? 1 : 0;
     if (champ === 'sort_order') return Math.max(0, parseInt(brut, 10) || 0);
     if (champ === 'price_public' || champ === 'price_school') {
-        const n = Number(brut);
+        const n = lireMontant(brut); // « 39,90 » : lu en français (cf. prixIllisible)
         // Un prix négatif ou délirant vient d'une faute de frappe, pas d'une intention.
         return Number.isFinite(n) && n >= 0 && n <= 1e6 ? Number(n.toFixed(2)) : null;
     }
@@ -414,6 +442,8 @@ const getPartnerProducts = async (req, res) => {
 const createPartnerProduct = async (req, res) => {
     const b = req.body || {};
     if (!b.name || !String(b.name).trim()) return res.status(422).json({ message: 'Nom du produit requis.' });
+    const refus = prixIllisible(b);
+    if (refus) return res.status(422).json({ message: refus });
     try {
         const conn = db.promise();
         // Le partenaire doit appartenir à l'organisme : un identifiant venu d'ailleurs créerait
@@ -484,6 +514,8 @@ const setPartnerDestinataire = (req, res) => {
 
 const updatePartnerProduct = async (req, res) => {
     const b = req.body || {};
+    const refus = prixIllisible(b);
+    if (refus) return res.status(422).json({ message: refus });
     const sets = [], vals = [];
     for (const f of PRODUCT_FIELDS) {
         if (b[f] === undefined) continue;

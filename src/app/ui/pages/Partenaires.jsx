@@ -19,7 +19,7 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import ApportForm from "../components/PartnerContributions.jsx";
 import PartnerProduits from "../components/PartnerProduits.jsx";
 import { APPORT_TYPES, apportType, apportsOfPartner } from "../lib/apports.js";
-import { lireMontant } from "../lib/montantSaisi.js";
+import { lireMontant, montantEnSaisie } from "../lib/montantSaisi.js";
 import { euro, dateFr } from "../lib/format.js";
 
 /* LA LISTE N'EST PLUS ÉCRITE ICI — elle vient du serveur (migration 129), qui la rend gérable par
@@ -219,7 +219,7 @@ function Partenaires() {
                     <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                       {/* La REMISE est le fait opérationnel de cette page : c'est ce qu'on vérifie
                           avant de commander. Elle était noyée en dernière ligne des coordonnées. */}
-                      {Number(p.discount_pct) > 0 && <Badge tone="g">−{p.discount_pct}%</Badge>}
+                      {Number(p.discount_pct) > 0 && <Badge tone="g">−{montantEnSaisie(p.discount_pct)} %</Badge>}
                       {/* LE LIBELLÉ, pas le code. La carte affichait « CHARCUTERIE » en capitales
                           parce que le code était tout ce qu'on avait ; il a maintenant un intitulé
                           écrit par l'école, et une couleur s'il y en a une. */}
@@ -577,6 +577,8 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
     const f = { ...EMPTY };
     for (const k of Object.keys(EMPTY)) if (partner[k] !== undefined && partner[k] !== null) f[k] = partner[k];
     f.contrat = Number(partner.contrat) === 1 ? 1 : 0;   // TINYINT → 0/1, jamais "0"
+    // La remise de la base (12.5) s'affiche comme on la tape : « 12,5 ».
+    if (partner.discount_pct != null) f.discount_pct = montantEnSaisie(partner.discount_pct);
     return f;
   });
   const [saving, setSaving] = useState(false);
@@ -652,7 +654,9 @@ function PartnerModal({ partner, categories, onClose, onSaved, onError }) {
           </div>
           <div className="row2">
             <Field label="Ville" value={form.town} onChange={set("town")} />
-            <Field label="Remise (%)" type="number" step="0.1" value={form.discount_pct} onChange={set("discount_pct")} />
+            {/* TEXTE en `inputMode="decimal"` : le champ numérique rendait « 12,5 » VIDE là où la
+                virgule n'est pas le séparateur de l'appareil — et une remise vide s'EFFACE. */}
+            <Field label="Remise (%)" inputMode="decimal" autoComplete="off" value={form.discount_pct} onChange={set("discount_pct")} />
           </div>
           {/* LE CONTRAT (migration 131). Replié derrière une case : la plupart des relations
               n'en ont pas, et deux champs de date affichés en permanence donneraient à croire

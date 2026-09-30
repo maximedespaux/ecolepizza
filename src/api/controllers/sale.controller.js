@@ -4,6 +4,19 @@ const { loadOrgSteps } = require('./template.controller.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { logAudit } = require('../lib/audit.js');
 const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
+/* Montants, remises et règlements arrivent TAPÉS, en français : « 12,5 », « 315,93 ».
+   `Number("12,5")` vaut NaN — une remise devenait 0 %, une part de règlement disparaissait,
+   sans un mot (cf. lib/montantSaisi.js). */
+const { lireMontant } = require('../lib/montantSaisi.js');
+
+/** Une remise en % : vide → 0 (comme avant) ; illisible → `null`, que l'appelant REFUSE ; sinon
+ *  bornée à [0, 100]. `Number(v) || 0` faisait d'une remise « 12,5 » une remise NULLE : la vente
+ *  partait au prix plein, et la facture avec. */
+function remiseLue(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    const n = lireMontant(v);
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+}
 
 // La table material_sale porte-t-elle le lien vers la facture (migration 069) ?
 // Permet un fonctionnement dégradé tant que la migration n'est pas appliquée.
@@ -69,9 +82,13 @@ const createSale = async (req, res) => {
     if (!product || amount === undefined || amount === '') {
         return res.status(422).json({ error: 'Produit et montant requis' });
     }
-    // Validation numérique : montant >= 0 fini, quantité entière >= 1.
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt < 0 || amt > 100000000) {
+    // Validation numérique : montant >= 0 fini, quantité entière >= 1. Le montant se lit en
+    // français (« 315,93 ») : `Number()` le refusait, avec un message qui ne disait pas pourquoi.
+    const amt = lireMontant(amount);
+    if (!Number.isFinite(amt)) {
+        return res.status(422).json({ error: 'Montant illisible : écrivez-le par exemple 315,93.' });
+    }
+    if (amt < 0 || amt > 100000000) {
         return res.status(422).json({ error: 'Montant invalide (nombre positif requis).' });
     }
     const qty = Number.parseInt(quantity, 10);
@@ -89,7 +106,7 @@ const createSale = async (req, res) => {
         `INSERT INTO material_sale (id, organization_id, date, product, category, quantity, amount, learner_id, note)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [crypto.randomUUID(), req.user.organization_id, date || new Date().toISOString().slice(0, 10),
-         product, category || null, qty, amt, learner_id || null, note || null],
+         product, category || null, qty, amt.toFixed(2), learner_id || null, note || null],
         (err) => {
             if (err) {
                 console.error('Erreur création vente :', err);
@@ -215,7 +232,10 @@ const checkout = async (req, res) => {
     if (!Array.isArray(lines) || lines.length === 0) {
         return res.status(422).json({ error: 'Panier vide' });
     }
-    const globalDisc = Math.min(100, Math.max(0, Number(req.body.discount) || 0)); // % remise globale
+    const globalDisc = remiseLue(req.body.discount); // % remise globale
+    if (globalDisc === null) {
+        return res.status(422).json({ error: 'Remise globale illisible : écrivez-la par exemple 12,5.' });
+    }
     const status = req.body.status === 'IMPAYEE' ? 'IMPAYEE' : 'PAYEE';
     try {
         const conn = db.promise();
@@ -231,9 +251,14 @@ const checkout = async (req, res) => {
         // Le résumé (moyen unique, ou « A + B ») sert à l'affichage et à la note ; le détail chiffré
         // part dans payment_split. La SOMME est vérifiée plus bas, une fois le total connu.
         const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
-        const parts = (Array.isArray(req.body.payments) ? req.body.payments : [])
+        const saisies = (Array.isArray(req.body.payments) ? req.body.payments : [])
             .map((p) => {
-                const part = { method: String(p && p.method || '').trim().slice(0, 40), amount: Number(p && p.amount) };
+                /* « 300,50 » se lit en français. `Number()` en faisait NaN, et la part DISPARAISSAIT
+                   au filtre : le règlement se retrouvait sur les autres moyens, sans un mot. Vide,
+                   elle ne compte pas (comme avant) ; illisible, elle est refusée plus bas. */
+                const brut = p && p.amount;
+                const part = { method: String(p && p.method || '').trim().slice(0, 40),
+                    amount: brut === '' || brut == null ? 0 : lireMontant(brut) };
                 // Infos du chèque (banque, numéro) : conservées pour le rapprochement et le suivi
                 // de l'encaissement. Seulement pour un chèque, et seulement si renseignées.
                 if (estCheque(part.method)) {
@@ -241,8 +266,12 @@ const checkout = async (req, res) => {
                     if (p && String(p.cheque_number || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
                 }
                 return part;
-            })
-            .filter((p) => p.method && Number.isFinite(p.amount) && p.amount > 0);
+            });
+        const illisible = saisies.find((p) => p.method && !Number.isFinite(p.amount));
+        if (illisible) {
+            return res.status(422).json({ error: `Montant illisible pour « ${illisible.method} » : écrivez-le par exemple 315,93.` });
+        }
+        const parts = saisies.filter((p) => p.method && p.amount > 0);
         const payMethod = parts.length
             ? parts.map((p) => p.method).join(' + ').slice(0, 30)
             : ((req.body.payment_method || '').toString().slice(0, 30) || null);
@@ -269,7 +298,10 @@ const checkout = async (req, res) => {
             if (rows[0].quantity < qty) return res.status(422).json({ error: `Stock insuffisant : ${rows[0].name}` });
             ln._it = rows[0];
             ln._qty = qty;
-            ln._disc = Math.min(100, Math.max(0, Number(ln.discount_pct) || 0)); // remise ligne
+            ln._disc = remiseLue(ln.discount_pct); // remise ligne
+            if (ln._disc === null) {
+                return res.status(422).json({ error: `Remise illisible sur « ${rows[0].name} » : écrivez-la par exemple 12,5.` });
+            }
         }
 
         /* REMISE LIGNE ET REMISE GLOBALE S'EXCLUENT.
