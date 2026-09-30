@@ -653,7 +653,9 @@ function StagiaireDetail() {
             — d'après les factures, ou coché à la main. Pleine largeur, sous le financement. */}
         <CarteReglement learnerId={id} reglements={reglements} canEdit={peutEncaisser} onSaved={loadReglements} />
 
-        <Card title={T("target", "Projet")}>
+        {/* Pleine largeur (cols-2) : le projet aligne beaucoup de cases (activité, équipement,
+            avancement), à l'étroit sur une demi-carte. */}
+        <Card title={T("target", "Projet")} className="cols-2">
           {projet.length ? projet.map((r) => <Row key={r.label} label={r.label} value={r.value} />)
             : <p className="hint" style={{ margin: 0 }}>Aucun projet renseigné.</p>}
           {/* LA NOTE (migration 168), sous le projet comme dans le formulaire. Du texte simple : ses

@@ -40,7 +40,7 @@ export default function CarteReglement({ learnerId, reglements, canEdit, onSaved
   }
 
   return (
-    <Card title={<Titre />} className="cols-2">
+    <Card title={<Titre />}>
       {erreur && <div className="regl-err" role="alert"><Icon name="alert-triangle" size={15} /> {erreur}</div>}
       <div className="regl-liste">
         {reglements.map((d) => {
