@@ -663,9 +663,10 @@ function Programmes({ onStatus }) {
         )}>
         {indispo && <p className="hint" style={{ marginTop: 0 }}><Icon name="info" size={12} /> {indispo}</p>}
         <p className="hint" style={{ marginTop: 0 }}>
-          Un e-mail qui part tout seul, une fois par stagiaire, à une date calculée : «&nbsp;3 mois
-          après la fin de la session&nbsp;», «&nbsp;7 jours avant le début&nbsp;». <b>Une règle ne
-          rattrape jamais le passé</b> : elle ne vaut que pour les dates atteintes après sa création.
+          Un e-mail qui part tout seul — à une date calculée («&nbsp;3&nbsp;mois après la fin&nbsp;»,
+          «&nbsp;7&nbsp;jours avant le début&nbsp;»), ou dès qu'un document est envoyé ou signé.
+          <b> Une règle ne rattrape jamais le passé</b> : elle ne vaut que pour ce qui arrive après
+          sa création.
         </p>
 
         {edite && (
@@ -674,37 +675,57 @@ function Programmes({ onStatus }) {
         )}
 
         {!edite && (regles.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>Aucune règle pour l'instant.</p>
+          <div className="mail-vide">
+            <span className="mail-vide-ico"><Icon name="clock" size={22} /></span>
+            <p>Aucune règle pour l'instant.</p>
+            {!indispo && (
+              <button type="button" className="btn sm primary" onClick={() => setEdite("neuve")}>
+                <Icon name="plus" size={13} /> Créer la première
+              </button>
+            )}
+          </div>
         ) : (
           <ul className="mail-regles">
-            {regles.map((r) => (
-              <li key={r.id} className={r.actif ? "" : "off"}>
-                <div>
-                  <b>{r.nom}</b>
-                  <span className="hint">
-                    {r.phrase}
-                    {estDocDecl(cat, r.declencheur) && (r.modele_titre ? ` · ${r.modele_titre}` : " · tous les documents")}
-                    {` · ${cibleRegleTexte(r)}`}
-                    {r.destinataire && r.destinataire !== "stagiaire" ? ` · ${libelleDestinataireMail(r.destinataire)}` : ""}
-                    {" · depuis le "}{r.depuis}
+            {regles.map((r) => {
+              const doc = estDocDecl(cat, r.declencheur);
+              return (
+                <li key={r.id} className={"mail-regle" + (r.actif ? "" : " off")}>
+                  <span className={"mail-regle-ico " + (doc ? "doc" : "date")} aria-hidden="true">
+                    <Icon name={doc ? "file-text" : "calendar"} size={16} />
                   </span>
-                  <span className="hint">
-                    {r.envoyes > 0 ? `${r.envoyes} envoyé${r.envoyes > 1 ? "s" : ""}` : "aucun envoi pour l'instant"}
-                    {r.echecs > 0 && ` · ${r.echecs} en échec`}
-                    {r.dernier && ` · dernier le ${r.dernier}`}
+                  <div className="mail-regle-corps">
+                    <b className="mail-regle-nom">{r.nom}</b>
+                    <span className="mail-regle-phrase">
+                      {r.phrase}
+                      {doc && (r.modele_titre ? ` · ${r.modele_titre}` : " · tous les documents")}
+                    </span>
+                    <div className="mail-regle-tags">
+                      <span className="chip"><Icon name="target" size={11} /> {cibleRegleTexte(r)}</span>
+                      {r.destinataire && r.destinataire !== "stagiaire" && (
+                        <span className="chip"><Icon name="send" size={11} /> {libelleDestinataireMail(r.destinataire)}</span>
+                      )}
+                      <span className="mail-regle-stat">
+                        {r.envoyes > 0 ? `${r.envoyes} envoyé${r.envoyes > 1 ? "s" : ""}` : "aucun envoi pour l'instant"}
+                        {r.echecs > 0 && ` · ${r.echecs} en échec`}
+                        {r.dernier && ` · dernier le ${r.dernier}`}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="mail-regle-actions">
+                    <button type="button" className={"btn sm" + (r.actif ? "" : " ghost")} onClick={() => basculer(r)}
+                      title={r.actif ? "Mettre en pause" : "Réactiver"}>
+                      <Icon name={r.actif ? "pause" : "play"} size={12} /> {r.actif ? "Active" : "En pause"}
+                    </button>
+                    <button type="button" className="btn sm ghost" onClick={() => setEdite(r)}>
+                      <Icon name="pencil" size={13} /> Modifier
+                    </button>
+                    <button type="button" className="btn sm ghost icone" onClick={() => supprimer(r)} aria-label={`Supprimer ${r.nom}`}>
+                      <Icon name="trash" size={14} />
+                    </button>
                   </span>
-                </div>
-                <span className="mail-regle-actions">
-                  <button type="button" className={"btn sm" + (r.actif ? "" : " ghost")} onClick={() => basculer(r)}>
-                    {r.actif ? "Active" : "En pause"}
-                  </button>
-                  <button type="button" className="btn sm ghost" onClick={() => setEdite(r)}>Modifier</button>
-                  <button type="button" className="btn sm ghost" onClick={() => supprimer(r)} aria-label={`Supprimer ${r.nom}`}>
-                    <Icon name="trash" size={14} />
-                  </button>
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ))}
       </Card>
@@ -724,6 +745,31 @@ function cibleRegleTexte(r) {
   return (r.formation_code || r.formation_titre) ? (r.formation_code || r.formation_titre) : "toutes les formations";
 }
 
+/* La règle dite en une phrase VIVANTE, mise à jour à chaque frappe — « 3 mois après la fin de la
+   session, au stagiaire, pour RS7404 ». Elle rassure : l'école voit ce qu'elle construit. */
+function resumeRegle(v, cat, formations) {
+  const est = estDocDecl(cat, v.declencheur);
+  let quand;
+  if (est) {
+    const d = (cat.declencheursDoc || []).find((x) => x.cle === v.declencheur);
+    const m = v.template_slug ? (cat.modeles || []).find((x) => x.slug === v.template_slug) : null;
+    quand = `Quand ${d ? d.libelle : "un document change"}${m ? ` (${m.label})` : ""}`;
+  } else {
+    const d = (cat.declencheurs || []).find((x) => x.cle === v.declencheur);
+    const n = Math.max(0, Math.round(Number(v.decalage) || 0));
+    const u = (cat.unites || []).find((x) => x.cle === v.unite);
+    const s = (cat.sens || []).find((x) => x.cle === v.sens);
+    quand = n === 0 ? `Le jour de ${d ? d.libelle : "…"}` : `${n} ${u ? u.libelle : ""} ${s ? s.libelle : ""} ${d ? d.libelle : ""}`;
+  }
+  const dest = est ? libelleDestinataireMail(v.destinataire || "stagiaire") : "au stagiaire";
+  let scope;
+  if (v.learner_id) scope = v.cible_stagiaire || "un stagiaire";
+  else if (v.company_id) scope = v.cible_entreprise || "une entreprise";
+  else if (v.program_id) { const f = formations.find((x) => x.id === v.program_id); scope = f ? (f.code || f.title) : "une formation"; }
+  else scope = "toutes les formations";
+  return { est, quand, dest, scope };
+}
+
 function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus }) {
   const [v, setV] = useState(() => regle || {
     nom: "", declencheur: "fin_session", sens: "apres", decalage: 3, unite: "mois",
@@ -733,13 +779,19 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
   const [busy, setBusy] = useState(false);
   const [apercu, setApercu] = useState(null);
   const maj = (champ) => (e) => setV((p) => ({ ...p, [champ]: e.target.value }));
-  const declencheursDoc = cat.declencheursDoc || [];
   const estDoc = estDocDecl(cat, v.declencheur);
 
-  function majDeclencheur(e) {
-    const d = e.target.value;
-    setV((p) => ({ ...p, declencheur: d,
-      ...(estDocDecl(cat, d) && !p.destinataire ? { destinataire: "stagiaire" } : {}) }));
+  /* Bascule « date » ⇄ « document » : on garde le déclencheur s'il est déjà du bon type, sinon un
+     défaut (la fin de session, ou « document signé »). */
+  function choisirType(type) {
+    setV((p) => {
+      if (type === "document") {
+        const dejaDoc = estDocDecl(cat, p.declencheur);
+        const parDefaut = (cat.declencheursDoc || []).some((x) => x.cle === "document_signe") ? "document_signe" : ((cat.declencheursDoc || [])[0] || {}).cle;
+        return { ...p, declencheur: dejaDoc ? p.declencheur : (parDefaut || p.declencheur), destinataire: p.destinataire || "stagiaire" };
+      }
+      return { ...p, declencheur: estDocDecl(cat, p.declencheur) ? "fin_session" : p.declencheur };
+    });
   }
 
   async function voir() {
@@ -747,14 +799,12 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
     try { setApercu((await apercuMail({ objet: v.objet, corps: v.corps })).data); }
     catch (e) { onStatus({ type: "error", message: e.message }); }
   }
-
   async function enregistrer() {
     setBusy(true); onStatus(null);
     try {
       const payload = {
-        ...v, decalage: Number(v.decalage) || 0,
-        program_id: v.program_id || null, template_slug: v.template_slug || null,
-        destinataire: v.destinataire || "stagiaire",
+        ...v, decalage: Number(v.decalage) || 0, program_id: v.program_id || null,
+        template_slug: v.template_slug || null, destinataire: v.destinataire || "stagiaire",
         learner_id: v.learner_id || null, company_id: v.company_id || null, actif: v.actif !== 0,
       };
       if (regle) await modifierRegleMail(regle.id, payload); else await creerRegleMail(payload);
@@ -765,82 +815,111 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
     finally { setBusy(false); }
   }
 
+  const res = resumeRegle(v, cat, formations);
   return (
-    <div className="mail-regle-form">
+    <div className="mail-editeur">
       <div className="field">
         <label htmlFor="regle-nom">Nom de la règle</label>
-        <input id="regle-nom" className="inp" value={v.nom} onChange={maj("nom")}
-          placeholder="Merci — convention signée" />
+        <input id="regle-nom" className="inp" value={v.nom} onChange={maj("nom")} placeholder="Merci — convention signée" />
       </div>
-      <div className="field">
-        <label htmlFor="regle-declencheur">Quand l'e-mail part-il&nbsp;?</label>
-        <select id="regle-declencheur" className="inp" value={v.declencheur} onChange={majDeclencheur}>
-          <optgroup label="À une date">
-            {cat.declencheurs.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
-          </optgroup>
-          <optgroup label="Quand un document…">
-            {declencheursDoc.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
-          </optgroup>
-        </select>
-      </div>
-      {estDoc ? (
-        <div className="mail-regle-quand">
-          <div className="field">
-            <label htmlFor="regle-modele">Modèle concerné</label>
-            <select id="regle-modele" className="inp" value={v.template_slug || ""}
-              onChange={(e) => setV((p) => ({ ...p, template_slug: e.target.value || null }))}>
-              <option value="">Tous les documents</option>
-              {(cat.modeles || []).map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
-            </select>
+
+      <section className="mail-ed-bloc">
+        <h4 className="mail-ed-titre"><span className="mail-ed-num">1</span> Quand l'e-mail part-il&nbsp;?</h4>
+        <div className="seg mail-ed-seg">
+          <button type="button" className={"seg-btn" + (!estDoc ? " on" : "")} onClick={() => choisirType("date")}>
+            <Icon name="calendar" size={13} /> À une date
+          </button>
+          <button type="button" className={"seg-btn" + (estDoc ? " on" : "")} onClick={() => choisirType("document")}>
+            <Icon name="file-text" size={13} /> Quand un document…
+          </button>
+        </div>
+        {estDoc ? (
+          <div className="mail-ed-grille">
+            <div className="field">
+              <label htmlFor="regle-evt">Événement</label>
+              <select id="regle-evt" className="inp" value={v.declencheur} onChange={maj("declencheur")}>
+                {(cat.declencheursDoc || []).map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="regle-modele">Modèle concerné</label>
+              <select id="regle-modele" className="inp" value={v.template_slug || ""}
+                onChange={(e) => setV((p) => ({ ...p, template_slug: e.target.value || null }))}>
+                <option value="">Tous les documents</option>
+                {(cat.modeles || []).map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+              </select>
+            </div>
           </div>
+        ) : (
+          <div className="mail-ed-grille date">
+            <div className="field fx-petit">
+              <label htmlFor="regle-decalage">Combien</label>
+              <input id="regle-decalage" className="inp" type="number" min="0" value={v.decalage} onChange={maj("decalage")} />
+            </div>
+            <div className="field">
+              <label htmlFor="regle-unite">Unité</label>
+              <select id="regle-unite" className="inp" value={v.unite} onChange={maj("unite")}>
+                {cat.unites.map((u) => <option key={u.cle} value={u.cle}>{u.libelle}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="regle-sens">Avant / après</label>
+              <select id="regle-sens" className="inp" value={v.sens} onChange={maj("sens")}>
+                {cat.sens.map((x) => <option key={x.cle} value={x.cle}>{x.libelle}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="regle-declencheur">Quelle date</label>
+              <select id="regle-declencheur" className="inp" value={v.declencheur} onChange={maj("declencheur")}>
+                {cat.declencheurs.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="mail-ed-bloc">
+        <h4 className="mail-ed-titre"><span className="mail-ed-num">2</span> Pour qui&nbsp;?</h4>
+        {estDoc && (
           <div className="field">
             <label htmlFor="regle-dest">Destinataire</label>
             <select id="regle-dest" className="inp" value={v.destinataire || "stagiaire"} onChange={maj("destinataire")}>
               {cat.destinataires.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
             </select>
           </div>
+        )}
+        <CibleRegle v={v} setV={setV} formations={formations} />
+      </section>
+
+      <section className="mail-ed-bloc">
+        <h4 className="mail-ed-titre"><span className="mail-ed-num">3</span> Le message</h4>
+        <div className="field">
+          <label htmlFor="regle-objet">Objet</label>
+          <input id="regle-objet" className="inp" value={v.objet} onChange={maj("objet")}
+            placeholder={estDoc ? "Votre document {Document} est bien reçu, {Prénom}" : "Comment se passe la suite, {Prénom} ?"} />
         </div>
-      ) : (
-        <div className="mail-regle-quand">
-          <div className="field">
-            <label htmlFor="regle-decalage">Combien</label>
-            <input id="regle-decalage" className="inp" type="number" min="0" value={v.decalage} onChange={maj("decalage")} />
-          </div>
-          <div className="field">
-            <label htmlFor="regle-unite">Unité</label>
-            <select id="regle-unite" className="inp" value={v.unite} onChange={maj("unite")}>
-              {cat.unites.map((u) => <option key={u.cle} value={u.cle}>{u.libelle}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="regle-sens">Avant ou après</label>
-            <select id="regle-sens" className="inp" value={v.sens} onChange={maj("sens")}>
-              {cat.sens.map((x) => <option key={x.cle} value={x.cle}>{x.libelle}</option>)}
-            </select>
-          </div>
+        <div className="field">
+          <label htmlFor="regle-corps">Contenu</label>
+          <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
+            onInserer={(txt) => setV((p) => ({ ...p, corps: `${p.corps}${txt}` }))} />
+          <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
+            placeholder={estDoc ? "Bonjour {Prénom},\n\nNous avons bien reçu votre {Document} signé. Merci !"
+              : "Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
         </div>
-      )}
-      <CibleRegle v={v} setV={setV} formations={formations} />
-      <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
-        onInserer={(txt) => setV((p) => ({ ...p, corps: `${p.corps}${txt}` }))} />
-      <div className="field">
-        <label htmlFor="regle-objet">Objet</label>
-        <input id="regle-objet" className="inp" value={v.objet} onChange={maj("objet")}
-          placeholder={estDoc ? "Votre document {Document} est bien reçu, {Prénom}" : "Comment se passe la suite, {Prénom} ?"} />
+      </section>
+
+      <div className="mail-ed-resume">
+        <Icon name={res.est ? "file-text" : "calendar"} size={15} />
+        <span><b>{res.quand}</b>, {res.dest}, pour <b>{res.scope}</b>.</span>
       </div>
-      <div className="field">
-        <label htmlFor="regle-corps">Message</label>
-        <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
-          placeholder={estDoc ? "Bonjour {Prénom},\n\nNous avons bien reçu votre {Document} signé. Merci !"
-            : "Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="btn sm" onClick={voir} disabled={!v.objet.trim() || !v.corps.trim()}>
+
+      <div className="mail-ed-pied">
+        <button type="button" className="btn sm ghost" onClick={voir} disabled={!v.objet.trim() || !v.corps.trim()}>
           <Icon name="eye" size={13} /> Aperçu
         </button>
         <span style={{ flex: 1 }} />
         <button type="button" className="btn ghost sm" onClick={onFerme}>Annuler</button>
-        <button type="button" className="btn primary sm" onClick={enregistrer} disabled={busy}>
+        <button type="button" className="btn primary sm" onClick={enregistrer} disabled={busy || !v.nom.trim()}>
           {busy ? "…" : regle ? "Enregistrer" : "Créer la règle"}
         </button>
       </div>
@@ -861,18 +940,18 @@ function CibleRegle({ v, setV, formations }) {
       program_id: m === "formation" ? p.program_id : null,
       learner_id: null, company_id: null, cible_stagiaire: null, cible_entreprise: null }));
   }
+  const MODES = [["formation", "Une formation", "target"], ["stagiaire", "Un stagiaire", "user"], ["entreprise", "Une entreprise", "building"]];
   return (
-    <div className="mail-regle-cible">
-      <div className="field">
-        <label>Pour qui&nbsp;?</label>
-        <div className="mail-cible-seg">
-          {[["formation", "Une formation"], ["stagiaire", "Un stagiaire"], ["entreprise", "Une entreprise"]].map(([m, lib]) => (
-            <button key={m} type="button" className={"btn sm" + (mode === m ? "" : " ghost")} onClick={() => choisirMode(m)}>{lib}</button>
-          ))}
-        </div>
+    <div className="mail-cible">
+      <div className="seg mail-cible-seg">
+        {MODES.map(([m, lib, ico]) => (
+          <button key={m} type="button" className={"seg-btn" + (mode === m ? " on" : "")} onClick={() => choisirMode(m)}>
+            <Icon name={ico} size={12} /> {lib}
+          </button>
+        ))}
       </div>
       {mode === "formation" && (
-        <div className="field">
+        <div className="field" style={{ margin: 0 }}>
           <select className="inp" value={v.program_id || ""} aria-label="Formation"
             onChange={(e) => setV((p) => ({ ...p, program_id: e.target.value || null }))}>
             <option value="">Toutes les formations</option>
