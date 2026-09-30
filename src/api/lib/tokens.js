@@ -1291,6 +1291,11 @@ const OPTIONAL_TOKENS = new Set([
     'Case photos oui', 'Case photos non', 'Choix photos',
     'Case partenaires oui', 'Case partenaires non', 'Choix partenaires', 'Données partenaires',
     'Identité partenaires',
+    /* DES MONTANTS QUI PEUVENT LÉGITIMEMENT ÊTRE ABSENTS (2026-09-30) : un dossier SANS acompte, une
+       formation sans nombre d'heures. Vides, ce n'est pas une « information manquante » — une facture
+       sans acompte est normale, et la bloquer pour ça était le bug (relevé sur une facture d'acompte
+       dont le dossier n'avait pas d'acompte). La ligne s'imprime simplement en blanc. */
+    'Acompte', 'Reste à payer', 'Coût horaire',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
