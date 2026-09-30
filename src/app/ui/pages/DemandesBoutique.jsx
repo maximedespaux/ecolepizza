@@ -249,8 +249,9 @@ function FacturerModal({ d, busy, onClose, onValider }) {
      partenaire est vendue par le partenaire, cf. invoiceShopRequest), TVA arrondie PAR TAUX
      (`totalDemande`, lib/ttc.js). C'est lui qu'on encaisse, et le règlement tombe dessus au centime :
      additionner les TTC de ligne en faisait encaisser un de moins ou de plus sur près d'un panier à
-     deux taux sur quatre, et la facture imprimait ce règlement sous un total qu'il ne faisait pas. */
-  const totalTtc = totalDemande(d.lines).facture;
+     deux taux sur quatre, et la facture imprimait ce règlement sous un total qu'il ne faisait pas.
+     `d.tva_centimes` : le calcul de cette facture (migration 192), que le serveur donne avec la demande. */
+  const totalTtc = totalDemande(d.lines, d.tva_centimes).facture;
   const blocage = blocageReglement(resolvePayments(paiements, totalTtc));
   /* Échéance au JOUR MÊME par défaut : à ce stade le paiement a déjà eu lieu (« Payé » précède
    * « Facturé »), la facture ne fait que le constater — rien n'est dû plus tard. Modifiable pour

@@ -9,6 +9,11 @@
  *
  * Sert la carte d'une demande (`listShopRequests`), la notification d'une commande et le prix d'un
  * article dans l'espace stagiaire (espace.controller.js), et la caisse (`checkout`).
+ *
+ * DEUX CALCULS DEPUIS LA MIGRATION 192 (`tvaCentimes`, cf. `ventilerTva`) : une facture née avec
+ * `invoice.tva_centimes` compte en centimes entiers, une facture d'avant garde l'ancien calcul. Un
+ * montant annoncé suit la facture qu'il annonce : celle qui naîtra (la colonne existe-t-elle ?), ou
+ * celle d'une demande déjà facturée (`tvaCentimesDeLaDemande`).
  */
 const { ventilerTva } = require('./facturx.js');
 
@@ -31,16 +36,18 @@ function ttcDeLigne(prixHt, qte, taux) {
 
 /**
  * LE TOTAL DE LA FACTURE, par `ventilerTva`. `lignes` : [{ ht, taux }], `ht` étant le HT de ligne que
- * la facture écrit. Exonérée (art. 261-4-4°) : pas de TVA, le total est le HT.
+ * la facture écrit. Exonérée (art. 261-4-4°) : pas de TVA, le total est le HT. `tvaCentimes` : le
+ * calcul d'une facture née depuis la migration 192.
  *
  * Sans ligne, zéro — et pas la ligne unique de repli de `ventilerTva`, qui prendrait `amountNet`.
  */
-function totalFacture(lignes, exonere = false) {
+function totalFacture(lignes, exonere = false, tvaCentimes = false) {
     if (!lignes.length) return { ht: 0, tva: 0, ttc: 0 };
     const v = ventilerTva({
         amountNet: Number(lignes.reduce((s, l) => s + l.ht, 0).toFixed(2)),
         tvaExoneree: !!exonere,
         taxRate: null,
+        tvaCentimes: !!tvaCentimes,
         lines: lignes.map((l) => ({ amount: l.ht, taxRate: l.taux })),
     });
     return { ht: v.base, tva: v.taxe, ttc: v.grand };
@@ -52,17 +59,29 @@ function totalFacture(lignes, exonere = false) {
  * `facture` est le total de la facture de l'ÉCOLE : ses lignes ÉCOLE à prix connu, celles que
  * `invoiceShopRequest` facture. Une ligne PARTENAIRE est vendue par le partenaire, sur SA facture :
  * ventilée à part, elle s'ajoute au total de la demande (`ttc`) sans se mêler à la TVA de l'école. Une
- * ligne sans prix (« sur demande ») ne compte pas, et `aDefinir` le dit.
+ * ligne sans prix (« sur demande ») ne compte pas, et `aDefinir` le dit. `tvaCentimes` : le calcul de
+ * la facture de la demande (`tvaCentimesDeLaDemande`) — le partenaire, dont on ignore le sien, suit le
+ * même.
  */
-function totalDemande(lignes) {
+function totalDemande(lignes, tvaCentimes = false) {
     const ecole = [], partenaire = [];
     let aDefinir = false;
     for (const l of lignes || []) {
         if (l.unit_price_ht == null) { aDefinir = true; continue; }
         (l.source === 'ECOLE' ? ecole : partenaire).push({ ht: htDeLigne(l.unit_price_ht, l.qty), taux: l.tax_rate });
     }
-    const f = totalFacture(ecole), p = totalFacture(partenaire);
+    const f = totalFacture(ecole, false, tvaCentimes), p = totalFacture(partenaire, false, tvaCentimes);
     return { ht: arrondi(f.ht + p.ht), ttc: arrondi(f.ttc + p.ttc), facture: f.ttc, aDefinir };
 }
 
-module.exports = { arrondi, htDeLigne, ttcDeLigne, totalFacture, totalDemande };
+/**
+ * LE CALCUL DE LA FACTURE D'UNE DEMANDE BOUTIQUE. Facturée : celui de SA facture, relu dans
+ * `invoice.tva_centimes` (la requête le rend sous `facture_tva_centimes`) — une facture émise garde
+ * son calcul, et la demande l'annonce tel quel. Pas encore facturée : celui de la facture qui naîtra,
+ * en centimes entiers dès que la colonne existe (`colonneTva`), comme `invoiceShopRequest` l'écrira.
+ */
+function tvaCentimesDeLaDemande(r, colonneTva) {
+    return r.invoice_id ? !!Number(r.facture_tva_centimes || 0) : !!colonneTva;
+}
+
+module.exports = { arrondi, htDeLigne, ttcDeLigne, totalFacture, totalDemande, tvaCentimesDeLaDemande };

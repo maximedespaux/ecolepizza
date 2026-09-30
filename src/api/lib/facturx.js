@@ -109,6 +109,23 @@ const MENTIONS_LEGALES = [
  * son édition.
  *
  * Exonéré (art. 261-4-4°) court-circuite tout : un seul groupe à 0 %, catégorie E.
+ *
+ * UN QUATRIÈME DÉFAUT, relevé le 2026-09-30 : les HT d'un taux s'additionnaient EN FLOTTANT
+ * avant l'arrondi. Quand la TVA exacte tombe sur un demi-centime, la somme passe parfois juste
+ * en dessous, et l'arrondi part vers le bas. Quatre lignes à 10 % — 122,60 + 159,45 + 5,88 +
+ * 141,42 — font 429,35 € HT et 42,935 € de TVA ; la somme flottante vaut 429,34999…, et le PDF
+ * imprimait 42,93 € et 472,28 € au lieu de 42,94 € et 472,29 €. Toujours un centime DE MOINS,
+ * jamais sur une ligne seule, jamais à 20 % (la TVA y vaut le cinquième d'un nombre entier de
+ * centimes, qui ne tombe jamais sur un demi). Et les écrans qui annoncent la facture la recopient
+ * (lib/ttc.js) : la caisse et la boutique encaissaient ce centime de moins. D'où
+ * `ventilerEnCentimes`, ci-dessous.
+ *
+ * MAIS SEULEMENT POUR LES FACTURES CRÉÉES DEPUIS LA MIGRATION 192 (`d.tvaCentimes`, lu dans
+ * invoice.tva_centimes). Rien n'est figé à l'émission : la base ne garde que des HT, et le PDF
+ * comme le XML se RECALCULENT à chaque téléchargement. Corriger toutes les factures aurait
+ * changé d'un centime le total réimprimé de pièces déjà remises au client — l'école a tranché :
+ * une facture émise garde son calcul. Sans le drapeau, c'est donc l'ancien calcul, À
+ * L'IDENTIQUE, flottants compris : c'est lui qui a produit les pièces envoyées.
  */
 function ventilerTva(d) {
     const net = Number(d.amountNet);
@@ -117,11 +134,14 @@ function ventilerTva(d) {
     }
     const tauxDefaut = Number.isFinite(Number(d.taxRate)) && d.taxRate !== null ? Number(d.taxRate) : 20;
     const lignes = (d.lines && d.lines.length) ? d.lines : [{ name: d.lineName, amount: net }];
+    const tauxDe = (ln) => (Number.isFinite(Number(ln.taxRate)) && ln.taxRate !== null && ln.taxRate !== undefined
+        ? Number(ln.taxRate) : tauxDefaut);
+    if (d.tvaCentimes) return ventilerEnCentimes(lignes, tauxDe);
 
+    // L'ANCIEN CALCUL, celui des factures d'avant la 192 : il ne doit plus bouger d'un centime.
     const parTaux = new Map();
     for (const ln of lignes) {
-        const t = Number.isFinite(Number(ln.taxRate)) && ln.taxRate !== null && ln.taxRate !== undefined
-            ? Number(ln.taxRate) : tauxDefaut;
+        const t = tauxDe(ln);
         parTaux.set(t, (parTaux.get(t) || 0) + Number(ln.amount || 0));
     }
     // Arrondi PAR GROUPE, comme l'exige la ventilation légale.
@@ -136,6 +156,37 @@ function ventilerTva(d) {
     const base = Math.round(groupes.reduce((s, g) => s + g.base, 0) * 100) / 100;
     const taxe = Math.round(groupes.reduce((s, g) => s + g.taxe, 0) * 100) / 100;
     return { groupes, base, taxe, grand: Math.round((base + taxe) * 100) / 100 };
+}
+
+/** Des euros déjà au centime (122.6, « 122.60 ») en centimes entiers : 12260. */
+const enCentimes = (euros) => Math.round(Number(euros || 0) * 100);
+
+/**
+ * LA VENTILATION D'UNE FACTURE CRÉÉE DEPUIS LA MIGRATION 192 : aucun flottant entre la ligne et
+ * le total. Les HT de ligne arrivent au centime (DECIMAL(10,2) en base, ou arrondis par
+ * l'appelant) : ramenés en centimes entiers, ils s'additionnent exactement. La TVA exacte d'un
+ * taux se compte en entiers — HT en centimes × taux en millièmes de point —, puis s'arrondit UNE
+ * fois au centime, le demi-centime vers le haut. HT + TVA = TTC au centime, par construction.
+ * L'écran en porte la copie (src/app/ui/lib/ttc.js, `total-facture-ecrans.test.js` les confronte).
+ */
+function ventilerEnCentimes(lignes, tauxDe) {
+    const parTaux = new Map(); // taux → HT du taux, en centimes
+    for (const ln of lignes) {
+        const t = tauxDe(ln);
+        parTaux.set(t, (parTaux.get(t) || 0) + enCentimes(ln.amount));
+    }
+    let ht = 0;
+    let tva = 0;
+    const groupes = [...parTaux.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([taux, centimes]) => {
+            // en cent-millièmes de centime, puis au centime ; le demi, vers le haut
+            const taxe = Math.floor((centimes * Math.round(taux * 1000) + 50000) / 100000);
+            ht += centimes;
+            tva += taxe;
+            return { cat: taux === 0 ? 'Z' : 'S', taux, base: centimes / 100, taxe: taxe / 100 };
+        });
+    return { groupes, base: ht / 100, taxe: tva / 100, grand: (ht + tva) / 100 };
 }
 
 function buildCII(d) {

@@ -21,7 +21,7 @@ const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
 // Le prix TTC d'un article et le total d'une commande : ceux que la facture imprimera.
-const { ttcDeLigne, totalDemande } = require('../lib/ttc.js');
+const { ttcDeLigne, totalDemande, tvaCentimesDeLaDemande } = require('../lib/ttc.js');
 const { formationsDesQcm, jourPour } = require('../lib/qcmFormations.js');
 const { capitaliser, enCapitales, CAPITALES_STAGIAIRE } = require('../lib/saisie.js');
 const { suivreStagiaire } = require('../lib/referentEntreprise.js');
@@ -1640,9 +1640,11 @@ const createShopRequest = async (req, res) => {
         // `user_id` nul : visible par tout l'organisme, comme les autres notifications de suivi.
         const nomStagiaire = [learner.first_name, learner.last_name].filter(Boolean).join(' ').trim();
         const nbArticles = resolved.reduce((s, r) => s + (Number(r.qty) || 0), 0);
-        // Le montant que la carte de la demande affichera : celui de la facture (lib/ttc.js).
+        // Le montant que la carte de la demande affichera : celui de la facture qui naîtra (lib/ttc.js),
+        // en centimes entiers dès que la migration 192 est jouée.
+        const tvaCentimes = await colonneExiste(conn, 'invoice', 'tva_centimes');
         const totalTTC = totalDemande(resolved.map((r) => ({
-            source: r.source, qty: r.qty, unit_price_ht: r.price, tax_rate: r.tax }))).ttc;
+            source: r.source, qty: r.qty, unit_price_ht: r.price, tax_rate: r.tax })), tvaCentimes).ttc;
         const quand = pickup
             ? ` · retrait le ${String(pickup).slice(0, 10).split('-').reverse().join('/')}`
             : '';
@@ -1671,6 +1673,11 @@ const getMyShopRequests = async (req, res) => {
         const conn = db.promise();
         const learner = await learnerForUser(conn, req.user.id);
         if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire.' });
+        /* Le calcul de la facture (migration 192, cf. `tvaCentimesDeLaDemande`) : celui de SA facture
+           pour une demande facturée, relu ici ; celui de la facture qui naîtra pour les autres — et
+           pour le PANIER, que la page reçoit avec la liste (`tva_centimes`, à la racine). */
+        const colonneTva = await colonneExiste(conn, 'invoice', 'tva_centimes');
+        const colTvaFacture = colonneTva ? 'inv.tva_centimes AS facture_tva_centimes' : 'NULL AS facture_tva_centimes';
         let rows = [];
         try {
             [rows] = await conn.query(
@@ -1679,23 +1686,27 @@ const getMyShopRequests = async (req, res) => {
                 // Le front y découpe l'heure telle quelle et affichait 10:00 — deux heures avant
                 // l'heure réelle, sur un rendez-vous physique. On renvoie donc la MÊME forme que
                 // celle qu'on accepte à l'écriture : heure locale, sans Z (cf. lib/horaires.js).
-                `SELECT r.id, r.ref, r.status, r.note,
+                `SELECT r.id, r.ref, r.status, r.note, r.invoice_id, ${colTvaFacture},
                         DATE_FORMAT(r.created_at, '%Y-%m-%dT%H:%i') AS created_at,
                         DATE_FORMAT(r.pickup_at, '%Y-%m-%dT%H:%i') AS pickup_at,
                         l.source, l.label, l.qty, l.unit_price_ht, l.tax_rate, l.personalization, l.variant
                  FROM shop_request r LEFT JOIN shop_request_line l ON l.request_id = r.id
+                 LEFT JOIN invoice inv ON inv.id = r.invoice_id
                  WHERE r.learner_id = ? ORDER BY r.created_at DESC, l.sort_order`,
                 [learner.id]
             );
-        } catch (e) { if (isMissingSchema(e)) return res.json({ data: [] }); throw e; }
+        } catch (e) { if (isMissingSchema(e)) return res.json({ data: [], tva_centimes: colonneTva }); throw e; }
         const byId = new Map();
         for (const r of rows) {
-            if (!byId.has(r.id)) byId.set(r.id, { id: r.id, ref: r.ref, status: r.status, note: r.note, pickup_at: r.pickup_at, created_at: r.created_at, lines: [] });
+            if (!byId.has(r.id)) {
+                byId.set(r.id, { id: r.id, ref: r.ref, status: r.status, note: r.note, pickup_at: r.pickup_at, created_at: r.created_at,
+                    tva_centimes: tvaCentimesDeLaDemande(r, colonneTva), lines: [] });
+            }
             if (r.label) byId.get(r.id).lines.push({ source: r.source, label: r.label, qty: r.qty,
                 unit_price_ht: r.unit_price_ht == null ? null : Number(r.unit_price_ht), tax_rate: Number(r.tax_rate),
                 personalization: r.personalization, variant: r.variant });
         }
-        res.json({ data: [...byId.values()] });
+        res.json({ data: [...byId.values()], tva_centimes: colonneTva });
     } catch (err) {
         console.error('Erreur mes demandes :', err);
         res.status(500).json({ error: 'Internal Server Error' });

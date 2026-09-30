@@ -183,6 +183,9 @@ function Ventes() {
   }, [payOptions]);
 
   const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
+  /* Le calcul de la facture qui va naître (migration 192) : en centimes entiers dès que la colonne
+     existe — ce que le serveur dit dans ses réglages, et ce qu'il vérifiera. */
+  const tvaCentimes = !!(settings && settings.tva_centimes);
   // Une remise de ligne exclut la remise globale, et réciproquement (cf. sale.controller.js) :
   // les deux se cumulaient, et 10 % sur l'article plus 5 % sur la vente faisaient 14,5 %.
   const remiseDeLigne = useMemo(() => cart.some((l) => tauxApplique(l.disc) > 0), [cart]);
@@ -201,9 +204,9 @@ function Ventes() {
      venait d'être calculé ici ; arrondie une fois sur plusieurs taux, la TVA s'écartait d'un centime
      de la facture sur près d'une vente à deux taux sur quatre. */
   const totals = useMemo(() => ({
-    ...totalFacture(lignesDuPanier(cart, { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies),
+    ...totalFacture(lignesDuPanier(cart, { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies, tvaCentimes),
     discount: remiseDeLigne ? 0 : remiseGlobale,
-  }), [cart, remiseDeLigne, remiseGlobale, tvaApplies]);
+  }), [cart, remiseDeLigne, remiseGlobale, tvaApplies, tvaCentimes]);
 
   async function validate() {
     if (cart.length === 0) return;
@@ -495,7 +498,7 @@ function Ventes() {
                             l'imprime ainsi dans sa colonne « Total TTC » : un article seul affiche
                             ce que le total annonce, et ce que le serveur encaissera. */}
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>
-                          {euro(totalFacture(lignesDuPanier([l], { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies).ttc)}
+                          {euro(totalFacture(lignesDuPanier([l], { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies, tvaCentimes).ttc)}
                         </span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>

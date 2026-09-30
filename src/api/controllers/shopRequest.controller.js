@@ -17,7 +17,7 @@ const { lireMontant } = require('../lib/montantSaisi.js');
 // Le total que le règlement doit atteindre est celui du PDF, par la fonction qui le calcule.
 const { ventilerTva } = require('../lib/facturx.js');
 // … et celui qu'annonce la carte d'une demande, calculé de même (cf. lib/ttc.js).
-const { totalDemande } = require('../lib/ttc.js');
+const { totalDemande, tvaCentimesDeLaDemande } = require('../lib/ttc.js');
 const { montantFr } = require('../lib/montants.js');
 
 /* Colonnes de `invoice` arrivées par migration. Écrire une colonne absente ferait échouer
@@ -59,6 +59,10 @@ const listShopRequests = async (req, res) => {
         const avecRemise = await colonneDe(conn, 'shop_request_line', 'discount_pct');
         const colsRemise = avecRemise ? 'li.discount_pct, li.unit_price_gross_ht,' : '';
         const jointureEntreprise = 'LEFT JOIN company c ON c.id = l.company_id';
+        /* Le calcul de la facture de chaque demande (migration 192, cf. `tvaCentimesDeLaDemande`) : celui
+           de SA facture si elle est facturée, relu ici ; sinon celui de la facture qui naîtra. */
+        const colonneTva = await colonneFacture(conn, 'tva_centimes');
+        const colTvaFacture = colonneTva ? 'inv.tva_centimes AS facture_tva_centimes,' : 'NULL AS facture_tva_centimes,';
         let rows = [];
         try {
             [rows] = await conn.query(
@@ -70,10 +74,12 @@ const listShopRequests = async (req, res) => {
                         ${colsFacturation}
                         l.id AS learner_id, l.first_name, l.last_name, l.email, l.phone,
                         ${colsRemise}
+                        ${colTvaFacture}
                         li.source, li.label, li.qty, li.unit_price_ht, li.tax_rate, li.personalization, li.variant, li.sort_order
                  FROM shop_request r
                  JOIN learner l ON l.id = r.learner_id
                  ${jointureEntreprise}
+                 LEFT JOIN invoice inv ON inv.id = r.invoice_id
                  LEFT JOIN shop_request_line li ON li.request_id = r.id
                  WHERE r.organization_id = ? ${status ? 'AND r.status = ?' : ''}
                  ORDER BY r.created_at DESC, li.sort_order`,
@@ -98,6 +104,8 @@ const listShopRequests = async (req, res) => {
                     company_id: r.company_id, company_name: r.company_name,
                     learner: { id: r.learner_id, first_name: r.first_name, last_name: r.last_name,
                                email: r.email, phone: r.phone },
+                    // Le calcul de sa facture : la carte, et la fenêtre « Facturer la demande », le suivent.
+                    tva_centimes: tvaCentimesDeLaDemande(r, colonneTva),
                     lines: [], has_partner: false,
                 });
             }
@@ -119,7 +127,7 @@ const listShopRequests = async (req, res) => {
          * Une ligne « tarif sur demande » n'a pas de prix : elle n'est pas additionnée, et
          * `tarif_a_definir` le signale, sinon le total afficherait un montant faux avec assurance. */
         const data = [...byId.values()].map((d) => {
-            const t = totalDemande(d.lines);
+            const t = totalDemande(d.lines, d.tva_centimes);
             return { ...d, total_ht: t.ht, total_ttc: t.ttc, tarif_a_definir: t.aDefinir };
         });
         res.json({ data });
@@ -267,10 +275,14 @@ const invoiceShopRequest = async (req, res) => {
          * tantôt 0,01000…5 : `Math.abs(somme - ttc) > 0.01` accepte 60,01 € pour 60 € et refuse
          * 120,01 € pour 120 €.
          *
-         * Aucune part : rien à vérifier, la facture naît PAYÉE avec `payment_method` seul, comme avant. */
+         * Aucune part : rien à vérifier, la facture naît PAYÉE avec `payment_method` seul, comme avant.
+         *
+         * Et le calcul est celui que CETTE facture emploiera : en centimes entiers dès que la
+         * migration 192 est jouée — la facture naît alors avec `tva_centimes`, écrit plus bas. */
+        const tvaCentimes = await colonneFacture(conn, 'tva_centimes');
         if (parts.length) {
             const ttc = ventilerTva({
-                amountNet: totalHt, tvaExoneree: false, taxRate: tauxEntete,
+                amountNet: totalHt, tvaExoneree: false, taxRate: tauxEntete, tvaCentimes,
                 lines: lines.map((l) => ({ amount: Number((Number(l.unit_price_ht) * l.qty).toFixed(2)), taxRate: Number(l.tax_rate) })),
             }).grand;
             const somme = parts.reduce((s, p) => s + p.amount, 0);
@@ -345,6 +357,9 @@ const invoiceShopRequest = async (req, res) => {
         await ajouter('billing_profile_id', emetteur ? emetteur.id : null);
         await ajouter('template_slug', slugChoisi);
         await ajouter('company_id', versEntreprise ? r.company_id : null);
+        // TVA en centimes entiers (192) : sondée plus haut, pour que la vérification du règlement
+        // et la facture emploient le même calcul. Écrite ici, jamais par défaut : cf. ventilerTva.
+        if (tvaCentimes) { ic.push('tva_centimes'); iv.push(1); }
         await conn.query(
             `INSERT INTO invoice (${ic.join(', ')}) VALUES (uuid(), ${ic.slice(1).map(() => '?').join(', ')})`,
             iv

@@ -463,7 +463,7 @@ function PartenairesTab() {
   ))}</>;
 }
 
-function PanierTab({ onSent }) {
+function PanierTab({ onSent, tvaCentimes }) {
   const [lines, setLines] = useState(getCart);
   const [note, setNote] = useState("");
   const [pickup, setPickup] = useState(null);
@@ -479,7 +479,7 @@ function PanierTab({ onSent }) {
     return <EmptyState icon="package" title="Ton panier est vide"
       text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare, tu paies sur place." />;
   }
-  const t = cartTotals(lines);
+  const t = cartTotals(lines, tvaCentimes);
   const brodes = lines.filter((l) => l.personalizable);
   const manque = brodes.filter((l) => !brodOk(l));
 
@@ -632,7 +632,7 @@ function MesDemandes() {
   }
 
   return rows.map((r) => {
-    const t = totalDemande(r.lines);
+    const t = totalDemande(r.lines, r.tva_centimes); // le calcul de SA facture, que le serveur donne
     return (
       <Card key={r.id} title={
         <span className="card-ttl">
@@ -701,14 +701,14 @@ function MesDemandes() {
  * (via le localStorage géré par lib/cart.js). Le bouton « Valider » ouvre le récapitulatif
  * complet (broderie + créneau) ; à l'envoi, le panier (localStorage) est vidé.
  */
-function CartAside({ count, onCheckout }) {
+function CartAside({ count, onCheckout, tvaCentimes }) {
   const [lines, setLines] = useState(getCart);
   useEffect(() => {
     const sync = () => setLines(getCart());
     window.addEventListener(CART_EVENT, sync);
     return () => window.removeEventListener(CART_EVENT, sync);
   }, []);
-  const t = cartTotals(lines);
+  const t = cartTotals(lines, tvaCentimes);
   return (
     <aside className="shop-aside">
       <div className="card" style={{ padding: 14 }}>
@@ -755,6 +755,9 @@ function Boutique() {
   const [n, setN] = useState(cartCount);
   const [sent, setSent] = useState(null);
   const [pretes, setPretes] = useState(0);
+  /* Le calcul de la facture qui naîtra d'une demande (migration 192) : le serveur le donne avec la
+     liste, et le panier l'emploie pour annoncer ce que la facture imprimera. */
+  const [tvaCentimes, setTvaCentimes] = useState(false);
   useEffect(() => {
     const sync = () => setN(cartCount());
     window.addEventListener(CART_EVENT, sync);
@@ -765,7 +768,10 @@ function Boutique() {
   // relit à chaque envoi (`sent`) pour que l'onglet ne mente pas juste après une commande.
   useEffect(() => {
     getMyShopRequests()
-      .then((r) => setPretes((r.data || []).filter((x) => x.status === "PRETE").length))
+      .then((r) => {
+        setPretes((r.data || []).filter((x) => x.status === "PRETE").length);
+        setTvaCentimes(!!r.tva_centimes);
+      })
       .catch(() => setPretes(0));
   }, [sent]);
 
@@ -807,7 +813,7 @@ function Boutique() {
               <button className="btn ghost sm" style={{ marginBottom: 14 }} onClick={() => setCheckout(false)}>
                 <Icon name="chevron-left" size={14} /> Continuer mes achats
               </button>
-              <PanierTab onSent={(ref) => { setSent(ref); setCheckout(false); setTab("demandes"); }} />
+              <PanierTab tvaCentimes={tvaCentimes} onSent={(ref) => { setSent(ref); setCheckout(false); setTab("demandes"); }} />
             </>
           ) : (
             <>
@@ -831,7 +837,7 @@ function Boutique() {
           )}
         </div>
 
-        {showCart && <CartAside count={n} onCheckout={() => setCheckout(true)} />}
+        {showCart && <CartAside count={n} tvaCentimes={tvaCentimes} onCheckout={() => setCheckout(true)} />}
       </div>
     </>
   );

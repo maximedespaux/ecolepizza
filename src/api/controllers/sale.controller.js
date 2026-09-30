@@ -160,11 +160,18 @@ async function loadSettings(conn, orgId) {
     return r2[0] || { ...DEFAULT_SETTINGS };
 }
 
-/** GET /api/ventes/settings — paramètres de facturation de la boutique. */
+/**
+ * GET /api/ventes/settings — paramètres de facturation de la boutique.
+ *
+ * `tva_centimes` dit à la caisse et aux demandes boutique le calcul de la facture qu'elles
+ * préparent : en centimes entiers dès que la migration 192 est jouée (cf. ventilerTva). Ce n'est pas
+ * un réglage, c'est un fait de la base : il n'est jamais enregistré.
+ */
 const getShopSettings = async (req, res) => {
     try {
-        const s = await loadSettings(db.promise(), req.user.organization_id);
-        res.json({ data: s });
+        const conn = db.promise();
+        const s = await loadSettings(conn, req.user.organization_id);
+        res.json({ data: { ...s, tva_centimes: await hasColumn(conn, 'invoice', 'tva_centimes') } });
     } catch (err) {
         console.error('Erreur paramètres boutique :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -337,6 +344,10 @@ const checkout = async (req, res) => {
         const hasLineDiscount = await hasColumn(conn, 'invoice_line', 'discount_pct');
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
+        /* TVA en centimes entiers (192) : sondée ICI, avant le total, pour que le total vérifié soit
+           celui que la facture imprimera — elle naîtra avec `tva_centimes`, écrit plus bas par ce
+           code, jamais par défaut (cf. ventilerTva). L'écran le sait par ses réglages. */
+        const hasInvTvaCentimes = await hasColumn(conn, 'invoice', 'tva_centimes');
 
         /* LES LIGNES ET LE TOTAL SE CALCULENT D'ABORD, LE RÈGLEMENT SE VÉRIFIE ENSUITE, ET RIEN NE
          * S'ÉCRIT AVANT. La répartition des paiements se vérifiait APRÈS la prise du numéro, le
@@ -388,7 +399,7 @@ const checkout = async (req, res) => {
          * le 2026-09-30). Arrondie une fois sur le tout, elle s'écartait d'un centime de la facture sur
          * près d'une vente à deux taux sur quatre. L'écran calcule le même total, par la copie de
          * lib/ttc.js : c'est sur lui qu'il a calculé le solde du dernier moyen de paiement. */
-        const { ht: totalHT, tva: totalTVA, ttc } = totalFacture(invLines.map((l) => ({ ht: l.amount_net, taux: l.rate })), !tvaApplies);
+        const { ht: totalHT, tva: totalTVA, ttc } = totalFacture(invLines.map((l) => ({ ht: l.amount_net, taux: l.rate })), !tvaApplies, hasInvTvaCentimes);
 
         /* LA SOMME DES PAIEMENTS DOIT TOMBER SUR LE TOTAL À RÉGLER (TTC). Sinon, la caisse ne boucle
          * pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment. Vérifié
@@ -492,6 +503,7 @@ const checkout = async (req, res) => {
         if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
         if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }
         if (hasInvTemplate) { iCol.push('template_slug'); iVal.push(templateSlug); }
+        if (hasInvTvaCentimes) { iCol.push('tva_centimes'); iVal.push(1); }
         await conn.query(
             `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X. Colonnes

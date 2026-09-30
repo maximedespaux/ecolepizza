@@ -12,7 +12,8 @@
  * Ce fichier gèle :
  *   · le serveur : la somme des parts tombe sur le TTC, à un centime près, sinon 422 — AVANT le
  *     numéro de facture, dont la séquence ne souffre aucun trou ;
- *   · ce TTC est celui du PDF (`ventilerTva`, TVA arrondie par taux), pas une somme de TTC de ligne ;
+ *   · ce TTC est celui du PDF (`ventilerTva`, TVA arrondie par taux), pas une somme de TTC de ligne —
+ *     en centimes entiers depuis la migration 192, comme la facture qui naît alors avec `tva_centimes` ;
  *   · la fenêtre ENVOIE ce total-là, au centime : depuis le 2026-09-30, elle annonce le total de la
  *     facture (`totalDemande`, lib/ttc.js — cf. total-facture-ecrans.test.js) ;
  *   · le centime de tolérance, qui sert encore : une fenêtre ouverte AVANT additionne les TTC de
@@ -68,7 +69,8 @@ const faux = {
             const q = plat(sql);
             b.requetes.push({ q, p });
             if (/^(INSERT|UPDATE|DELETE)/.test(q)) { b.ecritures.push({ q, p }); return [{ affectedRows: 1 }]; }
-            if (/information_schema\.columns/i.test(q)) return [[{ 1: 1 }]]; // toutes les migrations jouées
+            // Toutes les migrations jouées, sauf les colonnes nommées dans `sans` (colonneDe passe [table, colonne]).
+            if (/information_schema\.columns/i.test(q)) return [(b.sans || []).includes(p[1]) ? [] : [{ 1: 1 }]];
             if (/FROM shop_request r JOIN learner/.test(q)) {
                 return [[{ id: 'dem-1', ref: 'BQ-17', status: 'PAYE', invoice_id: null, first_name: 'Jean', last_name: 'Martin', company_id: null, company_name: null }]];
             }
@@ -119,7 +121,7 @@ function ttcEcrit() {
     const f = colonnes(ecrit(/^INSERT INTO invoice \(/)[0]);
     const lignes = ecrit(/^INSERT INTO invoice_line/).map(colonnes);
     return ventilerTva({
-        amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null,
+        amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null, tvaCentimes: !!f.tva_centimes,
         lines: lignes.map((l) => ({ amount: Number(l.amount_net), taxRate: l.tax_rate ?? null })),
     }).grand;
 }
@@ -131,7 +133,7 @@ function rendu(modele) {
     const lignes = ecrit(/^INSERT INTO invoice_line/).map(colonnes);
     const ctx = invoiceCtx({ legal_name: 'École' }, {
         number: f.number, typeLabel: 'Facture', issueDate: '20260930',
-        amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null,
+        amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null, tvaCentimes: !!f.tva_centimes,
         lines: lignes.map((l) => ({ name: l.description, amount: Number(l.amount_net), taxRate: l.tax_rate ?? null, qty: l.qty })),
         buyer: { name: f.buyer_name, address: {} },
         paymentMethod: f.payment_method || null, paymentSplit: f.payment_split || null,
@@ -314,8 +316,10 @@ function paniers(n, tauxPossibles) {
         prix: (1 + Math.floor(alea() * 30000)) / 100, qty: 1 + Math.floor(alea() * 3), taux: tauxPossibles[Math.floor(alea() * tauxPossibles.length)],
     })));
 }
-/** La demande telle que `GET /boutique/demandes` la rend à l'écran : des nombres. */
-const demande = (panier) => ({ lines: panier.map((l, i) => ({ source: 'ECOLE', label: `Article ${i + 1}`, qty: l.qty, unit_price_ht: l.prix, tax_rate: l.taux })) });
+/** La demande telle que `GET /boutique/demandes` la rend à l'écran : des nombres, et le calcul de sa
+ *  facture (`tva_centimes`, migration 192) — celle qui naîtra, puisque toutes les migrations sont jouées. */
+const demande = (panier, tvaCentimes = true) => ({ tva_centimes: tvaCentimes,
+    lines: panier.map((l, i) => ({ source: 'ECOLE', label: `Article ${i + 1}`, qty: l.qty, unit_price_ht: l.prix, tax_rate: l.taux })) });
 /** … et ses lignes telles que la base les rend au serveur : les décimaux en texte. */
 const lignesDe = (panier) => panier.map((l, i) => ligne(`Article ${i + 1}`, l.prix.toFixed(2), l.taux.toFixed(2), l.qty));
 const centimes = (n) => Math.round(n * 100);
@@ -359,6 +363,29 @@ test('L\'ÉCRAN — ce qu\'il envoie EST le total de la facture : zéro centime 
     assert.deepStrictEqual(envoye, [{ method: 'CB', amount: 66.47 }]);
     assert.strictEqual((await facturer({ payments: envoye }, { lignes: lignesDe(demi) })).code, 201);
     assert.strictEqual(ttcEcrit(), 66.47);
+});
+
+test('DEPUIS LA 192, LA FENÊTRE, LA VÉRIFICATION ET LA FACTURE COMPTENT EN CENTIMES ENTIERS — sans elle, comme avant', async () => {
+    /* Quatre lignes à 10 % : 429,35 € HT, 42,935 € de TVA. Le PDF additionnait les HT en flottant
+       (429,34999…) et imprimait 472,28 € — la fenêtre, qui recopie son calcul, en faisait régler
+       autant. La facture née avec `tva_centimes` imprime 472,29 € : la liste des demandes le dit à la
+       fenêtre (`tva_centimes`), qui fait régler ce montant, et la vérification l'attend. */
+    const DIX = [{ prix: 122.6, qty: 1, taux: 10 }, { prix: 159.45, qty: 1, taux: 10 }, { prix: 5.88, qty: 1, taux: 10 }, { prix: 141.42, qty: 1, taux: 10 }];
+    for (const [joue, attendu] of [[true, 472.29], [false, 472.28]]) {
+        const quand = joue ? 'la 192 jouée' : 'la 192 non jouée';
+        const sans = joue ? [] : ['tva_centimes'];
+        const total = await totalFenetre(demande(DIX, joue));
+        assert.strictEqual(total, attendu, `${quand} : le total de la fenêtre`);
+        const refus = await facturer({ payments: [{ method: 'CB', amount: '400' }] }, { lignes: lignesDe(DIX), sans });
+        assert.match(dit(refus), new RegExp(`\\(400,00 €\\) ne correspond pas au total à régler \\(${String(attendu).replace('.', ',')} €\\)`),
+            `${quand} : la vérification attend le total de la facture qu'elle précède`);
+        rienEcrit(`${quand}, règlement insuffisant`);
+        const r = await facturer({ payments: resolvePayments([{ method: 'CB', amount: '' }], total).parts }, { lignes: lignesDe(DIX), sans });
+        assert.strictEqual(r.code, 201, dit(r));
+        assert.strictEqual(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).tva_centimes, joue ? 1 : undefined,
+            `${quand} : la facture naît avec son drapeau, ou sans la colonne`);
+        assert.strictEqual(ttcEcrit(), attendu, `${quand} : le PDF, relu dans ce qui a été écrit, imprime ce qui a été réglé`);
+    }
 });
 
 test('UNE FENÊTRE OUVERTE AVANT LE 2026-09-30 — sa somme des TTC de ligne passe encore : un centime d\'écart, jamais deux', async () => {

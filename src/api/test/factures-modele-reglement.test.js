@@ -10,7 +10,9 @@
  *   · à la création : le modèle (une FACTURE active, ou « automatique ») et le règlement (des parts
  *     dont la somme tombe sur le TTC du PDF), vérifiés AVANT toute écriture ;
  *   · le brouillon qui se complète — et le document émis qui ne se modifie plus ;
- *   · le TTC de l'écran, identique à celui du PDF (`ventilerTva`) au centime ;
+ *   · le TTC de l'écran, identique à celui du PDF (`ventilerTva`) au centime — que le document soit né
+ *     avant la migration 192 ou depuis, en centimes entiers (facture-tva-centimes.test.js) ;
+ *   · le document qui naît avec ce drapeau dès que la colonne existe, et sans lui sinon ;
  *   · l'écran : le modèle, le règlement « Ajouter un moyen », et le complément d'un brouillon.
  */
 const test = require('node:test');
@@ -34,6 +36,10 @@ const faux = {
         query: async (sql, p = []) => {
             const q = plat(sql);
             if (/^(INSERT|UPDATE|DELETE)/.test(q)) b.ecritures.push({ q, p });
+            // Sans la migration 113 : l'INSERT qui nomme l'émettrice échoue, le contrôleur réessaie sans elle.
+            if (b.sansEmettrice && /^INSERT INTO invoice \(.*billing_profile_id/.test(q)) {
+                throw Object.assign(new Error("Unknown column 'billing_profile_id'"), { code: 'ER_BAD_FIELD_ERROR' });
+            }
             if (/information_schema\.columns/.test(q)) return [b.sansColonnes ? [] : [{ 1: 1 }]];
             if (/^SELECT COUNT\(\*\) AS n FROM invoice WHERE organization_id = \? AND type = \?/.test(q)) return [[{ n: 3 }]];
             if (/^SELECT id, status FROM invoice WHERE id = \?/.test(q)) {
@@ -82,6 +88,15 @@ const creer = (corps) => appeler(createInvoice, { body: {
     type: 'FACTURE', tva_exoneree: 1, lines: [{ enrollment_id: null, description: 'Formation RS7404', amount_net: '300' }], ...corps,
 } });
 const ecrit = (motif) => b.ecritures.filter((e) => motif.test(e.q));
+/** Les valeurs d'un INSERT, par colonne — sans les places qui ne sont pas des `?` ('BROUILLON'). */
+function colonnes({ q, p }) {
+    const [, cols, places] = /^INSERT INTO \w+ \(([^)]*)\) VALUES \((.*)\)$/.exec(q);
+    const vals = places.split(/,\s*/);
+    const o = {};
+    let k = 0;
+    cols.split(/,\s*/).forEach((c, i) => { if (vals[i] === '?') o[c] = p[k++]; });
+    return o;
+}
 
 /* ── La création ──────────────────────────────────────────────────────────────────────────────── */
 
@@ -130,6 +145,25 @@ test('SANS MODÈLE NI RÈGLEMENT : le document se crée comme avant, rien de plu
     assert.deepStrictEqual(ecrit(/^UPDATE invoice SET/).map((e) => e.q.split(' = ')[0]), ['UPDATE invoice SET payment_method']);
 });
 
+test('LE DOCUMENT NAÎT AVEC SA TVA EN CENTIMES ENTIERS dès que la migration 192 est jouée — sans elle, comme avant', async () => {
+    /* À 20 % ou exonéré, les deux calculs tombent d'accord (facture-tva-centimes.test.js). Le drapeau
+       s'écrit pourtant ici comme à la caisse et à la boutique : c'est lui qui dira, le jour où ce
+       document sera réimprimé, quel calcul l'a produit — et il naît AVEC le document, dans l'INSERT. */
+    base();
+    assert.strictEqual((await creer({})).code, 201);
+    assert.strictEqual(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).tva_centimes, 1);
+    // Sans la migration 113, l'INSERT de secours le porte aussi.
+    base({ sansEmettrice: true });
+    assert.strictEqual((await creer({})).code, 201);
+    const [echoue, secours] = ecrit(/^INSERT INTO invoice \(/).map(colonnes);
+    assert.ok('billing_profile_id' in echoue && !('billing_profile_id' in secours), 'le repli sans émettrice a bien joué');
+    assert.strictEqual(secours.tva_centimes, 1);
+    // Sans la 192, la colonne ne s'écrit pas : l'INSERT échouerait en entier.
+    base({ sansColonnes: true });
+    assert.strictEqual((await creer({})).code, 201);
+    assert.ok(!('tva_centimes' in colonnes(ecrit(/^INSERT INTO invoice \(/)[0])));
+});
+
 /* ── Le brouillon qui se complète ─────────────────────────────────────────────────────────────── */
 
 const BROUILLON = { id: 'inv-4', number: 'FACT-2026-0004', status: 'BROUILLON', type: 'FACTURE', amount_net: '300.00', tva_exoneree: 1, tax_rate: null };
@@ -162,11 +196,24 @@ test('UN DOCUMENT ÉMIS NE SE MODIFIE PLUS — et changer un statut marche comme
 test('LE TTC DE L\'ÉCRAN ET CELUI DU PDF, au centime, sur toute une plage de montants', async () => {
     const { ttcDe } = await import(`file://${path.join(RACINE, 'src/app/ui/lib/ttc.js')}`);
     const ecarts = [];
-    for (let centimes = 0; centimes <= 200000; centimes += 37) {
-        const ht = centimes / 100;
-        for (const exo of [0, 1]) {
-            const pdf = ventilerTva({ amountNet: ht, tvaExoneree: !!exo, taxRate: null, lines: [{ amount: ht }] }).grand;
-            if (ttcDe(ht, exo) !== pdf) ecarts.push(`${ht} € (${exo ? 'exonéré' : 'TVA'}) : écran ${ttcDe(ht, exo)}, PDF ${pdf}`);
+    // Le document né avant la 192 (l'ancien calcul) comme celui né depuis (centimes entiers).
+    for (const tvaCentimes of [false, true]) {
+        for (let centimes = 0; centimes <= 200000; centimes += 37) {
+            const ht = centimes / 100;
+            for (const exo of [0, 1]) {
+                const pdf = ventilerTva({ amountNet: ht, tvaExoneree: !!exo, taxRate: null, tvaCentimes, lines: [{ amount: ht }] }).grand;
+                if (ttcDe(ht, exo) !== pdf) ecarts.push(`${ht} € (${exo ? 'exonéré' : 'TVA'}, ${tvaCentimes ? 'depuis' : 'avant'} la 192) : écran ${ttcDe(ht, exo)}, PDF ${pdf}`);
+            }
+        }
+        /* Plusieurs lignes : l'écran additionne les montants saisis (`formTotal`, Factures.jsx), le PDF
+           les ventile ligne à ligne. À 20 %, aucun des deux calculs ne tombe sur un demi-centime. */
+        let graine = 28;
+        const alea = () => { graine = (Math.imul(graine, 1103515245) + 12345) >>> 0; return graine / 4294967296; };
+        for (let k = 0; k < 5000; k++) {
+            const montants = Array.from({ length: 2 + Math.floor(alea() * 4) }, () => Math.floor(alea() * 200001) / 100);
+            const pdf = ventilerTva({ amountNet: 0, tvaExoneree: false, taxRate: null, tvaCentimes, lines: montants.map((amount) => ({ amount })) }).grand;
+            const ecran = ttcDe(montants.reduce((s, x) => s + x, 0), 0);
+            if (ecran !== pdf) ecarts.push(`${montants.join(' + ')} (${tvaCentimes ? 'depuis' : 'avant'} la 192) : écran ${ecran}, PDF ${pdf}`);
         }
     }
     assert.deepStrictEqual(ecarts.slice(0, 5), [], 'un centime d\'écart refuserait un règlement juste');
