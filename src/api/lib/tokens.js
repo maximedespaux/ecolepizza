@@ -95,6 +95,25 @@ function businessDay(startStr, offset) {
     return frDate(d);
 }
 
+/**
+ * Une date EN TOUTES LETTRES : « lundi 18 mai 2026 » (demandé le 2026-09-30, pour que la facture
+ * lise « Du lundi 18 mai au vendredi 22 mai 2026 » comme le document Word de l'école).
+ *
+ * On DÉCOUPE la chaîne « AAAA-MM-JJ » et on construit une date LOCALE : `new Date("2026-05-18")`
+ * la lirait en UTC, et `getDay()` rendrait la veille dans tout fuseau négatif — donc le mauvais
+ * jour de la semaine (cf. le même piège, dateFr, côté écran). Minuscules, comme sur la facture.
+ */
+const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const JOURS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+function frDateLong(v) {
+    if (!v) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v));
+    let d;
+    if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    else { d = new Date(v); if (Number.isNaN(d.getTime())) return String(v); }
+    return `${JOURS_FR[d.getDay()]} ${d.getDate()} ${MOIS_FR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 // --- Catalogue (regroupé par table), tel qu'affiché dans la palette ---
 // group  : table d'origine (libellé lisible)
 // tokens : { key: clé du jeton, label: libellé lisible, sample: exemple d'aperçu }
@@ -174,6 +193,10 @@ const TOKEN_CATALOG = [
                catalogue seulement à défaut. « Prix catalogue » promettait l'autre ; le champ
                « Prix catalogue » (training_program.price) est celui qui le tient. Reconnu, plus proposé. */
             { key: 'PrixFormation', label: 'Prix du dossier (€)', sample: '1 500 €' },
+            /* Le montant divisé par les heures. Sur une FACTURE : le total ÷ le nombre d'heures —
+               « 44 heures au coût unitaire de 40,45 € par heure ». Vide si le nombre d'heures manque. */
+            { key: 'Coût horaire', label: 'Coût horaire (€)', sample: '40,45 €',
+              desc: 'Le montant divisé par le nombre d’heures. Sur une facture, le total ÷ les heures.' },
         ],
     },
     {
@@ -186,6 +209,12 @@ const TOKEN_CATALOG = [
             { key: 'endDate', label: 'Date de fin', sample: '06/06/2025',
               desc: 'La clé s’écrit en anglais (héritage des premiers modèles) ; sa valeur est bien '
                   + 'la date de fin de session, au format 06/06/2025.' },
+            /* Les mêmes dates EN TOUTES LETTRES — « lundi 2 juin 2025 » — pour lire « Du … au … »
+               comme sur une facture (demandé le 2026-09-30). En minuscules, sans point. */
+            { key: 'Début en toutes lettres', label: 'Date de début (en toutes lettres)', sample: 'lundi 2 juin 2025',
+              desc: 'La date de début écrite en toutes lettres : « lundi 2 juin 2025 ».' },
+            { key: 'Fin en toutes lettres', label: 'Date de fin (en toutes lettres)', sample: 'vendredi 6 juin 2025',
+              desc: 'La date de fin écrite en toutes lettres : « vendredi 6 juin 2025 ».' },
             { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025',
               desc: '« Semaine 23 — 2025 » : la semaine de la session et son année. À défaut de '
                   + 'semaine, la date de début.' },
@@ -1469,8 +1498,11 @@ function resolveTokens(ctx = {}) {
         Jours: sumDays ? decimaleFr(sumDays) : (f.days != null ? decimaleFr(f.days) : ''),
         TmpTotSem: sumHours ? decimaleFr(sumHours) : (f.hours != null ? decimaleFr(f.hours) : ''),
         PrixFormation: euro(totalPrice),
+        // Le coût horaire : montant ÷ heures, arrondi au centime (sinon `euro` en montrerait trois).
+        'Coût horaire': sumHours > 0 && totalPrice > 0 ? euro(Math.round((totalPrice / sumHours) * 100) / 100) : '',
         // Session
         Jour1: frDate(start), endDate: frDate(end), Semaine: semaine,
+        'Début en toutes lettres': frDateLong(start), 'Fin en toutes lettres': frDateLong(end),
         'Semaine de la formation': semaine, Formateur: f.trainer || '',
         Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
@@ -1574,4 +1606,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, euro, businessDay, horairesParJour};
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, frDateLong, euro, businessDay, horairesParJour};
