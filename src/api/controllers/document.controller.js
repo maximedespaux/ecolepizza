@@ -8,6 +8,8 @@ const { colonneOuNull, colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent, loadOrgSteps, loadCustomTokens } = require('./template.controller.js');
 const { stagiaireSignsDoc, companySignsDoc, orgSignsDoc, externalSignsDoc, signatureAttendue, stagiairesDuDocument, signatureOrganismeAffichee, creneauJury } = require('../lib/documents.js');
 const { estSignatureValide } = require('../lib/signatures.js');
+// Crochet des règles d'e-mail déclenchées par un document (migration 196) — jamais bloquant.
+const { declencherPuisOublier } = require('../lib/crochetMailsDocument.js');
 
 /**
  * La signature de ce document incombe-t-elle à l'entreprise ?
@@ -1515,6 +1517,8 @@ async function sendPreparedDoc(conn, orgId, docId) {
     await conn.query(`UPDATE generated_document SET status = 'ENVOYE', sent_at = NOW()${orgSet} WHERE id = ? AND organization_id = ? AND status = 'A_FAIRE'`, [...orgVals, docId, orgId]);
     if (doc.type === 'DEVIS') await advanceEnrollments(conn, orgId, docId, 'DEVIS_ENVOYE');
     else if (doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, orgId, docId, 'EVALUATION_ENVOYEE');
+    // Document envoyé pour signature → règles d'e-mail « document envoyé » (à part, jamais bloquant).
+    declencherPuisOublier(db, { orgId, documentId: docId, evenement: 'document_envoye' });
     return true;
 }
 
@@ -1579,6 +1583,8 @@ const sendDocument = async (req, res) => {
         if (doc && doc.type === 'DEVIS') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'DEVIS_ENVOYE');
         else if (doc && doc.type === 'EVALUATION_SATISFACTION') await advanceEnrollments(conn, req.user.organization_id, req.params.id, 'EVALUATION_ENVOYEE');
         logAudit(req, 'document.send', 'GeneratedDocument', req.params.id);
+        // Document envoyé pour signature → règles d'e-mail « document envoyé » (à part, jamais bloquant).
+        declencherPuisOublier(db, { orgId, documentId: req.params.id, evenement: 'document_envoye' });
         res.status(200).json({ success: true, message: 'Document envoyé au stagiaire' });
     } catch (err) {
         console.error('Erreur envoi document :', err);
@@ -1804,6 +1810,8 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
     }
     if (complet) {
         await conn.query("UPDATE generated_document SET status = 'SIGNE', signed_at = NOW(), signer_name = ? WHERE id = ?", [signerName, doc.id]);
+        // Le document est ENTIÈREMENT signé → règles d'e-mail « document signé » (à part, jamais bloquant).
+        declencherPuisOublier(db, { orgId, documentId: doc.id, evenement: 'document_signe' });
     }
 }
 
@@ -1827,6 +1835,8 @@ async function applyLearnerSignature(conn, orgId, doc, { signerName, signatureDa
          WHERE id = ?`,
         [signerName, encrypt(signatureData || null), encrypt(ip || ''), encrypt((userAgent || '').slice(0, 400)), signedHash, doc.id]
     );
+    // Document signé (par le stagiaire ou le représentant) → règles d'e-mail (à part, jamais bloquant).
+    declencherPuisOublier(db, { orgId, documentId: doc.id, evenement: 'document_signe' });
     // Signatures cryptographiques (stagiaire + organisme) sur le PDF figé, stockées.
     try {
         const [[full]] = await conn.query('SELECT * FROM generated_document WHERE id = ?', [doc.id]);

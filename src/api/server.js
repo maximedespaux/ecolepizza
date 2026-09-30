@@ -280,29 +280,15 @@ app.listen(port, () => {
        aucun envoi. Premier passage deux minutes après le démarrage, pour ne pas peser sur le
        redéploiement lui-même. */
     const { passerLesReglesMail } = require('./lib/passageMailsProgrammes.js');
-    const { messageGroupeEmail } = require('./lib/mailTemplates.js');
-    const { sendMail } = require('./lib/mailer.js');
+    /* LE MÊME ENVOYEUR que le crochet des règles de document (lib/envoiGroupe.js) : le texte est écrit
+       par l'école, les images citées sont attachées, et le Reply-To est l'adresse de l'école — une
+       relance « trois mois après la fin » appelle une réponse. Pas de `kind` : une règle est SON envoi,
+       arrêté par son propre interrupteur « active », pas par ceux des cinq e-mails du code (138). */
+    const { construireEnvoyeur } = require('./lib/envoiGroupe.js');
     const passerMails = () => passerLesReglesMail({
         conn: require('./config/database.js').promise(),
         orgName: org.orgInfo().short_name || org.orgInfo().legal_name || null,
-        envoyer: async ({ to, objet, corps, orgId }) => {
-            /* LES IMAGES DU MESSAGE voyagent aussi dans un envoi programmé : le même chargement
-               que « Écrire à un groupe », par la même fonction — deux copies finiraient par
-               diverger, et une règle enverrait des images que l'autre chemin attache. */
-            const { chargerImages, piecesImages } = require('./controllers/mailing.controller.js');
-            const images = await chargerImages(require('./config/database.js').promise(), orgId, corps)
-                .catch(() => []);
-            /* UN ENVOI PROGRAMMÉ EST DÉCLENCHÉ PAR UNE DATE, mais son texte a été écrit par
-               quelqu'un : il n'est pas « automatique » au sens du pied de page, et une relance
-               « trois mois après la fin » appelle justement une réponse. D'où la même adresse
-               qu'à l'écran « Écrire à un groupe », en `Reply-To` comme dans la mention. */
-            const repondreA = org.orgInfo().email || null;
-            const { subject, html } = messageGroupeEmail({ objet, corps, orgName: org.orgInfo().short_name || null, images, repondreA });
-            /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une
-               règle posée par l'école est SON envoi — elle l'arrête par son propre interrupteur
-               « active », là où elle l'a écrite. */
-            return sendMail({ to, replyTo: repondreA, subject, html, attachments: piecesImages(images) });
-        },
+        envoyer: construireEnvoyeur(),
     }).then((r) => { if (r.envoyes || r.echecs) console.log(`[mailing] ${r.envoyes} envoyé(s), ${r.echecs} échec(s)`); })
         .catch((err) => console.error('Envois programmés :', err.message));
     setTimeout(passerMails, 2 * 60 * 1000).unref?.();

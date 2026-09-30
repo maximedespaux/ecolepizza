@@ -18,6 +18,11 @@
  * un envoi programmé ne partirait jamais — personne ne s'en apercevrait, puisque rien n'échoue.
  */
 
+/* Les déclencheurs d'ÉVÉNEMENT (document envoyé / signé, migration 196) vivent à part : ils ne se
+   calculent pas dans le temps, ils partent quand le document change d'état. On les lit ici pour que la
+   même fonction `lireRegle` valide les deux familles de règles. */
+const { estDeclencheurDoc, DECLENCHEURS_DOC, destinataireValide } = require('./reglesDocument.js');
+
 /** Les trois dates de départ possibles. L'écran propose exactement celles-là. */
 const DECLENCHEURS = {
     fin_session: {
@@ -79,6 +84,8 @@ function dateCible({ depart, sens = 'apres', decalage = 0, unite = 'jour' }) {
 
 /** « 3 mois après la fin de la session » — la règle dite en une ligne, pour l'écran et le journal. */
 function phraseRegle(r) {
+    /* Un déclencheur d'événement n'a ni décalage ni sens : il se dit « Quand un document est signé ». */
+    if (r && estDeclencheurDoc(r.declencheur)) return `Quand ${DECLENCHEURS_DOC[r.declencheur].libelle}`;
     const d = DECLENCHEURS[r && r.declencheur];
     if (!d) return '';
     const n = Math.max(0, Math.round(Number(r.decalage) || 0));
@@ -97,18 +104,29 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
     const nom = String(b.nom == null ? '' : b.nom).replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!nom) return { erreur: 'Donnez un nom à cette règle : c’est ce qui la distingue dans la liste.' };
     const declencheur = String(b.declencheur || '');
-    if (!DECLENCHEURS[declencheur]) return { erreur: 'Choisissez à partir de quelle date l’envoi se compte.' };
-    const unite = UNITES[b.unite] ? b.unite : 'jour';
-    const sens = SENS[b.sens] ? b.sens : 'apres';
-    const decalage = Math.max(0, Math.round(Number(b.decalage) || 0));
-    if (decalage > MAX_DECALAGE[unite]) {
-        return { erreur: `Le décalage ne peut pas dépasser ${MAX_DECALAGE[unite]} ${UNITES[unite]}.` };
+    const estDoc = estDeclencheurDoc(declencheur);
+    if (!estDoc && !DECLENCHEURS[declencheur]) return { erreur: 'Choisissez à partir de quel événement l’envoi se fait.' };
+
+    /* LE DÉCALAGE N'EXISTE QUE POUR LES DÉCLENCHEURS DE DATE : un événement (document envoyé / signé)
+       part à l'instant. Pour une règle d'événement, sens et décalage sont laissés à leur valeur neutre. */
+    let unite = 'jour';
+    let sens = 'apres';
+    let decalage = 0;
+    if (!estDoc) {
+        unite = UNITES[b.unite] ? b.unite : 'jour';
+        sens = SENS[b.sens] ? b.sens : 'apres';
+        decalage = Math.max(0, Math.round(Number(b.decalage) || 0));
+        if (decalage > MAX_DECALAGE[unite]) {
+            return { erreur: `Le décalage ne peut pas dépasser ${MAX_DECALAGE[unite]} ${UNITES[unite]}.` };
+        }
+        /* UNE INSCRIPTION N'A PAS D'AVANT : elle n'est pas connue avant d'exister. Le dire vaut mieux
+           que d'enregistrer une règle qui ne partirait jamais. */
+        if (declencheur === 'inscription' && sens === 'avant' && decalage > 0) {
+            return { erreur: 'Une inscription ne se connaît pas à l’avance : choisissez « après ».' };
+        }
     }
-    /* UNE INSCRIPTION N'A PAS D'AVANT : elle n'est pas connue avant d'exister. Le dire vaut mieux
-       que d'enregistrer une règle qui ne partirait jamais. */
-    if (declencheur === 'inscription' && sens === 'avant' && decalage > 0) {
-        return { erreur: 'Une inscription ne se connaît pas à l’avance : choisissez « après ».' };
-    }
+    /* À QUI part le message (migration 196) : le stagiaire par défaut, comme les règles d'avant. */
+    const destinataire = destinataireValide(b.destinataire) ? b.destinataire : 'stagiaire';
     const objet = String(b.objet == null ? '' : b.objet).replace(/\s+/g, ' ').trim().slice(0, 200);
     const corps = String(b.corps == null ? '' : b.corps).replace(/\r\n?/g, '\n').trim().slice(0, 4000);
     if (!objet) return { erreur: 'L’objet est obligatoire.' };
@@ -120,6 +138,12 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
     return { valeurs: {
         nom, declencheur, sens, decalage, unite,
         program_id: b.program_id ? String(b.program_id) : null,
+        /* Le modèle filtré n'a de sens que pour un événement de document ; une règle de date filtre
+           par formation. Le ciblage stagiaire / entreprise vaut pour les deux familles. */
+        template_slug: (estDoc && b.template_slug) ? String(b.template_slug).slice(0, 60) : null,
+        destinataire,
+        learner_id: b.learner_id ? String(b.learner_id) : null,
+        company_id: b.company_id ? String(b.company_id) : null,
         objet, corps, actif: b.actif === false ? 0 : 1,
     } };
 }

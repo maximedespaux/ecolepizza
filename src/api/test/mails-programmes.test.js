@@ -41,6 +41,29 @@ test('un décalage en mois compte des MOIS, pas des jours', () => {
     assert.strictEqual(prog.dateCible({ depart: null, decalage: 1, unite: 'jour' }), null);
 });
 
+test('un DÉCLENCHEUR D\'ÉVÉNEMENT (document signé) : ni décalage, un modèle, un destinataire (196)', () => {
+    const v = prog.lireRegle({
+        nom: 'Merci', declencheur: 'document_signe', template_slug: 'convention',
+        destinataire: 'stagiaire_entreprise', learner_id: 'l1', decalage: 9,
+        objet: 'Merci {Prénom}', corps: 'Votre {Document} est signée.',
+    }, { jetons: JETONS_REGLE }).valeurs;
+    assert.strictEqual(v.declencheur, 'document_signe');
+    assert.strictEqual(v.decalage, 0, 'un événement part à l’instant : pas de décalage');
+    assert.strictEqual(v.template_slug, 'convention');
+    assert.strictEqual(v.destinataire, 'stagiaire_entreprise');
+    assert.strictEqual(v.learner_id, 'l1');
+    assert.strictEqual(prog.phraseRegle({ declencheur: 'document_signe' }), 'Quand un document signé');
+    // {Document} est un jeton reconnu (il ne l'était pas avant la 196).
+    assert.ok(!prog.lireRegle({ nom: 'x', declencheur: 'document_signe', objet: '{Document}', corps: 'x' }, { jetons: JETONS_REGLE }).erreur);
+});
+
+test('une règle de DATE : pas de modèle, destinataire stagiaire par défaut', () => {
+    const v = prog.lireRegle({ nom: 'Suivi', declencheur: 'fin_session', decalage: 3, unite: 'mois', objet: 'x', corps: 'y' }, { jetons: JETONS_REGLE }).valeurs;
+    assert.strictEqual(v.template_slug, null, 'une règle de date filtre par formation, pas par modèle');
+    assert.strictEqual(v.destinataire, 'stagiaire');
+    assert.strictEqual(v.decalage, 3);
+});
+
 test('une règle refuse ce qui ne partirait jamais', () => {
     const base = { nom: 'Suivi', declencheur: 'fin_session', objet: 'x', corps: 'y' };
     /* UNE INSCRIPTION NE SE CONNAÎT PAS À L'AVANCE : une règle « 3 jours avant l'inscription »
@@ -157,9 +180,13 @@ test('le serveur repasse, et la règle ne se fait pas couper par les interrupteu
     const srv = sansCommentaires(lire(path.join(API, 'server.js')));
     assert.match(srv, /setInterval\(passerMails, 30 \* 60 \* 1000\)/, 'toutes les demi-heures : la granularité est le JOUR');
     assert.match(srv, /setTimeout\(passerMails, 2 \* 60 \* 1000\)/, 'et un passage peu après le démarrage');
-    /* PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code. Une règle
-       posée par l'école s'arrête par SON interrupteur, là où elle a été écrite. */
-    assert.match(srv, /return sendMail\(\{ to, replyTo: repondreA, subject, html, attachments: piecesImages\(images\) \}\);/);
+    /* L'ENVOYEUR est désormais partagé (lib/envoiGroupe.js) entre le passage et le crochet des règles
+       de document (migration 196) : une seule copie, comme le disait déjà le commentaire de server.js.
+       PAS DE `kind` : les interrupteurs de la 138 coupent les cinq e-mails du code ; une règle posée
+       par l'école s'arrête par SON interrupteur « active », là où elle a été écrite. */
+    assert.match(srv, /envoyer: construireEnvoyeur\(\)/, 'le passage utilise l’envoyeur partagé');
+    const env = sansCommentaires(lire(path.join(API, 'lib', 'envoiGroupe.js')));
+    assert.match(env, /return sendMail\(\{ to, replyTo: repondreA, subject, html, attachments: piecesImages\(images\) \}\);/);
 });
 
 test('l\'écran dit qu\'une règle ne rattrape pas le passé, et montre ce qu\'elle a fait', () => {

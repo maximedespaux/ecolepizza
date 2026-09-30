@@ -4,6 +4,7 @@ import {
   apercuMail, destinatairesMail, envoyerMailGroupe, getEnvoisMail, getSessions, getFormations,
   getReglesMail, creerRegleMail, modifierRegleMail, supprimerRegleMail,
   televerserImageMail, getImagesMail, supprimerImageMail, API_BASE_URL,
+  getStagiaires, getCompanies,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -682,7 +683,9 @@ function Programmes({ onStatus }) {
                   <b>{r.nom}</b>
                   <span className="hint">
                     {r.phrase}
-                    {r.formation_code || r.formation_titre ? ` · ${r.formation_code || r.formation_titre}` : " · toutes les formations"}
+                    {estDocDecl(cat, r.declencheur) && (r.modele_titre ? ` · ${r.modele_titre}` : " · tous les documents")}
+                    {` · ${cibleRegleTexte(r)}`}
+                    {r.destinataire && r.destinataire !== "stagiaire" ? ` · ${libelleDestinataireMail(r.destinataire)}` : ""}
                     {" · depuis le "}{r.depuis}
                   </span>
                   <span className="hint">
@@ -709,14 +712,35 @@ function Programmes({ onStatus }) {
   );
 }
 
+/* Un déclencheur d'ÉVÉNEMENT (document envoyé / signé, 196) ? L'écran cache alors le décalage et
+   montre le modèle + le destinataire. */
+const estDocDecl = (cat, d) => (cat?.declencheursDoc || []).some((x) => x.cle === d);
+const libelleDestinataireMail = (d) => ({
+  stagiaire: "au stagiaire", entreprise: "à l’entreprise", stagiaire_entreprise: "au stagiaire et à l’entreprise",
+}[d] || "");
+function cibleRegleTexte(r) {
+  if (r.cible_stagiaire) return `pour ${r.cible_stagiaire}`;
+  if (r.cible_entreprise) return `pour ${r.cible_entreprise}`;
+  return (r.formation_code || r.formation_titre) ? (r.formation_code || r.formation_titre) : "toutes les formations";
+}
+
 function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus }) {
   const [v, setV] = useState(() => regle || {
     nom: "", declencheur: "fin_session", sens: "apres", decalage: 3, unite: "mois",
-    program_id: null, objet: "", corps: "", actif: 1,
+    program_id: null, template_slug: null, destinataire: "stagiaire",
+    learner_id: null, company_id: null, objet: "", corps: "", actif: 1,
   });
   const [busy, setBusy] = useState(false);
   const [apercu, setApercu] = useState(null);
   const maj = (champ) => (e) => setV((p) => ({ ...p, [champ]: e.target.value }));
+  const declencheursDoc = cat.declencheursDoc || [];
+  const estDoc = estDocDecl(cat, v.declencheur);
+
+  function majDeclencheur(e) {
+    const d = e.target.value;
+    setV((p) => ({ ...p, declencheur: d,
+      ...(estDocDecl(cat, d) && !p.destinataire ? { destinataire: "stagiaire" } : {}) }));
+  }
 
   async function voir() {
     onStatus(null);
@@ -727,9 +751,15 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
   async function enregistrer() {
     setBusy(true); onStatus(null);
     try {
-      const payload = { ...v, decalage: Number(v.decalage) || 0, program_id: v.program_id || null, actif: v.actif !== 0 };
+      const payload = {
+        ...v, decalage: Number(v.decalage) || 0,
+        program_id: v.program_id || null, template_slug: v.template_slug || null,
+        destinataire: v.destinataire || "stagiaire",
+        learner_id: v.learner_id || null, company_id: v.company_id || null, actif: v.actif !== 0,
+      };
       if (regle) await modifierRegleMail(regle.id, payload); else await creerRegleMail(payload);
-      onStatus({ type: "success", message: regle ? "Règle enregistrée." : "Règle créée : elle vaut pour les dates atteintes à partir d'aujourd'hui." });
+      onStatus({ type: "success", message: regle ? "Règle enregistrée."
+        : estDoc ? "Règle créée : elle part dès qu'un document correspond." : "Règle créée : elle vaut pour les dates atteintes à partir d'aujourd'hui." });
       onEnregistre();
     } catch (e) { onStatus({ type: "error", message: e.message }); }
     finally { setBusy(false); }
@@ -740,51 +770,69 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
       <div className="field">
         <label htmlFor="regle-nom">Nom de la règle</label>
         <input id="regle-nom" className="inp" value={v.nom} onChange={maj("nom")}
-          placeholder="Suivi à froid — 3 mois" />
+          placeholder="Merci — convention signée" />
       </div>
-      <div className="mail-regle-quand">
-        <div className="field">
-          <label htmlFor="regle-decalage">Combien</label>
-          <input id="regle-decalage" className="inp" type="number" min="0" value={v.decalage} onChange={maj("decalage")} />
-        </div>
-        <div className="field">
-          <label htmlFor="regle-unite">Unité</label>
-          <select id="regle-unite" className="inp" value={v.unite} onChange={maj("unite")}>
-            {cat.unites.map((u) => <option key={u.cle} value={u.cle}>{u.libelle}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="regle-sens">Avant ou après</label>
-          <select id="regle-sens" className="inp" value={v.sens} onChange={maj("sens")}>
-            {cat.sens.map((x) => <option key={x.cle} value={x.cle}>{x.libelle}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="regle-declencheur">Quelle date</label>
-          <select id="regle-declencheur" className="inp" value={v.declencheur} onChange={maj("declencheur")}>
+      <div className="field">
+        <label htmlFor="regle-declencheur">Quand l'e-mail part-il&nbsp;?</label>
+        <select id="regle-declencheur" className="inp" value={v.declencheur} onChange={majDeclencheur}>
+          <optgroup label="À une date">
             {cat.declencheurs.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="regle-formation">Formation</label>
-          <select id="regle-formation" className="inp" value={v.program_id || ""}
-            onChange={(e) => setV((p) => ({ ...p, program_id: e.target.value || null }))}>
-            <option value="">Toutes les formations</option>
-            {formations.map((f) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ""}{f.title}</option>)}
-          </select>
-        </div>
+          </optgroup>
+          <optgroup label="Quand un document…">
+            {declencheursDoc.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+          </optgroup>
+        </select>
       </div>
+      {estDoc ? (
+        <div className="mail-regle-quand">
+          <div className="field">
+            <label htmlFor="regle-modele">Modèle concerné</label>
+            <select id="regle-modele" className="inp" value={v.template_slug || ""}
+              onChange={(e) => setV((p) => ({ ...p, template_slug: e.target.value || null }))}>
+              <option value="">Tous les documents</option>
+              {(cat.modeles || []).map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="regle-dest">Destinataire</label>
+            <select id="regle-dest" className="inp" value={v.destinataire || "stagiaire"} onChange={maj("destinataire")}>
+              {cat.destinataires.map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+            </select>
+          </div>
+        </div>
+      ) : (
+        <div className="mail-regle-quand">
+          <div className="field">
+            <label htmlFor="regle-decalage">Combien</label>
+            <input id="regle-decalage" className="inp" type="number" min="0" value={v.decalage} onChange={maj("decalage")} />
+          </div>
+          <div className="field">
+            <label htmlFor="regle-unite">Unité</label>
+            <select id="regle-unite" className="inp" value={v.unite} onChange={maj("unite")}>
+              {cat.unites.map((u) => <option key={u.cle} value={u.cle}>{u.libelle}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="regle-sens">Avant ou après</label>
+            <select id="regle-sens" className="inp" value={v.sens} onChange={maj("sens")}>
+              {cat.sens.map((x) => <option key={x.cle} value={x.cle}>{x.libelle}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+      <CibleRegle v={v} setV={setV} formations={formations} />
       <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
         onInserer={(txt) => setV((p) => ({ ...p, corps: `${p.corps}${txt}` }))} />
       <div className="field">
         <label htmlFor="regle-objet">Objet</label>
         <input id="regle-objet" className="inp" value={v.objet} onChange={maj("objet")}
-          placeholder="Comment se passe la suite, {Prénom} ?" />
+          placeholder={estDoc ? "Votre document {Document} est bien reçu, {Prénom}" : "Comment se passe la suite, {Prénom} ?"} />
       </div>
       <div className="field">
         <label htmlFor="regle-corps">Message</label>
         <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
-          placeholder={"Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
+          placeholder={estDoc ? "Bonjour {Prénom},\n\nNous avons bien reçu votre {Document} signé. Merci !"
+            : "Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="btn sm" onClick={voir} disabled={!v.objet.trim() || !v.corps.trim()}>
@@ -797,6 +845,102 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
         </button>
       </div>
       {apercu && <Apercu rendu={apercu} />}
+    </div>
+  );
+}
+
+/* POUR QUI la règle vaut : une formation (comme avant), OU un stagiaire précis, OU une entreprise
+   précise — « au lieu d'une session entière » (196). Les trois s'excluent : choisir l'un efface
+   les autres. La recherche va au serveur pour les stagiaires (ils sont un millier) et filtre en
+   local les entreprises (elles sont quelques centaines). */
+function CibleRegle({ v, setV, formations }) {
+  const [mode, setMode] = useState(v.learner_id ? "stagiaire" : v.company_id ? "entreprise" : "formation");
+  function choisirMode(m) {
+    setMode(m);
+    setV((p) => ({ ...p,
+      program_id: m === "formation" ? p.program_id : null,
+      learner_id: null, company_id: null, cible_stagiaire: null, cible_entreprise: null }));
+  }
+  return (
+    <div className="mail-regle-cible">
+      <div className="field">
+        <label>Pour qui&nbsp;?</label>
+        <div className="mail-cible-seg">
+          {[["formation", "Une formation"], ["stagiaire", "Un stagiaire"], ["entreprise", "Une entreprise"]].map(([m, lib]) => (
+            <button key={m} type="button" className={"btn sm" + (mode === m ? "" : " ghost")} onClick={() => choisirMode(m)}>{lib}</button>
+          ))}
+        </div>
+      </div>
+      {mode === "formation" && (
+        <div className="field">
+          <select className="inp" value={v.program_id || ""} aria-label="Formation"
+            onChange={(e) => setV((p) => ({ ...p, program_id: e.target.value || null }))}>
+            <option value="">Toutes les formations</option>
+            {formations.map((f) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ""}{f.title}</option>)}
+          </select>
+        </div>
+      )}
+      {mode === "stagiaire" && (
+        <RechercheCible type="stagiaire" labelActuel={v.cible_stagiaire}
+          onChoisir={(o) => setV((p) => ({ ...p, learner_id: o.id, company_id: null, cible_stagiaire: o.label, cible_entreprise: null }))}
+          onEffacer={() => setV((p) => ({ ...p, learner_id: null, cible_stagiaire: null }))} />
+      )}
+      {mode === "entreprise" && (
+        <RechercheCible type="entreprise" labelActuel={v.cible_entreprise}
+          onChoisir={(o) => setV((p) => ({ ...p, company_id: o.id, learner_id: null, cible_entreprise: o.label, cible_stagiaire: null }))}
+          onEffacer={() => setV((p) => ({ ...p, company_id: null, cible_entreprise: null }))} />
+      )}
+    </div>
+  );
+}
+
+function RechercheCible({ type, labelActuel, onChoisir, onEffacer }) {
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [toutes, setToutes] = useState(null); // entreprises chargées une fois
+  useEffect(() => {
+    if (type !== "entreprise") return;
+    getCompanies().then((r) => setToutes(Array.isArray(r) ? r : (r.data || []))).catch(() => setToutes([]));
+  }, [type]);
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2) { setRes([]); return; }
+    if (type === "entreprise") {
+      const bas = s.toLowerCase();
+      setRes((toutes || []).filter((c) => (c.name || "").toLowerCase().includes(bas)).slice(0, 12)
+        .map((c) => ({ id: c.id, label: c.name })));
+      return undefined;
+    }
+    let vif = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await getStagiaires(s);
+        const liste = Array.isArray(r) ? r : (r.data || []);
+        if (vif) setRes(liste.slice(0, 12).map((l) => ({ id: l.id, label: [l.civility, l.first_name, l.last_name].filter(Boolean).join(" ") || l.email })));
+      } catch { if (vif) setRes([]); }
+    }, 250);
+    return () => { vif = false; clearTimeout(t); };
+  }, [q, type, toutes]);
+
+  if (labelActuel) {
+    return (
+      <div className="field">
+        <span className="mail-cible-chip"><b>{labelActuel}</b>
+          <button type="button" className="lien" onClick={onEffacer}>changer</button></span>
+      </div>
+    );
+  }
+  return (
+    <div className="field mail-cible-search">
+      <input className="inp" value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder={type === "stagiaire" ? "Chercher un stagiaire (nom, e-mail)…" : "Chercher une entreprise…"} />
+      {res.length > 0 && (
+        <ul className="mail-cible-res">
+          {res.map((o) => (
+            <li key={o.id}><button type="button" onClick={() => { onChoisir(o); setQ(""); setRes([]); }}>{o.label}</button></li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
