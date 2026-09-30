@@ -7,6 +7,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import PaiementSplit, { resolvePayments } from "../components/PaiementSplit.jsx";
 import { euro, dateFr, initials } from "../lib/format.js";
+import { arrondi, totalDemande, ttcDeLigne } from "../lib/ttc.js";
 import { getShopRequests, updateShopRequest, invoiceShopRequest, deleteShopRequest, deleteAllShopRequests, getEmitters, getTemplates, getShopSettings } from "../api/apiClient.js";
 
 // Créneau de retrait en clair (« lundi 27 juillet »), comme côté stagiaire : une date
@@ -127,7 +128,7 @@ function Demande({ d, onChange, onErreur }) {
             <span className="tnum" style={{ width: 34, textAlign: "right" }}>× {l.qty}</span>
             <b className="tnum cart-sum">
               {l.unit_price_ht == null ? <span className="hint">à définir</span>
-                : euro(l.unit_price_ht * l.qty * (1 + l.tax_rate / 100))}
+                : euro(ttcDeLigne(l.unit_price_ht, l.qty, l.tax_rate))}
             </b>
           </div>
           {/* Remise stagiaire consentie sur cette ligne, telle qu'elle a été FIGÉE à la commande.
@@ -137,13 +138,15 @@ function Demande({ d, onChange, onErreur }) {
           {l.discount_pct > 0 && l.unit_price_gross_ht != null ? (
             <div className="cart-perso" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 8px" }}>
               <label style={{ margin: 0 }}>Remise stagiaire</label>
+              {/* Les trois montants s'accordent : l'économie est l'écart entre les deux prix
+                  AFFICHÉS, chacun calculé comme la facture calcule une ligne. */}
               <span className="tnum" style={{ textDecoration: "line-through", color: "var(--muted)" }}>
-                {euro(l.unit_price_gross_ht * l.qty * (1 + l.tax_rate / 100))}
+                {euro(ttcDeLigne(l.unit_price_gross_ht, l.qty, l.tax_rate))}
               </span>
               <span className="badge g">−{Number.isInteger(l.discount_pct) ? l.discount_pct : l.discount_pct.toFixed(2).replace(".", ",")} %</span>
-              <b className="tnum">{euro(l.unit_price_ht * l.qty * (1 + l.tax_rate / 100))}</b>
+              <b className="tnum">{euro(ttcDeLigne(l.unit_price_ht, l.qty, l.tax_rate))}</b>
               <span className="hint">
-                soit {euro((l.unit_price_gross_ht - l.unit_price_ht) * l.qty * (1 + l.tax_rate / 100))} d'économie
+                soit {euro(arrondi(ttcDeLigne(l.unit_price_gross_ht, l.qty, l.tax_rate) - ttcDeLigne(l.unit_price_ht, l.qty, l.tax_rate)))} d'économie
               </span>
             </div>
           ) : null}
@@ -242,11 +245,13 @@ function FacturerModal({ d, busy, onClose, onValider }) {
   const [slug, setSlug] = useState("");
   const [moyens, setMoyens] = useState([]);
   const [paiements, setPaiements] = useState([{ method: "", amount: "" }]);
-  // Total TTC des seules lignes ÉCOLE : c'est ce que l'école encaisse (une ligne partenaire
-  // est vendue par le partenaire, cf. invoiceShopRequest).
-  const totalTtc = (d.lines || [])
-    .filter((l) => l.source === "ECOLE" && l.unit_price_ht != null)
-    .reduce((s2, l) => s2 + l.unit_price_ht * l.qty * (1 + l.tax_rate / 100), 0);
+  /* LE TOTAL DE LA FACTURE qui va naître : les seules lignes ÉCOLE à prix connu (une ligne
+     partenaire est vendue par le partenaire, cf. invoiceShopRequest), TVA arrondie PAR TAUX
+     (`totalDemande`, lib/ttc.js). C'est lui qu'on encaisse, et le règlement tombe dessus au centime :
+     additionner les TTC de ligne en faisait encaisser un de moins ou de plus sur près d'un panier à
+     deux taux sur quatre, et la facture imprimait ce règlement sous un total qu'il ne faisait pas.
+     `d.tva_centimes` : le calcul de cette facture (migration 192), que le serveur donne avec la demande. */
+  const totalTtc = totalDemande(d.lines, d.tva_centimes).facture;
   const blocage = blocageReglement(resolvePayments(paiements, totalTtc));
   /* Échéance au JOUR MÊME par défaut : à ce stade le paiement a déjà eu lieu (« Payé » précède
    * « Facturé »), la facture ne fait que le constater — rien n'est dû plus tard. Modifiable pour

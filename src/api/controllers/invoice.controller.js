@@ -248,6 +248,9 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         amountNet: inv.amount_net,
         tvaExoneree: !!inv.tva_exoneree,
         taxRate: inv.tax_rate ?? null, // NULL = facture antérieure à la 108 → 20 % comme avant
+        // TVA en centimes entiers : seulement les factures créées depuis la 192 (cf. ventilerTva).
+        // 0, ou colonne absente : l'ancien calcul — une facture émise ne change pas de total.
+        tvaCentimes: !!inv.tva_centimes,
         lines,
         lineName: inv.description || inv.program_title || 'Prestation de formation',
         // Règlement : le moyen (résumé) et sa ventilation JSON s'il y en a une (paiement mixte,
@@ -410,9 +413,11 @@ const createInvoice = async (req, res) => {
         const conn = db.promise();
         /* LE MODÈLE ET LE RÈGLEMENT, vérifiés AVANT toute écriture : un refus ne doit pas laisser un
            document à moitié créé, ni consommer un numéro de la séquence. Le TTC vient de
-           `ventilerTva`, comme sur le PDF (TVA à 20 % sauf exonération, cf. tax_rate NULL). */
+           `ventilerTva`, comme sur le PDF (TVA à 20 % sauf exonération, cf. tax_rate NULL) — et par
+           le calcul que CE document emploiera : en centimes entiers dès que la 192 est jouée. */
+        const tvaCentimes = await colonneExiste(conn, 'invoice', 'tva_centimes');
         const ttc = ventilerTva({
-            amountNet: total, tvaExoneree: !!tva_exoneree, taxRate: null,
+            amountNet: total, tvaExoneree: !!tva_exoneree, taxRate: null, tvaCentimes,
             lines: hasLines ? cleanLines.map((l) => ({ amount: l.amount_net })) : [],
         }).grand;
         const reglement = reglementDe(req.body, ttc);
@@ -452,18 +457,21 @@ const createInvoice = async (req, res) => {
         // La base garde le POINT (`toFixed(2)`) : la virgule n'est qu'une façon de TAPER.
         const base = [invoiceId, req.user.organization_id, mainEnroll, company_id || null, buyer_name || null,
             type, number, total.toFixed(2), tva_exoneree ? 1 : 0, due_date || null];
+        // La TVA en centimes entiers (192) naît avec le document, écrite ici, jamais par défaut :
+        // un document créé avant la migration garde l'ancien calcul (cf. ventilerTva).
+        const tva = tvaCentimes ? { colonne: ', tva_centimes', place: ', ?', valeurs: [1] } : { colonne: '', place: '', valeurs: [] };
         try {
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?, ?)`,
-                [...base, emetteur ? emetteur.id : null]
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id${tva.colonne})
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?, ?${tva.place})`,
+                [...base, emetteur ? emetteur.id : null, ...tva.valeurs]
             );
         } catch (e) {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
-                base
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date${tva.colonne})
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?${tva.place})`,
+                [...base, ...tva.valeurs]
             );
         }
         if (hasLines) {

@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~5 s** (281 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2328 tests — 2321 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-09-30** : **2368 tests — 2361 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -222,23 +222,69 @@ TTC calculé au vrai taux ; seul l'article à 20 % s'affichait juste, par hasard
 l'écriture des options AVANT d'entrer dans l'état (`tauxEnListe`, Inventaire.jsx), et une valeur enregistrée hors de
 la liste y reste proposée (`tauxProposes` ; même idée pour la forme juridique, Reglages.jsx). Tests : `inventaire-tva.test.js`.
 
-**« Un centime de tolérance » se compte en centimes ENTIERS — et ce centime existe** (2026-09-30).
+**« Un centime de tolérance » se compte en centimes ENTIERS** (2026-09-30).
 `Math.abs(somme - ttc) > 0.01` n'est pas une tolérance d'un centime : en flottant, 120,01 − 120 vaut
 0,01000000000000512 (refusé) et 60,01 − 60 vaut 0,00999999999999801 (accepté). Comparer `Math.round(x * 100)`.
-Et l'écart n'a rien de théorique : la facture arrondit la TVA PAR TAUX (`ventilerTva`), quand le panier du stagiaire,
-la carte d'une demande, la fenêtre « Facturer la demande » et la caisse additionnent les TTC de ligne. Sur près d'un
-panier à deux taux sur quatre, le total ENCAISSÉ est à un centime du total FACTURÉ (33,33 € à 20 % et 7,77 € à 5,5 % :
-48,19 € encaissés, 48,20 € sur la facture) — jamais à deux. La facturation d'une demande boutique le tolère
-(`invoiceShopRequest`, qui vérifie que le règlement tombe sur le total du PDF, AVANT de prendre un numéro). Tests :
-`boutique-reglement.test.js`. /factures compare encore en flottant, sans effet : son écran (`ttcDe`) calcule comme le
-PDF, un test le tient. ⚠️ **LA CAISSE, NON CORRIGÉE (relevé le 2026-09-30)** : elle compare en flottant, et APRÈS avoir
-pris le numéro, décrémenté le stock et écrit la vente. Son écran arrondit par `Math.round`, son serveur par
-`toFixed` : ils se séparent quand la TVA tombe sur un demi-centime, et la vente d'UN article à 1,00 € ou 29,00 € HT
-à 5,5 % (0,45 € à 10 %) est refusée, écritures faites. À 20 %, jamais.
+
+**Un montant ANNONCÉ est le total de la FACTURE — TRANCHÉ le 2026-09-30.** La facture arrondit la TVA PAR TAUX
+(`ventilerTva`, Factur-X l'exige). Le panier du stagiaire, « Mes demandes », la carte d'une demande et la fenêtre
+« Facturer la demande » additionnaient les TTC de ligne, la caisse arrondissait la TVA une fois sur le tout : sur près
+d'un panier à deux taux sur quatre, on encaissait un centime de plus ou de moins que la facture (33,33 € à 20 % et
+7,77 € à 5,5 % : 48,19 € encaissés, 48,20 € facturés). Tous passent désormais par `lib/ttc.js` — côté écran une COPIE de
+`ventilerTva`, opération pour opération ; côté serveur un appel à `ventilerTva` : `totalFacture`, `totalDemande`
+(l'école au centime, le partenaire ventilé À PART : il facture lui-même) et `ttcDeLigne` (la colonne « Total TTC » du
+PDF, qui donne aussi le prix TTC d'un article et le montant de la notification d'une commande). Conséquence connue en
+tranchant : plusieurs articles au MÊME taux peuvent ne pas s'additionner (2 × 25,00 € = 49,99 €), exactement comme sur
+la facture. C'était déjà le cas avant, et plus souvent. Une somme de TTC de ligne réintroduite fait rougir
+`total-facture-ecrans.test.js`. La tolérance d'un centime RESTE, à `invoiceShopRequest` comme à la caisse : une page
+ouverte avant le déploiement envoie encore l'ancien total (`boutique-reglement.test.js`, `caisse-reglement.test.js`).
+/factures compare encore en flottant, sans effet : son écran (`ttcDe`) calcule comme le PDF, un test le tient.
+
+**LA CAISSE, CORRIGÉE LE MÊME JOUR** : elle comparait en flottant, et APRÈS avoir pris le numéro, décrémenté le stock et
+écrit la vente ; son écran arrondissait par `Math.round`, son serveur par `toFixed`, et la vente d'UN article à 1,00 € ou
+29,00 € HT à 5,5 % (0,45 € à 10 %) était refusée, écritures faites. Désormais tout se vérifie AVANT le numéro, en
+centimes entiers, et l'écran comme le serveur calculent le total de la facture (`totalFacture`, ci-dessus —
+`lib/totalCaisse.js`, qui arrondissait la TVA une fois sur le tout, est retirée). Tests : `caisse-reglement.test.js`.
+**Tranché le même jour, pour les factures NOUVELLES** : sur plusieurs lignes d'un même taux, `ventilerTva`
+arrondissait une somme FLOTTANTE, qui passe parfois sous un demi-centime — le PDF imprimait alors un centime de TVA de
+moins que l'arrondi exact (0,26 % de paniers tirés au hasard ; jamais sur une ligne seule, jamais à 20 %). Une facture
+née depuis la migration 192 compte en centimes entiers, taux par taux ; une facture d'avant garde son calcul (cf. § 4,
+192). Les écrans suivent la facture qu'ils annoncent : le serveur leur dit laquelle (`tva_centimes`, cf. § 4, 192), et
+la copie de `lib/ttc.js` porte les deux calculs. Tests : `facture-tva-centimes.test.js`, `total-facture-ecrans.test.js`.
+
+**Une facture ÉMISE se RECALCULE à chaque téléchargement** (2026-09-30) : rien n'est figé — ni PDF, ni TVA, ni TTC.
+Le PDF et le XML Factur-X se refont depuis les seuls HT (`invoice.amount_net`, `invoice_line`) par `loadInvoiceData`
+puis `ventilerTva`. Toute correction du CALCUL change donc le duplicata de pièces déjà remises au client. Une telle
+correction ne s'applique qu'aux factures NOUVELLES, par un drapeau que le code qui CRÉE la facture écrit (jamais une
+valeur par défaut de la colonne, sinon l'ordre migration/déploiement compterait) : la 108 pour le taux, la 192 pour les
+centimes. Trois points créent une facture (caisse, /factures, demande boutique) ; un test refuse qu'un quatrième oublie
+le drapeau.
 
 ---
 
-## 4. Migrations — **la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 192 à jouer (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**192 est À JOUER, avant ou après le code : l'ordre ne compte pas** (`192_facture_tva_centimes.sql`, la TVA d'une
+NOUVELLE facture en centimes entiers — décidé avec l'école le 2026-09-30). Une colonne sur `invoice` : `tva_centimes`
+(tinyint, 0 par défaut). `ventilerTva` additionnait en flottant les HT d'un même taux : sur un demi-centime, le PDF et le
+XML imprimaient un centime de moins que l'arrondi exact (429,35 € HT à 10 % en quatre lignes : 472,28 € au lieu de
+472,29 €), et les écrans qui recopient leur calcul (`lib/ttc.js`) faisaient encaisser autant.
+Rien n'étant figé à l'émission (cf. § 3), seules les factures NÉES depuis la migration comptent en centimes entiers : le
+code qui les crée (caisse, /factures, demande boutique) écrit `tva_centimes = 1` quand la colonne existe ; les factures
+existantes restent à 0, l'ancien calcul, à l'identique. Le 1 est écrit par le code, JAMAIS par défaut : jouée avant le
+déploiement, les factures que l'ancien code crée entre-temps restent à 0 ; jouée après, celles d'entre-temps reçoivent 0
+à l'ajout de la colonne. La vérification du règlement (caisse, demande boutique, /factures) calcule comme la facture
+qu'elle précède, et LES ÉCRANS AUSSI : le serveur leur dit le calcul par `tva_centimes` — les réglages de la caisse
+(`GET /ventes/settings`, pour la caisse), chaque demande de la liste (`GET /boutique/demandes`, pour sa carte et la
+fenêtre « Facturer la demande ») et de « Mes demandes » (qui le donne aussi, à la racine, pour le panier). Une demande
+déjà facturée suit SA facture (`tvaCentimesDeLaDemande`, lib/ttc.js) ; les autres, celle qui naîtra. Un article seul ne
+change jamais : `ttcDeLigne` et le prix d'un article s'accordent avec les deux calculs. Sans la migration, rien ne
+change. **Elle se vérifie par l'API, sans SQL** : créer une facture après l'avoir
+jouée, puis `GET /api/factures` (`SELECT i.*`) — la nouvelle ligne porte `tva_centimes: 1`, les anciennes 0 ; sans elle,
+la clé n'existe pas. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='invoice' AND column_name='tva_centimes';`
+⚠️ Son revert fait repasser à l'ancien calcul les factures créées depuis : celles dont la TVA tombait sur un demi-centime
+se réimprimeraient avec un centime de moins que l'exemplaire remis. Tests : `facture-tva-centimes.test.js`.
 
 **191 est À JOUER** (`191_fiche_photo.sql`, la PHOTO d'une fiche technique — demandée le 2026-09-29 avec le nouvel
 éditeur). Une table `recipe_photo` : une photo par fiche (`recipe_id` en clé primaire, ON DELETE CASCADE), octets CHIFFRÉS

@@ -8,6 +8,11 @@ const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
    `Number("12,5")` vaut NaN — une remise devenait 0 %, une part de règlement disparaissait,
    sans un mot (cf. lib/montantSaisi.js). */
 const { lireMontant } = require('../lib/montantSaisi.js');
+const { montantFr } = require('../lib/montants.js');
+/* Le total d'une vente est celui de sa FACTURE (`ventilerTva`, par lib/ttc.js), et l'écran de la
+   caisse calcule le même : chacun arrondissait le sien, et un article à 1,00 € HT à 5,5 % coûtait
+   1,06 € à l'écran, 1,05 € ici. */
+const { totalFacture } = require('../lib/ttc.js');
 
 /** Une remise en % : vide → 0 (comme avant) ; illisible → `null`, que l'appelant REFUSE ; sinon
  *  bornée à [0, 100]. `Number(v) || 0` faisait d'une remise « 12,5 » une remise NULLE : la vente
@@ -155,11 +160,18 @@ async function loadSettings(conn, orgId) {
     return r2[0] || { ...DEFAULT_SETTINGS };
 }
 
-/** GET /api/ventes/settings — paramètres de facturation de la boutique. */
+/**
+ * GET /api/ventes/settings — paramètres de facturation de la boutique.
+ *
+ * `tva_centimes` dit à la caisse et aux demandes boutique le calcul de la facture qu'elles
+ * préparent : en centimes entiers dès que la migration 192 est jouée (cf. ventilerTva). Ce n'est pas
+ * un réglage, c'est un fait de la base : il n'est jamais enregistré.
+ */
 const getShopSettings = async (req, res) => {
     try {
-        const s = await loadSettings(db.promise(), req.user.organization_id);
-        res.json({ data: s });
+        const conn = db.promise();
+        const s = await loadSettings(conn, req.user.organization_id);
+        res.json({ data: { ...s, tva_centimes: await hasColumn(conn, 'invoice', 'tva_centimes') } });
     } catch (err) {
         console.error('Erreur paramètres boutique :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -326,31 +338,24 @@ const checkout = async (req, res) => {
         // Le taux qui s'applique RÉELLEMENT à une ligne : le sien en mode ligne, sinon le global.
         const tauxDe = (ln) => (remiseDeLigne ? ln._disc : globalDisc);
 
-        // Facture liée : identifiant + numéro générés AVANT les lignes, pour que chaque
-        // vente (material_sale) référence sa facture → regroupement de l'historique.
         const hasInvLink = await saleHasInvoiceLink(conn);
-        // Sondée ICI et pas plus bas : le libellé de ligne s'écrit avant l'insertion, et il doit
+        // Sondée ICI et pas plus bas : le libellé de ligne se calcule avant l'insertion, et il doit
         // savoir s'il garde le suffixe « (remise 10%) » ou si la colonne s'en charge.
         const hasLineDiscount = await hasColumn(conn, 'invoice_line', 'discount_pct');
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
-        const invoiceId = crypto.randomUUID();
-        const year = new Date().getFullYear();
+        /* TVA en centimes entiers (192) : sondée ICI, avant le total, pour que le total vérifié soit
+           celui que la facture imprimera — elle naîtra avec `tva_centimes`, écrit plus bas par ce
+           code, jamais par défaut (cf. ventilerTva). L'écran le sait par ses réglages. */
+        const hasInvTvaCentimes = await hasColumn(conn, 'invoice', 'tva_centimes');
 
-        // Numéro : avec une émettrice, il vient de SA séquence continue et de SON gabarit ; sans
-        // elle, on garde le compteur de la boutique (shop_settings), comportement d'avant.
-        let number;
-        if (emetteur) {
-            number = await nextNumberForEmitter(conn, emetteur);
-        } else {
-            const num = settings.next_number || 1;
-            number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
-            await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
-        }
-
-        // Applique : décrément stock + vente par ligne (remise ligne puis globale).
-        // On construit aussi les lignes de facture (invoice_line) → facture détaillée + PDF.
-        let totalHT = 0;
+        /* LES LIGNES ET LE TOTAL SE CALCULENT D'ABORD, LE RÈGLEMENT SE VÉRIFIE ENSUITE, ET RIEN NE
+         * S'ÉCRIT AVANT. La répartition des paiements se vérifiait APRÈS la prise du numéro, le
+         * décrément du stock et l'écriture des ventes, sans transaction : un refus laissait un trou
+         * dans la séquence des factures, un stock faux, et des ventes — la comptabilité les lit —
+         * qui pointaient vers une facture jamais créée. Chaque nouvel essai recommençait.
+         *
+         * On construit ici les lignes de facture (invoice_line) → facture détaillée + PDF. */
         const productNames = [];
         const invLines = [];
         for (const ln of lines) {
@@ -375,21 +380,7 @@ const checkout = async (req, res) => {
             const unitNet = Number((unitGross * (1 - taux / 100)).toFixed(2));
             const rate = tvaApplies ? Number(it.tax_rate || 0) : 0;
             const lineHT = Number((unitNet * ln._qty).toFixed(2));
-            const note = payMethod ? `Paiement : ${payMethod}` : null;
-            await conn.query('UPDATE inventory_item SET quantity = quantity - ? WHERE id = ?', [ln._qty, ln.item_id]);
-
-            // Colonnes construites selon les migrations présentes, plutôt qu'en quatre variantes
-            // de requête pour deux drapeaux : chaque combinaison oubliée serait un chemin non
-            // testé. On ajoute chaque colonne optionnelle quand elle existe, une seule fois.
-            const col = ['id', 'organization_id', 'date', 'product', 'category', 'quantity', 'amount', 'learner_id', 'note'];
-            const val = [crypto.randomUUID(), orgId, null /*date via CURDATE*/, it.name, it.category, ln._qty, unitNet.toFixed(2), learner_id || null, note];
-            if (hasSaleCompany) { col.push('company_id'); val.push(company_id || null); }
-            if (hasInvLink) { col.push('invoice_id', 'invoice_number'); val.push(invoiceId, number); }
-            const ph = col.map((c) => (c === 'date' ? 'CURDATE()' : '?'));
-            const args = val.filter((_, i) => col[i] !== 'date');
-            await conn.query(
-                `INSERT INTO material_sale (${col.join(', ')}) VALUES (${ph.join(', ')})`, args);
-            totalHT += lineHT;
+            ln._unitNet = unitNet; // ce que la vente (material_sale) écrira, plus bas
             // Désignation PROPRE (juste le nom) : la quantité et la remise ont leurs colonnes sur
             // la facture. La référence (SKU) est figée à part. L'ancien libellé « nom × qté
             // (remise) » doublonnait la colonne Qté.
@@ -403,25 +394,72 @@ const checkout = async (req, res) => {
             });
             productNames.push(`${it.name} x${ln._qty}`);
         }
-        const totalTVA = invLines.reduce((s, l) => s + l.amount_net * l.rate / 100, 0);
-        totalHT = Number(totalHT.toFixed(2));
+        /* LE TOTAL EST CELUI DE LA FACTURE : `totalFacture` (lib/ttc.js), c'est-à-dire `ventilerTva`
+         * sur les lignes telles qu'elles vont s'écrire — TVA arrondie PAR TAUX, comme le PDF (tranché
+         * le 2026-09-30). Arrondie une fois sur le tout, elle s'écartait d'un centime de la facture sur
+         * près d'une vente à deux taux sur quatre. L'écran calcule le même total, par la copie de
+         * lib/ttc.js : c'est sur lui qu'il a calculé le solde du dernier moyen de paiement. */
+        const { ht: totalHT, tva: totalTVA, ttc } = totalFacture(invLines.map((l) => ({ ht: l.amount_net, taux: l.rate })), !tvaApplies, hasInvTvaCentimes);
 
-        // La somme des paiements doit tomber sur le total à régler (TTC). Sinon, la caisse ne
-        // boucle pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment.
-        // Vérifié seulement si un règlement est saisi ET que la vente est marquée payée.
-        const ttc = Number((totalHT + totalTVA).toFixed(2));
+        /* LA SOMME DES PAIEMENTS DOIT TOMBER SUR LE TOTAL À RÉGLER (TTC). Sinon, la caisse ne boucle
+         * pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment. Vérifié
+         * seulement si un règlement est saisi ET que la vente est marquée payée.
+         *
+         * L'ÉCART SE COMPTE EN CENTIMES ENTIERS, comme aux demandes boutique (invoiceShopRequest).
+         * `Math.abs(somme - ttc) > 0.01` n'était pas une tolérance d'un centime : en flottant,
+         * 120,01 − 120 vaut 0,01000000000000512 — refusé —, et 60,01 − 60 vaut 0,00999999999999801
+         * — accepté. Le centime qui reste toléré ne sert plus à l'écran d'aujourd'hui, qui calcule
+         * ce total exactement comme ici ; il couvre une page restée ouverte sur un ancien calcul,
+         * qui arrondissait les demi-centimes à sa façon, ou la TVA une seule fois sur plusieurs taux. */
         let paymentSplit = null;
         if (status === 'PAYEE' && parts.length) {
-            const somme = Number(parts.reduce((s, p) => s + p.amount, 0).toFixed(2));
-            if (Math.abs(somme - ttc) > 0.01) {
+            const somme = parts.reduce((s, p) => s + p.amount, 0);
+            if (Math.abs(Math.round(somme * 100) - Math.round(ttc * 100)) > 1) {
                 return res.status(422).json({
-                    message: `La répartition des paiements (${somme.toFixed(2)} €) ne correspond pas au total à régler (${ttc.toFixed(2)} €).`,
+                    message: `La répartition des paiements (${montantFr(somme)}) ne correspond pas au total à régler (${montantFr(ttc)}).`,
                 });
             }
             // On garde le détail dès qu'il y a plus d'un moyen, OU des infos de chèque à conserver
             // (un chèque unique porte sa banque et son numéro, qui seraient sinon perdus).
             const aDuDetail = parts.some((p) => p.bank || p.cheque_number);
             if (parts.length > 1 || aDuDetail) paymentSplit = JSON.stringify(parts);
+        }
+
+        /* PLUS AUCUN REFUS PASSÉ CE POINT : le numéro, puis les écritures. Ce qui suit ne fait que
+         * lire (nom de l'acheteur, colonnes présentes) ou écrire. */
+        // Facture liée : identifiant + numéro pris AVANT les ventes, pour que chaque vente
+        // (material_sale) référence sa facture → regroupement de l'historique.
+        const invoiceId = crypto.randomUUID();
+        const year = new Date().getFullYear();
+
+        // Numéro : avec une émettrice, il vient de SA séquence continue et de SON gabarit ; sans
+        // elle, on garde le compteur de la boutique (shop_settings), comportement d'avant.
+        let number;
+        if (emetteur) {
+            number = await nextNumberForEmitter(conn, emetteur);
+        } else {
+            const num = settings.next_number || 1;
+            number = `${settings.invoice_prefix || 'F'}-${year}-${String(num).padStart(4, '0')}`;
+            await conn.query('UPDATE shop_settings SET next_number = ? WHERE organization_id = ?', [num + 1, orgId]);
+        }
+
+        // Applique : décrément du stock + une vente par ligne, au prix unitaire net calculé plus haut.
+        const note = payMethod ? `Paiement : ${payMethod}` : null;
+        for (const ln of lines) {
+            const it = ln._it;
+            await conn.query('UPDATE inventory_item SET quantity = quantity - ? WHERE id = ?', [ln._qty, ln.item_id]);
+
+            // Colonnes construites selon les migrations présentes, plutôt qu'en quatre variantes
+            // de requête pour deux drapeaux : chaque combinaison oubliée serait un chemin non
+            // testé. On ajoute chaque colonne optionnelle quand elle existe, une seule fois.
+            const col = ['id', 'organization_id', 'date', 'product', 'category', 'quantity', 'amount', 'learner_id', 'note'];
+            const val = [crypto.randomUUID(), orgId, null /*date via CURDATE*/, it.name, it.category, ln._qty, ln._unitNet.toFixed(2), learner_id || null, note];
+            if (hasSaleCompany) { col.push('company_id'); val.push(company_id || null); }
+            if (hasInvLink) { col.push('invoice_id', 'invoice_number'); val.push(invoiceId, number); }
+            const ph = col.map((c) => (c === 'date' ? 'CURDATE()' : '?'));
+            const args = val.filter((_, i) => col[i] !== 'date');
+            await conn.query(
+                `INSERT INTO material_sale (${col.join(', ')}) VALUES (${ph.join(', ')})`, args);
         }
 
         // Nom imprimé sur la facture. Priorité : nom libre saisi > entreprise > stagiaire >
@@ -465,6 +503,7 @@ const checkout = async (req, res) => {
         if (hasInvEmitter) { iCol.push('billing_profile_id'); iVal.push(emetteur ? emetteur.id : null); }
         if (hasInvSplit) { iCol.push('payment_split'); iVal.push(paymentSplit); }
         if (hasInvTemplate) { iCol.push('template_slug'); iVal.push(templateSlug); }
+        if (hasInvTvaCentimes) { iCol.push('tva_centimes'); iVal.push(1); }
         await conn.query(
             `INSERT INTO invoice (${iCol.join(', ')}) VALUES (${iCol.map(() => '?').join(', ')})`, iVal);
         // Lignes détaillées (une par article) → facture itemisée + PDF Factur-X. Colonnes
@@ -488,10 +527,10 @@ const checkout = async (req, res) => {
                 `INSERT INTO invoice_line (${lc.join(', ')}) VALUES (${lc.map(() => '?').join(', ')})`, lv);
         }
         logAudit(req, 'sale.checkout', 'Invoice', invoiceId);
+        // Le total annoncé est celui qui a été vérifié contre le règlement, et que l'écran affichait.
         res.status(201).json({
             success: true, invoice_number: number, invoice_id: invoiceId, buyer: name,
-            total_ht: Number(totalHT.toFixed(2)), total_tva: Number(totalTVA.toFixed(2)),
-            total_ttc: Number((totalHT + totalTVA).toFixed(2)),
+            total_ht: totalHT, total_tva: totalTVA, total_ttc: ttc,
         });
     } catch (err) {
         console.error('Erreur checkout :', err);

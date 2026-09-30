@@ -58,7 +58,12 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
         for (const d of ctx.customTokens) {
             if (!d || !d.token_key || !/\{#\s*Stagiaires\s*\}/.test(d.template || '')) continue;
             const key = 'custom:' + d.token_key;
-            out = out.replace(new RegExp('<span[^>]*\\sdata-token="' + esc(key) + '"[^>]*>[\\s\\S]*?<\\/span>', 'g'), d.template);
+            // Le modèle s'insère par une FONCTION, jamais en chaîne de remplacement : `replace` y lit
+            // `$&`, `$'`, `$$`… Appelé en puce, « Tarif 10 $$ » perdait un « $ », « $' » recopiait
+            // toute la SUITE du document dans le paragraphe, « $` » tout son début, et « $& »
+            // réinsérait la puce, remplie ensuite avec le stagiaire du dossier. La forme {custom:clé}
+            // (split/join) n'y était pas exposée. Cf. `remplirLigne` et `expandGroupBlocks` (tokens.js).
+            out = out.replace(new RegExp('<span[^>]*\\sdata-token="' + esc(key) + '"[^>]*>[\\s\\S]*?<\\/span>', 'g'), () => d.template);
             out = out.split('{' + key + '}').join(d.template);
         }
     }

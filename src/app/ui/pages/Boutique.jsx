@@ -8,6 +8,7 @@ import CreneauCalendrier from "../components/CreneauCalendrier.jsx";
 import ConseilMateriel from "../components/ConseilMateriel.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { euro, listeCategories } from "../lib/format.js";
+import { totalDemande, ttcDeLigne } from "../lib/ttc.js";
 import ImageLien from "../components/ImageLien.jsx";
 import {
   getCart, addToCart, setQty, setBroderie, clearCart, cartTotals, cartCount,
@@ -462,7 +463,7 @@ function PartenairesTab() {
   ))}</>;
 }
 
-function PanierTab({ onSent }) {
+function PanierTab({ onSent, tvaCentimes }) {
   const [lines, setLines] = useState(getCart);
   const [note, setNote] = useState("");
   const [pickup, setPickup] = useState(null);
@@ -478,7 +479,7 @@ function PanierTab({ onSent }) {
     return <EmptyState icon="package" title="Ton panier est vide"
       text="Ajoute du matériel depuis les onglets. Tu enverras ta demande à l'école, qui te la prépare, tu paies sur place." />;
   }
-  const t = cartTotals(lines);
+  const t = cartTotals(lines, tvaCentimes);
   const brodes = lines.filter((l) => l.personalizable);
   const manque = brodes.filter((l) => !brodOk(l));
 
@@ -513,7 +514,7 @@ function PanierTab({ onSent }) {
             </span>
             <b className="tnum cart-sum">
               {l.price_ht == null ? <span className="hint">à définir</span>
-                : euro(l.price_ht * l.qty * (1 + (l.tax_rate ?? 20) / 100))}
+                : euro(ttcDeLigne(l.price_ht, l.qty, l.tax_rate))}
             </b>
             <button className="iconbtn del" onClick={() => setQty(k, 0)} aria-label="Retirer"><Icon name="x" size={13} /></button>
           </div>
@@ -600,17 +601,9 @@ const STATUS_BADGE = {
   NOUVELLE: "n", EN_PREPARATION: "a", PRETE: "g", PAYE: "a", FACTUREE: "b", REMISE: "b", ANNULEE: "r",
 };
 
-/* Total d'une demande. Une ligne partenaire n'a pas de prix (« tarif sur demande ») : on ne
-   l'additionne pas ET on le signale, sinon le total mentirait par omission. */
-function totalDemande(lines) {
-  let ttc = 0, aDefinir = false;
-  for (const l of lines) {
-    if (l.unit_price_ht == null) { aDefinir = true; continue; }
-    ttc += l.unit_price_ht * l.qty * (1 + (l.tax_rate ?? 20) / 100);
-  }
-  return { ttc: +ttc.toFixed(2), aDefinir };
-}
-
+/* Le total d'une demande est celui de sa FACTURE (`totalDemande`, lib/ttc.js), comme au panier :
+   c'est lui que le stagiaire vient régler. Une ligne partenaire « sur demande » n'a pas de prix :
+   elle n'est pas additionnée, ET c'est signalé, sinon le total mentirait par omission. */
 function MesDemandes() {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(null);   // id en cours d'annulation
@@ -639,7 +632,7 @@ function MesDemandes() {
   }
 
   return rows.map((r) => {
-    const t = totalDemande(r.lines);
+    const t = totalDemande(r.lines, r.tva_centimes); // le calcul de SA facture, que le serveur donne
     return (
       <Card key={r.id} title={
         <span className="card-ttl">
@@ -672,7 +665,7 @@ function MesDemandes() {
               <span className="dem-prix tnum">
                 {l.unit_price_ht == null
                   ? <span className="hint">sur demande</span>
-                  : euro(l.unit_price_ht * l.qty * (1 + (l.tax_rate ?? 20) / 100))}
+                  : euro(ttcDeLigne(l.unit_price_ht, l.qty, l.tax_rate))}
               </span>
             </li>
           ))}
@@ -708,14 +701,14 @@ function MesDemandes() {
  * (via le localStorage géré par lib/cart.js). Le bouton « Valider » ouvre le récapitulatif
  * complet (broderie + créneau) ; à l'envoi, le panier (localStorage) est vidé.
  */
-function CartAside({ count, onCheckout }) {
+function CartAside({ count, onCheckout, tvaCentimes }) {
   const [lines, setLines] = useState(getCart);
   useEffect(() => {
     const sync = () => setLines(getCart());
     window.addEventListener(CART_EVENT, sync);
     return () => window.removeEventListener(CART_EVENT, sync);
   }, []);
-  const t = cartTotals(lines);
+  const t = cartTotals(lines, tvaCentimes);
   return (
     <aside className="shop-aside">
       <div className="card" style={{ padding: 14 }}>
@@ -762,6 +755,9 @@ function Boutique() {
   const [n, setN] = useState(cartCount);
   const [sent, setSent] = useState(null);
   const [pretes, setPretes] = useState(0);
+  /* Le calcul de la facture qui naîtra d'une demande (migration 192) : le serveur le donne avec la
+     liste, et le panier l'emploie pour annoncer ce que la facture imprimera. */
+  const [tvaCentimes, setTvaCentimes] = useState(false);
   useEffect(() => {
     const sync = () => setN(cartCount());
     window.addEventListener(CART_EVENT, sync);
@@ -772,7 +768,10 @@ function Boutique() {
   // relit à chaque envoi (`sent`) pour que l'onglet ne mente pas juste après une commande.
   useEffect(() => {
     getMyShopRequests()
-      .then((r) => setPretes((r.data || []).filter((x) => x.status === "PRETE").length))
+      .then((r) => {
+        setPretes((r.data || []).filter((x) => x.status === "PRETE").length);
+        setTvaCentimes(!!r.tva_centimes);
+      })
       .catch(() => setPretes(0));
   }, [sent]);
 
@@ -814,7 +813,7 @@ function Boutique() {
               <button className="btn ghost sm" style={{ marginBottom: 14 }} onClick={() => setCheckout(false)}>
                 <Icon name="chevron-left" size={14} /> Continuer mes achats
               </button>
-              <PanierTab onSent={(ref) => { setSent(ref); setCheckout(false); setTab("demandes"); }} />
+              <PanierTab tvaCentimes={tvaCentimes} onSent={(ref) => { setSent(ref); setCheckout(false); setTab("demandes"); }} />
             </>
           ) : (
             <>
@@ -838,7 +837,7 @@ function Boutique() {
           )}
         </div>
 
-        {showCart && <CartAside count={n} onCheckout={() => setCheckout(true)} />}
+        {showCart && <CartAside count={n} tvaCentimes={tvaCentimes} onCheckout={() => setCheckout(true)} />}
       </div>
     </>
   );

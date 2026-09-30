@@ -16,8 +16,7 @@ import Inventaire from "./Inventaire.jsx";
 import { euro, initials } from "../lib/format.js";
 import { bumpBadges } from "../lib/events.js";
 import { lireMontant } from "../lib/montantSaisi.js";
-
-const ttc = (ht, rate) => Number(ht || 0) * (1 + Number(rate || 0) / 100);
+import { totalFacture } from "../lib/ttc.js";
 
 /* UNE REMISE TAPÉE (« 12,5 ») se lit en français, comme les montants (cf. lib/montantSaisi.js).
    Les deux champs étaient en `type="number"`, lus par `Number(v) || 0` : un champ numérique lit la
@@ -36,6 +35,23 @@ const TABS = [
   { v: "historique", label: "Historique des ventes" },
   { v: "inventaire", label: "Inventaire" },
 ];
+
+/**
+ * LE PANIER EN LIGNES DE FACTURE, telles que le serveur les calculera (sale.controller.js,
+ * checkout) : le HT de chaque ligne et le taux de TVA qui s'y applique, prêts pour `totalFacture`.
+ *
+ * MÊME ARRONDI QUE LE SERVEUR : prix unitaire remisé arrondi d'abord, puis multiplié. La caisse
+ * arrondissait après la multiplication et pouvait donc afficher un centime de moins que la facture
+ * émise — un ticket qui ne tombe pas sur le montant encaissé. Le taux de remise est celui qui
+ * s'applique VRAIMENT : celui de la ligne en mode ligne, sinon le global.
+ */
+function lignesDuPanier(cart, { remiseDeLigne, remiseGlobale, tvaApplies }) {
+  return cart.map((l) => {
+    const taux = remiseDeLigne ? tauxApplique(l.disc) : remiseGlobale;
+    const unitNet = Number((l.unit_price * (1 - taux / 100)).toFixed(2));
+    return { ht: Number((unitNet * l.quantity).toFixed(2)), taux: tvaApplies ? l.tax_rate : 0 };
+  });
+}
 
 function Ventes() {
   const [tab, setTab] = useState("caisse");
@@ -167,6 +183,9 @@ function Ventes() {
   }, [payOptions]);
 
   const tvaApplies = selectedEmitter ? !!selectedEmitter.tva_applies : (settings ? !!settings.tva_applies : true);
+  /* Le calcul de la facture qui va naître (migration 192) : en centimes entiers dès que la colonne
+     existe — ce que le serveur dit dans ses réglages, et ce qu'il vérifiera. */
+  const tvaCentimes = !!(settings && settings.tva_centimes);
   // Une remise de ligne exclut la remise globale, et réciproquement (cf. sale.controller.js) :
   // les deux se cumulaient, et 10 % sur l'article plus 5 % sur la vente faisaient 14,5 %.
   const remiseDeLigne = useMemo(() => cart.some((l) => tauxApplique(l.disc) > 0), [cart]);
@@ -179,21 +198,15 @@ function Ventes() {
     : !remiseDeLigne && !Number.isFinite(remiseSaisie(discount))
       ? "Remise globale illisible : écrivez-la par exemple 12,5." : null;
 
-  const totals = useMemo(() => {
-    let ht = 0, tva = 0;
-    for (const l of cart) {
-      // Le taux qui s'applique vraiment : celui de la ligne en mode ligne, sinon le global.
-      const taux = remiseDeLigne ? tauxApplique(l.disc) : remiseGlobale;
-      // MÊME ARRONDI QUE LE SERVEUR : prix unitaire arrondi d'abord, puis multiplié. La caisse
-      // arrondissait après la multiplication et pouvait donc afficher un centime de moins que
-      // la facture émise — un ticket qui ne tombe pas sur le montant encaissé.
-      const unitNet = Number((l.unit_price * (1 - taux / 100)).toFixed(2));
-      const lineHT = Number((unitNet * l.quantity).toFixed(2));
-      ht += lineHT;
-      if (tvaApplies) tva += lineHT * l.tax_rate / 100;
-    }
-    return { ht, tva, ttc: ht + tva, discount: remiseDeLigne ? 0 : remiseGlobale };
-  }, [cart, remiseDeLigne, remiseGlobale, tvaApplies]);
+  /* LE TOTAL DE LA FACTURE, celui que le serveur vérifiera contre le règlement : TVA arrondie PAR
+     TAUX, par la copie de `ventilerTva` (`totalFacture`, lib/ttc.js) que le serveur appelle. L'écran
+     arrondissait 1,055 € en 1,06 €, le serveur en 1,05 € — et il refusait le règlement dont le solde
+     venait d'être calculé ici ; arrondie une fois sur plusieurs taux, la TVA s'écartait d'un centime
+     de la facture sur près d'une vente à deux taux sur quatre. */
+  const totals = useMemo(() => ({
+    ...totalFacture(lignesDuPanier(cart, { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies, tvaCentimes),
+    discount: remiseDeLigne ? 0 : remiseGlobale,
+  }), [cart, remiseDeLigne, remiseGlobale, tvaApplies, tvaCentimes]);
 
   async function validate() {
     if (cart.length === 0) return;
@@ -481,12 +494,11 @@ function Ventes() {
                           onChange={(e) => setLine(l.item_id, { disc: borneRemise(e.target.value) })}
                           className="inp" placeholder="%"
                           style={{ width: 76, flex: "0 0 auto", textAlign: "center", ...(Number.isFinite(remiseSaisie(l.disc)) ? null : { borderColor: "var(--ember1)" }) }} />
-                        {/* Le montant de ligne suit le MÊME arrondi que le serveur (prix unitaire
-                            d'abord), sinon le ticket ne tombe pas sur ce qui est facturé. */}
+                        {/* Le TTC de la ligne, par la règle du total — celle de la facture, qui
+                            l'imprime ainsi dans sa colonne « Total TTC » : un article seul affiche
+                            ce que le total annonce, et ce que le serveur encaissera. */}
                         <span className="mono" style={{ width: 74, textAlign: "right" }}>
-                          {euro(ttc(
-                            Number((l.unit_price * (1 - (remiseDeLigne ? tauxApplique(l.disc) : remiseGlobale) / 100)).toFixed(2)) * l.quantity,
-                            tvaApplies ? l.tax_rate : 0))}
+                          {euro(totalFacture(lignesDuPanier([l], { remiseDeLigne, remiseGlobale, tvaApplies }), !tvaApplies, tvaCentimes).ttc)}
                         </span>
                         <button className="iconbtn del" title="Retirer" onClick={() => removeLine(l.item_id)}><Icon name="trash" size={15} /></button>
                       </div>

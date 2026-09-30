@@ -1101,13 +1101,25 @@ function empilerDansLaLigne(ligne, nom, list, rowTokens, mini) {
     }).join('') + queue;
 }
 
-/** Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}. */
+/**
+ * Remplace, dans un gabarit, les jetons d'UNE ligne — puces de l'éditeur comme texte {Clé}.
+ *
+ * LA VALEUR EST DU TEXTE, ÉCHAPPÉE (`escCell`) comme dans les tableaux {Articles} et {Règlements},
+ * qui impriment les mêmes valeurs, et comme dans les blocs {#Stagiaires}. Elle entrait telle quelle
+ * dans le HTML du document : un « < » ou un « & » dans une désignation ou une banque y devenait du
+ * balisage. Or la désignation d'une demande boutique reprend la personnalisation que le STAGIAIRE
+ * tape dans son panier : une balise écrite là était interprétée dans la facture qu'émet l'école.
+ *
+ * ET ELLE S'INSÈRE PAR UNE FONCTION, jamais en chaîne de remplacement : `replace` y lit `$&`, `$'`,
+ * `$$`… « Lot $& promo » réinsérait la puce elle-même, et « $' » recopiait la fin de la ligne,
+ * `</td></tr>` compris — le tableau sortait cassé. La forme {Clé} (split/join) n'y était pas exposée.
+ */
 function remplirLigne(gabarit, vals) {
     let out = gabarit;
     for (const [k, v] of Object.entries(vals)) {
         const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const val = String(v == null ? '' : v);
-        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), val);
+        const val = escCell(v);
+        out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), () => val);
         out = out.split(`{${k}}`).join(val);
     }
     return out;
@@ -1138,10 +1150,14 @@ function expandGroupBlocks(html, list, customDefs, globalValues) {
             //    Les jetons par stagiaire s'insèrent désormais comme puces propres (et non plus
             //    en {Clé} brut) — il faut donc les remplir ICI, par stagiaire, sinon la puce
             //    « Prénom » retomberait sur le remplacement GLOBAL (le stagiaire du dossier).
+            //    La valeur s'insère par une FONCTION, jamais en chaîne de remplacement : `replace` y
+            //    lit `$&`, `$'`, `$$`… « Lot $& X » réinsérait la puce elle-même, que la passe
+            //    globale remplissait ensuite avec le stagiaire DU DOSSIER — la ligne d'un stagiaire
+            //    du groupe imprimait le nom d'un autre. Cf. `remplirLigne`, même défaut.
             for (const [k, val] of Object.entries(repl)) {
                 const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'),
-                    escCell(val == null ? '' : String(val)));
+                const texte = escCell(val == null ? '' : String(val));
+                out = out.replace(new RegExp(`<span[^>]*\\sdata-token="${esc}"[^>]*>[\\s\\S]*?<\\/span>`, 'g'), () => texte);
             }
             // 2) Forme texte {Clé} (modèles hérités, décalage de date {Jour1|+2}).
             return out.replace(/\{\s*([^{}|]+?)\s*(?:\|\s*([+-]?\d+)\s*)?\}/g, (mm, ref, off) => {
