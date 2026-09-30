@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Card from "./Card.jsx";
 import {
-  getEmitters, createEmitter, updateEmitter, deleteEmitter,
+  getEmitters, createEmitter, updateEmitter, deleteEmitter, reprendreNumerotation,
 } from "../api/apiClient.js";
 
 /**
@@ -212,6 +212,23 @@ export default function BillingProfiles({ onError }) {
     if (!window.confirm(`Supprimer l'entité « ${row.label || row.legal_name} » ?\nLes factures déjà émises sous ce nom sont conservées.`)) return;
     try { await deleteEmitter(row.id); load(); } catch (e) { onError?.(e.message); }
   }
+  /* REPRENDRE LA NUMÉROTATION (2026-09-30). Des documents supprimés ont laissé des numéros derrière
+     le compteur — « FACT-2026-0009 » à venir, sans FACT-2026-0008. Un brouillon supprimé rend
+     désormais son numéro tout seul ; ceci rattrape les suppressions d'avant, entité par entité. Le
+     compteur ne se tape pas : il ne sait que revenir juste après le dernier document qui existe, ce
+     que le serveur recalcule. Redonner un numéro est une décision — d'où la question. */
+  async function reprendre(row) {
+    const premier = apercuNumero(row.number_format, Number(row.sequence_max) + 1);
+    const dernier = apercuNumero(row.number_format, Number(row.next_number) - 1);
+    const plage = premier === dernier ? `Le numéro ${premier} sera redonné` : `Les numéros ${premier} à ${dernier} seront redonnés`;
+    if (!window.confirm(`Reprendre la numérotation de « ${row.label || row.legal_name} » à ${premier} ?\n${plage} aux prochains documents. À ne faire que s'ils n'ont jamais été remis à un client (brouillons ou essais supprimés).`)) return;
+    setMsg(null);
+    try {
+      const r = await reprendreNumerotation(row.id);
+      setMsg({ type: "success", text: r.message || "Numérotation reprise." });
+      load();
+    } catch (e) { onError?.(e.message); }
+  }
 
   return (
     <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Entités émettrices</span>}>
@@ -233,6 +250,17 @@ export default function BillingProfiles({ onError }) {
               <div className="hint" style={{ fontSize: 12 }}>
                 {r.legal_name} · {r.siret || "SIRET, "} · <span className="mono">{apercuNumero(r.number_format, r.next_number || 1)}</span>
               </div>
+              {/* Des numéros donnés n'existent plus (documents supprimés) : l'entité peut les reprendre. */}
+              {r.sequence_max != null && Number(r.next_number) - 1 > Number(r.sequence_max) && (
+                <div className="hint" style={{ fontSize: 12 }}>
+                  {Number(r.sequence_max) > 0
+                    ? <>Son dernier document porte le n° <span className="mono">{apercuNumero(r.number_format, r.sequence_max)}</span>.</>
+                    : "Aucun document ne porte encore un de ses numéros."}{" "}
+                  <button type="button" className="lien-nu" onClick={() => reprendre(r)}>
+                    Reprendre à {apercuNumero(r.number_format, Number(r.sequence_max) + 1)}
+                  </button>
+                </div>
+              )}
             </div>
             <button className="btn ghost sm" onClick={() => setEditing(r)}><Icon name="settings" size={13} /></button>
             {/* L'entité organisme n'est pas supprimable : c'est l'émetteur de base. */}

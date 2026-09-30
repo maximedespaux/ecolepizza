@@ -146,7 +146,29 @@ async function rendreLeNumero(conn, orgId, profileId, number) {
     return r && r.affectedRows === 1 ? { rendu: true } : { rendu: false, raison: 'pas_le_dernier' };
 }
 
+/**
+ * LA PLUS GRANDE SÉQUENCE PORTÉE PAR UN DOCUMENT EXISTANT, entité par entité (0 : aucun document).
+ *
+ * C'est ce qui sépare un compteur « à jour » d'un compteur qui a laissé des numéros derrière lui :
+ * `next_number - 1` plus grand que cette valeur, et des numéros donnés n'existent plus. Un numéro
+ * qui ne suit pas le gabarit actuel de son entité n'est pas compté — on ne devine pas sa séquence.
+ * Rend une Map `id de l'entité → séquence`.
+ */
+async function dernieresSequences(conn, orgId, emitters) {
+    const max = new Map(emitters.map((e) => [e.id, 0]));
+    if (!emitters.length) return max;
+    const parId = new Map(emitters.map((e) => [e.id, e]));
+    const [rows] = await conn.query(
+        'SELECT billing_profile_id, number FROM invoice WHERE organization_id = ? AND billing_profile_id IS NOT NULL', [orgId]);
+    for (const r of rows) {
+        const e = parId.get(r.billing_profile_id);
+        const seq = e ? sequenceDuNumero(e, r.number) : null;
+        if (seq !== null && seq > max.get(e.id)) max.set(e.id, seq);
+    }
+    return max;
+}
+
 module.exports = {
     loadEmitter, defaultEmitter, resolveEmitter, formatNumber, nextNumberForEmitter, isMissingSchema,
-    sequenceDuNumero, rendreLeNumero,
+    sequenceDuNumero, rendreLeNumero, dernieresSequences,
 };

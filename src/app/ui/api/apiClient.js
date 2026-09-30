@@ -194,6 +194,10 @@ export function updateEmitter(id, payload) {
 export function deleteEmitter(id) {
   return request(`/emetteurs/${id}`, { method: "DELETE" });
 }
+// Ramène le prochain numéro d'une entité juste après son dernier document existant.
+export function reprendreNumerotation(id) {
+  return request(`/emetteurs/${id}/compteur`, { method: "PUT" });
+}
 
 // --- Émargement ---
 export function getAttendance(sessionId) {

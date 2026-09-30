@@ -229,6 +229,8 @@ const ACTION_LABEL = {
     'billing_profile.create': ['Entité émettrice créée', G],
     'billing_profile.update': ['Entité émettrice modifiée', A],
     'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
+    // Le prochain numéro ramené juste après le dernier document existant (2026-09-30).
+    'billing_profile.compteur': ['Numérotation d\'une entité reprise', A],
     'billing_profile.delete': ['Entité émettrice supprimée', R],
 
     // Archives

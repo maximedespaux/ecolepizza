@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
+const { loadEmitter, formatNumber, dernieresSequences } = require('../lib/emitter.js');
 
 /**
  * Entités émettrices : les identités de vendeur sous lesquelles un organisme facture.
@@ -88,6 +89,13 @@ const list = async (req, res) => {
         // L'entité organisme est garantie AVANT la lecture : elle doit toujours être là, défaut.
         try { await ensureOrgProfile(conn, orgId); } catch (e) { if (!isMissingSchema(e)) console.error('semis émetteur :', e.message); }
         const [rows] = await requete();
+        /* `sequence_max` : la séquence du dernier document EXISTANT de chaque entité. Quand le
+           prochain numéro est plus loin, des numéros donnés n'existent plus (des documents
+           supprimés) : l'écran propose alors de reprendre la numérotation (`reprendreNumerotation`). */
+        try {
+            const max = await dernieresSequences(conn, orgId, rows);
+            for (const r of rows) r.sequence_max = max.get(r.id) || 0;
+        } catch (e) { if (!isMissingSchema(e)) throw e; }
         res.json({ data: rows });
     } catch (e) {
         // COLS cite is_organization : sans la 117, la lecture échoue. On relit sans cette colonne.
@@ -197,6 +205,47 @@ const setDefault = async (req, res) => {
 };
 
 /**
+ * PUT /api/emetteurs/:id/compteur — REPRENDRE LA NUMÉROTATION juste après le dernier document de
+ * l'entité (2026-09-30).
+ *
+ * Depuis ce jour, un brouillon supprimé rend son numéro (`rendreLeNumero`, lib/emitter.js). Mais
+ * les suppressions d'AVANT ont déjà fait avancer le compteur — l'école en était à FACT-2026-0009
+ * sans FACT-2026-0008 —, et il ne se règle nulle part : le rendre modifiable permettrait de créer
+ * un trou ou un doublon d'une faute de frappe. Cette action ne sait faire qu'UNE chose, sans
+ * risque de doublon : ramener le prochain numéro juste après le dernier document qui EXISTE.
+ *
+ * Elle redonne donc des numéros déjà donnés une fois : c'est une décision humaine, que l'écran
+ * fait confirmer (à ne faire que si ces numéros n'ont jamais été remis à un client), et qui est
+ * journalisée. L'UPDATE est gardé par la valeur lue, comme partout où le compteur recule.
+ */
+const reprendreNumerotation = async (req, res) => {
+    const conn = db.promise();
+    const orgId = req.user.organization_id;
+    try {
+        const emitter = await loadEmitter(conn, orgId, req.params.id);
+        if (!emitter) return res.status(404).json({ message: 'Entité introuvable.' });
+        const dernier = (await dernieresSequences(conn, orgId, [emitter])).get(emitter.id) || 0;
+        const prochain = Number(emitter.next_number) || 1;
+        if (prochain <= dernier + 1) {
+            return res.status(409).json({ message: 'Rien à reprendre : le prochain numéro suit déjà le dernier document.' });
+        }
+        const [r] = await conn.query(
+            'UPDATE billing_profile SET next_number = ? WHERE id = ? AND organization_id = ? AND next_number = ?',
+            [dernier + 1, emitter.id, orgId, prochain]
+        );
+        if (!r || r.affectedRows !== 1) {
+            return res.status(409).json({ message: 'Un document vient d\'être numéroté : rechargez la page.' });
+        }
+        const numero = formatNumber(emitter, dernier + 1);
+        logAudit(req, 'billing_profile.compteur', 'BillingProfile', emitter.id, { libelle: numero });
+        res.json({ message: `Le prochain document portera le numéro ${numero}.`, next_number: dernier + 1 });
+    } catch (e) {
+        console.error('Erreur reprise de numérotation :', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * DELETE /api/emetteurs/:id
  *
  * La FK invoice.billing_profile_id est ON DELETE SET NULL : les factures déjà émises survivent,
@@ -234,4 +283,4 @@ const remove = async (req, res) => {
     }
 };
 
-module.exports = { list, create, update, setDefault, remove };
+module.exports = { list, create, update, setDefault, reprendreNumerotation, remove };

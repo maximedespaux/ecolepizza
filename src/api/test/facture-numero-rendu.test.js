@@ -51,6 +51,9 @@ async function requete(sql, params) {
         factures = factures.filter((f) => !(f.id === params[0] && f.organization_id === params[1]));
         return [{ affectedRows: avant - factures.length }];
     }
+    if (/^SELECT billing_profile_id, number FROM invoice WHERE organization_id = \? AND billing_profile_id IS NOT NULL/.test(q)) {
+        return [factures.filter((f) => f.organization_id === params[0] && f.billing_profile_id).map((f) => ({ billing_profile_id: f.billing_profile_id, number: f.number }))];
+    }
     if (/^SELECT \* FROM billing_profile WHERE id = \? AND organization_id = \?/.test(q)) {
         const p = profils[params[0]];
         return [p && p.organization_id === params[1] ? [{ ...p }] : []];
@@ -73,8 +76,9 @@ require.cache[cheminDb] = { id: cheminDb, filename: cheminDb, loaded: true, expo
     // logAudit écrit en mode rappel : on garde ce qu'il trace.
     query: (sql, params, cb) => { journal.push({ q: plat(sql), params }); const f = typeof params === 'function' ? params : cb; if (typeof f === 'function') f(null, {}); },
 } };
-const { formatNumber, sequenceDuNumero, rendreLeNumero, nextNumberForEmitter } = require('../lib/emitter.js');
+const { formatNumber, sequenceDuNumero, rendreLeNumero, nextNumberForEmitter, dernieresSequences } = require('../lib/emitter.js');
 const facturesCtrl = require('../controllers/invoice.controller.js');
+const entitesCtrl = require('../controllers/billingProfile.controller.js');
 
 async function supprimer(id) {
     const res = { code: 200, corps: null };
@@ -181,6 +185,66 @@ test('SANS LA MIGRATION 113 (aucune entité), la suppression marche comme avant'
     assert.strictEqual(res.corps.numero_rendu, false);
     assert.strictEqual(res.corps.message, 'Document supprimé.');
     assert.ok(!factures.some((f) => f.id === 'f8'));
+});
+
+/* ── LES SUPPRESSIONS D'AVANT ─────────────────────────────────────────────────────────────────────
+ * Le jour de la demande, l'école en était à FACT-2026-0009 sans FACT-2026-0008 : le brouillon avait
+ * été supprimé AVANT que la suppression sache rendre son numéro, et le compteur ne se règle nulle
+ * part. Une action le ramène juste après le dernier document qui EXISTE — jamais ailleurs. */
+async function reprendre(id) {
+    const res = { code: 200, corps: null };
+    res.status = (c) => { res.code = c; return res; };
+    res.json = (b) => { res.corps = b; return res; };
+    requetes = [];
+    await entitesCtrl.reprendreNumerotation({ user: { organization_id: ORG, id: 'u1' }, params: { id } }, res);
+    return res;
+}
+
+test('LE DERNIER DOCUMENT EXISTANT de chaque entité, lu par SON gabarit', async () => {
+    remettre();
+    factures.push({ id: 'vieux', organization_id: ORG, number: 'F-2025-0900', status: 'PAYEE', billing_profile_id: 'p1' });
+    const max = await dernieresSequences({ query: requete }, ORG, Object.values(profils));
+    assert.strictEqual(max.get('p1'), 8, 'F-2025-0900 ne suit pas le gabarit de l\'entité : on ne devine pas sa séquence');
+    assert.strictEqual(max.get('p2'), 42);
+    assert.deepStrictEqual([...(await dernieresSequences({ query: requete }, ORG, [])).keys()], []);
+});
+
+test('REPRENDRE LA NUMÉROTATION : le compteur revient juste après le dernier document, et c\'est journalisé', async () => {
+    remettre();
+    // Le cas de l'école : le 0008 a été supprimé par l'ancien code, le compteur est resté à 9.
+    factures = factures.filter((f) => f.id !== 'f8');
+    const res = await reprendre('p1');
+    assert.strictEqual(res.code, 200, JSON.stringify(res.corps));
+    assert.strictEqual(profils.p1.next_number, 8);
+    assert.match(res.corps.message, /^Le prochain document portera le numéro FACT-\d{4}-0008\.$/);
+    assert.deepStrictEqual(reculs()[0].params, [8, 'p1', ORG, 9], 'gardé par l\'organisme ET par la valeur lue');
+    const trace = journal.find((j) => /INSERT INTO audit_log/.test(j.q));
+    assert.ok(trace && trace.params.includes('billing_profile.compteur'), 'redonner des numéros est une décision : elle se trace');
+    assert.strictEqual(profils.p2.next_number, 43, 'une seule entité à la fois');
+
+    // Plus rien à reprendre : le refus le dit, et le compteur ne descend JAMAIS sous un document existant.
+    const encore = await reprendre('p1');
+    assert.strictEqual(encore.code, 409);
+    assert.strictEqual(profils.p1.next_number, 8);
+    // Une entité sans aucun document repart à 1.
+    remettre();
+    factures = [];
+    await reprendre('p2');
+    assert.strictEqual(profils.p2.next_number, 1);
+    // Une entité inconnue (ou d'un autre organisme) : rien.
+    assert.strictEqual((await reprendre('ailleurs')).code, 404);
+});
+
+test('LA LISTE DES ENTITÉS dit où en sont leurs documents, et l\'écran ne propose de reprendre que s\'il y a de quoi', () => {
+    const ctrl = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'billingProfile.controller.js'), 'utf8');
+    assert.match(ctrl, /for \(const r of rows\) r\.sequence_max = max\.get\(r\.id\) \|\| 0;/);
+    const routes = fs.readFileSync(path.join(__dirname, '..', 'routes', 'billingProfile.routes.js'), 'utf8');
+    assert.match(routes, /router\.put\('\/:id\/compteur', authorizeRoles\(\.\.\.ADMIN_ROLES\), reprendreNumerotation\)/, 'le bureau seulement');
+    const ecran = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'components', 'BillingProfiles.jsx'), 'utf8');
+    assert.match(ecran, /r\.sequence_max != null && Number\(r\.next_number\) - 1 > Number\(r\.sequence_max\)/);
+    assert.match(ecran, /À ne faire que s'ils n'ont jamais été remis à un client/, 'la question dit ce que reprendre veut dire');
+    // Le compteur ne devient PAS un champ : une faute de frappe y ferait un trou, ou un doublon.
+    assert.doesNotMatch(ctrl.slice(ctrl.indexOf('const CHAMPS'), ctrl.indexOf('];', ctrl.indexOf('const CHAMPS'))), /next_number/);
 });
 
 test('L\'ÉCRAN dit ce qu\'il advient du numéro : avant, et après', () => {
