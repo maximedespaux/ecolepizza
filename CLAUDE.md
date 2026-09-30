@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2421 tests — 2414 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2426 tests — 2419 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -950,9 +950,26 @@ rien ne se transmet avant.
   `identiteExemple(graine)` permet un tirage stable si l'on veut comparer deux aperçus sans que
   le nom change de longueur entre les deux. Tests : `test/apercu-echantillons.test.js`.
 
-**Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité
-émettrice (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ;
-ajouter des `desc` explicites aux autres groupes de jetons.
+- **Facture de formation NARRATIVE** (2026-09-30, modèle `facture-formation`, doc_type FACTURE) :
+  une facture n'exposait que l'acheteur, l'organisme, les lignes et les totaux — les jetons de
+  FORMATION, les DATES et l'ACOMPTE sortaient vides (`invoiceCtx` posait `formations: []`). Désormais,
+  quand une facture désigne un DOSSIER (par `invoice.enrollment_id` ou la 1ʳᵉ `invoice_line`),
+  `loadInvoiceData` charge sa formation/session (`data.formation`) et `invoiceCtx` en remplit les
+  Champs documents (`field:training_program.*`, `field:training_session.*`) ET `formations[0]` — d'où
+  {Formation}, {Heures}, {Jour1}, {endDate}, {Acompte}, {Reste à payer}. Le prix de référence de
+  `formations[0]` est le **total HT de la facture** (`v.base`), pas le tarif catalogue : {Prix},
+  {Coût horaire} et {Reste à payer} comptent dessus. « Pour le compte de » nomme le STAGIAIRE du
+  dossier même quand l'acheteur est l'entreprise (`learner` forcé). Additif : une facture SANS dossier
+  (boutique, nom libre) ne change pas. Trois jetons ajoutés au catalogue : **{Coût horaire}** (montant
+  ÷ heures, arrondi au centime) et **{Début/Fin en toutes lettres}** (« lundi 18 mai 2026 »,
+  `frDateLong`, découpe la chaîne pour ne pas décaler d'un fuseau). Aucune migration : {Acompte} lit
+  `enrollment.acompte` (déjà écrit par la carte Règlement, cf. § 4, 194). Le PDF se vérifie sur
+  l'instance déployée (LibreOffice), les jetons par `facture-formation-tokens.test.js`.
+
+**Reste ouvert / idées non faites** : les JETONS PERSONNALISÉS CALCULÉS (une formule entre jetons,
+ex. {Prix} ÷ {Heures}) — demandés le 2026-09-30, pas encore faits ; donner un préfixe de numéro
+distinct à chaque entité émettrice (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore
+`legal_name = "d"` ; ajouter des `desc` explicites aux autres groupes de jetons.
 
 ---
 

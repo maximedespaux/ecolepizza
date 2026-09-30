@@ -239,6 +239,36 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
+    /* LA FORMATION DU DOSSIER FACTURÉ — pour un modèle de facture NARRATIF (intitulé, dates,
+       heures, coût horaire, acompte / reste). Le dossier est celui de la facture, sinon celui de
+       sa PREMIÈRE ligne (une facture d'entreprise en porte une par stagiaire ; on prend la
+       formation commune). Absent — vente boutique, nom libre — : pas de formation, les jetons
+       correspondants restent vides et rien ne bloque (findMissingTokens ne compte pas un field:
+       absent). Un ancien schéma (colonnes/tables manquantes) retombe sur « pas de formation ». */
+    let formation = null;
+    try {
+        const [[fo]] = await conn.query(
+            `SELECT p.title, p.code, p.hours, p.days, p.price,
+                    DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
+                    DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
+                    s.week, s.year, s.trainer,
+                    e.acompte, e.price AS enroll_price,
+                    l.civility, l.first_name, l.last_name
+               FROM enrollment e
+               JOIN training_session s ON s.id = e.session_id
+               LEFT JOIN training_program p ON p.id = s.program_id
+               LEFT JOIN learner l ON l.id = e.learner_id
+              WHERE e.organization_id = ?
+                AND e.id = COALESCE(?, (SELECT il.enrollment_id FROM invoice_line il
+                                         WHERE il.invoice_id = ? AND il.enrollment_id IS NOT NULL
+                                         ORDER BY il.sort_order, il.id LIMIT 1))`,
+            [orgId, inv.enrollment_id || null, invoiceId]
+        );
+        formation = fo || null;
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+    }
+
     return {
         number: inv.number,
         type: inv.type,
@@ -275,6 +305,8 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         buyerIsCompany: !!inv.company_id,
         // Modèle de facture CHOISI à la vente (migration 121). Prioritaire sur la sélection auto.
         templateSlug: inv.template_slug || null,
+        // La formation du dossier facturé (null si la facture n'en désigne aucun) — cf. invoiceCtx.
+        formation,
     };
 }
 
@@ -895,12 +927,40 @@ function invoiceCtx(org, data) {
         .map((p) => `${p.method} : ${eur(p.amount)}${p.cheque_number ? ` (chèque n° ${p.cheque_number}${p.bank ? `, ${p.bank}` : ''})` : ''}`)
         .join(' · ');
 
+    /* LA FORMATION DU DOSSIER (facture narrative, 2026-09-30) : elle alimente les Champs documents
+       de la formation et de la session (field:training_program.* / field:training_session.*) ET
+       `formations[0]`, d'où {Formation}, {Heures}, {Jour1}, {endDate}, {Début/Fin en toutes lettres},
+       {Coût horaire}, {Acompte} et {Reste à payer}. LE PRIX DE RÉFÉRENCE est le MONTANT NET = le
+       total HT de la facture (choix de l'école), pas le tarif catalogue : {Prix}, {Coût horaire} et
+       {Reste à payer} comptent donc sur `v.base`. Absente (boutique, nom libre) : rien n'est ajouté,
+       les factures existantes ne changent pas. */
+    const fo = data.formation;
+    let formations = [];
+    // « Pour le compte de … » nomme le STAGIAIRE du dossier, même quand l'acheteur est l'entreprise.
+    let learner = estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city };
+    if (fo) {
+        const champs = {
+            'training_program.title': fo.title, 'training_program.code': fo.code,
+            'training_program.hours': fo.hours, 'training_program.days': fo.days, 'training_program.price': fo.price,
+            'training_session.start_date': fo.start_date, 'training_session.end_date': fo.end_date,
+        };
+        for (const [k, val] of Object.entries(champs)) if (val != null) fields[k] = val;
+        formations = [{
+            title: fo.title, code: fo.code, hours: fo.hours, days: fo.days,
+            enroll_price: v.base, price: v.base, acompte: fo.acompte,
+            start_date: fo.start_date, end_date: fo.end_date, week: fo.week, year: fo.year, trainer: fo.trainer,
+        }];
+        if (estEntreprise && (fo.first_name || fo.last_name)) {
+            learner = { civility: fo.civility, first_name: fo.first_name, last_name: fo.last_name };
+        }
+    }
+
     return {
         org,
         fields,
         company: estEntreprise ? { name: data.buyer.name, siret: data.buyer.siret, address: a.line, zip_code: a.zip, town: a.city } : {},
-        learner: estEntreprise ? {} : { first_name: data.buyer.name, address: a.line, zip_code: a.zip, town: a.city },
-        formations: [],
+        learner,
+        formations,
         articles: data.lines || [],
         payments, // bloc {#Paiements}…{/Paiements}
         invoice: {
