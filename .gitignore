@@ -57,3 +57,6 @@ CHANTIERS.md
 # Il a fallu `git rm -r --cached manuels/` en plus. Les fichiers restent dans l'historique
 # (13 commits) — les effacer vraiment demanderait de réécrire l'historique.
 manuels/
+
+# Rapports des engagements de pentest (skill pentest) : locaux, jamais versionnés.
+outputs/
