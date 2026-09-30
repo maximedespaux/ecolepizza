@@ -6,6 +6,8 @@
 //   · {Prix|-150}            → jeton NUMÉRIQUE augmenté ou diminué (ici 150 € de moins)
 //   · {Prix|*20%}            → multiplié (ici 20 % du prix ; {Prix|*0,2} dit la même chose)
 //   · {Prix|/3}              → divisé (ici le tiers du prix)
+//   · {Prix|/{Heures}}       → calcul ENTRE jetons : l'opérande est un AUTRE jeton (ici le coût
+//                              horaire) ; {Prix|-{Acompte}} donne le reste à payer
 //   · texte littéral         → conservé tel quel
 // Exemples : « du {Jour1} au {endDate} », « {endDate|-1} » (avant-dernier jour),
 //            « Reste : {Prix|-450} » (prix moins l'acompte), « {Prix|*90%} » (remise de 10 %).
@@ -113,6 +115,14 @@ function shiftNumber(value, delta) {
     return calculer(value, '+', String(delta));
 }
 
+/** Le NOMBRE contenu dans la valeur d'un jeton (« 1 780 € » → « 1780 », « 40,45 € » → « 40,45 ») :
+   séparateurs de milliers ôtés, virgule décimale gardée ; null s'il n'y en a pas. Sert à lire
+   l'OPÉRANDE d'un calcul entre jetons (cf. injecterOperandes). */
+function nombreDe(value) {
+    const m = String(value == null ? '' : value).match(/-?\d(?:[\d\s\u00a0\u202f]*\d)?(?:[.,]\d+)?/);
+    return m ? m[0].replace(/[\s\u00a0\u202f]/g, '') : null;
+}
+
 /* UNE RÉFÉRENCE : {Clé}, ou {Clé|modificateur}. Le modificateur est ±N (décaler, ajouter), *N
    (multiplier) ou /N (diviser) ; N peut porter une virgule et, après * ou /, un « % ».
    UN « % » APRÈS + OU − N'EST PAS ACCEPTÉ. « {Prix|-10%} » se lit « 10 % de remise » pour les uns
@@ -121,9 +131,31 @@ function shiftNumber(value, delta) {
    remise s'écrit sans ambiguïté : {Prix|*90%}. */
 const REFERENCE = /\{\s*([^{}|]+?)\s*(?:\|\s*(?:([+-]?\d+(?:[.,]\d+)?)|([*/])\s*(\d+(?:[.,]\d+)?)\s*(%?))\s*)?\}/g;
 
-// Remplit un modèle à partir d'une table de valeurs { clé: valeur }.
+/* UN CALCUL ENTRE DEUX JETONS : {Base|op {Opérande}}, où l'opérande est UN AUTRE JETON dont on
+   prend le NOMBRE (demandé le 2026-09-30 : « {Prix|/{Heures}} » pour le coût horaire,
+   « {Prix|-{Acompte}} » pour le reste). On le ramène à la forme À OPÉRANDE LITTÉRALE que
+   `applyTemplate` sait déjà calculer — {Base|op N} —, puis tout le reste (montants, dates,
+   séparateurs de milliers, centime juste) s'applique sans rien changer d'autre. Un « % » sur un
+   opérande-jeton n'aurait pas de sens (sa valeur porte déjà son unité) : non géré. */
+const REF_CALC = /\{\s*([^{}|]+?)\s*\|\s*([+\-*/])\s*\{\s*([^{}|]+?)\s*\}\s*\}/g;
+function injecterOperandes(template, values) {
+    return String(template || '').replace(REF_CALC, (tout, base, op, operande) => {
+        const n = nombreDe(values[operande]);
+        if (n == null) return '{' + base + '}'; // opérande sans nombre → on retombe sur la valeur de base (un reste sans acompte = le prix)
+        if (op === '+' || op === '-') {
+            // « − opérande » = « + (−opérande) » : le signe du résultat combine l'opérateur et le
+            // signe de l'opérande, et ±N (que `applyTemplate` attend) le porte sur le nombre.
+            const signe = (op === '-') !== n.startsWith('-') ? '-' : '+';
+            return `{${base}|${signe}${n.replace(/^-/, '')}}`;
+        }
+        return `{${base}|${op}${n}}`; // × et ÷ gardent leur opérateur
+    });
+}
+
+// Remplit un modèle à partir d'une table de valeurs { clé: valeur }. Les calculs ENTRE jetons
+// ({Base|op {Opérande}}) sont d'abord ramenés à un opérande littéral, puis résolus comme le reste.
 function applyTemplate(template, values) {
-    return String(template || '').replace(REFERENCE, (tout, ref, decalage, op, facteur, pct) => {
+    return String(injecterOperandes(template, values)).replace(REFERENCE, (tout, ref, decalage, op, facteur, pct) => {
         let v = values[ref];
         if (v == null) v = '';
         if (decalage) {

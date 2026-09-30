@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2426 tests — 2419 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2427 tests — 2420 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -966,10 +966,18 @@ rien ne se transmet avant.
   `enrollment.acompte` (déjà écrit par la carte Règlement, cf. § 4, 194). Le PDF se vérifie sur
   l'instance déployée (LibreOffice), les jetons par `facture-formation-tokens.test.js`.
 
-**Reste ouvert / idées non faites** : les JETONS PERSONNALISÉS CALCULÉS (une formule entre jetons,
-ex. {Prix} ÷ {Heures}) — demandés le 2026-09-30, pas encore faits ; donner un préfixe de numéro
-distinct à chaque entité émettrice (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore
-`legal_name = "d"` ; ajouter des `desc` explicites aux autres groupes de jetons.
+- **Jetons personnalisés : un CALCUL ENTRE JETONS** (2026-09-30). Le modificateur `|` savait déjà
+  opérer sur un nombre EN DUR (`{Prix|/3}`, `{Prix|-450}`, `{Prix|*20%}`) ; il accepte désormais un
+  AUTRE JETON comme opérande — **`{Prix|/{Heures}}`** (coût horaire), **`{Prix|-{Acompte}}`** (reste).
+  `injecterOperandes` (customtokens.js + la copie conforme jetonsPerso.js) ramène `{Base|op {Opérande}}`
+  à la forme à opérande littérale que le calcul existant résout, en lisant le NOMBRE de l'opérande ;
+  un opérande sans nombre retombe sur la valeur de base (un reste sans acompte = le prix). Aucune
+  migration, aucune donnée : le modèle d'un jeton perso est déjà du texte libre. Tests :
+  `jetons-perso-calcul.test.js` (valeurs + aperçu/serveur à l'identique).
+
+**Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
+(sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des
+`desc` explicites aux autres groupes de jetons.
 
 ---
 
