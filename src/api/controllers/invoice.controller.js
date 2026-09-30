@@ -9,7 +9,7 @@ const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
 const { decrypt } = require('../lib/crypto.js'); // identifiant France Travail de l'acheteur (migration 170)
 const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
-const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
+const { loadEmitter, resolveEmitter, nextNumberForEmitter, rendreLeNumero } = require('../lib/emitter.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { DATE_SESSION, FACTURES_DU_DOSSIER, BROUILLONS_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 /* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien — une ligne
@@ -581,20 +581,57 @@ const recordPayment = async (req, res) => {
 };
 
 /**
- * DELETE /api/factures/:id
+ * DELETE /api/factures/:id — supprime un document, et REND SON NUMÉRO à la séquence quand c'est
+ * possible (demandé le 2026-09-30 : « j'ai créé FACT-2026-0008, je le supprime : le suivant devrait
+ * être encore FACT-2026-0008 », et « pareil pour les autres entités émettrices »).
+ *
+ * Le compteur d'une entité ne savait qu'avancer : un brouillon créé puis supprimé laissait un TROU
+ * dans une numérotation que la loi veut continue. Le numéro est rendu quand deux conditions
+ * tiennent :
+ *   · le document n'a JAMAIS ÉTÉ ÉMIS — c'est un brouillon. Un numéro émis a pu partir chez un
+ *     client : le redonner ferait deux factures différentes du même numéro ;
+ *   · il portait le DERNIER numéro de sa séquence (`rendreLeNumero`, lib/emitter.js).
+ * C'est l'entité qui a numéroté le document (`billing_profile_id`) qui recule, pas l'entité par
+ * défaut. La réponse DIT ce qu'il advient du numéro : l'écran le répète.
+ *
+ * La suppression est aussi JOURNALISÉE, avec le numéro : elle ne laissait aucune trace, et un
+ * numéro qui ressort sur un autre document doit pouvoir s'expliquer.
  */
-const deleteInvoice = (req, res) => {
-    db.query(
-        'DELETE FROM invoice WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression facture :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
-            }
-            res.status(200).json({ success: true, message: 'Document supprimé' });
+const deleteInvoice = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        let inv;
+        try {
+            [[inv]] = await conn.query(
+                'SELECT id, number, status, billing_profile_id FROM invoice WHERE id = ? AND organization_id = ?',
+                [req.params.id, orgId]);
+        } catch (e) {
+            // Sans la migration 113, aucune entité émettrice : il n'y a pas de compteur à reculer.
+            if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
+            [[inv]] = await conn.query(
+                'SELECT id, number, status, NULL AS billing_profile_id FROM invoice WHERE id = ? AND organization_id = ?',
+                [req.params.id, orgId]);
         }
-    );
+        if (!inv) return res.status(404).json({ message: 'Document introuvable.' });
+        await conn.query('DELETE FROM invoice WHERE id = ? AND organization_id = ?', [inv.id, orgId]);
+
+        const brouillon = inv.status === 'BROUILLON';
+        const sort = brouillon
+            ? await rendreLeNumero(conn, orgId, inv.billing_profile_id, inv.number)
+            : { rendu: false, raison: 'emis' };
+        logAudit(req, 'invoice.delete', 'Invoice', inv.id, { libelle: inv.number });
+        const SUITE = {
+            emis: `Son numéro ${inv.number} ne sera pas repris : le document avait été émis.`,
+            pas_le_dernier: `Son numéro ${inv.number} ne sera pas repris : un numéro plus récent a déjà été donné.`,
+            autre_gabarit: `Son numéro ${inv.number} ne sera pas repris : il ne suit plus le format de numéro de son entité.`,
+        };
+        const suite = sort.rendu ? `Le prochain document reprendra le numéro ${inv.number}.` : SUITE[sort.raison] || '';
+        res.status(200).json({ success: true, numero_rendu: !!sort.rendu, message: `Document supprimé.${suite ? ` ${suite}` : ''}` });
+    } catch (err) {
+        console.error('Erreur suppression facture :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 /**

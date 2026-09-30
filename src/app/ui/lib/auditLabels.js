@@ -49,6 +49,8 @@ const ACTION_LABEL = {
     // Le modèle et le règlement posés sur un brouillon avant de l'émettre (2026-09-28).
     'invoice.completer': ['Brouillon de facture complété', A],
     'invoice.facturx': ['Facture Factur-X téléchargée', B],
+    // La suppression ne laissait aucune trace ; son numéro peut ressortir sur un autre document.
+    'invoice.delete': ['Facture supprimée', R],
     'payment.record': ['Paiement enregistré', G],
     'sale.create': ['Vente enregistrée', G],
     'sale.checkout': ['Vente encaissée', G],

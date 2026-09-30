@@ -236,9 +236,21 @@ function Factures() {
     } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
 
-  async function remove(id) {
-    if (!window.confirm("Supprimer ce document ?")) return;
-    try { await deleteInvoice(id); load(); } catch (err) { setStatus({ type: "error", message: err.message }); }
+  /* SUPPRIMER REND LE NUMÉRO d'un brouillon qui portait le dernier de sa séquence (2026-09-30) : le
+     prochain document le reprend, la numérotation reste continue. Un document ÉMIS garde le sien — il
+     a pu partir chez un client — et sa suppression laisse un trou : on le dit AVANT, « Annuler »
+     existe pour ça. Ce qu'il advient du numéro vient du serveur, et s'affiche. */
+  async function remove(inv) {
+    const question = inv.status === "BROUILLON"
+      ? `Supprimer le brouillon ${inv.number} ? S'il porte le dernier numéro de sa séquence, le prochain document le reprendra.`
+      : `${inv.number} a été émis : son numéro ne sera pas repris, et la numérotation gardera un trou. Pour l'annuler sans le supprimer, utilisez « Annuler ». Supprimer quand même ?`;
+    if (!window.confirm(question)) return;
+    try {
+      const r = await deleteInvoice(inv.id);
+      setStatus({ type: "success", message: r.message || "Document supprimé." });
+      load();
+      chargerSessions(); // les cases « Facturé » et « Brouillon » suivent
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
   /* Le serveur refuse en 422 avec la LISTE de ce qu'il faut compléter (`missing`). Les deux
    * poignées ne gardaient que `err.message` : l'écran annonçait « 2 information(s) à compléter »
@@ -517,7 +529,7 @@ function Factures() {
                         {encaissable && i.status !== "BROUILLON" && (
                           <button type="button" onClick={() => setStatusOf(i.id, "ANNULEE")}><Icon name="ban" size={15} /> Annuler</button>
                         )}
-                        <button type="button" className="danger" onClick={() => remove(i.id)}><Icon name="trash" size={15} /> Supprimer</button>
+                        <button type="button" className="danger" onClick={() => remove(i)}><Icon name="trash" size={15} /> Supprimer</button>
                       </MenuActions>
                     </span>
                   );
