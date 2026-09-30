@@ -25,14 +25,15 @@
  *     stock, ni vente, ni facture ;
  *   · le règlement que l'ÉCRAN calcule, le serveur l'accepte, et annonce le MÊME total, au centime —
  *     sur une plage de prix et de taux, par le vrai code de la page et le vrai contrôleur ;
- *   · les deux copies de la règle (lib/totalCaisse.js, écran et serveur) rendent la même chose, et un
- *     article seul s'encaisse au total que le PDF imprimera ;
+ *   · les deux copies de la règle (`totalFacture`, lib/ttc.js, écran et serveur) rendent la même
+ *     chose, et un article seul s'encaisse au total que le PDF imprimera ;
+ *   · sur PLUSIEURS TAUX aussi, la caisse encaisse le total de la FACTURE, confronté au PDF relu dans
+ *     ce qui a été écrit. Tranché le 2026-09-30 : la règle de la caisse (lib/totalCaisse.js, retirée)
+ *     arrondissait la TVA une fois sur le tout, la facture l'arrondit par taux — un centime d'écart
+ *     sur près d'une vente à deux taux sur quatre ;
  *   · l'écart toléré se compte en centimes entiers, et le message parle français.
  *
  * Chaque test a été vu ROUGE en réintroduisant le défaut qu'il gèle.
- *
- * HORS SUJET, non gelé ici : sur un panier à plusieurs taux, la caisse (TVA arrondie une fois) et le
- * PDF (TVA arrondie par taux) peuvent différer d'un centime — cf. CLAUDE.md § 3.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -41,7 +42,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 const { lireMontant } = require('../lib/montantSaisi.js');
-const { totalCaisse } = require('../lib/totalCaisse.js');
+const { totalFacture } = require('../lib/ttc.js');
 const { ventilerTva } = require('../lib/facturx.js');
 
 const UI = path.join(__dirname, '..', '..', 'app', 'ui');
@@ -50,7 +51,7 @@ const lireUi = (f) => fs.readFileSync(path.join(UI, f), 'utf8');
 const sansCommentaires = (f) => lireUi(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 const plat = (s) => String(s).replace(/\s+/g, ' ').trim();
 /** La copie de l'écran de la règle, et son format d'affichage : des modules ESM. */
-const ecran = import(pathToFileURL(path.join(UI, 'lib', 'totalCaisse.js')).href);
+const ecran = import(pathToFileURL(path.join(UI, 'lib', 'ttc.js')).href);
 const format = import(pathToFileURL(path.join(UI, 'lib', 'format.js')).href);
 
 /* ── Une fausse base : réponses par motif, écritures capturées ───────────────────────────────── */
@@ -129,6 +130,28 @@ function rienEcrit(quoi) {
     assert.deepStrictEqual(b.ecritures.map((e) => e.q.slice(0, 48)), [], `${quoi} : rien ne doit être écrit`);
 }
 const centimes = (n) => Math.round(n * 100);
+/** Le total que le PDF imprimera, relu comme `loadInvoiceData` le relit dans ce qui a été ÉCRIT :
+ *  les décimaux de la base en texte, la TVA par `ventilerTva`. */
+function totalDuPdf() {
+    const f = colonnes(ecrit(/^INSERT INTO invoice \(/)[0]);
+    const lignes = ecrit(/^INSERT INTO invoice_line/).map(colonnes);
+    const enBase = (n) => Number(Number(n).toFixed(2));
+    return ventilerTva({
+        amountNet: f.amount_net, tvaExoneree: !!Number(f.tva_exoneree), taxRate: f.tax_rate ?? null,
+        lines: lignes.map((l) => ({ amount: enBase(l.amount_net), taxRate: l.tax_rate == null ? null : enBase(l.tax_rate) })),
+    }).grand;
+}
+/** La règle de la caisse AVANT le 2026-09-30 (lib/totalCaisse.js, retirée), pour mémoire : la TVA
+ *  exacte en entiers, arrondie UNE fois sur le tout, le demi-centime vers le haut. */
+function totalArrondiUneFois(lignes) {
+    let ht = 0, tva = 0;
+    for (const l of lignes) {
+        const c = Math.round(Number(l.ht) * 100);
+        ht += c;
+        tva += c * Math.round(Number(l.taux || 0) * 1000);
+    }
+    return (ht + Math.floor((tva + 50000) / 100000)) / 100;
+}
 
 /* ── L'ÉCRAN, PAR SON PROPRE CODE ─────────────────────────────────────────────────────────────── */
 
@@ -148,7 +171,7 @@ const { tauxApplique, lignesDuPanier } = bloc('pages/Ventes.jsx', 'const remiseS
 const totauxDeLaPage = (() => {
     const m = /const totals = useMemo\(\(\) => (\(\{[\s\S]*?\}\)), \[cart, remiseDeLigne, remiseGlobale, tvaApplies\]\);/.exec(lireUi('pages/Ventes.jsx'));
     assert.ok(m, 'Ventes.jsx : le total du panier doit rester le `useMemo` nommé totals');
-    return new Function('totalCaisse', 'lignesDuPanier', 'cart', 'remiseDeLigne', 'remiseGlobale', 'tvaApplies', `return ${m[1]};`);
+    return new Function('totalFacture', 'lignesDuPanier', 'cart', 'remiseDeLigne', 'remiseGlobale', 'tvaApplies', `return ${m[1]};`);
 })();
 /** Une ligne du panier comme `addItem` la pose, depuis l'article que l'inventaire a servi. */
 const auPanier = (id, a, quantity = 1, disc = '') => ({
@@ -161,7 +184,7 @@ const auPanier = (id, a, quantity = 1, disc = '') => ({
  * (tenues par le test « L'ÉCRAN » plus bas).
  */
 async function ceQueLaCaisseEnvoie({ cart, discount = '', tvaApplies = true, moyens = [{ method: 'CB', amount: '' }] }) {
-    const { totalCaisse: totalEcran } = await ecran;
+    const { totalFacture: totalEcran } = await ecran;
     const remiseDeLigne = cart.some((l) => tauxApplique(l.disc) > 0);
     const remiseGlobale = tauxApplique(discount);
     const totals = totauxDeLaPage(totalEcran, lignesDuPanier, cart, remiseDeLigne, remiseGlobale, tvaApplies);
@@ -323,6 +346,8 @@ test('… ET SUR DES PANIERS TIRÉS AU HASARD — lignes, quantités, remises, t
     const alea = () => { graine = (graine * 1103515245 + 12345) % 2147483648; return graine / 2147483648; };
     const tirer = (liste) => liste[Math.floor(alea() * liste.length)];
     const desaccords = [];
+    const horsFacture = [];
+    let avantFaux = 0;
     for (let k = 0; k < 1500; k++) {
         const articles = {};
         const cart = Array.from({ length: 1 + Math.floor(alea() * 5) }, (_, i) => {
@@ -345,19 +370,28 @@ test('… ET SUR DES PANIERS TIRÉS AU HASARD — lignes, quantités, remises, t
         const r = await encaisser(envoi.corps, { articles, reglages: { ...REGLAGES, tva_applies: tvaApplies ? 1 : 0 } });
         const ecritsHt = r.code === 201 ? ecrit(/^INSERT INTO invoice_line/).map(colonnes).map((l) => l.amount_net) : [];
         const sommeReglee = envoi.corps.payments.reduce((s, p) => s + centimes(p.amount), 0);
+        const quoi = JSON.stringify({ cart: cart.map((l) => [l.unit_price, l.tax_rate, l.quantity, l.disc]), discount, tvaApplies });
         if (r.code !== 201 || r.corps.total_ttc !== envoi.totals.ttc || r.corps.total_ht !== envoi.totals.ht
             || r.corps.total_tva !== envoi.totals.tva || sommeReglee !== centimes(envoi.totals.ttc)
             || JSON.stringify(ecritsHt) !== JSON.stringify(envoi.lignes.map((l) => l.ht))) {
-            desaccords.push(`${JSON.stringify({ cart: cart.map((l) => [l.unit_price, l.tax_rate, l.quantity, l.disc]), discount, tvaApplies })} → ${r.code} ${dit(r)}`);
+            desaccords.push(`${quoi} → ${r.code} ${dit(r)}`);
+            continue;
         }
+        /* ET CE TOTAL EST CELUI DE LA FACTURE, plusieurs taux compris : le PDF, relu dans ce qui a été
+           écrit, imprime ce que la caisse a encaissé. */
+        const pdf = totalDuPdf();
+        if (pdf !== envoi.totals.ttc) horsFacture.push(`${quoi} : encaissé ${envoi.totals.ttc} €, facturé ${pdf} €`);
+        if (totalArrondiUneFois(envoi.lignes) !== pdf) avantFaux++;
     }
     assert.deepStrictEqual(desaccords.slice(0, 3), [], `${desaccords.length} paniers où l'écran et le serveur ne s'entendent pas`);
+    assert.deepStrictEqual(horsFacture.slice(0, 3), [], `${horsFacture.length} ventes encaissées à un autre montant que leur facture`);
+    assert.ok(avantFaux >= 50, `le tirage doit éprouver l'arrondi par taux : ${avantFaux} ventes tombaient à côté de leur facture avec la règle d'avant`);
 });
 
 /* ── LA RÈGLE, DES DEUX CÔTÉS ─────────────────────────────────────────────────────────────────── */
 
-test('LES DEUX COPIES DE LA RÈGLE (lib/totalCaisse.js) rendent la même chose — et HT + TVA = TTC, au centime', async () => {
-    const { totalCaisse: totalEcran } = await ecran;
+test('LES DEUX COPIES DE LA RÈGLE (`totalFacture`, lib/ttc.js) rendent la même chose — et HT + TVA = TTC, au centime', async () => {
+    const { totalFacture: totalEcran } = await ecran;
     // Les cas qui départagent : le demi-centime s'arrondit vers le haut, comme sur la facture.
     const reperes = [
         [[{ ht: 1, taux: 5.5 }], { ht: 1, tva: 0.06, ttc: 1.06 }],
@@ -366,12 +400,13 @@ test('LES DEUX COPIES DE LA RÈGLE (lib/totalCaisse.js) rendent la même chose �
         [[{ ht: 100, taux: 20 }, { ht: 50, taux: 0 }], { ht: 150, tva: 20, ttc: 170 }],
         [[{ ht: 99.99, taux: 20 }], { ht: 99.99, tva: 20, ttc: 119.99 }],
         [[], { ht: 0, tva: 0, ttc: 0 }],
-        /* Deux taux : la caisse arrondit la TVA UNE fois (7,0935 → 7,09 €), la facture par taux (6,67 +
-           0,43 = 7,10 €). L'écart d'un centime est connu, et laissé tel quel (CLAUDE.md § 3). */
-        [[{ ht: 33.33, taux: 20 }, { ht: 7.77, taux: 5.5 }], { ht: 41.1, tva: 7.09, ttc: 48.19 }],
+        /* Deux taux : la TVA s'arrondit PAR TAUX, comme sur la facture (6,67 + 0,43 = 7,10 €). La règle
+           d'avant l'arrondissait une fois sur le tout (7,0935 → 7,09 €) : 48,19 € encaissés pour
+           48,20 € facturés. Tranché le 2026-09-30 (CLAUDE.md § 3). */
+        [[{ ht: 33.33, taux: 20 }, { ht: 7.77, taux: 5.5 }], { ht: 41.1, tva: 7.1, ttc: 48.2 }],
     ];
     for (const [lignes, attendu] of reperes) {
-        assert.deepStrictEqual(totalCaisse(lignes), attendu, `serveur : ${JSON.stringify(lignes)}`);
+        assert.deepStrictEqual(totalFacture(lignes), attendu, `serveur : ${JSON.stringify(lignes)}`);
         assert.deepStrictEqual(totalEcran(lignes), attendu, `écran : ${JSON.stringify(lignes)}`);
     }
     let graine = 7;
@@ -380,23 +415,25 @@ test('LES DEUX COPIES DE LA RÈGLE (lib/totalCaisse.js) rendent la même chose �
         const lignes = Array.from({ length: 1 + Math.floor(alea() * 6) }, () => ({
             ht: Math.floor(alea() * 500000) / 100, taux: [0, 1.05, 2.1, 5.5, 8.5, 10, 13, 20][Math.floor(alea() * 8)],
         }));
-        const s = totalCaisse(lignes);
+        const s = totalFacture(lignes);
         assert.deepStrictEqual(totalEcran(lignes), s, JSON.stringify(lignes));
         assert.strictEqual(centimes(s.ht) + centimes(s.tva), centimes(s.ttc), `HT + TVA ≠ TTC : ${JSON.stringify(lignes)}`);
         for (const v of [s.ht, s.tva, s.ttc]) assert.strictEqual(Number(v.toFixed(2)), v, `${v} n'est pas un montant au centime`);
     }
 });
 
-test('UN ARTICLE SEUL S\'ENCAISSE AU TOTAL DU PDF — l\'arrondi de `ventilerTva`, à chaque centime jusqu\'à 2 000 €', () => {
+test('UN ARTICLE SEUL S\'ENCAISSE AU TOTAL DU PDF — l\'arrondi de `ventilerTva`, à chaque centime jusqu\'à 2 000 €', async () => {
     /* C'est ce qui départage les deux anciens arrondis : 1,055 € fait 1,06 € sur la facture. Le
        serveur disait 1,05 € (`toFixed`), et l'écran 1,06 € par la grâce du flottant — sauf sur
-       d'autres montants, où `Math.round(x * 100)` passait sous le demi. */
+       d'autres montants, où `Math.round(x * 100)` passait sous le demi. C'est la copie de l'ÉCRAN
+       qu'on éprouve : le serveur, lui, appelle `ventilerTva`. */
+    const { totalFacture: totalEcran } = await ecran;
     const ecarts = [];
     for (const taux of [0, 2.1, 5.5, 10, 20]) {
         for (let c = 0; c <= 200000; c++) {
             const ht = c / 100;
             const pdf = ventilerTva({ amountNet: ht, tvaExoneree: false, taxRate: null, lines: [{ amount: ht, taxRate: taux }] }).grand;
-            if (totalCaisse([{ ht, taux }]).ttc !== pdf) ecarts.push(`${ht} € à ${taux} % : caisse ${totalCaisse([{ ht, taux }]).ttc}, PDF ${pdf}`);
+            if (totalEcran([{ ht, taux }]).ttc !== pdf) ecarts.push(`${ht} € à ${taux} % : caisse ${totalEcran([{ ht, taux }]).ttc}, PDF ${pdf}`);
         }
     }
     assert.deepStrictEqual(ecarts.slice(0, 5), [], `${ecarts.length} articles encaissés à un autre montant que leur facture`);
@@ -406,9 +443,9 @@ test('UN ARTICLE SEUL S\'ENCAISSE AU TOTAL DU PDF — l\'arrondi de `ventilerTva
 
 test('L\'ÉCRAN — le total, le TTC d\'une ligne et le règlement passent par la règle commune', async () => {
     const page = sansCommentaires('pages/Ventes.jsx');
-    assert.match(page, /import \{ totalCaisse \} from "\.\.\/lib\/totalCaisse\.js";/);
-    assert.match(page, /\.\.\.totalCaisse\(lignesDuPanier\(cart, \{ remiseDeLigne, remiseGlobale, tvaApplies \}\)\),/, 'le total du panier');
-    assert.match(page, /\{euro\(totalCaisse\(lignesDuPanier\(\[l\], \{ remiseDeLigne, remiseGlobale, tvaApplies \}\)\)\.ttc\)\}/,
+    assert.match(page, /import \{ totalFacture \} from "\.\.\/lib\/ttc\.js";/);
+    assert.match(page, /\.\.\.totalFacture\(lignesDuPanier\(cart, \{ remiseDeLigne, remiseGlobale, tvaApplies \}\), !tvaApplies\),/, 'le total du panier');
+    assert.match(page, /\{euro\(totalFacture\(lignesDuPanier\(\[l\], \{ remiseDeLigne, remiseGlobale, tvaApplies \}\), !tvaApplies\)\.ttc\)\}/,
         'le TTC d\'une ligne, par la même règle : un article seul affiche ce que le total annonce');
     assert.doesNotMatch(page, /ttc: ht \+ tva|tva \+= lineHT/, 'plus aucun total additionné en flottant, arrondi ailleurs');
     // Le règlement se ventile sur CE total, à l'écran comme à l'envoi.
@@ -423,10 +460,10 @@ test('L\'ÉCRAN — le total, le TTC d\'une ligne et le règlement passent par l
 
     // Un article seul : sa ligne et le total disent le même montant, celui que le serveur encaissera.
     const { euro } = await format;
-    const { totalCaisse: totalEcran } = await ecran;
+    const { totalFacture: totalEcran } = await ecran;
     const cart = [auPanier('brosse', BROSSE)];
     const options = { remiseDeLigne: false, remiseGlobale: 0, tvaApplies: true };
-    const ligne = euro(totalEcran(lignesDuPanier(cart, options)).ttc);
+    const ligne = euro(totalEcran(lignesDuPanier(cart, options), false).ttc);
     const { totals } = await ceQueLaCaisseEnvoie({ cart });
     assert.strictEqual(ligne, '1,06 €');
     assert.strictEqual(euro(totals.ttc), ligne);

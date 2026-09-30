@@ -9,9 +9,10 @@ const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
    sans un mot (cf. lib/montantSaisi.js). */
 const { lireMontant } = require('../lib/montantSaisi.js');
 const { montantFr } = require('../lib/montants.js');
-/* Le total d'une vente, au centime, par la règle que l'écran de la caisse applique aussi : chacun
-   arrondissait le sien, et un article à 1,00 € HT à 5,5 % coûtait 1,06 € à l'écran, 1,05 € ici. */
-const { totalCaisse } = require('../lib/totalCaisse.js');
+/* Le total d'une vente est celui de sa FACTURE (`ventilerTva`, par lib/ttc.js), et l'écran de la
+   caisse calcule le même : chacun arrondissait le sien, et un article à 1,00 € HT à 5,5 % coûtait
+   1,06 € à l'écran, 1,05 € ici. */
+const { totalFacture } = require('../lib/ttc.js');
 
 /** Une remise en % : vide → 0 (comme avant) ; illisible → `null`, que l'appelant REFUSE ; sinon
  *  bornée à [0, 100]. `Number(v) || 0` faisait d'une remise « 12,5 » une remise NULLE : la vente
@@ -382,9 +383,12 @@ const checkout = async (req, res) => {
             });
             productNames.push(`${it.name} x${ln._qty}`);
         }
-        // Le total, par la règle de l'écran (lib/totalCaisse.js) : c'est sur lui que l'écran a
-        // calculé le solde du dernier moyen de paiement.
-        const { ht: totalHT, tva: totalTVA, ttc } = totalCaisse(invLines.map((l) => ({ ht: l.amount_net, taux: l.rate })));
+        /* LE TOTAL EST CELUI DE LA FACTURE : `totalFacture` (lib/ttc.js), c'est-à-dire `ventilerTva`
+         * sur les lignes telles qu'elles vont s'écrire — TVA arrondie PAR TAUX, comme le PDF (tranché
+         * le 2026-09-30). Arrondie une fois sur le tout, elle s'écartait d'un centime de la facture sur
+         * près d'une vente à deux taux sur quatre. L'écran calcule le même total, par la copie de
+         * lib/ttc.js : c'est sur lui qu'il a calculé le solde du dernier moyen de paiement. */
+        const { ht: totalHT, tva: totalTVA, ttc } = totalFacture(invLines.map((l) => ({ ht: l.amount_net, taux: l.rate })), !tvaApplies);
 
         /* LA SOMME DES PAIEMENTS DOIT TOMBER SUR LE TOTAL À RÉGLER (TTC). Sinon, la caisse ne boucle
          * pas — mieux vaut refuser que d'enregistrer une vente dont la répartition ment. Vérifié
@@ -394,8 +398,8 @@ const checkout = async (req, res) => {
          * `Math.abs(somme - ttc) > 0.01` n'était pas une tolérance d'un centime : en flottant,
          * 120,01 − 120 vaut 0,01000000000000512 — refusé —, et 60,01 − 60 vaut 0,00999999999999801
          * — accepté. Le centime qui reste toléré ne sert plus à l'écran d'aujourd'hui, qui calcule
-         * ce total exactement comme ici ; il couvre une page restée ouverte sur l'ancien calcul,
-         * qui arrondissait les demi-centimes à sa façon. */
+         * ce total exactement comme ici ; il couvre une page restée ouverte sur un ancien calcul,
+         * qui arrondissait les demi-centimes à sa façon, ou la TVA une seule fois sur plusieurs taux. */
         let paymentSplit = null;
         if (status === 'PAYEE' && parts.length) {
             const somme = parts.reduce((s, p) => s + p.amount, 0);

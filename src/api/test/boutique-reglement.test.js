@@ -13,8 +13,11 @@
  *   · le serveur : la somme des parts tombe sur le TTC, à un centime près, sinon 422 — AVANT le
  *     numéro de facture, dont la séquence ne souffre aucun trou ;
  *   · ce TTC est celui du PDF (`ventilerTva`, TVA arrondie par taux), pas une somme de TTC de ligne ;
- *   · le centime de tolérance, qui SERT : l'écran additionne les TTC de ligne, et ce qu'il envoie
- *     doit toujours passer ;
+ *   · la fenêtre ENVOIE ce total-là, au centime : depuis le 2026-09-30, elle annonce le total de la
+ *     facture (`totalDemande`, lib/ttc.js — cf. total-facture-ecrans.test.js) ;
+ *   · le centime de tolérance, qui sert encore : une fenêtre ouverte AVANT additionne les TTC de
+ *     ligne, et ce qu'elle envoie doit toujours passer — le solde de son dernier moyen ne se saisit
+ *     pas ;
  *   · sans aucune part, rien n'est vérifié : la facture naît PAYÉE avec `payment_method` seul ;
  *   · un chèque garde sa BANQUE et son NUMÉRO, jusqu'aux jetons {Banque} et {N° chèque} de la
  *     facture — seulement pour un chèque, seulement renseignés, bornés comme à la caisse. Relevé le
@@ -29,6 +32,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 const { lireMontant } = require('../lib/montantSaisi.js');
 const { ventilerTva } = require('../lib/facturx.js');
@@ -207,7 +211,8 @@ test('LE TOTAL EST CELUI DU PDF — la TVA arrondie PAR TAUX, pas une somme de T
     assert.ok(!('tax_rate' in f), 'deux taux : aucun taux d\'en-tête, chaque ligne porte le sien');
     assert.deepStrictEqual(ecrit(/^INSERT INTO invoice_line/).map(colonnes).map((l) => [l.amount_net, l.tax_rate]), [['33.33', 20], ['7.77', 5.5]]);
 
-    // Ce que l'écran envoie — et ce qui a été encaissé : 48,19 €, à un centime. Accepté.
+    /* Ce qu'envoie une fenêtre ouverte avant le 2026-09-30 — la somme des TTC de ligne, 48,19 €,
+       ce qu'elle a fait encaisser — : à un centime, accepté. */
     const encaisse = await facturer({ payments: [{ method: 'CB', amount: '48,19' }] }, { lignes: DEUX_TAUX });
     assert.strictEqual(encaisse.code, 201, dit(encaisse));
 
@@ -286,12 +291,20 @@ function bloc(fichier, debut, fin, noms) {
 }
 const { resolvePayments } = bloc('components/PaiementSplit.jsx', 'export const estCheque', 'export default', ['resolvePayments']);
 const { blocageReglement } = bloc('pages/DemandesBoutique.jsx', 'const blocageReglement', 'function FacturerModal', ['blocageReglement']);
-/** Le « Total encaissé » de la fenêtre, par SA formule, lue dans la page : `d` est la demande. */
-const totalFenetre = (() => {
+/** Le « Total encaissé » de la fenêtre, par SA formule, lue dans la page : `d` est la demande, et
+ *  `totalDemande` la fonction de l'écran qu'elle appelle (lib/ttc.js), importée telle quelle. */
+const ttcEcran = import(pathToFileURL(path.join(UI, 'lib', 'ttc.js')).href);
+async function totalFenetre(d) {
     const formule = /const totalTtc = [^;]+;/.exec(lireUi('pages/DemandesBoutique.jsx'));
     assert.ok(formule, 'DemandesBoutique.jsx : le total de la fenêtre doit s\'appeler totalTtc');
-    return new Function('d', `${formule[0]}\nreturn totalTtc;`);
-})();
+    const { totalDemande } = await ttcEcran;
+    return new Function('d', 'totalDemande', `${formule[0]}\nreturn totalTtc;`)(d, totalDemande);
+}
+/** Ce que calculait la fenêtre AVANT le 2026-09-30 — et calcule encore un onglet ouvert avant le
+ *  déploiement : la somme des TTC de ligne, jamais arrondie (c'est `resolvePayments` qui arrondit). */
+const totalFenetreAvant = (d) => (d.lines || [])
+    .filter((l) => l.source === 'ECOLE' && l.unit_price_ht != null)
+    .reduce((s2, l) => s2 + l.unit_price_ht * l.qty * (1 + l.tax_rate / 100), 0);
 
 /** Des paniers tirés au hasard, toujours les mêmes : prix au centime, 1 à 3 exemplaires, 1 à 5 lignes. */
 function paniers(n, tauxPossibles) {
@@ -307,30 +320,56 @@ const demande = (panier) => ({ lines: panier.map((l, i) => ({ source: 'ECOLE', l
 const lignesDe = (panier) => panier.map((l, i) => ligne(`Article ${i + 1}`, l.prix.toFixed(2), l.taux.toFixed(2), l.qty));
 const centimes = (n) => Math.round(n * 100);
 
-test('L\'ÉCRAN — son « Total encaissé » : les seules lignes ÉCOLE à prix connu, celles que le serveur facture', () => {
+test('L\'ÉCRAN — son « Total encaissé » : les seules lignes ÉCOLE à prix connu, celles que le serveur facture', async () => {
     const d = { lines: [
         { source: 'ECOLE', label: 'Tablier', qty: 1, unit_price_ht: 50, tax_rate: 20 },
         { source: 'PARTENAIRE', label: 'Four électrique', qty: 1, unit_price_ht: 1500, tax_rate: 20 },
         { source: 'ECOLE', label: 'Sur demande', qty: 1, unit_price_ht: null, tax_rate: 20 },
     ] };
-    assert.strictEqual(totalFenetre(d), 60, 'ni la ligne partenaire, ni celle dont le prix reste à définir');
-    assert.strictEqual(totalFenetre({}), 0);
-    // Deux taux : la fenêtre additionne les TTC de ligne, comme le panier du stagiaire — 48,19 €.
-    assert.strictEqual(centimes(totalFenetre(demande([{ prix: 33.33, qty: 1, taux: 20 }, { prix: 7.77, qty: 1, taux: 5.5 }]))), 4819);
+    assert.strictEqual(await totalFenetre(d), 60, 'ni la ligne partenaire, ni celle dont le prix reste à définir');
+    assert.strictEqual(await totalFenetre({}), 0);
+    /* Deux taux : la fenêtre annonce le total de la FACTURE, 48,20 € — elle additionnait les TTC de
+       ligne, comme le panier du stagiaire, et annonçait 48,19 €. */
+    const deuxTaux = demande([{ prix: 33.33, qty: 1, taux: 20 }, { prix: 7.77, qty: 1, taux: 5.5 }]);
+    assert.strictEqual(centimes(await totalFenetre(deuxTaux)), 4820);
+    assert.strictEqual(centimes(totalFenetreAvant(deuxTaux)), 4819, 'le calcul d\'avant, pour mémoire');
 });
 
-test('L\'ÉCRAN — ce qu\'il envoie passe TOUJOURS : un centime d\'écart avec la facture, jamais deux', async () => {
-    let unCentime = 0;
+test('L\'ÉCRAN — ce qu\'il envoie EST le total de la facture : zéro centime d\'écart, sur des centaines de paniers', async () => {
+    let avantAUnCentime = 0;
     for (const panier of paniers(400, [5.5, 10, 20])) {
         // La fenêtre : 10 € en espèces quand le total le permet, le solde sur le dernier moyen.
-        const total = totalFenetre(demande(panier));
+        const total = await totalFenetre(demande(panier));
         const saisie = total > 10 ? [{ method: 'Espèces', amount: '10' }, { method: 'CB', amount: '' }] : [{ method: 'CB', amount: '' }];
         const reglement = resolvePayments(saisie, total);
         assert.strictEqual(blocageReglement(reglement), null);
 
-        /* L'école a encaissé CE total-là, et ne peut pas en saisir un autre : le solde du dernier
-           moyen se calcule. Un refus ici la laisserait sans recours. */
         const r = await facturer({ payments: reglement.parts }, { lignes: lignesDe(panier) });
+        assert.strictEqual(r.code, 201, `${JSON.stringify(panier)} : ${dit(r)}`);
+        const split = JSON.parse(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).payment_split);
+        assert.strictEqual(centimes(split.reduce((s, p) => s + p.amount, 0)), centimes(ttcEcrit()),
+            `${JSON.stringify(panier)} : le règlement et le total de la facture doivent être le même montant`);
+        if (Math.abs(centimes(totalFenetreAvant(demande(panier))) - centimes(ttcEcrit())) === 1) avantAUnCentime++;
+    }
+    assert.ok(avantAUnCentime >= 40, `le tirage doit éprouver l'arrondi par taux : ${avantAUnCentime} paniers étaient à un centime avant`);
+
+    // Un seul taux n'en protégeait pas : 63 € à 5,5 % font 3,465 € de TVA — 66,47 € facturés, 66,46 € annoncés.
+    const demi = [{ prix: 31.5, qty: 2, taux: 5.5 }];
+    const envoye = resolvePayments([{ method: 'CB', amount: '' }], await totalFenetre(demande(demi))).parts;
+    assert.deepStrictEqual(envoye, [{ method: 'CB', amount: 66.47 }]);
+    assert.strictEqual((await facturer({ payments: envoye }, { lignes: lignesDe(demi) })).code, 201);
+    assert.strictEqual(ttcEcrit(), 66.47);
+});
+
+test('UNE FENÊTRE OUVERTE AVANT LE 2026-09-30 — sa somme des TTC de ligne passe encore : un centime d\'écart, jamais deux', async () => {
+    /* Un onglet ne se recharge pas au déploiement : il garde l'ancien calcul. L'école a encaissé CE
+       total-là, et ne peut pas en saisir un autre — le solde du dernier moyen se calcule. Un refus
+       la laisserait sans recours : c'est pour lui que le centime de tolérance reste. */
+    let unCentime = 0;
+    for (const panier of paniers(400, [5.5, 10, 20])) {
+        const total = totalFenetreAvant(demande(panier));
+        const saisie = total > 10 ? [{ method: 'Espèces', amount: '10' }, { method: 'CB', amount: '' }] : [{ method: 'CB', amount: '' }];
+        const r = await facturer({ payments: resolvePayments(saisie, total).parts }, { lignes: lignesDe(panier) });
         assert.strictEqual(r.code, 201, `${JSON.stringify(panier)} : ${dit(r)}`);
         const split = JSON.parse(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).payment_split);
         const ecart = Math.abs(centimes(split.reduce((s, p) => s + p.amount, 0)) - centimes(ttcEcrit()));
@@ -338,13 +377,6 @@ test('L\'ÉCRAN — ce qu\'il envoie passe TOUJOURS : un centime d\'écart avec 
         if (ecart === 1) unCentime++;
     }
     assert.ok(unCentime >= 40, `le tirage doit éprouver la tolérance : ${unCentime} paniers à un centime`);
-
-    // Un seul taux n'en protège pas : 63 € à 5,5 % font 3,465 € de TVA — 66,47 € facturés, 66,46 € à l'écran.
-    const demi = [{ prix: 31.5, qty: 2, taux: 5.5 }];
-    const envoye = resolvePayments([{ method: 'CB', amount: '' }], totalFenetre(demande(demi))).parts;
-    assert.deepStrictEqual(envoye, [{ method: 'CB', amount: 66.46 }]);
-    assert.strictEqual((await facturer({ payments: envoye }, { lignes: lignesDe(demi) })).code, 201);
-    assert.strictEqual(ttcEcrit(), 66.47);
 });
 
 test('L\'ÉCRAN — « Créer la facture » attend sur un DÉPASSEMENT, pas seulement sur l\'illisible', () => {
@@ -382,7 +414,7 @@ test('L\'ÉCRAN — la banque et le numéro qu\'il demande arrivent jusqu\'aux j
     const { parts } = resolvePayments([
         { method: 'Espèces', amount: '20' },
         { method: 'Chèque', amount: '', bank: 'Crédit Agricole', cheque_number: '0012345' },
-    ], totalFenetre(demande([{ prix: 50, qty: 1, taux: 20 }])));
+    ], await totalFenetre(demande([{ prix: 50, qty: 1, taux: 20 }])));
     const r = await facturer({ payments: parts });
     assert.strictEqual(r.code, 201, dit(r));
 

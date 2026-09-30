@@ -20,6 +20,8 @@ const { estSignatureValide } = require('../lib/signatures.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
+// Le prix TTC d'un article et le total d'une commande : ceux que la facture imprimera.
+const { ttcDeLigne, totalDemande } = require('../lib/ttc.js');
 const { formationsDesQcm, jourPour } = require('../lib/qcmFormations.js');
 const { capitaliser, enCapitales, CAPITALES_STAGIAIRE } = require('../lib/saisie.js');
 const { suivreStagiaire } = require('../lib/referentEntreprise.js');
@@ -1289,10 +1291,14 @@ const getBoutique = async (req, res) => {
              * qu'on ne voit pas ne fait plaisir à personne.
              * Arrondi au centime AVANT multiplication, comme partout ailleurs (cf. sale.controller). */
             const { brut: brutHt, net: netHt, taux, libelle } = prixStagiaire(r);
+            /* Le TTC est celui que la facture imprimera pour UN article (`ttcDeLigne`, lib/ttc.js) :
+             * le HT, plus sa TVA arrondie. `(HT × (1 + taux)).toFixed(2)` tombait un centime plus bas
+             * quand la TVA finit sur un demi-centime (63 € HT à 5,5 % : 66,46 € sur la carte, 66,47 €
+             * au panier comme sur la facture). */
             return {
                 id: r.id, name: cleanName(r.name), category: r.category, image_url: r.image_url,
                 price_ht: netHt, tax_rate: Number(r.tax_rate),
-                price_ttc: +(netHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                price_ttc: ttcDeLigne(netHt, 1, Number(r.tax_rate)),
                 // Prix catalogue + taux : présents SEULEMENT s'il y a une remise, pour que le
                 // front n'ait pas à comparer deux nombres pour savoir s'il doit barrer un prix.
                 ...(taux > 0 ? {
@@ -1301,7 +1307,7 @@ const getBoutique = async (req, res) => {
                     // exact et incompréhensible.
                     remise_label: libelle,
                     remise_pct: taux,
-                    price_ttc_avant: +(brutHt * (1 + Number(r.tax_rate) / 100)).toFixed(2),
+                    price_ttc_avant: ttcDeLigne(brutHt, 1, Number(r.tax_rate)),
                 } : {}),
                 stock: dispo,            // ce qu'il reste réellement à prendre
                 in_stock: dispo > 0,
@@ -1634,8 +1640,9 @@ const createShopRequest = async (req, res) => {
         // `user_id` nul : visible par tout l'organisme, comme les autres notifications de suivi.
         const nomStagiaire = [learner.first_name, learner.last_name].filter(Boolean).join(' ').trim();
         const nbArticles = resolved.reduce((s, r) => s + (Number(r.qty) || 0), 0);
-        const totalTTC = resolved.reduce(
-            (s, r) => s + (Number(r.price) || 0) * (Number(r.qty) || 0) * (1 + (Number(r.tax) || 0) / 100), 0);
+        // Le montant que la carte de la demande affichera : celui de la facture (lib/ttc.js).
+        const totalTTC = totalDemande(resolved.map((r) => ({
+            source: r.source, qty: r.qty, unit_price_ht: r.price, tax_rate: r.tax }))).ttc;
         const quand = pickup
             ? ` · retrait le ${String(pickup).slice(0, 10).split('-').reverse().join('/')}`
             : '';

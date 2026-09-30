@@ -16,6 +16,8 @@ const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 const { lireMontant } = require('../lib/montantSaisi.js');
 // Le total que le règlement doit atteindre est celui du PDF, par la fonction qui le calcule.
 const { ventilerTva } = require('../lib/facturx.js');
+// … et celui qu'annonce la carte d'une demande, calculé de même (cf. lib/ttc.js).
+const { totalDemande } = require('../lib/ttc.js');
 const { montantFr } = require('../lib/montants.js');
 
 /* Colonnes de `invoice` arrivées par migration. Écrire une colonne absente ferait échouer
@@ -96,7 +98,7 @@ const listShopRequests = async (req, res) => {
                     company_id: r.company_id, company_name: r.company_name,
                     learner: { id: r.learner_id, first_name: r.first_name, last_name: r.last_name,
                                email: r.email, phone: r.phone },
-                    lines: [], total_ht: 0, total_ttc: 0, has_partner: false, tarif_a_definir: false,
+                    lines: [], has_partner: false,
                 });
             }
             const d = byId.get(r.id);
@@ -109,15 +111,17 @@ const listShopRequests = async (req, res) => {
                 discount_pct: r.discount_pct == null ? null : Number(r.discount_pct),
                 unit_price_gross_ht: r.unit_price_gross_ht == null ? null : Number(r.unit_price_gross_ht) });
             if (r.source === 'PARTENAIRE') d.has_partner = true;
-            // Une ligne partenaire « tarif sur demande » n'a pas de prix : on ne l'additionne pas
-            // et on le signale, sinon le total afficherait un montant faux avec assurance.
-            if (price == null) { d.tarif_a_definir = true; continue; }
-            d.total_ht += price * r.qty;
-            d.total_ttc += price * r.qty * (1 + Number(r.tax_rate) / 100);
         }
-        const data = [...byId.values()].map((d) => ({
-            ...d, total_ht: +d.total_ht.toFixed(2), total_ttc: +d.total_ttc.toFixed(2),
-        }));
+        /* LE TOTAL EST CELUI DE LA FACTURE (`totalDemande`, lib/ttc.js) : TVA arrondie PAR TAUX, par
+         * la fonction du PDF — la carte additionnait les TTC de ligne, et annonçait un centime de plus
+         * ou de moins que la facture sur près d'une demande à deux taux sur quatre. Les lignes
+         * partenaires à prix connu s'y ajoutent, ventilées à part : le partenaire les facture lui-même.
+         * Une ligne « tarif sur demande » n'a pas de prix : elle n'est pas additionnée, et
+         * `tarif_a_definir` le signale, sinon le total afficherait un montant faux avec assurance. */
+        const data = [...byId.values()].map((d) => {
+            const t = totalDemande(d.lines);
+            return { ...d, total_ht: t.ht, total_ttc: t.ttc, tarif_a_definir: t.aDefinir };
+        });
         res.json({ data });
     } catch (err) {
         console.error('Erreur demandes boutique :', err);
@@ -249,17 +253,19 @@ const invoiceShopRequest = async (req, res) => {
          * TELLES QU'ELLES VONT S'ÉCRIRE plus bas : le HT au centime, le taux de la ligne, la TVA
          * arrondie PAR TAUX.
          *
-         * UN CENTIME DE TOLÉRANCE, ET IL SERT. Le panier du stagiaire, la carte de la demande et la
-         * fenêtre de facturation additionnent les TTC de ligne : c'est CE montant qui a été encaissé,
-         * et que l'écran envoie. Il s'écarte d'un centime du total de la facture sur près d'un panier
-         * à deux taux sur quatre (33,33 € à 20 % et 7,77 € à 5,5 % : 48,19 € encaissés, 48,20 €
-         * facturés), et de loin en loin sur un seul, quand la TVA tombe sur un demi-centime (63 € à
-         * 5,5 %) — jamais de deux, relevé sur des millions de paniers tirés au hasard.
+         * UN CENTIME DE TOLÉRANCE, GARDÉ POUR L'ONGLET D'AVANT. Depuis le 2026-09-30, le panier du
+         * stagiaire, la carte de la demande et la fenêtre de facturation annoncent le total de la
+         * FACTURE (`totalDemande`, lib/ttc.js) : c'est lui qu'on encaisse, et l'écran l'envoie au
+         * centime. Avant, ils additionnaient les TTC de ligne, qui s'écartent d'un centime de la
+         * facture sur près d'un panier à deux taux sur quatre (33,33 € à 20 % et 7,77 € à 5,5 % :
+         * 48,19 € encaissés, 48,20 € facturés), et de loin en loin sur un seul, quand la TVA tombe sur
+         * un demi-centime (63 € à 5,5 %) — jamais de deux, relevé sur des millions de paniers tirés
+         * au hasard. Une fenêtre ouverte AVANT le déploiement calcule encore ainsi, et le solde de son
+         * dernier moyen ne se saisit pas : refuser son règlement laisserait l'école sans recours.
          *
-         * L'ÉCART SE COMPTE DONC EN CENTIMES ENTIERS. En flottant, « un centime » vaut tantôt
-         * 0,00999…, tantôt 0,01000…5 : `Math.abs(somme - ttc) > 0.01` accepte 60,01 € pour 60 € et
-         * refuse 120,01 € pour 120 €. Ce règlement-là, c'est l'écran qui l'a calculé : le refuser
-         * laisserait l'école sans recours, le solde du dernier moyen ne se saisit pas.
+         * L'ÉCART SE COMPTE EN CENTIMES ENTIERS. En flottant, « un centime » vaut tantôt 0,00999…,
+         * tantôt 0,01000…5 : `Math.abs(somme - ttc) > 0.01` accepte 60,01 € pour 60 € et refuse
+         * 120,01 € pour 120 €.
          *
          * Aucune part : rien à vérifier, la facture naît PAYÉE avec `payment_method` seul, comme avant. */
         if (parts.length) {

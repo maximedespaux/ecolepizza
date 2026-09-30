@@ -8,6 +8,8 @@
  * identité, ni historique. Ses demandes passées viennent de l'API.
  */
 
+import { totalDemande } from "./ttc.js";
+
 const KEY = "impasto.panier.v1";
 const EVT = "impasto:panier";
 
@@ -109,15 +111,13 @@ export const removeFromCart = (key) => setQty(key, 0);
 export const clearCart = () => write([]);
 
 /* Total indicatif : une ligne partenaire « tarif sur demande » n'a pas de prix — on ne
-   l'additionne pas et l'appelant doit le signaler, sinon le total ment. */
+   l'additionne pas et l'appelant doit le signaler, sinon le total ment.
+   C'est le total de la FACTURE, TVA arrondie par taux (`totalDemande`, lib/ttc.js) : additionner
+   les TTC de ligne annonçait un centime de moins ou de plus que la facture sur près d'un panier à
+   deux taux sur quatre — et c'est le montant annoncé que le stagiaire vient régler. */
 export function cartTotals(lines = read()) {
-  let ht = 0, ttc = 0, aDefinir = false;
-  for (const l of lines) {
-    if (l.price_ht == null) { aDefinir = true; continue; }
-    ht += l.price_ht * l.qty;
-    ttc += l.price_ht * l.qty * (1 + (l.tax_rate ?? 20) / 100);
-  }
-  return { ht: +ht.toFixed(2), ttc: +ttc.toFixed(2), aDefinir };
+  const t = totalDemande(lines.map((l) => ({ source: l.source, qty: l.qty, unit_price_ht: l.price_ht, tax_rate: l.tax_rate })));
+  return { ht: t.ht, ttc: t.ttc, aDefinir: t.aDefinir };
 }
 
 export const CART_EVENT = EVT;
