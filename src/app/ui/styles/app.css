@@ -6333,19 +6333,25 @@ label .requis {
 .fe-note .fe-icobtn{width:34px;height:34px;margin-top:-6px}
 
 /* Deux colonnes dès qu'il y a la place pour la composition ET le panneau ; sinon une, et le
-   dock (plus bas) prend le relais du panneau. Le panneau colle sous la barre du haut (63 px +
-   respiration), et défile pour lui-même s'il est plus haut que l'écran — le résultat d'un
-   empâtement l'est souvent. */
+   dock (plus bas) prend le relais du panneau.
+   LE PANNEAU FAIT EXACTEMENT LA HAUTEUR DE L'ÉCRAN (demandé le 2026-09-30) : il colle sous la
+   barre du haut (63 px + respiration) et occupe tout le reste, ni plus ni court. Ce n'est plus
+   LUI qui défile — sinon ses boutons « Enregistrer / Partager » descendaient hors de vue quand
+   le résultat d'un empâtement dépassait l'écran. C'est son CORPS (`fe-panel-corps`) qui défile,
+   à l'intérieur ; les boutons restent posés dessous, toujours visibles. */
 .fe-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
 .fe-main{display:flex;flex-direction:column;gap:20px;min-width:0}
-.fe-side{position:sticky;top:76px;max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
-  min-width:0;margin:0 -12px;padding:0 12px 26px}
-/* Une boîte qui défile COUPE l'ombre de ce qu'elle contient : l'ombre du panneau est donc
-   ramenée dans la marge intérieure de la colonne (12 px sur les côtés, 26 px en bas). */
-.fe-side > .fe-panel{box-shadow:0 12px 24px -14px rgba(30,30,80,.6)}
+.fe-side{position:sticky;top:76px;height:calc(100vh - 88px);min-width:0}
+.fe-side > .fe-panel{height:100%;min-height:0;box-shadow:0 18px 30px -18px rgba(30,30,80,.55)}
 @container fe (max-width:1099px){
+  /* Une colonne : le panneau reprend sa hauteur naturelle, dans le flux, et le dock (plus bas)
+     porte le chiffre clé et « Enregistrer ». Plus de hauteur d'écran imposée, plus de défilement
+     interne — la page entière défile. */
   .fe-layout{grid-template-columns:minmax(0,1fr)}
-  .fe-side{position:static;max-height:none;overflow:visible;margin:0;padding:0}
+  .fe-side{position:static;height:auto}
+  .fe-side > .fe-panel{height:auto}
+  /* Le corps ne défile plus pour lui-même (la page entière défile) : sa remise en flux est
+     posée AVEC sa règle de base, plus bas — sinon l'ordre du fichier ferait gagner la base. */
 }
 
 .fe-card{padding:24px}
@@ -6604,6 +6610,15 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 
 /* ── Le panneau de résultat (bleu nuit), à droite ── */
 .fe-panel{display:flex;flex-direction:column;gap:18px;padding:24px;border-radius:22px}
+/* Le corps qui défile quand le panneau fait la hauteur de l'écran : il prend toute la place
+   laissée par les boutons (`flex:1`), et défile pour lui-même (`min-height:0` — sans lui, un
+   enfant flex refuse de rétrécir sous son contenu et rien ne défile). En une colonne, la règle
+   du conteneur le repasse en `overflow:visible`. */
+.fe-panel-corps{display:flex;flex-direction:column;gap:18px;flex:1 1 auto;min-height:0;
+  overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+/* En une colonne, le panneau reprend sa hauteur naturelle : le corps ne se borne plus et ne
+   défile plus (placé APRÈS la règle de base pour la vaincre par l'ordre du fichier). */
+@container fe (max-width:1099px){.fe-panel-corps{flex:0 1 auto;overflow:visible}}
 .fe-panel-eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#ffa294}
 .fe-panel-kpi{display:flex;flex-direction:column;gap:6px}
 .fe-panel-lbl{font-size:13px;font-weight:600;color:rgba(255,255,255,.75)}
@@ -6643,7 +6658,7 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .fe-used li svg{flex:none;color:#a5d98a}
 .fe-used-n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fe-used-q{font-size:12.5px;color:rgba(255,255,255,.72);white-space:nowrap}
-.fe-actions{display:flex;flex-direction:column;gap:10px}
+.fe-actions{display:flex;flex-direction:column;gap:10px;flex:none}
 .fe-save{justify-content:center;min-height:50px;font-size:15.5px}
 .fe-actions-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn.fe-ghost{justify-content:center;min-height:44px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.28);color:#fff}
