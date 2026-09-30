@@ -130,7 +130,7 @@ export default function FichesTechniques() {
       <PageHead icon="file-text" eyebrow="Outils · fiches techniques" title="Mes fiches techniques"
         lead="Tes empâtements, préparations et réalisations réunis. Compose une fiche à partir de ta mercuriale, importe une fiche dans une autre à son coût au kg, et partage-la à la communauté." />
 
-      <BuilderHub cards={[
+      <BuilderHub className="hub-3" cards={[
         { title: "Empâtement", badge: count("PATE") || "0", desc: "Calcule ta pâte au pourcentage boulanger (hydratation, sel, huile, levure).", icon: "wheat", color: "#e0ac48", onClick: versRayon("PATE") },
         { title: "Préparation", badge: count("PREPARATION") || "0", desc: "Un ingrédient que tu prépares : une sauce, une base, une crème… Chiffré depuis ta mercuriale.", icon: "list-checks", color: "#3aa0e0", onClick: versRayon("PREPARATION") },
         { title: "Réalisation", badge: count("RECETTE") || "0", desc: "Ta pizza : une pâte, tes préparations et les autres ingrédients. Coût matière, prix conseillé et accords de saveurs.", icon: "pizza", color: "#5f9e3f", onClick: versRayon("RECETTE") },
