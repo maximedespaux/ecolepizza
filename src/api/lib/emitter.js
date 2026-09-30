@@ -93,4 +93,82 @@ async function nextNumberForEmitter(conn, emitter) {
     return number;
 }
 
-module.exports = { loadEmitter, defaultEmitter, resolveEmitter, formatNumber, nextNumberForEmitter, isMissingSchema };
+/**
+ * La SÉQUENCE que porte un numéro, relue par le gabarit de l'entité : l'inverse de `formatNumber`.
+ *
+ * Le gabarit devient un motif — chaque jeton par ce qu'il imprime, le reste recopié tel quel —
+ * plutôt que de recomposer le numéro avec la date du document : une date relue de la base peut
+ * avoir glissé d'un fuseau, et un numéro qui porte {MM} ou {DD} ne se reconnaîtrait plus.
+ * `null` quand le numéro ne suit pas ce gabarit : une autre entité, un gabarit changé depuis, un
+ * ancien compteur. Dans le doute, on ne rend rien.
+ */
+function sequenceDuNumero(emitter, number) {
+    const fmt = (emitter.number_format && String(emitter.number_format).trim()) || '{PREFIX}-{YYYY}-{SEQ}';
+    const litteral = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const motif = fmt.split(/(\{PREFIX\}|\{YYYY\}|\{YY\}|\{MM\}|\{DD\}|\{SEQ(?::\d+)?\})/).map((part) => {
+        if (part === '{PREFIX}') return litteral(emitter.invoice_prefix || 'F');
+        if (part === '{YYYY}') return '\\d{4}';
+        if (part === '{YY}' || part === '{MM}' || part === '{DD}') return '\\d{2}';
+        if (/^\{SEQ/.test(part)) return '(\\d+)';
+        return litteral(part);
+    }).join('');
+    const m = new RegExp(`^${motif}$`).exec(String(number || ''));
+    return m && m[1] !== undefined ? Number(m[1]) : null;
+}
+
+/**
+ * REND UN NUMÉRO À SA SÉQUENCE — quand un document est supprimé (demandé le 2026-09-30 : « j'ai créé
+ * FACT-2026-0008, je le supprime : le suivant devrait être encore FACT-2026-0008 »).
+ *
+ * Le compteur d'une entité ne savait qu'avancer : un brouillon créé puis supprimé laissait un trou
+ * dans une numérotation que la loi veut CONTINUE. Il recule d'un cran, à une condition : le numéro
+ * rendu est le DERNIER donné par cette entité. Rendre le 0007 quand le 0008 existe ferait ressortir
+ * un second 0008.
+ *
+ * C'est l'entité qui a numéroté le document qui recule (`profileId`), jamais l'entité par défaut :
+ * chacune tient sa séquence. L'UPDATE est gardé par la valeur lue — une facture créée entre-temps
+ * a déjà pris le numéro suivant, et le compteur ne bouge plus.
+ *
+ * Rend `{ rendu: true }`, ou `{ rendu: false, raison }` : 'sans_entite', 'autre_gabarit' (le numéro
+ * ne suit pas le format de l'entité) ou 'pas_le_dernier'.
+ */
+async function rendreLeNumero(conn, orgId, profileId, number) {
+    const emitter = await loadEmitter(conn, orgId, profileId);
+    if (!emitter) return { rendu: false, raison: 'sans_entite' };
+    const seq = sequenceDuNumero(emitter, number);
+    if (seq === null) return { rendu: false, raison: 'autre_gabarit' };
+    const prochain = Number(emitter.next_number) || 1;
+    if (seq !== prochain - 1) return { rendu: false, raison: 'pas_le_dernier' };
+    const [r] = await conn.query(
+        'UPDATE billing_profile SET next_number = ? WHERE id = ? AND organization_id = ? AND next_number = ?',
+        [seq, emitter.id, orgId, prochain]
+    );
+    return r && r.affectedRows === 1 ? { rendu: true } : { rendu: false, raison: 'pas_le_dernier' };
+}
+
+/**
+ * LA PLUS GRANDE SÉQUENCE PORTÉE PAR UN DOCUMENT EXISTANT, entité par entité (0 : aucun document).
+ *
+ * C'est ce qui sépare un compteur « à jour » d'un compteur qui a laissé des numéros derrière lui :
+ * `next_number - 1` plus grand que cette valeur, et des numéros donnés n'existent plus. Un numéro
+ * qui ne suit pas le gabarit actuel de son entité n'est pas compté — on ne devine pas sa séquence.
+ * Rend une Map `id de l'entité → séquence`.
+ */
+async function dernieresSequences(conn, orgId, emitters) {
+    const max = new Map(emitters.map((e) => [e.id, 0]));
+    if (!emitters.length) return max;
+    const parId = new Map(emitters.map((e) => [e.id, e]));
+    const [rows] = await conn.query(
+        'SELECT billing_profile_id, number FROM invoice WHERE organization_id = ? AND billing_profile_id IS NOT NULL', [orgId]);
+    for (const r of rows) {
+        const e = parId.get(r.billing_profile_id);
+        const seq = e ? sequenceDuNumero(e, r.number) : null;
+        if (seq !== null && seq > max.get(e.id)) max.set(e.id, seq);
+    }
+    return max;
+}
+
+module.exports = {
+    loadEmitter, defaultEmitter, resolveEmitter, formatNumber, nextNumberForEmitter, isMissingSchema,
+    sequenceDuNumero, rendreLeNumero, dernieresSequences,
+};

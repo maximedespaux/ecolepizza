@@ -49,6 +49,8 @@ const ACTION_LABEL = {
     // Le modèle et le règlement posés sur un brouillon avant de l'émettre (2026-09-28).
     'invoice.completer': ['Brouillon de facture complété', A],
     'invoice.facturx': ['Facture Factur-X téléchargée', B],
+    // La suppression ne laissait aucune trace ; son numéro peut ressortir sur un autre document.
+    'invoice.delete': ['Facture supprimée', R],
     'payment.record': ['Paiement enregistré', G],
     'sale.create': ['Vente enregistrée', G],
     'sale.checkout': ['Vente encaissée', G],
@@ -227,6 +229,8 @@ const ACTION_LABEL = {
     'billing_profile.create': ['Entité émettrice créée', G],
     'billing_profile.update': ['Entité émettrice modifiée', A],
     'billing_profile.default': ['Entité émettrice par défaut modifiée', A],
+    // Le prochain numéro ramené juste après le dernier document existant (2026-09-30).
+    'billing_profile.compteur': ['Numérotation d\'une entité reprise', A],
     'billing_profile.delete': ['Entité émettrice supprimée', R],
 
     // Archives
