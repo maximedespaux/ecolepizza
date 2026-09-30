@@ -67,13 +67,14 @@ test('chaque écran qui envoie une image la réduit d\'abord', () => {
         ['pages/Quiz.jsx', /await reduireEnDataUrl\(f, PROFILS\.quiz\)/, 'illustration de QCM'],
         ['components/QuestionPost.jsx', /await reduireImage\(f\)/, 'photo de la communauté'],
         ['pages/FicheRecette.jsx', /const blob = await reduireSiImage\(f, PROFILS\.fiche\);/, 'photo d’une fiche technique'],
+        ['components/MemoListe.jsx', /const blob = await reduireSiImage\(f, PROFILS\.memo\);/, 'pièce jointe d’un mémo'],
     ];
     for (const [fichier, motif, quoi] of chemins) {
         assert.match(lireUi(fichier), motif, `${quoi} : l’image doit être réduite avant l’envoi`);
     }
     /* `e.target.value = ""` SUR CHAQUE ENTRÉE : sans lui, rechoisir LE MÊME fichier après un
        refus ne déclenche aucun `change`, et le bouton paraît mort. */
-    for (const f of ['pages/Reglages.jsx', 'pages/EmargementEditor.jsx', 'pages/Quiz.jsx', 'pages/FicheRecette.jsx']) {
+    for (const f of ['pages/Reglages.jsx', 'pages/EmargementEditor.jsx', 'pages/Quiz.jsx', 'pages/FicheRecette.jsx', 'components/MemoListe.jsx']) {
         assert.match(lireUi(f), /e\.target\.value = "";/, `${f} : l’entrée doit se réarmer`);
     }
 });
@@ -98,6 +99,14 @@ test('le plafond d\'un profil reste SOUS la limite du serveur qu\'il alimente', 
     assert.ok(profilKo('fiche') < fiche, `profil fiche ${profilKo('fiche')} Ko >= serveur ${fiche} Ko`);
     const multerFiche = nombre(lireApi('routes/recipe.routes.js'), /fileSize: (\d+) \* 1024/, 'limite multer photo de fiche');
     assert.ok(fiche < multerFiche, 'la limite de multer doit rester au-dessus de celle du contrôleur');
+
+    /* LA PIÈCE JOINTE D'UN MÉMO (migration 193) : une image réduite dans les règles ne doit pas être
+       refusée à l'arrivée, et multer reste au-dessus des deux plafonds du contrôleur (image, PDF). */
+    const memo = nombre(lireApi('lib/memoFichiers.js'), /const MAX_IMAGE_MEMO = (\d+) \* 1024;/, 'plafond image de mémo');
+    assert.ok(profilKo('memo') < memo, `profil memo ${profilKo('memo')} Ko >= serveur ${memo} Ko`);
+    const pdfMemo = nombre(lireApi('lib/memoFichiers.js'), /const MAX_PDF_MEMO = (\d+) \* 1024 \* 1024;/, 'plafond PDF de mémo');
+    const multerMemo = nombre(lireApi('routes/memo.routes.js'), /fileSize: (\d+) \* 1024 \* 1024/, 'limite multer des mémos');
+    assert.ok(pdfMemo < multerMemo && memo < multerMemo * 1024, 'la limite de multer doit rester au-dessus de celles du contrôleur');
 
     /* SIGNATURE, CACHET, LOGO, QCM voyagent en data-URL DANS du JSON. Deux plafonds les
        bornent, et le base64 pèse un TIERS de plus que les octets qu'il transporte : c'est ce

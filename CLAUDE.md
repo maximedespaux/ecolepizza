@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2380 tests — 2373 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2395 tests — 2388 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,9 +262,34 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 192 à jouer (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
-**192 est À JOUER, avant ou après le code : l'ordre ne compte pas** (`192_facture_tva_centimes.sql`, la TVA d'une
+**193 est À JOUER** (`193_memo_fichiers.sql`, les PIÈCES JOINTES d'un mémo — demandées le 2026-09-30 : « joindre une image au
+mémo, deux au plus, une image collée ou un PDF »). Une table `memo_fichier` : `memo_id` (ON DELETE CASCADE : les pièces partent
+avec leur mémo, et seulement avec lui), `nom`, `mime`, `octets` (le poids en clair), `bytes` (CHIFFRÉS au repos, comme les
+photos de la Communauté), `rang`. À PART de `memo`, parce que la liste se relit toutes les minutes : elle ne lit que le nom, le
+type et le poids, le fichier ne voyage qu'à l'ouverture. DEUX par mémo, c'est le serveur qui compte ; le TYPE se lit dans les
+octets (JPEG, PNG, WebP, PDF — `lib/memoFichiers.js`), jamais dans ce que l'envoi déclare ; une image est réduite par le
+navigateur (`lib/image.js`, profil `memo` : 1 800 px, 450 Ko visés, 900 au plus) et refusée au-delà de 1 Mo, un PDF au-delà de
+5 Mo (multer s'arrête à 6 Mo, pour que ce soit le contrôleur qui réponde). Les pièces se posent à la CRÉATION du mémo, dans le
+MÊME envoi (multipart ; sans pièce, le mémo reste en JSON) : fichier refusé, table absente ou écriture ratée, le mémo n'est pas
+créé à moitié. Une pièce ne s'ouvre que pour qui VOIT le mémo (`memoVisible` : l'auteur, l'équipe s'il est partagé, le collègue
+mentionné), sous le type prouvé, `nosniff`, et SANS cache — la règle `no-store` de toute l'API, c'est une note privée. Les noms
+voyagent à part (`noms`) : multer lit un nom de fichier en latin1. Sans la migration, rien ne casse : pas de trombone
+(`pieces_jointes: false` dans `GET /api/memos`), un mémo envoyé avec un fichier répond 503, les autres marchent comme avant.
+**Elle se vérifie par l'API, sans SQL** : `GET /api/memos` rend `pieces_jointes: true`. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='memo_fichier';`
+⚠️ Son revert supprime toutes les pièces jointes, et elles seules. Tests : `memos-fichiers.test.js`.
+LE BROUILLON D'UN MÉMO, lui, n'a PAS de migration (même jour) : ce qu'on écrit vit hors du panneau (`lib/brouillonMemo.js`),
+tient à sa fermeture ET au rechargement (`sessionStorage`, propre à l'onglet, gravé avec l'identifiant du compte et effacé à la
+déconnexion), jusqu'à l'envoi ou « Effacer ». Les fichiers joints du brouillon restent en mémoire : ils tiennent à la
+fermeture, pas au rechargement. Tests : `brouillon-memo.test.js`.
+
+**192 est JOUÉE — constaté le 2026-09-30 par l'API, sans SQL** : `GET /api/factures` (`SELECT i.*`) rend la clé `tva_centimes` ;
+sans la colonne, elle n'existerait pas. Aucune facture n'avait encore été créée depuis (toutes à 0). Son paragraphe garde ce
+qu'elle fait et son revert.
+
+**192** (`192_facture_tva_centimes.sql`, avant ou après le code, l'ordre ne compte pas : la TVA d'une
 NOUVELLE facture en centimes entiers — décidé avec l'école le 2026-09-30). Une colonne sur `invoice` : `tva_centimes`
 (tinyint, 0 par défaut). `ventilerTva` additionnait en flottant les HT d'un même taux : sur un demi-centime, le PDF et le
 XML imprimaient un centime de moins que l'arrondi exact (429,35 € HT à 10 % en quatre lignes : 472,28 € au lieu de

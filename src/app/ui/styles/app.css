@@ -5195,7 +5195,30 @@ button.av-wrap:active{transform:scale(.94)}
 .memo-date{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
 .memo-date .inp{padding:6px 8px;font-size:12.5px;width:auto}
 .memo-partage{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
-.memo-form-options .btn{margin-left:auto}
+/* « Effacer » et « Ajouter » restent ensemble, à droite : ce sont les deux sorties du brouillon. */
+.memo-form-fin{margin-left:auto;display:inline-flex;align-items:center;gap:6px}
+/* LE TROMBONE (migration 193) : joindre une image ou un PDF, deux au plus. */
+.memo-joindre{display:inline-grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid var(--border);
+  border-radius:8px;background:var(--surface);color:var(--muted);cursor:pointer}
+.memo-joindre:hover:not(:disabled){color:var(--text);border-color:var(--muted)}
+.memo-joindre:disabled{opacity:.45;cursor:not-allowed}
+/* Ce qu'on a joint au mémo EN COURS : la vignette, le nom, le poids, et de quoi l'enlever. */
+.memo-fichiers-choisis{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 2px}
+.memo-fichier{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 6px 3px 4px;border-radius:9px;
+  background:var(--surface2);border:1px solid var(--border-soft);font-size:12px;color:var(--text)}
+.memo-fichier img{width:30px;height:30px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.memo-fichier-nom{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memo-fichier-poids{color:var(--dim);white-space:nowrap}
+.memo-fichier button{border:0;background:transparent;color:var(--muted);font-size:14px;line-height:1;padding:0 2px;cursor:pointer}
+.memo-fichier button:hover{color:var(--red)}
+/* Les pièces d'un mémo de la liste : l'image en vignette, le PDF par son nom. */
+.memo-pieces{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
+.memo-piece{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 8px;border-radius:8px;
+  background:var(--surface2);border:1px solid var(--border-soft);font-size:12px;color:var(--text);text-decoration:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memo-piece:hover{border-color:var(--muted)}
+.memo-piece.image{padding:0;border-radius:8px;line-height:0}
+.memo-piece.image img{display:block;height:56px;width:auto;max-width:120px;object-fit:cover}
 .memo-erreur{color:var(--red);font-size:12.5px;margin:0 0 10px}
 /* @ et # : la liste s'ouvre SOUS le champ, dans le flux du formulaire — un menu flottant de plus
    se serait battu avec le panneau, qui flotte déjà. */

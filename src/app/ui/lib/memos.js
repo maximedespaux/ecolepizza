@@ -197,3 +197,54 @@ export function trierMemos(liste) {
     return String(b.cree_le || "").localeCompare(String(a.cree_le || ""));
   });
 }
+
+/* ── LES PIÈCES JOINTES (migration 193, demandées le 2026-09-30) ─────────────────────────────────
+ * Deux au plus par mémo : une image — collée depuis le presse-papiers, ou choisie — ou un PDF. Les
+ * plafonds sont ceux du SERVEUR (src/api/lib/memoFichiers.js), qui revérifie tout dans les octets :
+ * ici, on ne fait que le dire AVANT l'envoi, pour ne pas écrire un mémo et le voir refusé. Un test
+ * tient les deux côtés d'accord. */
+export const MAX_FICHIERS = 2;
+export const MAX_IMAGE_KO = 1024;
+export const MAX_PDF_MO = 5;
+
+/** « image », « pdf », ou `null` : ce qu'un mémo sait joindre, d'après le type que le navigateur annonce. */
+export function genreFichier(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "application/pdf") return "pdf";
+  // gif et bmp sont réencodés en WebP par la réduction (lib/image.js) ; un HEIC ne l'est pas.
+  return /^image\/(jpeg|png|webp|gif|bmp)$/.test(t) ? "image" : null;
+}
+
+/**
+ * Pourquoi ce fichier ne peut pas partir, ou `null`. À lire sur ce qui PARTIRA : l'image déjà
+ * réduite. Une image que la réduction n'a pas su convertir (elle rend alors le fichier d'origine)
+ * serait refusée par le serveur, qui n'accepte que JPEG, PNG et WebP — autant le dire ici.
+ */
+export function refusDeFichier(blob) {
+  const genre = genreFichier(blob && blob.type);
+  if (!genre) return "Pièce jointe refusée : une image ou un PDF.";
+  if (genre === "pdf") return blob.size > MAX_PDF_MO * 1024 * 1024 ? `PDF trop lourd : ${MAX_PDF_MO} Mo au plus.` : null;
+  if (!/^image\/(jpeg|png|webp)$/i.test(blob.type)) return "Cette image n'a pas pu être convertie : enregistrez-la en JPEG ou en PNG.";
+  return blob.size > MAX_IMAGE_KO * 1024 ? "Image trop lourde, même réduite : 1 Mo au plus." : null;
+}
+
+/** « 340 Ko », « 1,2 Mo » : le poids d'une pièce, comme on le dit. */
+export function poidsLisible(octets) {
+  const n = Number(octets) || 0;
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))}\u00a0Ko`;
+  return `${(n / 1024 / 1024).toFixed(1).replace(".", ",")}\u00a0Mo`;
+}
+
+/**
+ * CE QU'UN COLLAGE APPORTE À JOINDRE — les fichiers du presse-papiers, SAUF s'il porte du texte.
+ *
+ * Copier trois cellules d'un tableur, ou une phrase d'un traitement de texte, pose dans le
+ * presse-papiers le texte ET une IMAGE de ce texte. Coller doit alors écrire la phrase, pas joindre
+ * sa photo. Une capture d'écran, elle, n'apporte que l'image : c'est elle qu'on joint.
+ */
+export function fichiersColles(presse) {
+  if (!presse) return [];
+  const texte = typeof presse.getData === "function" ? presse.getData("text/plain") : "";
+  if (texte && texte.trim()) return [];
+  return [...(presse.files || [])].filter((f) => genreFichier(f.type));
+}

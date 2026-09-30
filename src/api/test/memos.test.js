@@ -49,7 +49,9 @@ const faux = {
             /* CE FICHIER DÉCRIT LES RÈGLES DE LA 176, SANS LES LIENS : la table `memo_lien` répond
                donc absente, et le contrôleur retombe sur la forme d'avant (sa cascade). Les liens et
                les mentions ont leur propre fichier, `memos-liens.test.js`. */
-            if (/memo_lien/.test(q)) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
+            /* Pareil pour les PIÈCES JOINTES (migration 193, `memo_fichier`) : elles ont leur fichier,
+               `memos-fichiers.test.js`. */
+            if (/memo_lien|memo_fichier/.test(q)) { const e = new Error('pas de table'); e.code = 'ER_NO_SUCH_TABLE'; throw e; }
             /* LA BASE FACTICE OBÉIT À LA REQUÊTE, elle ne refait pas la règle à sa place : si la
                clause de visibilité disparaissait du code, ce faux la rendrait quand même — et le
                test resterait vert sur un mémo privé devenu visible. */
