@@ -187,11 +187,23 @@ const invoiceShopRequest = async (req, res) => {
         /* LE RÈGLEMENT SE LIT ICI, AVANT LE NUMÉRO : un refus ne doit pas en consommer un — la
          * séquence des factures ne souffre aucun trou. « 30,50 » se lit en français ; `Number()`
          * en faisait NaN, et la part DISPARAISSAIT au filtre, sans un mot. Vide, elle ne compte
-         * pas (comme avant) ; illisible, elle est refusée. */
+         * pas (comme avant) ; illisible, elle est refusée.
+         *
+         * LA BANQUE ET LE NUMÉRO D'UN CHÈQUE SE GARDENT, comme à la caisse (`checkout`) et à
+         * /factures (`reglementDe`) : seulement pour un chèque, seulement s'ils sont renseignés.
+         * La fenêtre « Facturer la demande » les demande et les envoie (PaiementSplit) ; on ne
+         * retenait de chaque part que `{ method, amount }` — perdus sans un mot, ils manquaient à
+         * `payment_split`, et {Banque} et {N° chèque} sortaient vides sur la facture. */
+        const estCheque = (m) => /ch[eè]que/i.test(String(m || ''));
         const saisies = (Array.isArray(req.body?.payments) ? req.body.payments : [])
             .map((p) => {
                 const brut = p && p.amount;
-                return { method: String(p && p.method || '').trim().slice(0, 40), amount: brut === '' || brut == null ? 0 : lireMontant(brut) };
+                const part = { method: String(p && p.method || '').trim().slice(0, 40), amount: brut === '' || brut == null ? 0 : lireMontant(brut) };
+                if (estCheque(part.method)) {
+                    if (p && String(p.bank || '').trim()) part.bank = String(p.bank).trim().slice(0, 120);
+                    if (p && String(p.cheque_number || '').trim()) part.cheque_number = String(p.cheque_number).trim().slice(0, 40);
+                }
+                return part;
             });
         const illisible = saisies.find((p) => p.method && !Number.isFinite(p.amount));
         if (illisible) {

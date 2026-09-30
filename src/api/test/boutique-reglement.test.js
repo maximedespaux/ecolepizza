@@ -16,6 +16,10 @@
  *   · le centime de tolérance, qui SERT : l'écran additionne les TTC de ligne, et ce qu'il envoie
  *     doit toujours passer ;
  *   · sans aucune part, rien n'est vérifié : la facture naît PAYÉE avec `payment_method` seul ;
+ *   · un chèque garde sa BANQUE et son NUMÉRO, jusqu'aux jetons {Banque} et {N° chèque} de la
+ *     facture — seulement pour un chèque, seulement renseignés, bornés comme à la caisse. Relevé le
+ *     même jour : la fenêtre les demandait et les envoyait, le serveur ne gardait de chaque part
+ *     que `{ method, amount }`, et ils se perdaient sans un mot ;
  *   · l'écran : un bouton qui attend sur un dépassement — sans attendre quand aucun moyen de
  *     paiement n'est configuré.
  *
@@ -74,6 +78,9 @@ const faux = {
 const cheminDb = require.resolve('../config/database.js');
 require.cache[cheminDb] = { id: cheminDb, filename: cheminDb, loaded: true, exports: faux };
 const { invoiceShopRequest } = require('../controllers/shopRequest.controller.js');
+// Le contexte et le rendu du modèle de facture : ce qui remplit {Banque} et {N° chèque}.
+const { invoiceCtx } = require('../controllers/invoice.controller.js');
+const { renderTemplateHtml } = require('../lib/htmlfill.js');
 
 async function facturer(corps, o) {
     base(o);
@@ -111,6 +118,22 @@ function ttcEcrit() {
         amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null,
         lines: lignes.map((l) => ({ amount: Number(l.amount_net), taxRate: l.tax_rate ?? null })),
     }).grand;
+}
+/** Le modèle de facture rendu sur CE QUI A ÉTÉ ÉCRIT, par le contexte du PDF (`invoiceCtx`, qui
+ *  relit `payment_split` comme après `loadInvoiceData`) — son texte seul, sans balises ni feuille
+ *  de style, pour lire ses lignes. */
+function rendu(modele) {
+    const f = colonnes(ecrit(/^INSERT INTO invoice \(/)[0]);
+    const lignes = ecrit(/^INSERT INTO invoice_line/).map(colonnes);
+    const ctx = invoiceCtx({ legal_name: 'École' }, {
+        number: f.number, typeLabel: 'Facture', issueDate: '20260930',
+        amountNet: f.amount_net, tvaExoneree: !!f.tva_exoneree, taxRate: f.tax_rate ?? null,
+        lines: lignes.map((l) => ({ name: l.description, amount: Number(l.amount_net), taxRate: l.tax_rate ?? null, qty: l.qty })),
+        buyer: { name: f.buyer_name, address: {} },
+        paymentMethod: f.payment_method || null, paymentSplit: f.payment_split || null,
+    });
+    return plat(renderTemplateHtml(modele, ctx, { title: 'F', letterhead: false })
+        .replace(/<(style|title)\b[\s\S]*?<\/\1>/g, ' ').replace(/<[^>]+>/g, ' '));
 }
 
 /* ── LE SERVEUR ───────────────────────────────────────────────────────────────────────────────── */
@@ -221,6 +244,34 @@ test('AUCUNE PART — rien n\'est vérifié : la facture naît PAYÉE avec `paym
     }
 });
 
+test('UN CHÈQUE GARDE SA BANQUE ET SON NUMÉRO — seulement un chèque, seulement renseignés, bornés comme à la caisse', async () => {
+    /* Le corps relevé le 2026-09-30, tel que l'écran l'envoie : `payment_split` ne recevait que
+       `{ method, amount }` — la banque et le numéro, saisis dans la fenêtre, se perdaient sans un mot. */
+    const r = await facturer({ payments: [{ method: 'Chèque', amount: 60, bank: 'Crédit Agricole', cheque_number: '0012345' }] });
+    assert.strictEqual(r.code, 201, dit(r));
+    const f = colonnes(ecrit(/^INSERT INTO invoice \(/)[0]);
+    assert.deepStrictEqual(JSON.parse(f.payment_split), [{ method: 'Chèque', amount: 60, bank: 'Crédit Agricole', cheque_number: '0012345' }],
+        'la banque et le numéro du chèque manquaient à la ventilation');
+    assert.strictEqual(f.payment_method, 'Chèque', 'le résumé reste le moyen seul');
+
+    /* Une banque saisie sur un AUTRE moyen ne se garde pas : l'écran ne l'envoie pas, mais un corps
+       posté à la main peut tout porter — et une carte bancaire n'a pas de numéro de chèque. Fait
+       d'espaces, un champ ne compte pas ; renseigné, il est rogné. */
+    const mixte = await facturer({ payments: [
+        { method: 'CB', amount: '20', bank: 'BNP', cheque_number: '0098765' },
+        { method: 'Chèque', amount: '40', bank: '  LCL  ', cheque_number: '   ' },
+    ] });
+    assert.strictEqual(mixte.code, 201, dit(mixte));
+    assert.deepStrictEqual(JSON.parse(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).payment_split),
+        [{ method: 'CB', amount: 20 }, { method: 'Chèque', amount: 40, bank: 'LCL' }]);
+
+    // Bornés comme à la caisse et à /factures : 120 caractères pour la banque, 40 pour le numéro.
+    const long = await facturer({ payments: [{ method: 'Chèque', amount: 60, bank: 'B'.repeat(200), cheque_number: '9'.repeat(60) }] });
+    assert.strictEqual(long.code, 201, dit(long));
+    const [part] = JSON.parse(colonnes(ecrit(/^INSERT INTO invoice \(/)[0]).payment_split);
+    assert.deepStrictEqual([part.bank, part.cheque_number], ['B'.repeat(120), '9'.repeat(40)]);
+});
+
 /* ── L'ÉCRAN ──────────────────────────────────────────────────────────────────────────────────── */
 
 /** Évalue un bloc PUR d'un fichier de l'écran (entre deux repères), `lireMontant` passé en
@@ -324,4 +375,24 @@ test('L\'ÉCRAN — « Créer la facture » attend sur un DÉPASSEMENT, pas seul
     assert.match(page, /<button className="btn primary" disabled=\{busy \|\| !!blocage\}\s+title=\{blocage \|\| undefined\}/,
         'le bouton attend, et son info-bulle dit pourquoi');
     assert.doesNotMatch(sansCommentaires('pages/DemandesBoutique.jsx'), /\.valid\b/, 'jamais `valid` tout court, cf. ci-dessus');
+});
+
+test('L\'ÉCRAN — la banque et le numéro qu\'il demande arrivent jusqu\'aux jetons {Banque} et {N° chèque} de la facture', async () => {
+    // La fenêtre : 20 € en espèces, le solde par chèque — banque et numéro saisis sous sa ligne.
+    const { parts } = resolvePayments([
+        { method: 'Espèces', amount: '20' },
+        { method: 'Chèque', amount: '', bank: 'Crédit Agricole', cheque_number: '0012345' },
+    ], totalFenetre(demande([{ prix: 50, qty: 1, taux: 20 }])));
+    const r = await facturer({ payments: parts });
+    assert.strictEqual(r.code, 201, dit(r));
+
+    /* Le bloc {#Paiements} d'un modèle, tel que l'éditeur l'écrit : des puces, et les marqueurs DANS
+       les cellules (cf. CLAUDE.md § 3). Une ligne par moyen ; la banque et le numéro sortaient vides. */
+    const puce = (k) => `<span data-token="${k}">${k}</span>`;
+    const modele = `<table><tbody><tr><td>{#Paiements}${puce('Moyen')}</td><td>${puce('Banque')}</td>`
+        + `<td>${puce('N° chèque')}</td><td>${puce('Montant réglé')}{/Paiements}</td></tr></tbody></table>`
+        + `<p>${puce('Détail règlement')}</p>`;
+    const texte = rendu(modele);
+    assert.match(texte, /Espèces 20,00 € Chèque Crédit Agricole 0012345 40,00 €/, `{Banque} et {N° chèque} : ${texte}`);
+    assert.match(texte, /Espèces : 20,00 € · Chèque : 40,00 € \(chèque n° 0012345, Crédit Agricole\)/, `{Détail règlement} : ${texte}`);
 });
