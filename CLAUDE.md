@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~0,4 s**. État de référence, **relevé le 2026-09-30** :
-**2315 tests — 2308 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~5 s** (280 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-09-30** : **2318 tests — 2311 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -213,6 +213,14 @@ pas lire (règle HTML) : 0, sans un mot — une remise à 0 %, une TVA à 0 %. L
 l'illisible est refusé en disant « écrivez-le par exemple 315,93 » ; la base garde le point (`toFixed(2)`) ; une
 valeur de la base s'affiche avec une virgule (`montantEnSaisie`). Un écran qui calcule à chaque frappe (fiche
 technique) passe par `ChampMontant`. Tests : `montant-saisi*.test.js`.
+
+**Une liste déroulante dont la valeur n'est dans AUCUNE option affiche la PREMIÈRE, sans un mot** (2026-09-30) : ni
+React ni le navigateur ne préviennent. Or mysql2 rend un DECIMAL en CHAÎNE, avec ses décimales (« 10.00 » — pas de
+`decimalNumbers`, config/database.js) : donné tel quel à une liste qui propose « 10 », il n'y désigne rien. La fenêtre
+« Modifier l'article » de l'inventaire affichait ainsi « 20 % » pour un article à 10 %, à 5,5 % ou exonéré, à côté d'un
+TTC calculé au vrai taux ; seul l'article à 20 % s'affichait juste, par hasard. Une valeur de la base se ramène à
+l'écriture des options AVANT d'entrer dans l'état (`tauxEnListe`, Inventaire.jsx), et une valeur enregistrée hors de
+la liste y reste proposée (`tauxProposes` ; même idée pour la forme juridique, Reglages.jsx). Tests : `inventaire-tva.test.js`.
 
 ---
 

@@ -21,7 +21,24 @@ const CATEGORIES = [
   "Thermomètre", "Louche", "Biberon", "Textile",
 ];
 const TVA_RATES = ["20", "10", "5.5", "2.1", "0"];
-const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: "20", threshold: 0,
+// Le taux d'un article neuf : celui de la colonne (DEFAULT 20.00), et du serveur à la création.
+const TVA_DEFAUT = "20";
+
+/* LA BASE REND « 10.00 », LA LISTE PROPOSE « 10 ». Le taux est un DECIMAL(5,2), et mysql2 rend un
+   décimal en CHAÎNE, avec ses deux décimales. Donné tel quel à la liste, « 10.00 » n'y désignait
+   AUCUNE option — et une liste dont la valeur n'existe pas affiche sa PREMIÈRE : un article à 10 %,
+   à 5,5 % ou exonéré s'ouvrait sur « 20 % », à côté d'un TTC calculé, lui, au vrai taux. Rien ne se
+   perdait à l'enregistrement (l'état gardait « 10.00 »), mais c'est sur l'écran qu'on décide. Le
+   taux entre donc dans l'état écrit COMME LA LISTE L'ÉCRIT : « 10.00 » → « 10 », « 5.50 » → « 5.5 ».
+   Illisible ou absent, c'est le taux par défaut — jamais « 0 », que `Number("")` aurait donné. */
+const tauxEnListe = (v) => { const n = lireMontant(v); return Number.isFinite(n) ? String(n) : TVA_DEFAUT; };
+
+/* … ET UN TAUX HORS DE LA LISTE Y RESTE PROPOSÉ (l'API accepte tout taux de 0 à 100) — même idée que
+   la forme juridique de l'organisme (Reglages.jsx) : sans son option, il s'afficherait « 20 % » à
+   son tour. Il vient en tête ; les taux courants gardent leur ordre. */
+const tauxProposes = (...taux) => [...new Set(taux.filter((t) => !TVA_RATES.includes(t))), ...TVA_RATES];
+
+const EMPTY = { name: "", category: "", sku: "", quantity: 0, unit_price: "", tax_rate: TVA_DEFAUT, threshold: 0,
   remiseValeur: "", remiseUnite: "%", image_url: "" };
 
 // Icône par (sous-)catégorie — vignette visuelle à défaut de photo produit.
@@ -44,6 +61,19 @@ function stockState(item) {
   if (item.quantity <= 0) return { tone: "r", label: "Rupture", color: "var(--ember1)" };
   if (item.quantity <= item.threshold) return { tone: "a", label: "Stock bas", color: "#e8a13a" };
   return { tone: "g", label: "En stock", color: "var(--green)" };
+}
+
+/** LA LISTE DES TAUX, la même à la création et à la modification : écrite deux fois, elle finirait
+ *  par ne plus proposer les mêmes taux. Celui trouvé À L'OUVERTURE y reste tant qu'elle est à l'écran
+ *  (`ouverture`), même après en avoir choisi un autre : hors de la liste, un clic de trop et il n'y
+ *  aurait plus moyen d'y revenir sans annuler. */
+function ChoixTva({ value, onChange }) {
+  const [ouverture] = useState(value);
+  return (
+    <SelectField label="TVA (%)" value={value} onChange={onChange}>
+      {tauxProposes(ouverture, value).map((r) => <option key={r} value={r}>{r} %</option>)}
+    </SelectField>
+  );
 }
 
 function Inventaire({ embedded = false }) {
@@ -129,8 +159,9 @@ function Inventaire({ embedded = false }) {
     setStatus(null); // un ancien refus ne doit pas s'afficher dans la fenêtre qui s'ouvre
     setEditing({
       id: item.id, name: item.name, category: item.category || "", sku: item.sku || "",
-      // Le prix de la base (« 39.90 ») s'affiche comme on le tape : « 39,90 ».
-      quantity: item.quantity, unit_price: montantEnSaisie(item.unit_price), tax_rate: item.tax_rate ?? "20", threshold: item.threshold,
+      // Le prix de la base (« 39.90 ») s'affiche comme on le tape : « 39,90 » ; son taux
+      // (« 10.00 »), comme la liste l'écrit : « 10 ».
+      quantity: item.quantity, unit_price: montantEnSaisie(item.unit_price), tax_rate: tauxEnListe(item.tax_rate), threshold: item.threshold,
       /* SANS CETTE LIGNE, la photo existante n'apparaissait pas à l'édition : le champ s'ouvrait
          vide alors que l'article en avait une, et on ne pouvait ni la voir ni la corriger — juste
          en coller une autre à l'aveugle. Le `|| ""` suit la règle du reste de cette fonction :
@@ -218,9 +249,7 @@ function Inventaire({ embedded = false }) {
             <div className="row3">
               <Field label="Quantité initiale" type="number" min="0" value={form.quantity} onChange={set("quantity")} />
               <Field label="Prix unitaire HT (€)" inputMode="decimal" autoComplete="off" value={form.unit_price} onChange={set("unit_price")} />
-              <SelectField label="TVA (%)" value={form.tax_rate} onChange={set("tax_rate")}>
-                {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
-              </SelectField>
+              <ChoixTva value={form.tax_rate} onChange={set("tax_rate")} />
             </div>
             {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
                 adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
@@ -371,9 +400,9 @@ function Inventaire({ embedded = false }) {
                 <div className="row3">
                   <Field label="Quantité" type="number" min="0" value={editing.quantity} onChange={setEdit("quantity")} />
                   <Field label="Prix unitaire HT (€)" inputMode="decimal" autoComplete="off" value={editing.unit_price} onChange={setEdit("unit_price")} />
-                  <SelectField label="TVA (%)" value={String(editing.tax_rate)} onChange={setEdit("tax_rate")}>
-                    {TVA_RATES.map((r) => <option key={r} value={r}>{r} %</option>)}
-                  </SelectField>
+                  {/* `key` : le taux gardé proposé est celui de CET article. Au clavier, on en ouvre un
+                      autre sans fermer la fenêtre — le voile ne retient pas la tabulation. */}
+                  <ChoixTva key={editing.id} value={editing.tax_rate} onChange={setEdit("tax_rate")} />
                 </div>
                 {/* PHOTO PAR LIEN (migration 133). L'aperçu est immédiat : sans lui on colle une
                     adresse, on enregistre, et on découvre au rechargement qu'elle ne pointait sur
