@@ -14,6 +14,9 @@ const db = require('../config/database.js');
 const { resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 // Les montants du règlement se TAPENT en français (« 30,50 ») : cf. lib/montantSaisi.js.
 const { lireMontant } = require('../lib/montantSaisi.js');
+// Le total que le règlement doit atteindre est celui du PDF, par la fonction qui le calcule.
+const { ventilerTva } = require('../lib/facturx.js');
+const { montantFr } = require('../lib/montants.js');
 
 /* Colonnes de `invoice` arrivées par migration. Écrire une colonne absente ferait échouer
  * l'INSERT ENTIER : on perdrait la facture pour un choix facultatif d'émettrice ou de modèle. */
@@ -222,6 +225,44 @@ const invoiceShopRequest = async (req, res) => {
         // ligne porte le sien et la ventilation se fait à l'édition (cf. ventilerTva).
         const taux = [...new Set(lines.map((l) => Number(l.tax_rate)))];
         const tauxEntete = taux.length === 1 ? taux[0] : null;
+
+        /* LA RÉPARTITION DOIT TOMBER SUR LE TOTAL DE LA FACTURE — et se vérifie ICI, avant le numéro.
+         *
+         * Les parts s'enregistraient sans que personne les additionne : 150 € « en espèces » pour
+         * 60 € dus partaient dans `payment_split`, et la facture imprimait des « Moyens et montants
+         * réglés » qui ne bouclaient pas avec son propre total. La caisse et /factures le refusent ;
+         * ici, l'écran envoyait même le dépassement qu'il affichait en rouge.
+         *
+         * LE TOTAL EST CELUI DU PDF, par la fonction qui le calcule (`ventilerTva`), sur les lignes
+         * TELLES QU'ELLES VONT S'ÉCRIRE plus bas : le HT au centime, le taux de la ligne, la TVA
+         * arrondie PAR TAUX.
+         *
+         * UN CENTIME DE TOLÉRANCE, ET IL SERT. Le panier du stagiaire, la carte de la demande et la
+         * fenêtre de facturation additionnent les TTC de ligne : c'est CE montant qui a été encaissé,
+         * et que l'écran envoie. Il s'écarte d'un centime du total de la facture sur près d'un panier
+         * à deux taux sur quatre (33,33 € à 20 % et 7,77 € à 5,5 % : 48,19 € encaissés, 48,20 €
+         * facturés), et de loin en loin sur un seul, quand la TVA tombe sur un demi-centime (63 € à
+         * 5,5 %) — jamais de deux, relevé sur des millions de paniers tirés au hasard.
+         *
+         * L'ÉCART SE COMPTE DONC EN CENTIMES ENTIERS. En flottant, « un centime » vaut tantôt
+         * 0,00999…, tantôt 0,01000…5 : `Math.abs(somme - ttc) > 0.01` accepte 60,01 € pour 60 € et
+         * refuse 120,01 € pour 120 €. Ce règlement-là, c'est l'écran qui l'a calculé : le refuser
+         * laisserait l'école sans recours, le solde du dernier moyen ne se saisit pas.
+         *
+         * Aucune part : rien à vérifier, la facture naît PAYÉE avec `payment_method` seul, comme avant. */
+        if (parts.length) {
+            const ttc = ventilerTva({
+                amountNet: totalHt, tvaExoneree: false, taxRate: tauxEntete,
+                lines: lines.map((l) => ({ amount: Number((Number(l.unit_price_ht) * l.qty).toFixed(2)), taxRate: Number(l.tax_rate) })),
+            }).grand;
+            const somme = parts.reduce((s, p) => s + p.amount, 0);
+            if (Math.abs(Math.round(somme * 100) - Math.round(ttc * 100)) > 1) {
+                return res.status(422).json({
+                    message: `La répartition des paiements (${montantFr(somme)}) ne correspond pas au total à régler (${montantFr(ttc)}).`,
+                });
+            }
+        }
+
         /* ENTITÉ ÉMETTRICE choisie par l'organisme au moment de facturer (le corps de la requête
          * l'emporte sur celle figée à la commande). Avec une émettrice, le numéro vient de SA
          * séquence et de SON gabarit, comme à la caisse — sans elle on garde le compteur BQ
