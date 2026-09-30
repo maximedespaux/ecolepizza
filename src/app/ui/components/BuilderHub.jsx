@@ -1,9 +1,10 @@
 import { Icon } from "./Icon.jsx";
 
-/** Panneau d'accueil d'un outil : cartes de choix (créer / calculer / consulter…). */
-export default function BuilderHub({ cards }) {
+/** Panneau d'accueil d'un outil : cartes de choix (créer / calculer / consulter…).
+ * `className` : modificateur de grille (ex. « hub-3 » pour figer trois colonnes). */
+export default function BuilderHub({ cards, className = "" }) {
   return (
-    <div className="hub-grid">
+    <div className={"hub-grid" + (className ? " " + className : "")}>
       {cards.map((c) => (
         <button key={c.title} className="hub-card" onClick={c.onClick} style={{ borderTopColor: c.color }}>
           <span className="hub-top">
