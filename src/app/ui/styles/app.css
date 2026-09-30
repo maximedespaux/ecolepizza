@@ -395,6 +395,12 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
    posé à l'intérieur ne servait à rien puisque rien ne contraignait jamais la largeur. Avec le
    plancher levé : `439.5px 439.5px`, et le texte se coupe enfin. */
 .grid > *{min-width:0}
+/* Une carte `cols-2` DANS une grille à deux colonnes tient toute la largeur (elle enjambe les deux) :
+   sans cette règle, `grid-template-columns` posé sur une carte `display:block` restait inerte et la
+   carte gardait une demi-largeur (relevé le 2026-09-30 sur la fiche stagiaire : Règlement, Projet et
+   Entreprise voulaient la pleine largeur, aucune ne l'avait). En une seule colonne (≤1050 px) 1/-1
+   vaut la colonne unique : rien ne change. */
+.grid.cols-2 > .card.cols-2{grid-column:1 / -1}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-1),var(--relief);transition:box-shadow .2s var(--ease),transform .2s var(--ease),border-color .2s var(--ease);animation:rise .45s var(--ease) backwards}
 .card.hover{cursor:pointer}
 .card.hover:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 14px 32px -18px rgba(44,51,113,.32)}
@@ -6696,16 +6702,20 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .regl-sem{font-size:12px;color:var(--muted)}
 .regl-prix{margin-left:auto;font-size:13px;color:var(--muted)}
 .regl-prix b{color:var(--text)}
-.regl-ligne{display:grid;grid-template-columns:120px 116px 1fr auto;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border-soft)}
-.regl-ligne-t{font-size:13px;font-weight:600;color:var(--text)}
-.regl-ligne-montant{font-size:14px}
+/* Une ligne (acompte / solde) en flex qui S'ENROULE : intitulé, montant et état tiennent le haut, la
+   zone de saisie suit tant qu'il y a la place puis passe en pleine ligne. flex-wrap répond à la largeur
+   de la CARTE (une demi-carte de la fiche fait ~528 px), là où une règle @media ne verrait que celle de
+   la fenêtre — d'où l'ancienne grille rigide à quatre colonnes qui débordait à mi-largeur. */
+.regl-ligne{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:9px 0;border-top:1px solid var(--border-soft)}
+.regl-ligne-t{flex:0 0 auto;min-width:90px;font-size:13px;font-weight:600;color:var(--text)}
+.regl-ligne-montant{flex:0 0 auto;min-width:74px;font-size:14px}
 .regl-montant-inp{max-width:112px;padding:5px 8px;font-size:13px}
-.regl-ligne-etat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.regl-ligne-etat{flex:1 1 150px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .regl-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700}
 .regl-chip.ok{background:color-mix(in srgb,var(--green) 16%,var(--surface));color:var(--green)}
 .regl-chip.attente{background:var(--surface3);color:var(--muted)}
 .regl-src{font-size:11.5px;color:var(--dim)}
-.regl-ligne-saisie{justify-self:end;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.regl-ligne-saisie{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px 12px;min-width:0}
 .regl-datelbl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
 .regl-date{padding:4px 8px;font-size:12.5px}
 .regl-nomig{font-size:11.5px}
@@ -6719,8 +6729,9 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .regl-facture-st.st-payee{background:color-mix(in srgb,var(--green) 16%,var(--surface));color:var(--green)}
 .regl-facture-st.st-impayee{background:color-mix(in srgb,var(--ember1) 14%,var(--surface));color:var(--ember1)}
 @media(max-width:640px){
-  .regl-ligne{grid-template-columns:minmax(0,1fr);gap:4px}
-  .regl-ligne-saisie{justify-self:start;align-items:flex-start}
+  /* Sur un vrai téléphone, chaque partie prend sa ligne (état et saisie à gauche). */
+  .regl-ligne-etat{flex-basis:100%}
+  .regl-ligne-saisie{flex-basis:100%;justify-content:flex-start}
   .regl-moyen{justify-content:flex-start}
   .regl-ref{max-width:none;flex:1 1 auto}
 }
