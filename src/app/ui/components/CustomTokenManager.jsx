@@ -86,6 +86,7 @@ export default function CustomTokenManager({ catalog, onClose, onSaved }) {
             Combine jetons et texte. Dates, en jours : <code>{"{Jour1|+30}"}</code>, <code>{"{endDate|-1}"}</code>.
             Montants : <code>{"{Prix|-450}"}</code>, <code>{"{Prix|*20%}"}</code> (20 % du prix),{" "}
             <code>{"{Prix|*90%}"}</code> (remise de 10 %), <code>{"{Prix|/3}"}</code> (un tiers).
+            {" "}Entre <b>jetons</b> : <code>{"{Prix|/{Heures}}"}</code> (coût horaire), <code>{"{Prix|-{Acompte}}"}</code> (reste à payer).
             {" "}La <b>clé</b> d'un jeton ne change plus une fois enregistrée — les modèles la désignent ; le <b>libellé</b>, si.
           </p>
           {status && <div className={"status " + (status.type || "")} style={{ marginBottom: 8 }}>{status.message}</div>}

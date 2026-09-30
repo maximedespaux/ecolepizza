@@ -28,6 +28,8 @@ const V = {
     Prix: eur(1500), Mille: eur(1000), TTC: eur(1200), Neuf: '900 €',
     Petit: '2,15 €', Cent: '0,35 €', Sou: '0,05 €',
     Annee: '2026', Heures: '35', Jour1: '02/06/2026', Titre: 'Pizzaïolo', Vide: '',
+    // Pour les calculs ENTRE jetons : l'opérande est un autre jeton (montant, taux, négatif).
+    Acompte: '450 €', Taux: '0,2', Neg: '-100',
 };
 const calc = (f) => serveur.applyTemplate(f, V);
 
@@ -89,6 +91,21 @@ test('« % » APRÈS + OU − EST REFUSÉ — donc visible, jamais mal compris',
     assert.strictEqual(calc('{Prix|+10%}'), '{Prix|+10%}');
 });
 
+test('UN CALCUL ENTRE JETONS : l\'opérande est UN AUTRE JETON, pas un nombre en dur', () => {
+    /* La demande du 2026-09-30 : « faire un calcul entre jetons ». {Prix|/{Heures}} = le coût
+       horaire, {Prix|-{Acompte}} = le reste — sans écrire 44 ni 450 en dur dans la formule. */
+    assert.strictEqual(calc('{Prix|/{Heures}}'), eur(42.86), '1500 ÷ 35, au centime');
+    assert.strictEqual(calc('{Prix|-{Acompte}}'), eur(1050), 'le reste : prix moins l\'acompte');
+    assert.strictEqual(calc('{Prix|+{Acompte}}'), eur(1950));
+    assert.strictEqual(calc('{Prix|*{Taux}}'), eur(300), '20 % du prix, le taux étant un jeton');
+    // « − opérande » quand l'opérande est négatif : 1500 − (−100) = 1600.
+    assert.strictEqual(calc('{Prix|-{Neg}}'), eur(1600));
+    // Le texte autour reste, les milliers et le centime aussi.
+    assert.strictEqual(calc('coût : {Prix|/{Heures}} / h'), `coût : ${eur(42.86)} / h`);
+    // Un opérande sans nombre (vide, absent) : la formule ne calcule pas — visible à l'aperçu.
+    assert.strictEqual(calc('{Prix|/{Titre}}'), eur(1500), 'diviser par du texte ne fait rien');
+});
+
 test('les étapes s\'enchaînent par un jeton intermédiaire', () => {
     // « 20 % de ce qui reste à payer » : le reste d'abord, le pourcentage ensuite.
     const out = serveur.resolveCustomTokens([
@@ -109,6 +126,9 @@ test('L\'APERÇU ET LE DOCUMENT CALCULENT PAREIL, formule par formule', async ()
         '{Prix|+99,5}', '{Annee|+1}', '{Heures|/7}', '{Prix|/0}', '{Prix|-10%}', '{Jour1|*2}',
         '{Jour1|-1}', '{Jour1|+30}', '{Jour1|-1,5}', '{Titre|-5}', '{Vide|*2}', '{Inconnu}',
         'du {Jour1} au {Jour1|+4}', 'Reste : {Prix|-450}, soit {Prix|/3} par mois',
+        // Calculs ENTRE jetons — l'opérande est un jeton (et les cas limites : texte, absent, négatif).
+        '{Prix|/{Heures}}', '{Prix|-{Acompte}}', '{Prix|+{Acompte}}', '{Prix|*{Taux}}', '{Prix|-{Neg}}',
+        '{Prix|/{Titre}}', '{Prix|/{Inconnu}}', 'coût : {Prix|/{Heures}} par {Titre}',
     ];
     for (const f of FORMULES) assert.strictEqual(applyTemplate(f, V), calc(f), f);
 });

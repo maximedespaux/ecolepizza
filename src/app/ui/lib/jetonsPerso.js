@@ -73,9 +73,31 @@ export function calculer(value, op, n, pct = false) {
 
 const REFERENCE = /\{\s*([^{}|]+?)\s*(?:\|\s*(?:([+-]?\d+(?:[.,]\d+)?)|([*/])\s*(\d+(?:[.,]\d+)?)\s*(%?))\s*)?\}/g;
 
+// Le NOMBRE contenu dans la valeur d'un jeton (« 1 780 € » → « 1780 »), pour lire l'OPÉRANDE d'un
+// calcul entre jetons ; null s'il n'y en a pas. Cf. injecterOperandes (POURQUOI côté serveur).
+function nombreDe(value) {
+  const m = String(value == null ? "" : value).match(/-?\d(?:[\d\s\u00a0\u202f]*\d)?(?:[.,]\d+)?/);
+  return m ? m[0].replace(/[\s\u00a0\u202f]/g, "") : null;
+}
+
+// {Base|op {Opérande}} : un calcul entre deux jetons, ramené à un opérande LITTÉRAL que le calcul
+// existant sait résoudre. Copie conforme du serveur (customtokens.js).
+const REF_CALC = /\{\s*([^{}|]+?)\s*\|\s*([+\-*/])\s*\{\s*([^{}|]+?)\s*\}\s*\}/g;
+function injecterOperandes(template, values) {
+  return String(template || "").replace(REF_CALC, (tout, base, op, operande) => {
+    const n = nombreDe(values[operande]);
+    if (n == null) return `{${base}}`;
+    if (op === "+" || op === "-") {
+      const signe = (op === "-") !== n.startsWith("-") ? "-" : "+";
+      return `{${base}|${signe}${n.replace(/^-/, "")}}`;
+    }
+    return `{${base}|${op}${n}}`;
+  });
+}
+
 /** Remplit un modèle de jeton personnalisé à partir d'une table de valeurs { clé: valeur }. */
 export function applyTemplate(template, values) {
-  return String(template || "").replace(REFERENCE, (tout, ref, decalage, op, facteur, pct) => {
+  return String(injecterOperandes(template, values)).replace(REFERENCE, (tout, ref, decalage, op, facteur, pct) => {
     let v = values[ref];
     if (v == null) v = "";
     if (decalage) {
