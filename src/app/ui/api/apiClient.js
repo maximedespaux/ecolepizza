@@ -587,6 +587,13 @@ export function updateStagiaire(id, payload) {
 export function deleteStagiaire(id) {
   return request(`/stagiaires/${id}`, { method: "DELETE" });
 }
+// Suivi du règlement (acompte / solde) d'un stagiaire — un bloc par dossier.
+export function getReglements(learnerId) {
+  return request(`/stagiaires/${learnerId}/reglements`);
+}
+export function updateReglement(learnerId, enrollmentId, payload) {
+  return request(`/stagiaires/${learnerId}/reglement/${enrollmentId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 
 export function resetStagiairePassword(id) {
   return request(`/stagiaires/${id}/reset-password`, { method: "POST" });

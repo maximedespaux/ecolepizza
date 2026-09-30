@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -12,7 +12,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dossierAffiche } from "../lib/lienDossier.js";
 import { UserContext } from "../context/UserContext.jsx";
-import { canOpen, NAV } from "../lib/nav.js";
+import { canOpen, NAV, peutEcrire } from "../lib/nav.js";
 import FicheIncomplete from "../components/FicheIncomplete.jsx";
 import { lignesProjet } from "../lib/projet.js";
 import { referentAvecCivilite } from "../lib/referent.js";
@@ -21,6 +21,7 @@ import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import PiecesReview from "../components/PiecesReview.jsx";
 import RemisesReview from "../components/RemisesReview.jsx";
 import EditStagiaireModal from "../components/EditStagiaireModal.jsx";
+import CarteReglement from "../components/CarteReglement.jsx";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
 import { initials, euro, dateHeure, dateFr } from "../lib/format.js";
 import { GROUPES_DOC, repartirDocuments, sansSignature, documentsHorsParcours } from "../lib/documentsDossier.js";
@@ -71,6 +72,11 @@ function StagiaireDetail() {
   const [status, setStatus] = useState(null);
   const [docs, setDocs] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
+  const [reglements, setReglements] = useState(null); // null = en cours de chargement
+  /* Le règlement se SAISIT par qui peut ÉCRIRE la rubrique Stagiaires — le bureau, ou un membre à
+     qui l'organisme l'a déléguée. Exactement ce que le serveur exige (authorizeRoles honore la
+     délégation sur le chemin /stagiaires), et pas une liste de rôles en dur (cf. peutEcrire). */
+  const peutEncaisser = peutEcrire(user, "/stagiaires");
   const [templates, setTemplates] = useState([]);
   const [prep, setPrep] = useState({ slug: "", title: "", enrollment_ids: [] });
   const [blockedRules, setBlockedRules] = useState([]); // règles non respectées pour le modèle+dossiers choisis
@@ -93,9 +99,14 @@ function StagiaireDetail() {
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
   }
+  // Le règlement (acompte / solde) par dossier : chargé à part, et rechargé après chaque saisie.
+  function loadReglements() {
+    return getReglements(id).then((r) => setReglements(r.data || [])).catch(() => setReglements([]));
+  }
   useEffect(() => {
     loadLearner();
     loadDocs();
+    loadReglements();
   }, [id]);
 
   // Charge la liste des modèles de documents (+ feuilles d'émargement) sélectionnables.
@@ -122,7 +133,7 @@ function StagiaireDetail() {
   }
 
   // Rafraîchit documents + parcours automatiquement (signatures faites ailleurs, envois…).
-  useAutoRefresh(() => { loadDocs(); setParcoursRefresh((n) => n + 1); }, { interval: 20000 });
+  useAutoRefresh(() => { loadDocs(); loadReglements(); setParcoursRefresh((n) => n + 1); }, { interval: 20000 });
 
   // Vérifie côté serveur si le modèle choisi s'applique aux dossiers sélectionnés
   // (règles / conditions de l'organisme). On n'interdit rien en dur : on prévient.
@@ -637,6 +648,10 @@ function StagiaireDetail() {
           <Row label="Contrat actuel" value={l.current_contract} />
           <Row label="N° de sécurité sociale" value={l.social_security} />
         </Card>
+
+        {/* LE RÈGLEMENT (carte demandée le 2026-09-30) : acompte et solde, payés ou dus, par dossier
+            — d'après les factures, ou coché à la main. Pleine largeur, sous le financement. */}
+        <CarteReglement learnerId={id} reglements={reglements} canEdit={peutEncaisser} onSaved={loadReglements} />
 
         <Card title={T("target", "Projet")}>
           {projet.length ? projet.map((r) => <Row key={r.label} label={r.label} value={r.value} />)

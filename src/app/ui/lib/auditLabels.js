@@ -43,6 +43,8 @@ const ACTION_LABEL = {
     'document.sign_externe': ['Document signé par un intervenant', G],
     'document.delete': ['Document supprimé', R],
     'enrollment.delete': ['Stagiaire retiré d\'une session', R],
+    // Le suivi du règlement (acompte / solde) saisi à la main sur la fiche stagiaire (2026-09-30).
+    'enrollment.reglement': ['Règlement d\'un dossier mis à jour', A],
 
     // Facturation et ventes
     'invoice.create': ['Facture créée', G],

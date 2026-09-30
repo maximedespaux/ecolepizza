@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2407 tests — 2400 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2421 tests — 2414 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,28 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**194 est À JOUER** (`194_enrollment_reglement.sql`, le SUIVI DU RÈGLEMENT d'un dossier — carte « Règlement » de la
+fiche stagiaire, demandée le 2026-09-30 : « savoir si le stagiaire a payé l'acompte et le reste »). Deux colonnes DATE
+sur `enrollment` : `acompte_paye_le` et `solde_paye_le`. LOGIQUE HYBRIDE, la facture d'abord (règle pure, éprouvée sans
+base : `lib/reglementDossier.js`) : une ligne (acompte / solde) portée par une FACTURE se lit d'après la table `payment`
+(règlements REUSSI) et ne se saisit pas ; SANS facture, l'école coche « payé le … » — ce sont ces deux dates. Le MONTANT
+de l'acompte, lui, réutilise la colonne `enrollment.acompte` qui existait DÉJÀ mais n'avait aucun chemin d'écriture : la
+carte lui en donne un (acompte convenu, saisi à la main). ⚠️ EFFET DE BORD ASSUMÉ : un modèle qui emploie le jeton
+{Acompte} (le CHAMP, pas le jeton personnalisé de l'organisme) ou {Reste à payer} imprimera désormais ce montant au lieu
+d'un blanc — ces jetons lisent `enrollment.acompte`, resté nul jusqu'ici. Le reste à payer = prix − acompte (prix = prix
+du dossier, sinon tarif de la formation, `montantDuDossier`). Écriture réservée à qui peut ÉCRIRE la rubrique Stagiaires
+(`peutEcrire`, délégation comprise — le serveur l'exige aussi, `authorizeRoles` honore la délégation sur /stagiaires).
+Sans la migration, rien ne casse : la carte lit le règlement d'après les seules factures, le montant de l'acompte se
+saisit quand même (sa colonne préexiste), et cocher « payé le … » répond 503 « migration 194 non jouée ». **Elle se
+vérifie par l'API, sans SQL** : cocher « acompte payé le … » sur un dossier SANS facture répond 200 (et non 503), puis
+`GET /api/stagiaires/:id/reglements` rend `acompte.date` rempli et `acompte.source: "manuel"`. Ou une requête, qui doit
+rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='enrollment' AND column_name IN ('acompte_paye_le','solde_paye_le');`
+⚠️ Son revert efface les deux dates cochées à la main (les paiements portés par des factures restent, ils vivent dans
+`payment`) ; la colonne `acompte` n'est PAS touchée (elle préexiste). Tests : `reglement-dossier.test.js` (la règle pure),
+`reglement-fiche.test.js` (les routes : 422 montant illisible, 503 sans la 194, GET assemblé).
 
 **193 est À JOUER** (`193_memo_fichiers.sql`, les PIÈCES JOINTES d'un mémo — demandées le 2026-09-30 : « joindre une image au
 mémo, deux au plus, une image collée ou un PDF »). Une table `memo_fichier` : `memo_id` (ON DELETE CASCADE : les pièces partent
