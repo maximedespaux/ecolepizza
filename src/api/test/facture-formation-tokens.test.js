@@ -34,7 +34,10 @@ const dataFacture = (extra = {}) => ({
     number: 'FACT-2026-0007', typeLabel: 'Facture', issueDate: '20260522', dueDate: null,
     amountNet: 1780, tvaExoneree: true, lines: [{ name: 'Formation', amount: 1780 }],
     buyer: { name: 'SARL LE PETIT MITRON', siret: '12345678900012', address: { line: '7 rue Joseph Boué', zip: '09140', city: 'OUST' } },
-    buyerFields: null, formation: FORMATION, ...extra,
+    buyerFields: null, formation: FORMATION,
+    // Un seul dossier : l'acompte total = son acompte, et la liste ne contient que lui.
+    acompteTotal: 450, groupStagiaires: [{ civility: 'Monsieur', first_name: 'Anthony', last_name: 'MUNOZ' }],
+    ...extra,
 });
 const ORG = { legal_name: 'École Pizza', town: 'Lannemezan', zip_code: '65300', siret: '87995513600012', naf_ape: '8559', nda: '76650098965' };
 
@@ -78,8 +81,27 @@ test('invoiceCtx : la formation du dossier alimente Champs documents, formations
     assert.strictEqual(eur(t['Reste à payer']), '1 330 €');
 });
 
+test('FACTURE D\'ENTREPRISE (plusieurs stagiaires) : acompte SOMMÉ, liste des stagiaires, un seul total', () => {
+    const ctx = invoiceCtx(ORG, dataFacture({
+        amountNet: 3560, lines: [{ name: 'F1', amount: 1780 }, { name: 'F2', amount: 1780 }],
+        acompteTotal: 900, // 450 + 450
+        groupStagiaires: [
+            { civility: 'Monsieur', first_name: 'Anthony', last_name: 'MUNOZ' },
+            { civility: 'Madame', first_name: 'Léa', last_name: 'DURAND' },
+        ],
+    }));
+    assert.strictEqual(ctx.groupStagiaires.length, 2, 'le groupe est exposé à la facture');
+    const t = resolveTokens(ctx);
+    assert.strictEqual(eur(t.Acompte), '900 €', 'la SOMME des acomptes des dossiers, pas seulement le premier');
+    assert.strictEqual(eur(t['Reste à payer']), '2 660 €', '3560 − 900');
+    assert.strictEqual(t['Nombre stagiaires'], '2');
+    // {Stagiaires} : le tableau nomme les deux (le bloc {#Stagiaires} s'étend, lui, dans htmlfill).
+    assert.match(t.Stagiaires, /MUNOZ/);
+    assert.match(t.Stagiaires, /DURAND/);
+});
+
 test('SANS formation (vente boutique) : rien n\'est ajouté — les factures existantes ne changent pas', () => {
-    const ctx = invoiceCtx(ORG, dataFacture({ formation: null, buyer: { name: 'Client', siret: null, address: {} }, amountNet: 30, lines: [{ name: 'Article', amount: 30 }] }));
+    const ctx = invoiceCtx(ORG, dataFacture({ formation: null, acompteTotal: 0, groupStagiaires: [], buyer: { name: 'Client', siret: null, address: {} }, amountNet: 30, lines: [{ name: 'Article', amount: 30 }] }));
     assert.deepStrictEqual(ctx.formations, []);
     assert.ok(!('training_program.title' in ctx.fields), 'aucun champ de formation ajouté');
     const t = resolveTokens(ctx);

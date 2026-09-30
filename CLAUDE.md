@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-09-30** : **2427 tests — 2420 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-09-30** : **2428 tests — 2421 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -965,6 +965,15 @@ rien ne se transmet avant.
   `frDateLong`, découpe la chaîne pour ne pas décaler d'un fuseau). Aucune migration : {Acompte} lit
   `enrollment.acompte` (déjà écrit par la carte Règlement, cf. § 4, 194). Le PDF se vérifie sur
   l'instance déployée (LibreOffice), les jetons par `facture-formation-tokens.test.js`.
+- **Facture de formation d'ENTREPRISE (plusieurs stagiaires)** (2026-09-30, modèle
+  `facture-formation-entreprise`) : une facture d'entreprise porte une ligne par stagiaire.
+  `loadInvoiceData` charge désormais TOUS les dossiers de la facture (par `enrollment_id` ou ses
+  `invoice_line`) et en tire l'ACOMPTE TOTAL (somme des acomptes des dossiers → {Acompte}/{Reste à
+  payer} comptent sur la somme, pas sur le premier) et la LISTE des stagiaires
+  (`data.groupStagiaires`). `invoiceCtx` expose `groupStagiaires`, d'où **le bloc {#Stagiaires}** et
+  {Nombre stagiaires} FONCTIONNENT désormais sur une facture (avant : réservés aux documents
+  entreprise). La formation reste celle du PREMIER dossier (même session pour tous). Le cas mono-
+  dossier (facture-formation) est inchangé : somme d'un seul acompte, liste d'un seul stagiaire.
 
 - **Jetons personnalisés : un CALCUL ENTRE JETONS** (2026-09-30). Le modificateur `|` savait déjà
   opérer sur un nombre EN DUR (`{Prix|/3}`, `{Prix|-450}`, `{Prix|*20%}`) ; il accepte désormais un

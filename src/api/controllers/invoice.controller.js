@@ -239,32 +239,49 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         }))
         : [{ name: inv.description || inv.program_title || 'Prestation de formation', amount: Number(inv.amount_net) }];
 
-    /* LA FORMATION DU DOSSIER FACTURÉ — pour un modèle de facture NARRATIF (intitulé, dates,
-       heures, coût horaire, acompte / reste). Le dossier est celui de la facture, sinon celui de
-       sa PREMIÈRE ligne (une facture d'entreprise en porte une par stagiaire ; on prend la
-       formation commune). Absent — vente boutique, nom libre — : pas de formation, les jetons
-       correspondants restent vides et rien ne bloque (findMissingTokens ne compte pas un field:
-       absent). Un ancien schéma (colonnes/tables manquantes) retombe sur « pas de formation ». */
+    /* LES DOSSIERS FACTURÉS — pour un modèle de facture NARRATIF. Le dossier de la facture, sinon
+       CEUX DE SES LIGNES (une facture d'entreprise en porte une par stagiaire). On en tire :
+         · la FORMATION commune (intitulé, dates, heures — celle du premier dossier ; sur une
+           facture de groupe ils partagent la même session) ;
+         · l'ACOMPTE TOTAL = la SOMME des acomptes des dossiers (une facture d'entreprise couvre
+           plusieurs stagiaires : leur reste à payer se calcule sur la somme, pas sur le premier) ;
+         · la LISTE des stagiaires, pour le bloc {#Stagiaires} et {Nombre stagiaires}.
+       Absent — vente boutique, nom libre — : rien, les jetons restent vides et ne bloquent pas
+       (findMissingTokens ne compte pas un field: absent). Un ancien schéma retombe sur « pas de
+       dossier ». */
     let formation = null;
+    let acompteTotal = 0;
+    let groupStagiaires = [];
     try {
-        const [[fo]] = await conn.query(
-            `SELECT p.title, p.code, p.hours, p.days, p.price,
+        const [dossiers] = await conn.query(
+            `SELECT e.acompte, e.price AS enroll_price,
+                    p.title, p.code, p.hours, p.days, p.price,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                     s.week, s.year, s.trainer,
-                    e.acompte, e.price AS enroll_price,
-                    l.civility, l.first_name, l.last_name
+                    l.civility, l.first_name, l.last_name, l.email, l.phone, l.opco,
+                    l.town, l.address, l.zip_code, l.birth_place, l.birthday
                FROM enrollment e
                JOIN training_session s ON s.id = e.session_id
                LEFT JOIN training_program p ON p.id = s.program_id
                LEFT JOIN learner l ON l.id = e.learner_id
               WHERE e.organization_id = ?
-                AND e.id = COALESCE(?, (SELECT il.enrollment_id FROM invoice_line il
-                                         WHERE il.invoice_id = ? AND il.enrollment_id IS NOT NULL
-                                         ORDER BY il.sort_order, il.id LIMIT 1))`,
+                AND (e.id = ? OR e.id IN (SELECT il.enrollment_id FROM invoice_line il
+                                           WHERE il.invoice_id = ? AND il.enrollment_id IS NOT NULL))
+              ORDER BY l.last_name, l.first_name`,
             [orgId, inv.enrollment_id || null, invoiceId]
         );
-        formation = fo || null;
+        if (dossiers.length) {
+            formation = dossiers[0];
+            acompteTotal = dossiers.reduce((sum, d) => sum + (Number(d.acompte) || 0), 0);
+            // Le bloc {#Stagiaires} lit des objets « stagiaire » (cf. stagiaireRowTokens).
+            groupStagiaires = dossiers.map((d) => ({
+                civility: d.civility, first_name: d.first_name, last_name: d.last_name,
+                email: d.email, phone: d.phone, opco: d.opco,
+                town: d.town, address: d.address, zip_code: d.zip_code,
+                birth_place: d.birth_place, birthday: d.birthday,
+            }));
+        }
     } catch (e) {
         if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
     }
@@ -307,6 +324,8 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
         templateSlug: inv.template_slug || null,
         // La formation du dossier facturé (null si la facture n'en désigne aucun) — cf. invoiceCtx.
         formation,
+        acompteTotal,       // somme des acomptes des dossiers → {Acompte} / {Reste à payer}
+        groupStagiaires,    // liste des stagiaires → bloc {#Stagiaires}, {Nombre stagiaires}
     };
 }
 
@@ -947,7 +966,9 @@ function invoiceCtx(org, data) {
         for (const [k, val] of Object.entries(champs)) if (val != null) fields[k] = val;
         formations = [{
             title: fo.title, code: fo.code, hours: fo.hours, days: fo.days,
-            enroll_price: v.base, price: v.base, acompte: fo.acompte,
+            // Acompte = la SOMME des dossiers (une facture d'entreprise en couvre plusieurs) ;
+            // {Reste à payer} = total facture − cette somme.
+            enroll_price: v.base, price: v.base, acompte: data.acompteTotal || 0,
             start_date: fo.start_date, end_date: fo.end_date, week: fo.week, year: fo.year, trainer: fo.trainer,
         }];
         if (estEntreprise && (fo.first_name || fo.last_name)) {
@@ -961,6 +982,8 @@ function invoiceCtx(org, data) {
         company: estEntreprise ? { name: data.buyer.name, siret: data.buyer.siret, address: a.line, zip_code: a.zip, town: a.city } : {},
         learner,
         formations,
+        // Le GROUPE de stagiaires du dossier facturé → bloc {#Stagiaires}, {Stagiaires}, {Nombre stagiaires}.
+        groupStagiaires: data.groupStagiaires || [],
         articles: data.lines || [],
         payments, // bloc {#Paiements}…{/Paiements}
         invoice: {
