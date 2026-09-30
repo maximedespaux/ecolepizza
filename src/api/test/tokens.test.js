@@ -29,6 +29,25 @@ test('SÉCURITÉ : les valeurs par stagiaire sont échappées (anti-XSS)', () =>
   assert.match(out, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
+test('une valeur en PUCE s\'imprime telle qu\'on l\'a tapée : « $& », « $\' », « $$ » ne sont pas des motifs', () => {
+  /* Relevé le 2026-09-30. La valeur d'une puce passait à `replace` en chaîne de remplacement, qui y
+     lit `$&` (la puce elle-même), `$'` (ce qui la suit), « $` » (ce qui la précède), `$$` (un seul
+     « $ »). La forme {Clé} passait déjà par une fonction : le test ci-dessus ne pouvait pas le voir. */
+  const puce = '<span data-token="Nom">Nom</span>';
+  for (const [tape, imprime] of [
+    ['Lot $& X', 'Lot $&amp; X'],
+    ['A $$ B', 'A $$ B'],
+    ['Fin $\' ici', 'Fin $\' ici'],
+    ['Début $` ici', 'Début $` ici'],
+  ]) {
+    assert.equal(expandGroupBlocks(`<p>{#Stagiaires}${puce}<br>{/Stagiaires}</p>`, [{ last_name: tape }]), `<p>${imprime}<br></p>`, tape);
+  }
+  // La conséquence, au rendu : « $& » réinsérait la puce, que la passe globale remplissait avec le
+  // stagiaire DU DOSSIER — la ligne d'un stagiaire du groupe imprimait le nom d'un autre.
+  const out = fillHtml(`<p>{#Stagiaires}${puce}<br>{/Stagiaires}</p>`, { groupStagiaires: [{ last_name: 'Lot $& X' }], learner: { last_name: 'DOSSIER' } });
+  assert.equal(out, '<p>Lot $&amp; X<br></p>');
+});
+
 test('jetons hors bloc restent intacts (résolus globalement ensuite)', () => {
   const out = expandGroupBlocks('{#Stagiaires}{Nom}{/Stagiaires} — {Formation}', GROUP);
   assert.match(out, /\{Formation\}$/); // laissé pour le passage global
