@@ -100,6 +100,17 @@ test('FACTURE D\'ENTREPRISE (plusieurs stagiaires) : acompte SOMMÉ, liste des s
     assert.match(t.Stagiaires, /DURAND/);
 });
 
+test('SANS ACOMPTE, la facture NE BLOQUE PAS : {Acompte} vide est facultatif', () => {
+    // Le bug relevé le 2026-09-30 : une facture d'acompte dont le dossier n'a pas d'acompte refusait
+    // de se générer (« 1 information attendue vide » → {Acompte}). Un acompte vide est normal.
+    const ctx = invoiceCtx(ORG, dataFacture({ acompteTotal: 0, groupStagiaires: [] }));
+    const t = resolveTokens(ctx);
+    assert.strictEqual(t.Acompte, '', 'euro(0) est vide');
+    const corps = '<p>MONTANT NET {Total HT} — Acompte : {Acompte} — Reste : {Reste à payer} — {Coût horaire}</p>';
+    const manquants = findMissingTokens([corps], ctx).map((m) => m.key);
+    assert.deepStrictEqual(manquants, [], `un acompte (ou coût horaire) vide ne doit pas bloquer : ${manquants.join(', ')}`);
+});
+
 test('SANS formation (vente boutique) : rien n\'est ajouté — les factures existantes ne changent pas', () => {
     const ctx = invoiceCtx(ORG, dataFacture({ formation: null, acompteTotal: 0, groupStagiaires: [], buyer: { name: 'Client', siret: null, address: {} }, amountNet: 30, lines: [{ name: 'Article', amount: 30 }] }));
     assert.deepStrictEqual(ctx.formations, []);
