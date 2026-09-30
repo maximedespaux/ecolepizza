@@ -146,9 +146,13 @@ test('les jetons qui manquaient sont proposés, chacun là où on le cherche', a
     const attendus = {
         'Nom financeur': 'Financeur (OPCO)', 'SIRET financeur': 'Financeur (OPCO)', 'Adresse financeur': 'Financeur (OPCO)',
         'Email financeur': 'Financeur (OPCO)', 'Téléphone financeur': 'Financeur (OPCO)', OPCO: 'Financeur (OPCO)',
-        Financement: 'Prix et financement', Prix: 'Prix et financement', Acompte: 'Prix et financement',
-        'Reste à payer': 'Prix et financement', 'Prix HT': 'Prix et financement', TVA: 'Prix et financement',
+        Financement: 'Prix et financement', Prix: 'Prix et financement',
+        'Prix HT': 'Prix et financement', TVA: 'Prix et financement',
         'Taux TVA': 'Prix et financement', 'Prix TTC': 'Prix et financement',
+        /* {Acompte} et {Reste à payer} ont été DÉPLACÉS dans « Stagiaire » le 2026-09-30 (avec le moyen
+           de paiement du règlement) : le règlement se suit sur la fiche stagiaire. */
+        Acompte: 'Stagiaire', 'Reste à payer': 'Stagiaire',
+        'Moyen acompte': 'Stagiaire', 'Réf acompte': 'Stagiaire', 'Moyen solde': 'Stagiaire', 'Réf solde': 'Stagiaire',
         'Date signature': 'Stagiaire', 'Nom signataire': 'Stagiaire', 'France Travail': 'Stagiaire',
         // Leur champ jumeau n'est pas coché en production : sans le jeton nommé, la donnée serait introuvable.
         'Lieu naissance': 'Stagiaire', Statut: 'Stagiaire', 'Fonction représentant': 'Entreprise', Formateur: 'Session',

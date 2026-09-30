@@ -80,6 +80,29 @@ test('EN CENTIMES : une facture de solde couverte au centime est payée ; un cen
     assert.strictEqual(presque.solde.paye, false, 'un centime manquant n\'est pas « presque payé »');
 });
 
+test('LE MOYEN DE PAIEMENT (migration 195) traverse le calcul sans rien y changer', () => {
+    // Séparément acompte / solde : un acompte par chèque, un solde par virement.
+    const r = calculerReglement({
+        prix: 1500, acompteConvenu: 450, acomptePayeLe: '2026-03-12',
+        acompteMoyen: 'CHEQUE', acompteRef: '12345', soldeMoyen: 'VIREMENT', soldeRef: 'VIR-2026-07', factures: [],
+    });
+    assert.strictEqual(r.acompte.moyen, 'CHEQUE');
+    assert.strictEqual(r.acompte.ref, '12345');
+    assert.strictEqual(r.solde.moyen, 'VIREMENT');
+    assert.strictEqual(r.solde.ref, 'VIR-2026-07');
+    // Passif : le montant et l'état ne bougent pas d'un moyen noté.
+    assert.strictEqual(r.acompte.paye, true);
+    assert.strictEqual(r.reste, 1050);
+});
+
+test('SANS MOYEN : les champs valent null (pas undefined), même forme partout', () => {
+    const r = calculerReglement({ prix: 1500, acompteConvenu: 450 });
+    assert.strictEqual(r.acompte.moyen, null);
+    assert.strictEqual(r.acompte.ref, null);
+    assert.strictEqual(r.solde.moyen, null);
+    assert.strictEqual(r.solde.ref, null);
+});
+
 test('UNE FACTURE ANNULÉE ne compte pour rien', () => {
     const r = calculerReglement({
         prix: 1500, acompteConvenu: 450, acomptePayeLe: '2026-03-12',

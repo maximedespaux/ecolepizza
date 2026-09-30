@@ -253,8 +253,17 @@ async function loadInvoiceData(conn, orgId, invoiceId) {
     let acompteTotal = 0;
     let groupStagiaires = [];
     try {
+        // Le moyen de paiement du règlement (migration 195) → {Moyen acompte}/{Réf acompte}/{Moyen
+        // solde}/{Réf solde} sur la facture. Colonnes optionnelles : sans elles on lit NULL — les
+        // ajouter en dur ferait échouer TOUTE la requête (donc perdre {Formation}, {Acompte}…) avant
+        // la 195.
+        const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
+        const colsMoyen = aMoyen
+            ? 'e.acompte_moyen, e.acompte_ref, e.solde_moyen, e.solde_ref,'
+            : 'NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref,';
         const [dossiers] = await conn.query(
             `SELECT e.acompte, e.price AS enroll_price,
+                    ${colsMoyen}
                     p.title, p.code, p.hours, p.days, p.price,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
@@ -970,6 +979,10 @@ function invoiceCtx(org, data) {
             // {Reste à payer} = total facture − cette somme.
             enroll_price: v.base, price: v.base, acompte: data.acompteTotal || 0,
             start_date: fo.start_date, end_date: fo.end_date, week: fo.week, year: fo.year, trainer: fo.trainer,
+            // Le moyen de paiement du règlement (migration 195), celui du PREMIER dossier (règlement
+            // global sur une facture de groupe) → {Moyen acompte}/{Réf acompte}/{Moyen solde}/{Réf solde}.
+            acompte_moyen: fo.acompte_moyen, acompte_ref: fo.acompte_ref,
+            solde_moyen: fo.solde_moyen, solde_ref: fo.solde_ref,
         }];
         if (estEntreprise && (fo.first_name || fo.last_name)) {
             learner = { civility: fo.civility, first_name: fo.first_name, last_name: fo.last_name };

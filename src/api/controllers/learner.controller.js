@@ -24,6 +24,7 @@ const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js'
 const { lireMontant } = require('../lib/montantSaisi.js');
 const { montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 const { calculerReglement } = require('../lib/reglementDossier.js');
+const { moyenValide } = require('../lib/moyensPaiement.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -943,8 +944,14 @@ const getReglements = async (req, res) => {
         const colsDates = aDates
             ? "DATE_FORMAT(e.acompte_paye_le, '%Y-%m-%d') AS acompte_paye_le, DATE_FORMAT(e.solde_paye_le, '%Y-%m-%d') AS solde_paye_le"
             : 'NULL AS acompte_paye_le, NULL AS solde_paye_le';
+        // Le moyen de paiement (migration 195) — mêmes précautions : sans les colonnes, on lit NULL et
+        // l'écran n'offre pas le sélecteur (`migration_195: false`).
+        const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
+        const colsMoyen = aMoyen
+            ? 'e.acompte_moyen, e.acompte_ref, e.solde_moyen, e.solde_ref'
+            : 'NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref';
         const [dossiers] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.price AS enroll_price, e.acompte, ${colsDates},
+            `SELECT e.id AS enrollment_id, e.price AS enroll_price, e.acompte, ${colsDates}, ${colsMoyen},
                     p.title AS program_title, p.code AS program_code, p.price AS tarif, s.year, s.week
                FROM enrollment e
                JOIN training_session s ON s.id = e.session_id
@@ -971,12 +978,19 @@ const getReglements = async (req, res) => {
                 [orgId, d.enrollment_id, d.enrollment_id]
             );
             const { montant: prix } = montantDuDossier(d.enroll_price, d.tarif);
-            const r = calculerReglement({ prix, acompteConvenu: d.acompte, acomptePayeLe: d.acompte_paye_le, soldePayeLe: d.solde_paye_le, factures });
+            const r = calculerReglement({
+                prix, acompteConvenu: d.acompte,
+                acomptePayeLe: d.acompte_paye_le, soldePayeLe: d.solde_paye_le,
+                acompteMoyen: d.acompte_moyen, acompteRef: d.acompte_ref,
+                soldeMoyen: d.solde_moyen, soldeRef: d.solde_ref,
+                factures,
+            });
             data.push({
                 enrollment_id: d.enrollment_id, program_title: d.program_title, program_code: d.program_code,
                 year: d.year, week: d.week,
                 acompte_convenu: d.acompte != null ? Number(d.acompte) : null, // pour préremplir le champ de saisie
                 migration_194: aDates, // l'écran n'offre la coche « payé le… » que si la 194 est jouée
+                migration_195: aMoyen, // … et le moyen de paiement que si la 195 est jouée
                 ...r,
             });
         }
@@ -1028,6 +1042,26 @@ const updateReglement = async (req, res) => {
                 if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
                 else if (/^\d{4}-\d{2}-\d{2}$/.test(String(v))) { sets.push(`${cle} = ?`); vals.push(v); }
                 else return res.status(422).json({ error: 'Date invalide (attendu AAAA-MM-JJ).' });
+            }
+        }
+
+        // Le moyen de paiement du règlement (195), séparément acompte / solde. Sans les colonnes, un
+        // refus lisible. Le moyen est l'un des moyens connus (ou vide) ; la référence, un texte court.
+        if (['acompte_moyen', 'solde_moyen', 'acompte_ref', 'solde_ref'].some((k) => k in b)) {
+            const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
+            if (!aMoyen) return res.status(503).json({ error: 'Le moyen de paiement arrive avec la migration 195 (non jouée).' });
+            for (const cle of ['acompte_moyen', 'solde_moyen']) {
+                if (!(cle in b)) continue;
+                const v = b[cle];
+                if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
+                else if (moyenValide(v)) { sets.push(`${cle} = ?`); vals.push(v); }
+                else return res.status(422).json({ error: 'Moyen de paiement inconnu.' });
+            }
+            for (const cle of ['acompte_ref', 'solde_ref']) {
+                if (!(cle in b)) continue;
+                const v = b[cle];
+                if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
+                else { sets.push(`${cle} = ?`); vals.push(String(v).trim().slice(0, 80)); }
             }
         }
 

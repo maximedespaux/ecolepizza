@@ -20,6 +20,8 @@ const { pointsPour, maximumExercice } = require('./bareme.js');
 // L'identifiant France Travail est chiffré au repos (migration 170) : le jeton imprime le CLAIR.
 const { decrypt } = require('./crypto.js');
 const { nomReferent } = require('./referentEntreprise.js');
+// Le moyen de paiement du règlement (migration 195) : {Moyen acompte}/{Moyen solde} impriment le LIBELLÉ.
+const { libelleMoyen } = require('./moyensPaiement.js');
 /* Les réponses du stagiaire (photos, partenaires) : la règle de rendu vit avec le registre. */
 const { valeursJetons } = require('./consentements.js');
 
@@ -144,6 +146,23 @@ const TOKEN_CATALOG = [
             { key: 'France Travail', label: 'Identifiant France Travail', sample: '1234567A',
               desc: 'L’identifiant France Travail du stagiaire, déchiffré au moment d’imprimer. '
                   + 'Vide si sa fiche n’en porte pas.' },
+            /* LE RÈGLEMENT — {Acompte} et {Reste à payer} ont été DÉPLACÉS ici depuis « Prix et
+               financement » le 2026-09-30 (même valeur, même résolution) : le règlement se suit sur la
+               fiche stagiaire (carte « Règlement »), à côté du moyen de paiement, séparément pour
+               l'acompte et pour le solde (migration 195). */
+            { key: 'Acompte', label: 'Acompte (€)', sample: '450 €',
+              desc: 'L’acompte enregistré sur l’inscription, symbole « € » compris.' },
+            { key: 'Reste à payer', label: 'Reste à payer (€)', sample: '1 050 €',
+              desc: 'Le prix du dossier moins l’acompte, symbole « € » compris.' },
+            { key: 'Moyen acompte', label: 'Acompte : moyen de paiement', sample: 'Chèque',
+              desc: 'Comment l’acompte a été réglé (espèces, chèque, virement, carte), tel que noté sur '
+                  + 'la carte « Règlement » de la fiche. Vide si rien n’a été noté.' },
+            { key: 'Réf acompte', label: 'Acompte : n° / référence', sample: '12345',
+              desc: 'Le n° de chèque ou la référence du virement de l’acompte. Vide sinon.' },
+            { key: 'Moyen solde', label: 'Solde : moyen de paiement', sample: 'Virement',
+              desc: 'Comment le solde (le reste) a été réglé. Vide si rien n’a été noté.' },
+            { key: 'Réf solde', label: 'Solde : n° / référence', sample: 'VIR-2026-07',
+              desc: 'Le n° de chèque ou la référence du virement du solde. Vide sinon.' },
         ],
     },
     /* LES RÉPONSES DU STAGIAIRE, IMPRIMÉES (2026-09-22) — photos et partenaires, deux questions
@@ -254,10 +273,9 @@ const TOKEN_CATALOG = [
             { key: 'Prix', label: 'Prix du dossier (€)', sample: '1 500 €',
               desc: 'Le prix de l’inscription, symbole « € » compris. Un document qui couvre plusieurs '
                   + 'formations (ou les stagiaires d’une entreprise) imprime leur somme.' },
-            { key: 'Acompte', label: 'Acompte (€)', sample: '450 €',
-              desc: 'L’acompte enregistré sur l’inscription, symbole « € » compris.' },
-            { key: 'Reste à payer', label: 'Reste à payer (€)', sample: '1 050 €',
-              desc: 'Le prix du dossier moins l’acompte, symbole « € » compris.' },
+            /* {Acompte} et {Reste à payer} ONT ÉTÉ DÉPLACÉS dans le groupe « Stagiaire » (le 2026-09-30,
+               avec le moyen de paiement du règlement) : leur résolution n'a pas bougé, seule leur place
+               dans la palette a changé. */
             { key: 'Prix HT', label: 'Prix HT (€)', sample: '1 500 €' },
             /* « 0 € » ÉTAIT IMPOSSIBLE : `euro(0)` rend une chaîne VIDE, exprès — un zéro imprimé
                sur une convention exonérée se lit comme une erreur de saisie. L'exemple montre donc
@@ -1296,6 +1314,9 @@ const OPTIONAL_TOKENS = new Set([
        sans acompte est normale, et la bloquer pour ça était le bug (relevé sur une facture d'acompte
        dont le dossier n'avait pas d'acompte). La ligne s'imprime simplement en blanc. */
     'Acompte', 'Reste à payer', 'Coût horaire',
+    /* LE MOYEN DE PAIEMENT du règlement (migration 195) : vide tant que l'école ne l'a pas noté sur la
+       carte « Règlement ». Une facture ne doit pas se bloquer parce que le moyen n'est pas renseigné. */
+    'Moyen acompte', 'Réf acompte', 'Moyen solde', 'Réf solde',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -1515,6 +1536,10 @@ function resolveTokens(ctx = {}) {
         // Dossier
         Financement: f.financing || '', Prix: euro(totalPrice), Offre: euro(totalPrice), Acompte: euro(totalAcompte),
         'Reste à payer': euro(totalPrice - totalAcompte),
+        /* Le moyen de paiement du règlement (migration 195) — celui du PREMIER dossier (une facture de
+           groupe partage un règlement global) ; {Moyen…} imprime le LIBELLÉ, {Réf…} le n° / la référence. */
+        'Moyen acompte': libelleMoyen(f.acompte_moyen), 'Réf acompte': f.acompte_ref || '',
+        'Moyen solde': libelleMoyen(f.solde_moyen), 'Réf solde': f.solde_ref || '',
         'Prix HT': euro(priceHT), TVA: euro(vatAmount),
         'Taux TVA': vatRate > 0 ? `${vatRate} %` : 'Exonérée', 'Prix TTC': euro(priceTTC),
         // Entreprise
