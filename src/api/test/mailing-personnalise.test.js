@@ -280,6 +280,22 @@ test('l\'écran dit où part la copie, et propose lien et image', () => {
     assert.match(page, /L'adresse doit commencer par http:\/\/ ou https:\/\//);
 });
 
+test('l\'image du mailing part en multipart (fetch direct), jamais par le helper JSON', () => {
+    /* LE DÉFAUT GELÉ (2026-10-01) : televerserImageMail passait son FormData au helper `request`, qui
+       force « Content-Type: application/json ». Le navigateur n'ajoute alors PAS la frontière
+       multipart (il ne la pose que si le Content-Type n'est pas déjà fixé), et le serveur parse le
+       multipart comme du JSON → 400 « Requête illisible (JSON invalide) » (reproduit sur l'API).
+       C'est CE qui faisait que le bouton « Image » « ne faisait rien ». L'upload doit se faire par un
+       fetch DIRECT, sans Content-Type, comme tous les autres envois de fichier (deposerPiece,
+       uploadPostImage, importDocumentFile…). Réintroduire le passage par `request` doit rougir. */
+    const client = sansCommentaires(lire(path.join(UI, 'api/apiClient.js')));
+    assert.match(client, /export async function televerserImageMail/, 'fetch direct ⇒ fonction async');
+    assert.match(client, /televerserImageMail[\s\S]*?new FormData\(\)[\s\S]*?fetch\(\s*`\$\{API_BASE_URL\}\/mailing\/images`/,
+        'construit un FormData et l’envoie par un fetch direct');
+    assert.doesNotMatch(client, /request\(\s*"\/mailing\/images"\s*,\s*\{\s*method:\s*"POST"/,
+        'le FormData ne repasse PAS par le helper qui force application/json');
+});
+
 test('la 180 range les images en base, et son revert dit ce qu\'il détruit', () => {
     const MIG = path.join(API, '..', '..', 'database', 'migrations');
     const aller = lire(path.join(MIG, '180_mail_images.sql'));

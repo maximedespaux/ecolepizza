@@ -882,10 +882,23 @@ export function getEnvoisMail() {
 /* LES IMAGES DU MAILING (migration 180) : déposées une fois, citées dans les messages par un
    marqueur `![nom](image:<id>)`. Elles partent en pièce jointe avec le courrier — jamais par une
    URL que le client mail irait chercher (il la bloquerait, et elle tracerait qui ouvre). */
-export function televerserImageMail(fichier) {
+export async function televerserImageMail(fichier) {
   const form = new FormData();
   form.append("image", fichier);
-  return request("/mailing/images", { method: "POST", body: form });
+  /* FETCH DIRECT, PAS `request` : ce dernier force « Content-Type: application/json ». Un corps
+     FormData envoyé avec cet en-tête n'obtient JAMAIS sa frontière multipart du navigateur (il ne
+     la pose que si le Content-Type n'est pas déjà fixé), et le serveur parse alors le multipart
+     comme du JSON → « Requête illisible (JSON invalide) » (prouvé en 400 sur l'API). D'où le bouton
+     « Image » qui « ne faisait rien ». Tous les autres envois de fichier passent par fetch pour
+     cette raison (cf. importDocumentFile, deposerPiece, uploadPostImage). */
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/mailing/images`, { method: "POST", credentials: "include", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Envoi de l'image échoué");
+    return data;
+  } finally { stopLoading(); }
 }
 export function getImagesMail() {
   return request("/mailing/images");
