@@ -57,7 +57,17 @@ function valeurNormalisee(k, v) {
   if (k === "email") return v.trim().toLowerCase();
   return v;
 }
-const sessLabel = (s) => `${s.program_code || s.program_title} · S${s.week} ${s.year}`;
+/* L'étiquette d'une session dans le menu « inscrire à une session » : LONGUE et sans ambiguïté —
+   code ET intitulé de la formation, semaine, puis les dates. Avec plusieurs sessions d'une même
+   formation, « RS7404 · S42 » seul ne suffit pas à choisir la bonne. */
+const frDateCourt = (d) => (d ? d.split("-").reverse().join("/") : "");
+const sessLabel = (s) => {
+  const titre = [s.program_code, s.program_title].filter(Boolean).join(" — ");
+  const dates = s.start_date
+    ? `${frDateCourt(s.start_date)}${s.end_date && s.end_date !== s.start_date ? ` → ${frDateCourt(s.end_date)}` : ""}`
+    : "";
+  return [titre, `S${s.week} ${s.year}`, dates].filter(Boolean).join(" · ");
+};
 const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
 
 export default function EntrepriseDetail() {
@@ -86,6 +96,11 @@ export default function EntrepriseDetail() {
    * dossier que cette personne porte seule n'a rien à faire dans la vue de son employeur.
    */
   const [enrollSessionId, setEnrollSessionId] = useState("");
+  /* LE CHOIX DE LA SESSION SE FAIT PAR RECHERCHE, plus par un menu déroulant : avec beaucoup de
+     sessions, dérouler et lire toute la liste était pénible. On tape (formation, semaine, date), on
+     choisit. `sessFocus` ouvre la liste tant qu'on est dedans. */
+  const [sessQ, setSessQ] = useState("");
+  const [sessFocus, setSessFocus] = useState(false);
   const [viewSessionId, setViewSessionId] = useState("");
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
@@ -603,11 +618,46 @@ export default function EntrepriseDetail() {
             )}
           </div>
 
-          <div className="field"><label>Session</label>
-            <select className="inp" value={enrollSessionId} onChange={(e) => setEnrollSessionId(e.target.value)}>
-              <option value="">Choisir une session</option>
-              {sessions.map((s) => <option key={s.id} value={s.id}>{sessLabel(s)}</option>)}
-            </select>
+          <div className="field" style={{ position: "relative" }}><label>Session</label>
+            {(() => {
+              const sel = sessions.find((s) => s.id === enrollSessionId);
+              if (sel) {
+                return (
+                  <span className="gs-search">
+                    <Icon name="calendar" size={14} aria-hidden="true" />
+                    <input readOnly value={sessLabel(sel)} />
+                    <button className="gs-clear" title="Changer de session"
+                      onClick={() => { setEnrollSessionId(""); setSessQ(""); }}><Icon name="x" size={13} /></button>
+                  </span>
+                );
+              }
+              const q = sessQ.trim().toLowerCase();
+              const filtrees = sessions.filter((s) => sessLabel(s).toLowerCase().includes(q)).slice(0, 50);
+              return (
+                <>
+                  <span className="gs-search">
+                    <Icon name="search" size={14} aria-hidden="true" />
+                    <input placeholder="Chercher une session (formation, semaine, date)…" value={sessQ}
+                      onChange={(e) => setSessQ(e.target.value)} onFocus={() => setSessFocus(true)}
+                      onBlur={() => setTimeout(() => setSessFocus(false), 150)} />
+                    {sessQ && <button className="gs-clear" onClick={() => setSessQ("")}><Icon name="x" size={13} /></button>}
+                  </span>
+                  {sessFocus && (
+                    <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4, maxHeight: 280, overflow: "auto" }}>
+                      {filtrees.length === 0
+                        ? <div className="cat-opt"><span className="hint">Aucune session ne correspond.</span></div>
+                        : filtrees.map((s) => (
+                          <div key={s.id} className="cat-opt" style={{ cursor: "pointer" }}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { setEnrollSessionId(s.id); setSessQ(""); setSessFocus(false); }}>
+                            {sessLabel(s)}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Stagiaires rattachés */}
