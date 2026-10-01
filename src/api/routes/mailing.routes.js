@@ -4,6 +4,7 @@ const {
     getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
     getRegles, creerRegle, modifierRegle, supprimerRegle,
     televerserImage, listerImages, servirImage, supprimerImage,
+    getSignature, saveSignature, apercuSignature,
 } = require('../controllers/mailing.controller.js');
 const { authenticateToken, authorizeRoles, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -45,5 +46,11 @@ router.get('/images', authorizeRoles(...ADMIN_ROLES), listerImages);
 router.post('/images', authorizeRoles(...ADMIN_ROLES), imageUpload.single('image'), televerserImage);
 router.get('/images/:id', authorizeRoles(...ADMIN_ROLES), servirImage);
 router.delete('/images/:id', authorizeRoles(...ADMIN_ROLES), supprimerImage);
+
+/* LA SIGNATURE DES E-MAILS (migration 197) — le bas de marque de chaque e-mail. Administration :
+   c'est l'image de l'organisme dans tout ce qu'il envoie. */
+router.get('/signature', authorizeRoles(...ADMIN_ROLES), getSignature);
+router.put('/signature', authorizeRoles(...ADMIN_ROLES), saveSignature);
+router.post('/signature/apercu', authorizeRoles(...ADMIN_ROLES), apercuSignature);
 
 module.exports = router;

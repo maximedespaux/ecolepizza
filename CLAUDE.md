@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-01** : **2453 tests — 2446 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-01** : **2464 tests — 2457 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,26 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 197, la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**197 est À JOUER** (`197_organisme_signature_email.sql`, la SIGNATURE des e-mails — demandée le 2026-10-01). Une colonne
+JSON sur `organization` : `email_signature`, à l'image de `logo_image` (une data URL en base). Elle porte les champs
+modifiables (sous-titre « Administration », site, liens Facebook/Instagram/YouTube, mention des labels) ET les images de la
+signature — un logo PROPRE à la signature (choisi par l'école, indépendant du logo de l'organisme) et jusqu'à 4 badges
+(Qualiopi/ICPF/cofrac…) — en data URL **PNG** (jamais WebP : Outlook ne l'affiche pas ; l'écran force le PNG,
+`reduireEnPngDataUrl`, le serveur refuse le reste). La signature paraît au bas de **CHAQUE** e-mail : un seul point
+d'injection, `coquille()` (mailTemplates.js, le squelette commun à tous les gabarits, message de groupe compris), qui rend
+`signatureHtml(signature(), o)` à la place du pied de page texte quand elle est configurée ; les images voyagent en pièce
+jointe `cid:`, ajoutées à chaque envoi par `mailer.js` (`signatureAttachments()`, même chemin que le logo). L'aperçu repasse
+les `cid:` en `data:` (`logoPourApercu`, étendu). Le nom, le téléphone, l'e-mail et l'adresse viennent de l'organisme, pas
+de la config. Règles : `lib/signatureEmail.js` (parse, validation, HTML, pièces jointes), lue par orgContext (4ᵉ requête
+isolée, cascade ER_BAD_FIELD_ERROR), l'éditeur dans Mailing → Signature. Le corps de l'enregistrement est plafonné (4
+badges, 200 Ko/image) pour tenir sous les 2 Mo d'`express.json`. Sans la migration, rien ne casse : les e-mails gardent leur
+pied de page texte, l'onglet Signature le dit (« migration 197 non jouée ») et l'enregistrement répond 503. **Elle se
+vérifie par l'API, sans SQL** : enregistrer une signature dans Mailing → Signature répond 200 (et non 503), puis
+`GET /api/mailing/signature` la rend. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='organization' AND column_name='email_signature';`
+⚠️ Son revert efface la signature (les e-mails reviennent au pied de page texte). Tests : `signature-email.test.js`.
 
 **196 est À JOUER** (`196_mail_regles_document.sql`, les règles d'e-mail déclenchées par un DOCUMENT + le CIBLAGE d'un
 stagiaire/entreprise — demandé le 2026-09-30, en prolongement des envois programmés (178/179)). Une règle partait jusqu'ici

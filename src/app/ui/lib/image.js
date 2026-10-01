@@ -219,3 +219,23 @@ export async function reduireEnDataUrl(file, profil = PROFILS.marque) {
     lecteur.readAsDataURL(blob);
   });
 }
+
+/**
+ * Une image de SIGNATURE D'E-MAIL : forcée en PNG, redimensionnée sous `maxPx`. Renvoie une data URL.
+ *
+ * POURQUOI PAS `reduireEnDataUrl` (WebP). Un e-mail voyage jusqu'à Outlook, dont le moteur de rendu
+ * (Word) N'AFFICHE PAS le WebP — une signature en WebP y sortirait en icône cassée. Le PNG est lu
+ * partout et garde la transparence d'un logo ou d'un badge. Pas de palier de qualité : le PNG est
+ * sans perte, on compte sur la petite taille des logos (le serveur refuse au-delà de son plafond).
+ */
+export async function reduireEnPngDataUrl(file, maxPx = 600) {
+  const img = await chargerRedressee(file);
+  const facteur = Math.min(1, maxPx / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * facteur));
+  canvas.height = Math.max(1, Math.round(img.height * facteur));
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height); // pas de fond : la transparence d'un logo reste
+  if (img.close) img.close();
+  return canvas.toDataURL("image/png");
+}

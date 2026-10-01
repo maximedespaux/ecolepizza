@@ -920,6 +920,19 @@ export function supprimerRegleMail(id) {
   return request(`/mailing/regles/${id}`, { method: "DELETE" });
 }
 
+/* LA SIGNATURE DES E-MAILS (migration 197) : logo, sous-titre, réseaux, badges, mention — au bas de
+   chaque e-mail. Le corps est du JSON (images en data URL PNG), donc le helper `request` convient ;
+   ce n'est PAS un envoi de fichier multipart. */
+export function getSignatureMail() {
+  return request("/mailing/signature");
+}
+export function saveSignatureMail(payload) {
+  return request("/mailing/signature", { method: "PUT", body: JSON.stringify(payload) });
+}
+export function apercuSignatureMail(payload) {
+  return request("/mailing/signature/apercu", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export function getSessions() {
   return request("/sessions");
 }

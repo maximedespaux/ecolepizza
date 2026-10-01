@@ -39,6 +39,10 @@ const EXCLUDED_EXACT = new Set([
     'archive_tree', 'company_archive_tree', 'company_steps', 'emargement_config', 'emargement_break_slug',
     'company_break_slug', 'needs_emargement', 'partner_fields',
     'mail_credentials', 'mail_reset', 'mail_forgot', 'mail_security', 'mail_notifications',
+    /* LA SIGNATURE DES E-MAILS (migration 197) : `organization.email_signature` est du JSON (logo et
+       badges en data-URL compris), un réglage de l'application — pas une donnée du dossier. Offerte
+       comme « champ », elle imprimerait son JSON ; en condition, elle ne dit rien d'un dossier. */
+    'email_signature',
     'avatar', 'profile_visibility', 'cadre', 'cadres_exclusifs',
     /* LE MOYEN DE PAIEMENT DU RÈGLEMENT (migration 195) : `enrollment.acompte_moyen` / `_ref` /
        `solde_moyen` / `_ref`. Ce ne sont pas des « Champs documents » — ils se saisissent sur la carte
