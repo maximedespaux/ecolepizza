@@ -152,7 +152,7 @@ test('LE FORMULAIRE : une section « Note » sous « Votre projet », et la frap
     assert.match(MODALE, /note_libre: "",/, 'dans l\'état initial : sans elle, `toForm` ne la relirait pas');
     const projet = MODALE.indexOf('>Votre projet</h3>');
     const note = MODALE.indexOf('id="note-libre-titre"');
-    const entreprise = MODALE.indexOf('{isPro && (', projet);
+    const entreprise = MODALE.indexOf('>Entreprise (employeur)</h3>', projet);
     assert.ok(projet > 0 && projet < note && note < entreprise, 'juste sous le projet, avant l\'entreprise');
     const zone = MODALE.slice(MODALE.indexOf('<textarea', note), MODALE.indexOf('/>', MODALE.indexOf('<textarea', note)));
     assert.doesNotMatch(zone, /maxLength/, 'un texte collé serait tronqué en silence, au milieu d\'une phrase');

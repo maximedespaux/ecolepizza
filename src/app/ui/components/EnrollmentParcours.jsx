@@ -181,7 +181,7 @@ const AUTRE = "__autre__";
  *     page sache quels documents les étapes montrent déjà.
  * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -274,7 +274,10 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
   }
 
   const h = data.header || {};
-  const headLine = [h.code, h.session, h.financing, h.opco].filter(Boolean).join(" · ");
+  /* LE TYPE DE DEVIS est sorti de cette ligne de texte : il se CHANGE ici, dossier par dossier, par
+     un petit menu (onChangeFinancing) — c'est la seule façon de le régler depuis le 2026-10-01. En
+     lecture seule (fiche entreprise, pas de onChangeFinancing), on garde le texte d'avant. */
+  const headLine = [h.code, h.session, h.opco].filter(Boolean).join(" · ");
   /* LA BARRE ET LES COMPTEURS NE PORTENT QUE LE DÛ. Une étape facultative (migration 188) reste
      dans la grille, faisable, mais hors du pourcentage — le serveur l'écarte des deux côtés de la
      fraction, la barre fait de même, sans quoi elle ne finirait jamais verte sous un « 100 % ». */
@@ -294,7 +297,20 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
         <h3 style={{ margin: 0, fontSize: 18 }}>Parcours</h3>
         <b style={{ color: "var(--green)", fontSize: 18 }} title="Étapes faites, dans n'importe quel ordre">{data.percent}%</b>
       </div>
-      {headLine && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{headLine}</div>}
+      {(headLine || onChangeFinancing || h.financing) && (
+        <div className="parc-sous">
+          {headLine && <span>{headLine}</span>}
+          {headLine && (onChangeFinancing || h.financing) && <span aria-hidden="true">·</span>}
+          {onChangeFinancing ? (
+            <select className="parc-devis" aria-label="Type de devis de ce dossier"
+              value={financingValue === "PROFESSIONNEL" ? "PROFESSIONNEL" : "PARTICULIER"}
+              onChange={(e) => onChangeFinancing(e.target.value)}>
+              <option value="PARTICULIER">Particulier</option>
+              <option value="PROFESSIONNEL">Professionnel</option>
+            </select>
+          ) : (h.financing && <span>{h.financing}</span>)}
+        </div>
+      )}
       {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est
           validé, ce qui attend l'école (reçu), ce qui attend le stagiaire (envoyé). */}
       <div className="parc-barre" role="img"

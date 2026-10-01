@@ -691,33 +691,13 @@ const updateLearner = async (req, res) => {
             } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
         }
 
-        // Le « type de devis » (financement) pilote le parcours documentaire, calculé à partir
-        // de enrollment.financing. On propage donc un CHANGEMENT aux dossiers concernés — mais
-        // sous deux gardes, absentes jusqu'ici.
-        //
-        // 1. SEULEMENT SI LA VALEUR A CHANGÉ. Le formulaire renvoie tous les champs à chaque
-        //    enregistrement : sans cette comparaison, corriger un numéro de téléphone
-        //    réécrivait le financement de tous les dossiers de la personne.
-        //
-        // 2. JAMAIS SUR UN DOSSIER PORTÉ PAR UNE ENTREPRISE. Un dossier rattaché à un
-        //    employeur est PROFESSIONNEL par construction, avec une convention déjà signée et
-        //    des documents de groupe émis. Le faire basculer en PARTICULIER depuis la fiche
-        //    personne changeait son parcours sous lui : les documents signés ne correspondaient
-        //    plus aux étapes attendues et la progression retombait, sans un mot ni une trace.
-        //
-        // C'est le même principe que le correctif company_id : ce que porte un dossier ne se
-        // décide pas depuis la fiche de la personne.
-        const financingAvant = rows[0].financing;
-        const financingApres = body.financing;
-        const aChange = (financingApres === 'PARTICULIER' || financingApres === 'PROFESSIONNEL')
-            && financingApres !== financingAvant;
-        if (aChange) {
-            await conn.query(
-                `UPDATE enrollment SET financing = ?
-                  WHERE learner_id = ? AND organization_id = ? AND company_id IS NULL`,
-                [financingApres, learnerId, organizationId]
-            );
-        }
+        /* PLUS DE CASCADE FICHE → DOSSIERS (2026-10-01). Le « type de devis » ne se saisit plus sur
+           la fiche : il se décide à l'INSCRIPTION (un stagiaire = particulier, par une entreprise =
+           professionnel) et se corrige dossier par dossier au menu du parcours. `learner.financing`
+           n'est plus qu'un RÉSUMÉ dérivé, recalculé côté dossier (recalcFinancementStagiaire,
+           enrollment.controller). Propager un changement de fiche réécrivait au contraire le
+           financement de tous les dossiers de la personne — exactement ce qu'on voulait pouvoir
+           distinguer (RS7404 particulier, NIV2 professionnel pour le même stagiaire). */
 
         logAudit(req, 'learner.update', 'Learner', req.params.id);
         res.status(200).json({ success: true, message: 'Stagiaire mis à jour', ...champsIgnores(body, champs) });

@@ -37,32 +37,31 @@ const controllers = fs.readdirSync(path.join(DIR, 'controllers')).filter((f) => 
 // FAMILLE 1 — la personne à la place du dossier
 // ============================================================================================
 
-test('le financement ne se propage pas aux dossiers à chaque enregistrement de fiche', () => {
-    // Le formulaire renvoie TOUS les champs : sans comparaison au préalable, corriger un
-    // numéro de téléphone réécrivait le financement de tous les dossiers de la personne.
-    const src = net(lire('controllers/learner.controller.js'));
-    assert.match(src, /financingApres !== financingAvant/,
-        'la propagation doit être conditionnée à un vrai changement');
-    // La comparaison doit porter sur la valeur RÉELLEMENT lue en base. Un `financingAvant`
-    // qui ne vient pas de la ligne existante rendrait la garde toujours vraie — elle aurait
-    // l'air d'être là sans rien garder.
-    assert.match(src, /const financingAvant = rows\[0\]\.financing/,
-        'la valeur précédente doit venir de la ligne chargée');
-    /* ÉCRITE TROP LITTÉRALEMENT au départ : elle épinglait la liste EXACTE des colonnes, si
-       bien qu'en ajouter une — `user_id` et `email`, pour propager l'identifiant de connexion —
-       la faisait échouer alors que `financing` était toujours lu. Le contrat est « la colonne
-       est lue », pas « la requête ne bouge jamais ». */
-    assert.match(src, /SELECT [^`]*\bfinancing\b[^`]*FROM learner WHERE id = \? AND organization_id/,
-        'la colonne doit être lue, sinon la comparaison porte sur undefined');
+test('la fiche ne propage plus le financement aux dossiers : il vit sur chaque dossier (2026-10-01)', () => {
+    /* AVANT : enregistrer la fiche réécrivait enrollment.financing de TOUS les dossiers de la
+       personne — impossible d'avoir RS7404 particulier ET NIV2 professionnel pour le même
+       stagiaire. Le « type de devis » se décide désormais à l'inscription et se change dossier par
+       dossier (menu du parcours) ; learner.financing n'est qu'un RÉSUMÉ dérivé. La fiche ne doit
+       donc plus contenir de propagation vers les dossiers. */
+    const learner = net(lire('controllers/learner.controller.js'));
+    assert.doesNotMatch(learner, /UPDATE enrollment SET financing/,
+        'la fiche ne doit plus réécrire le financement des dossiers');
+    const enroll = net(lire('controllers/enrollment.controller.js'));
+    assert.match(enroll, /function recalcFinancementStagiaire/,
+        'learner.financing est un résumé recalculé des dossiers');
+    assert.match(enroll, /e\.financing = 'PROFESSIONNEL'/,
+        'le résumé est professionnel si AU MOINS un dossier l’est');
 });
 
-test('un dossier porté par une entreprise garde son financement', () => {
-    // PROFESSIONNEL par construction, convention signée, documents de groupe émis : le faire
-    // basculer depuis la fiche personne changerait son parcours sous lui.
-    const src = net(lire('controllers/learner.controller.js'));
-    const bloc = src.slice(src.indexOf('UPDATE enrollment SET financing'));
-    assert.match(bloc.slice(0, 200), /company_id IS NULL/,
-        'la propagation doit épargner les dossiers rattachés à une entreprise');
+test('le type de devis d’un nouveau dossier suit la MÉTHODE d’inscription, pas la fiche', () => {
+    /* « Un stagiaire » (sans entreprise) = PARTICULIER ; par une entreprise = PROFESSIONNEL. On ne
+       lit PLUS learner.financing à l'inscription : sinon une fiche passée une fois en pro ferait
+       naître un dossier individuel en pro. Le type se corrige ensuite dossier par dossier. */
+    const enroll = net(lire('controllers/enrollment.controller.js'));
+    assert.match(enroll, /financing = company_id \? 'PROFESSIONNEL' : 'PARTICULIER'/,
+        'le financement d’un nouveau dossier vient de la méthode d’inscription');
+    assert.doesNotMatch(enroll, /financing = l && l\.financing/,
+        'un nouveau dossier ne doit plus hériter du financement de la fiche');
 });
 
 test("l'entreprise d'un dossier ne se lit jamais sur la fiche personne", () => {
