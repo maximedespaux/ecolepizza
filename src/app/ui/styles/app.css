@@ -3010,6 +3010,12 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .cat-opt{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;background:none;border-radius:8px;cursor:pointer;text-align:left}
 .cat-opt:hover{background:var(--surface2)}
 .cat-thumb{width:30px;height:30px;flex:0 0 30px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid var(--border-soft)}
+/* Menu de choix d'une session (fiche entreprise) : en-tête de semaine collant, et chaque formation
+   en pastille colorée — le texte passe à la ligne plutôt que d'être tronqué. */
+.sess-sem{position:sticky;top:0;background:var(--panel,#fff);padding:7px 10px 4px;font-size:11px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.sess-opt .badge{flex:0 0 auto}
+.sess-opt-txt{min-width:0}
 /* Communauté — liste des recettes partagées */
 .comm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 6px;border:none;background:none;border-bottom:1px solid var(--border-soft);cursor:pointer;color:var(--text)}
 .comm-row:hover,.comm-row.on{background:var(--surface2)}
