@@ -159,9 +159,18 @@ const apercu = async (req, res) => {
            de taper, avant d'enregistrer. D'où le passage par un cache temporaire. */
         return res.json({ data: rendreApercu(String(b.cle), lu.valeurs, orgName) });
     }
-    const lu = lireEnvoiGroupe(b);
+    /* L'APERÇU D'UNE RÈGLE (Envois programmés) connaît plus de jetons qu'« Écrire à un groupe » : la
+       formation, la session, les dates, et {Document} pour un déclencheur de document. Sans ça,
+       l'aperçu d'une règle qui porte {Document} répondait « jeton inconnu », et l'école, qui venait
+       d'y glisser une image, croyait l'image en cause. */
+    const estRegle = b.contexte === 'regle';
+    const lu = lireEnvoiGroupe(b, estRegle ? JETONS_REGLE : JETONS_GROUPE);
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
-    const valeurs = { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza' };
+    const valeurs = estRegle
+        ? { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza',
+            Formation: 'Pizzaïolo Niveau I', Session: 'RS7404 du 18/05/2026',
+            'Date de début': '18/05/2026', 'Date de fin': '22/05/2026', Document: 'Convention de formation' }
+        : { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza' };
     /* `pourApercu` : les images entrent dans le HTML en `data:`. L'aperçu vit dans une iframe en
        bac à sable — sans origine ni cookie, elle ne peut rien aller chercher à l'API. */
     const images = await chargerImages(db.promise(), req.user.organization_id, lu.valeurs.corps);

@@ -796,7 +796,9 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
 
   async function voir() {
     onStatus(null);
-    try { setApercu((await apercuMail({ objet: v.objet, corps: v.corps })).data); }
+    // `contexte: 'regle'` : l'aperçu connaît les jetons de la règle (formation, dates, {Document}),
+    // pas seulement les trois d'« Écrire à un groupe » — sinon {Document} casse l'aperçu (et l'image).
+    try { setApercu((await apercuMail({ objet: v.objet, corps: v.corps, contexte: "regle" })).data); }
     catch (e) { onStatus({ type: "error", message: e.message }); }
   }
   async function enregistrer() {
