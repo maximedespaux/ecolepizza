@@ -181,7 +181,7 @@ const AUTRE = "__autre__";
  *     page sache quels documents les étapes montrent déjà.
  * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing }) {
+function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing, companyValue, companies, onChangeCompany }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -309,6 +309,18 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
               <option value="PROFESSIONNEL">Professionnel</option>
             </select>
           ) : (h.financing && <span>{h.financing}</span>)}
+          {/* PROFESSIONNEL ⇒ l'entreprise du dossier : c'est ce rattachement qui range le stagiaire
+              sous son entreprise sur la session (et l'icône qui va avec). Pré-rempli de l'employeur. */}
+          {onChangeFinancing && onChangeCompany && financingValue === "PROFESSIONNEL" && (
+            <>
+              <span aria-hidden="true">·</span>
+              <select className="parc-devis" aria-label="Entreprise du dossier"
+                value={companyValue || ""} onChange={(e) => onChangeCompany(e.target.value || null)}>
+                <option value="">Choisir l'entreprise…</option>
+                {(companies || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </>
+          )}
         </div>
       )}
       {/* LA BARRE DIT OÙ EN EST CHAQUE ÉTAPE, pas seulement combien sont finies : ce qui est

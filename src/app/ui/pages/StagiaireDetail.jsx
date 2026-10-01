@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -72,6 +72,7 @@ function StagiaireDetail() {
   const [status, setStatus] = useState(null);
   const [docs, setDocs] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
+  const [companies, setCompanies] = useState([]); // pour le menu « entreprise » du dossier (type pro)
   const [reglements, setReglements] = useState(null); // null = en cours de chargement
   /* Le règlement se SAISIT par qui peut ÉCRIRE la rubrique Stagiaires — le bureau, ou un membre à
      qui l'organisme l'a déléguée. Exactement ce que le serveur exige (authorizeRoles honore la
@@ -120,6 +121,8 @@ function StagiaireDetail() {
         setPrep((p) => (p.slug ? p : { ...p, slug: list[0]?.slug || "" }));
       })
       .catch(() => {});
+    // Les entreprises, pour le menu « entreprise » d'un dossier professionnel.
+    getCompanies().then((r) => setCompanies(Array.isArray(r) ? r : (r.data || []))).catch(() => {});
   }, []);
 
   async function loadDocs() {
@@ -308,17 +311,32 @@ function StagiaireDetail() {
   }
 
   /* CHANGER LE TYPE DE DEVIS DE CE DOSSIER (menu du parcours). Il décide quels documents s'appliquent
-     (devis particulier ⇄ professionnel) : on recharge les dossiers (pour le menu) ET le parcours. */
+     (devis particulier ⇄ professionnel) : on recharge les dossiers (pour le menu) ET le parcours.
+     PROFESSIONNEL = rattaché à une entreprise, comme « Via une entreprise » : c'est ce rattachement
+     (enrollment.company_id) qui range le stagiaire sous son entreprise sur la session. On pré-remplit
+     l'employeur de la fiche, et un menu laisse choisir l'entreprise (changerEntreprise). Repasser en
+     PARTICULIER DÉTACHE l'entreprise — confirmé quand il y en avait une (les documents de groupe
+     déjà signés restent). */
+  async function majDossier(payload, msg) {
+    try {
+      await updateEnrollment(curEnrId, payload);
+      await loadDocs(); await loadLearner(); setParcoursRefresh((n) => n + 1);
+      if (msg) setStatus({ type: "success", message: msg });
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
   async function changerDevis(v) {
     if (!curEnrId || v === curEnr?.financing) return;
     setStatus(null);
-    try {
-      await updateEnrollment(curEnrId, { financing: v });
-      await loadDocs();
-      await loadLearner();
-      setParcoursRefresh((n) => n + 1);
-      setStatus({ type: "success", message: `Type de devis : ${v === "PROFESSIONNEL" ? "Professionnel" : "Particulier"}.` });
-    } catch (err) { setStatus({ type: "error", message: err.message }); }
+    if (v === "PROFESSIONNEL") {
+      return majDossier({ financing: "PROFESSIONNEL", company_id: curEnr?.company_id || l.company_id || null }, "Type de devis : Professionnel.");
+    }
+    if (curEnr?.company_id && !window.confirm(`Ce dossier est rattaché à ${curEnr.company_name || "une entreprise"}. Le repasser en « Particulier » le détache de l'entreprise (les documents de groupe déjà signés restent). Continuer ?`)) return;
+    return majDossier({ financing: "PARTICULIER", company_id: null }, "Type de devis : Particulier.");
+  }
+  async function changerEntreprise(companyId) {
+    if (!curEnrId) return;
+    setStatus(null);
+    return majDossier({ financing: "PROFESSIONNEL", company_id: companyId }, companyId ? "Entreprise du dossier enregistrée." : null);
   }
 
   const bandeauFinFormation = () => (aMarquer ? (
@@ -726,6 +744,11 @@ function StagiaireDetail() {
                  change les documents du parcours (devis particulier ⇄ professionnel) : on recharge. */
               financingValue={curEnr?.financing}
               onChangeFinancing={peutEncaisser ? changerDevis : undefined}
+              /* Professionnel ⇒ un menu « entreprise » : choisir la société du dossier (pré-remplie
+                 de l'employeur). C'est elle qui range le stagiaire sous son entreprise sur la session. */
+              companyValue={curEnr?.company_id}
+              companies={companies}
+              onChangeCompany={peutEncaisser ? changerEntreprise : undefined}
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}

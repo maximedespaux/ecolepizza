@@ -553,13 +553,20 @@ const listDocuments = async (req, res) => {
         const orgSteps = await loadOrgSteps(req.user.organization_id);
         for (const d of documents) d.signature_attendue = signatureAttendue(orgSteps, d);
         const [enrollments] = await conn.query(
-            `SELECT e.id, e.financing, p.code AS program_code, p.title AS program_title,
+            /* `company_id` / `company_name` : l'entreprise RATTACHÉE À CE DOSSIER (migration none —
+               colonnes existantes). Le menu « type de devis » du parcours s'en sert pour pré-remplir
+               l'entreprise quand on passe en professionnel, et pour nommer le détachement en repassant
+               en particulier. C'est l'entreprise DU DOSSIER (e.company_id), jamais l'employeur de la
+               fiche (l.company_id). */
+            `SELECT e.id, e.financing, e.company_id, c.name AS company_name,
+                    p.code AS program_code, p.title AS program_title,
                     s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                     DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date
              FROM enrollment e
              LEFT JOIN training_session s ON s.id = e.session_id
              LEFT JOIN training_program p ON p.id = s.program_id
+             LEFT JOIN company c ON c.id = e.company_id
              WHERE e.learner_id = ? AND e.organization_id = ?
              ORDER BY s.year, s.week, p.code`,
             [learnerId, req.user.organization_id]
