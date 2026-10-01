@@ -5,6 +5,7 @@ import {
   getReglesMail, creerRegleMail, modifierRegleMail, supprimerRegleMail,
   televerserImageMail, getImagesMail, supprimerImageMail, API_BASE_URL,
   getStagiaires, getCompanies,
+  getSignatureMail, saveSignatureMail, apercuSignatureMail,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -12,7 +13,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dateHeure } from "../lib/format.js";
-import { reduireSiImage, PROFILS } from "../lib/image.js";
+import { reduireSiImage, reduireEnPngDataUrl, PROFILS } from "../lib/image.js";
 
 /**
  * MAILING — les e-mails de l'école : ceux qui partent tout seuls, et ceux qu'elle écrit.
@@ -65,11 +66,16 @@ function Mailing() {
           className={"tab" + (onglet === "programmes" ? " on" : "")} onClick={() => { setOnglet("programmes"); setStatus(null); }}>
           Envois programmés
         </button>
+        <button type="button" role="tab" aria-selected={onglet === "signature"}
+          className={"tab" + (onglet === "signature" ? " on" : "")} onClick={() => { setOnglet("signature"); setStatus(null); }}>
+          Signature
+        </button>
       </div>
       {onglet === "envois" && <Interrupteurs onStatus={setStatus} />}
       {onglet === "textes" && <Textes onStatus={setStatus} />}
       {onglet === "groupe" && <Groupe onStatus={setStatus} />}
       {onglet === "programmes" && <Programmes onStatus={setStatus} />}
+      {onglet === "signature" && <Signature onStatus={setStatus} />}
     </>
   );
 }
@@ -1088,6 +1094,147 @@ function RechercheCible({ type, labelActuel, onChoisir, onEffacer }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/* ── 6. La signature des e-mails (migration 197) ─────────────────────────────────────────────── */
+/**
+ * LA SIGNATURE paraît au bas de CHAQUE e-mail. L'école la compose ici : son logo, un sous-titre,
+ * ses réseaux, ses labels qualité (images qu'on ajoute et retire), une mention. Le nom, le
+ * téléphone, l'e-mail et l'adresse viennent de Paramètres → Organisme — on ne les ressaisit pas.
+ *
+ * LES IMAGES SONT FORCÉES EN PNG (reduireEnPngDataUrl) : un e-mail va jusqu'à Outlook, qui n'affiche
+ * pas le WebP. L'aperçu vient du SERVEUR (apercuSignatureMail), par la même fonction que l'e-mail
+ * réel : le recomposer ici donnerait une seconde version à tenir.
+ */
+const SIGNATURE_VIDE = () => ({ actif: true, sous_titre: "", site: "", facebook: "", instagram: "", youtube: "", certif_mention: "", logo: "", badges: [] });
+const normBadge = (b) => (typeof b === "string" ? { data: b, alt: "" } : { data: (b && b.data) || "", alt: (b && b.alt) || "" });
+const MAX_BADGES_SIG = 4;
+
+function Signature({ onStatus }) {
+  const [v, setV] = useState(null);
+  const [indispo, setIndispo] = useState(null);
+  const [apercu, setApercu] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const logoRef = useRef(null);
+  const badgeRef = useRef(null);
+
+  useEffect(() => {
+    getSignatureMail()
+      .then((r) => {
+        if (r.disponible === false) { setIndispo(r.message); setV(SIGNATURE_VIDE()); return; }
+        setV({ ...SIGNATURE_VIDE(), ...(r.data || {}), badges: ((r.data && r.data.badges) || []).map(normBadge) });
+      })
+      .catch((e) => { onStatus({ type: "error", message: e.message }); setV(SIGNATURE_VIDE()); });
+  }, [onStatus]);
+
+  const champ = (k) => (e) => { setV((p) => ({ ...p, [k]: e.target.value })); setApercu(null); };
+
+  async function choisirImage(e, pose) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    try { pose(await reduireEnPngDataUrl(f)); setApercu(null); }
+    catch (err) { onStatus({ type: "error", message: err.message }); }
+  }
+
+  async function voir() {
+    onStatus(null);
+    try { setApercu((await apercuSignatureMail(v)).data.html); }
+    catch (e) { onStatus({ type: "error", message: e.message }); }
+  }
+  async function enregistrer() {
+    setBusy(true); onStatus(null);
+    try {
+      await saveSignatureMail(v);
+      onStatus({ type: "success", message: "Signature enregistrée : elle paraît au bas de chaque e-mail." });
+    } catch (e) { onStatus({ type: "error", message: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  if (!v) return <Squelette lignes={5} h={48} />;
+  return (
+    <Card title={<span className="card-ttl"><Icon name="mail" size={15} /> Signature des e-mails</span>}>
+      <p className="hint" style={{ marginTop: 0 }}>
+        Ce bloc apparaît au bas de <b>tous</b> les e-mails de l'école. Le nom, le téléphone, l'e-mail
+        et l'adresse viennent de <b>Paramètres → Organisme</b> ; vous composez ici le reste.
+      </p>
+      {indispo && <p className="hint" style={{ margin: "0 0 12px" }}><Icon name="info" size={12} /> {indispo}</p>}
+
+      {/* LOGO propre à la signature (indépendant du logo de l'organisme, par choix de l'école). */}
+      <div className="field">
+        <label>Logo</label>
+        <div className="sig-logo-ligne">
+          {v.logo
+            ? <img className="sig-logo-apercu" src={v.logo} alt="Logo de la signature" />
+            : <span className="hint">Aucun logo.</span>}
+          <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: "none" }}
+            aria-hidden="true" tabIndex={-1} onChange={(e) => choisirImage(e, (data) => setV((p) => ({ ...p, logo: data })))} />
+          <button type="button" className="btn ghost sm" onClick={() => logoRef.current?.click()}>
+            <Icon name="image" size={13} /> {v.logo ? "Changer" : "Ajouter un logo"}
+          </button>
+          {v.logo && <button type="button" className="btn ghost sm" onClick={() => { setV((p) => ({ ...p, logo: "" })); setApercu(null); }}>Retirer</button>}
+        </div>
+      </div>
+
+      <div className="row2" style={{ alignItems: "flex-start" }}>
+        <div className="field"><label htmlFor="sig-sous">Sous-titre</label>
+          <input id="sig-sous" className="inp" value={v.sous_titre} onChange={champ("sous_titre")} placeholder="Administration" /></div>
+        <div className="field"><label htmlFor="sig-site">Site web</label>
+          <input id="sig-site" className="inp" value={v.site} onChange={champ("site")} placeholder="ecole-pizza.com" /></div>
+      </div>
+      <div className="row2" style={{ alignItems: "flex-start" }}>
+        <div className="field"><label htmlFor="sig-fb">Facebook (lien)</label>
+          <input id="sig-fb" className="inp" value={v.facebook} onChange={champ("facebook")} placeholder="https://facebook.com/…" /></div>
+        <div className="field"><label htmlFor="sig-ig">Instagram (lien)</label>
+          <input id="sig-ig" className="inp" value={v.instagram} onChange={champ("instagram")} placeholder="https://instagram.com/…" /></div>
+      </div>
+      <div className="field"><label htmlFor="sig-yt">YouTube (lien)</label>
+        <input id="sig-yt" className="inp" value={v.youtube} onChange={champ("youtube")} placeholder="https://youtube.com/…" /></div>
+
+      {/* BADGES : les labels qualité (Qualiopi, ICPF, cofrac…), qu'on ajoute et retire. */}
+      <div className="field">
+        <label>Badges (labels qualité)</label>
+        {v.badges.length > 0 && (
+          <div className="sig-badges">
+            {v.badges.map((b, i) => (
+              <span key={i} className="sig-badge">
+                <img src={b.data} alt={b.alt || "Badge"} />
+                <button type="button" className="mail-biblio-x" aria-label="Retirer ce badge"
+                  onClick={() => { setV((p) => ({ ...p, badges: p.badges.filter((_, j) => j !== i) })); setApercu(null); }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <input ref={badgeRef} type="file" accept="image/png,image/jpeg,image/gif" style={{ display: "none" }}
+          aria-hidden="true" tabIndex={-1}
+          onChange={(e) => choisirImage(e, (data) => setV((p) => ({ ...p, badges: [...p.badges, { data, alt: "" }] })))} />
+        <button type="button" className="btn ghost sm" style={{ marginTop: 8 }}
+          disabled={v.badges.length >= MAX_BADGES_SIG} onClick={() => badgeRef.current?.click()}>
+          <Icon name="image" size={13} /> Ajouter un badge
+        </button>
+        {v.badges.length >= MAX_BADGES_SIG && <span className="hint"> &nbsp;{MAX_BADGES_SIG} au maximum.</span>}
+      </div>
+
+      <div className="field"><label htmlFor="sig-mention">Mention sous les badges</label>
+        <textarea id="sig-mention" className="inp" rows={2} value={v.certif_mention} onChange={champ("certif_mention")}
+          placeholder="La certification qualité a été délivrée au titre des catégories d'actions suivantes : Actions de formation." /></div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+        <button type="button" className="btn sm" onClick={voir}><Icon name="eye" size={13} /> Aperçu</button>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="btn primary sm" onClick={enregistrer} disabled={busy || !!indispo}>
+          <Icon name="send" size={13} /> {busy ? "Enregistrement…" : "Enregistrer"}
+        </button>
+      </div>
+      {apercu && (
+        <div className="mail-apercu" style={{ marginTop: 14 }}>
+          <b><Icon name="eye" size={13} /> Aperçu de la signature</b>
+          <iframe title="Aperçu de la signature" sandbox=""
+            srcDoc={`<div style="padding:16px;background:#f9fafb;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">${apercu}</div>`} />
+        </div>
+      )}
+    </Card>
   );
 }
 

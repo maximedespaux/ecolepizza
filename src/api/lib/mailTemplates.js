@@ -16,8 +16,9 @@
 const fs = require('fs');
 const path = require('path');
 const { LOGO_CID } = require('./mailer.js');
-const { orgInfo, modeleMail } = require('./orgContext.js');
+const { orgInfo, modeleMail, signature } = require('./orgContext.js');
 const { MODELES_MAIL, rendre, texteEnHtml } = require('./mailsPersonnalises.js');
+const { signatureHtml, imagesDe } = require('./signatureEmail.js');
 
 const MARQUE = 'École Pizza';       // repli texte ; surchargée par l'organisme quand on le connaît
 const ENCRE = '#c0392b';            // le rouge « ember » de l'application
@@ -60,8 +61,11 @@ function coquille(titre, contenu, { orgName, mention = MENTION_AUTO } = {}) {
           <h1 style="margin:0 0 14px;font-size:20px;color:#1f2430">${esc(titre)}</h1>
           ${contenu}
         </td></tr>
-        <tr><td style="padding:22px 28px 16px;border-top:1px solid #eef0f4;background:#f9fafb;text-align:center;color:#5e5e68;font-size:13px;line-height:1.75">
-          ${lignesContact}
+        <tr><td style="padding:22px 28px 16px;border-top:1px solid #eef0f4;background:#f9fafb;color:#5e5e68;font-size:13px;line-height:1.75">
+          ${/* LA SIGNATURE DE L'ÉCOLE (migration 197) prend la place du pied de page texte quand elle
+                est configurée. Toujours en `cid:` ici — les images voyagent en pièces jointes, ajoutées
+                à chaque envoi par mailer.js. L'aperçu, lui, les repasse en `data:` (logoPourApercu). */
+             signatureHtml(signature(), o) || `<div style="text-align:center">${lignesContact}</div>`}
         </td></tr>
         ${mention ? `<tr><td style="padding:0 28px 20px;background:#f9fafb;text-align:center;color:#a8adba;font-size:11px;line-height:1.5">
           ${esc(mention)}
@@ -228,14 +232,22 @@ function representativeEmail({ firstName, email, password, companyName, loginUrl
  * de remplacement — le nom de l'école — s'affiche, ce qu'il faisait déjà.
  */
 function logoPourApercu(html) {
+    let out = String(html);
     try {
         /* LE MÊME FICHIER QUE LA PIÈCE JOINTE (mailer.LOGO_PATH) : deux chemins finiraient
            par désigner deux logos, et l'aperçu montrerait autre chose que le courrier. */
         const chemin = path.join(__dirname, '..', 'assets', 'mail-logo.png');
-        if (!fs.existsSync(chemin)) return html;
-        const data = `data:image/png;base64,${fs.readFileSync(chemin).toString('base64')}`;
-        return html.replace(`cid:${LOGO_CID}`, data);
-    } catch { return html; }
+        if (fs.existsSync(chemin)) {
+            const data = `data:image/png;base64,${fs.readFileSync(chemin).toString('base64')}`;
+            out = out.replace(`cid:${LOGO_CID}`, data);
+        }
+    } catch { /* logo absent : on garde le cid:, son texte de remplacement s'affiche */ }
+    /* LES IMAGES DE LA SIGNATURE (migration 197) : mêmes data URLs que les pièces jointes, pour que
+       l'aperçu montre exactement le courrier — un cid: resté dans une iframe sortirait en cassé. */
+    try {
+        for (const im of imagesDe(signature() || {})) out = out.split(`cid:${im.cid}`).join(im.data);
+    } catch { /* signature absente ou illisible : rien à remplacer */ }
+    return out;
 }
 
 function messageGroupeEmail({ objet, corps, orgName, images = [], pourApercu = false, repondreA = null }) {

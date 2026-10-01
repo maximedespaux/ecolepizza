@@ -22,6 +22,7 @@ const db = require('../config/database.js');
 let cache = null;
 let mailCache = null; // réglages « Mailing » de l'organisme (migration 138), en cache
 let modelesCache = null; // textes d'e-mail réécrits par l'école (migration 178), en cache
+let signatureCache = null; // signature des e-mails (migration 197), déjà PARSÉE, en cache
 
 /** Recharge les coordonnées depuis la base. À n'appeler qu'au runtime (jamais dans un test). */
 async function charger() {
@@ -58,6 +59,18 @@ async function charger() {
         modelesCache = Object.fromEntries(rows.map((r) => [r.cle, r]));
     } catch (e) {
         if (e.code !== 'ER_NO_SUCH_TABLE' && e.code !== 'ER_BAD_FIELD_ERROR') console.error('[orgContext] modèles mail:', e.message);
+    }
+    /* LA SIGNATURE DES E-MAILS (migration 197) — quatrième requête isolée, même raison : la colonne
+       peut ne pas exister encore, et son absence ne doit pas emporter le pied de page. Parsée une
+       fois ici (et non à chaque e-mail) ; absente ou illisible → signatureCache reste null, et la
+       coquille retombe sur son pied de page en texte. */
+    try {
+        const [rows] = await db.promise().query(
+            'SELECT email_signature FROM organization ORDER BY created_at LIMIT 1');
+        signatureCache = rows[0] ? require('./signatureEmail.js').parseConfig(rows[0].email_signature) : null;
+    } catch (e) {
+        if (e.code !== 'ER_BAD_FIELD_ERROR' && e.code !== 'ER_NO_SUCH_TABLE') console.error('[orgContext] signature:', e.message);
+        // colonne absente (197 non jouée) → on laisse signatureCache tel quel : pied de page texte.
     }
 }
 
@@ -110,4 +123,7 @@ function mailActif(kind) {
     return Number(mailCache[col]) !== 0;
 }
 
-module.exports = { orgInfo, charger, mailActif, modeleMail, avecModeleTemporaire };
+/** La signature des e-mails, DÉJÀ parsée (objet) ou `null`. Lecture synchrone, comme orgInfo. */
+function signature() { return signatureCache; }
+
+module.exports = { orgInfo, charger, mailActif, modeleMail, avecModeleTemporaire, signature };

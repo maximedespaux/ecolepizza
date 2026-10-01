@@ -222,6 +222,7 @@ const ACTION_LABEL = {
     'mail.regle.suppression': ['Envoi programmé supprimé', A],
     'mail.image': ['Image ajoutée au mailing', A],
     'mail.image.suppression': ['Image du mailing supprimée', A],
+    'mail.signature': ['Signature des e-mails modifiée', A],
     'organization.locations': ['Lieux de formation modifiés', A],
     'accessprofile.create': ['Profil d\'accès créé', G],
     'accessprofile.system': ['Profil d\'accès système modifié', A],

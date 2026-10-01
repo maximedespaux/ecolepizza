@@ -32,6 +32,15 @@ function logoAttachment() {
     } catch { return []; }
 }
 
+/* LES IMAGES DE LA SIGNATURE (migration 197), jointes EN LIGNE à chaque e-mail, comme le logo : la
+   coquille les cite en `cid:`, c'est ici qu'elles voyagent. `require` locaux — mêmes raisons qu'en
+   bas (ordre de chargement) — et tout échec rend une liste vide : un e-mail part toujours. */
+function signatureAttachments() {
+    try {
+        return require('./signatureEmail.js').signatureAttachments(require('./orgContext.js').signature());
+    } catch { return []; }
+}
+
 let transport;      // instance nodemailer, ou null si non configuré
 let resolved = false;
 
@@ -125,7 +134,7 @@ async function sendMail({ to, bcc, replyTo, subject, html, text, kind, attachmen
             /* LE LOGO D'ABORD, LES IMAGES DU MESSAGE ENSUITE : elles voyagent avec le
                courrier (cid:) au lieu d'être chargées depuis un serveur — les clients mail
                bloquent les images distantes par défaut, et une image distante trace qui ouvre. */
-            attachments: [...logoAttachment(), ...(Array.isArray(attachments) ? attachments : [])],
+            attachments: [...logoAttachment(), ...signatureAttachments(), ...(Array.isArray(attachments) ? attachments : [])],
         });
         return { sent: true };
     } catch (e) {

@@ -203,7 +203,9 @@ function rendreApercu(cle, valeurs, orgName) {
     /* LE TEXTE EN COURS DE FRAPPE PREND LE PAS, le temps de l'aperçu : on pose un modèle
        temporaire que `modeleMail` renverra, puis on le retire — même si le rendu échoue. */
     const rendu = orgContext.avecModeleTemporaire(cle, valeurs, () => modeles[GABARIT[cle]](args));
-    return { subject: rendu.subject, html: rendu.html };
+    /* Les images (logo, signature) passent en `data:` pour l'iframe de l'aperçu : un `cid:` n'y
+       désigne rien (cf. logoPourApercu). Sans ça, l'aperçu des textes montrait un logo cassé. */
+    return { subject: rendu.subject, html: modeles.logoPourApercu(rendu.html) };
 }
 
 /**
@@ -728,7 +730,60 @@ const supprimerRegle = async (req, res) => {
     }
 };
 
+/* ── LA SIGNATURE DES E-MAILS (migration 197) ──────────────────────────────────────────────────
+   Un bloc de marque au bas de CHAQUE e-mail (cf. coquille, mailer). Composé par l'école : son logo,
+   un sous-titre, ses réseaux, ses labels qualité, une mention. Le reste (nom, tél., e-mail, adresse)
+   vient de l'organisme — on ne le ressaisit pas ici. */
+const MIGRATION_197 = 'Migration 197 non jouée : la signature des e-mails n’est pas encore disponible.';
+
+/** GET /api/mailing/signature — la signature enregistrée, telle quelle, pour l'éditeur. */
+const getSignature = async (req, res) => {
+    try {
+        const [[row]] = await db.promise().query(
+            'SELECT email_signature FROM organization WHERE id = ?', [req.user.organization_id]);
+        let config = null;
+        /* Lecture LÉNIENTE (et non parseConfig) : l'éditeur doit voir ce qui est stocké même si la
+           signature est désactivée (actif:false) — parseConfig, lui, la masquerait. */
+        try { config = row && row.email_signature ? JSON.parse(row.email_signature) : null; } catch { config = null; }
+        res.json({ data: config, disponible: true });
+    } catch (err) {
+        if (sansTable(err)) return res.json({ data: null, disponible: false, message: MIGRATION_197 });
+        console.error('Erreur signature (lecture) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mailing/signature — enregistre la signature (validée : PNG/JPEG/GIF, liens http(s)…). */
+const saveSignature = async (req, res) => {
+    const sig = require('../lib/signatureEmail.js');
+    const { erreur, valeur } = sig.validerConfig(req.body || {});
+    if (erreur) return res.status(422).json({ message: erreur });
+    try {
+        await db.promise().query('UPDATE organization SET email_signature = ? WHERE id = ?',
+            [JSON.stringify(valeur), req.user.organization_id]);
+        /* On RELIT la signature tout de suite (comme les textes, 178) : sans ce rappel, l'école
+           attendrait le sondage des dix minutes pour que sa signature parte avec les e-mails. */
+        orgContext.charger().catch(() => {});
+        logAudit(req, 'mail.signature', 'Organization', req.user.organization_id);
+        res.json({ data: valeur });
+    } catch (err) {
+        if (sansTable(err)) return res.status(503).json({ message: MIGRATION_197 });
+        console.error('Erreur signature (enregistrement) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/mailing/signature/apercu — le bloc rendu (images en data:) pour l'aperçu de l'éditeur. */
+const apercuSignature = (req, res) => {
+    const sig = require('../lib/signatureEmail.js');
+    const { erreur, valeur } = sig.validerConfig(req.body || {});
+    if (erreur) return res.status(422).json({ message: erreur });
+    const html = sig.signatureHtml(valeur, orgContext.orgInfo(), { pourApercu: true }) || '';
+    res.json({ data: { html } });
+};
+
 module.exports = { getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
     getRegles, creerRegle, modifierRegle, supprimerRegle,
     televerserImage, listerImages, servirImage, supprimerImage, chargerImages, piecesImages,
+    getSignature, saveSignature, apercuSignature,
     resoudreCibles, MAX_DESTINATAIRES, MIGRATION, JETONS_GROUPE };

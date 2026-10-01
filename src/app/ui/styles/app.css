@@ -6270,6 +6270,15 @@ label .requis {
 .mail-pick button:hover{color:var(--red)}
 .mail-badge-rep{margin-left:7px;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--blue) 14%,transparent);
   color:var(--blue);font-size:11px;font-weight:600;vertical-align:middle}
+/* Éditeur de signature : logo et badges (labels qualité) sur fond blanc, comme dans l'e-mail. Le ×
+   des badges reprend .mail-biblio-x (position:absolute, -6px) — le cadre est donc position:relative
+   SANS overflow:hidden, sinon il couperait le × (leçon des vignettes du mailing). */
+.sig-logo-ligne{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sig-logo-apercu{max-height:48px;max-width:180px;height:auto;border:1px solid var(--border);border-radius:8px;background:#fff;padding:4px}
+.sig-badges{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px}
+.sig-badge{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;
+  border:1px solid var(--border);border-radius:8px;background:#fff}
+.sig-badge img{max-height:46px;max-width:150px;height:auto;display:block}
 .mail-ed-resume{display:flex;align-items:center;gap:10px;margin-top:16px;padding:11px 14px;border-radius:12px;
   background:color-mix(in srgb,var(--blue) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--blue) 22%,var(--border-soft));font-size:13px;line-height:1.5}
 .mail-ed-resume svg{color:var(--blue);flex-shrink:0}

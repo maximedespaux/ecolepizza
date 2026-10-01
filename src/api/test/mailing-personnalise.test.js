@@ -119,9 +119,9 @@ test('une image entre dans le texte, et voyage AVEC le message', async () => {
     assert.strictEqual(lib.texteEnHtml('![Affiche](image:abc123)', undefined, { image: () => null }), '');
     assert.strictEqual(lib.texteEnHtml('![Affiche](image:abc123)'), '');
 
-    /* LE MAILER JOINT CE QU'ON LUI DONNE, en plus du logo. */
+    /* LE MAILER JOINT CE QU'ON LUI DONNE, en plus du logo ET de la signature (migration 197). */
     const mailer = sansCommentaires(lire(path.join(API, 'lib/mailer.js')));
-    assert.match(mailer, /attachments: \[\.\.\.logoAttachment\(\), \.\.\.\(Array\.isArray\(attachments\) \? attachments : \[\]\)\]/);
+    assert.match(mailer, /attachments: \[\.\.\.logoAttachment\(\), \.\.\.signatureAttachments\(\), \.\.\.\(Array\.isArray\(attachments\) \? attachments : \[\]\)\]/);
     const ctrl = sansCommentaires(lire(path.join(API, 'controllers/mailing.controller.js')));
     assert.match(ctrl, /cid: `img-\$\{i\.id\}`, contentDisposition: 'inline'/);
     /* L'APERÇU, LUI, NE PEUT PAS UTILISER `cid:` : son iframe est en bac à sable, sans origine ni
