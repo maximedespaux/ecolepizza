@@ -6285,7 +6285,17 @@ label .requis {
   background:var(--surface);overflow:hidden;line-height:0}
 .mail-biblio-vignette img{width:72px;height:54px;object-fit:cover;display:block}
 .mail-biblio-x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:99px;border:0;
-  background:var(--red);color:#fff;font-size:12px;line-height:1;display:grid;place-items:center}
+  background:var(--red);color:#fff;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
+/* « Images du message » : ce qui est réellement attaché, en vignettes sous les boutons — le retour
+   visible qui manquait quand une image n'apparaissait que sous la forme « ![nom](image:id) ». */
+.mail-images-jointes{display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;margin-top:8px}
+.mail-images-jointes > .hint{width:100%;margin:0}
+/* Le cadre arrondi et le rognage vont sur l'IMAGE, pas sur le parent : le parent est le repère
+   du × (position:absolute, à -6px), et un overflow:hidden sur lui couperait ce ×. C'est la même
+   répartition que la bibliothèque, où le rognage est sur le bouton interne, pas sur la vignette. */
+.mail-img-jointe{position:relative;display:inline-flex;line-height:0}
+.mail-img-jointe img{width:72px;height:54px;object-fit:cover;display:block;
+  border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 /* La liste des destinataires d'un envoi groupé : repliée, décochable, et qui défile au-delà
    d'une dizaine de noms — une session de trente occuperait sinon tout l'écran. */
 .mail-destinataires{margin:0 0 10px;border:1px dashed var(--border);border-radius:10px;padding:8px 12px}

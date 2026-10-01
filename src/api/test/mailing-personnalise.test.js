@@ -264,11 +264,17 @@ test('l\'écran dit où part la copie, et propose lien et image', () => {
 
     /* LES DEUX GESTES DEMANDÉS, dans la même barre que les jetons — et la MÊME barre pour un
        message de groupe et pour une règle programmée : deux copies auraient fini par diverger,
-       et un bouton présent d'un côté seulement se lit comme une panne. */
-    assert.match(page, /function BarreInsertion\(\{ jetons, onInserer, onStatus \}\)/);
+       et un bouton présent d'un côté seulement se lit comme une panne. La barre reçoit le corps
+       et le réécrit (onChangeCorps) au lieu d'un onInserer aveugle : c'est ce qui permet au
+       marqueur inséré de redevenir VISIBLE juste en dessous (strip « Images du message »). */
+    assert.match(page, /function BarreInsertion\(\{ jetons, corps = "", onChangeCorps, onStatus \}\)/);
     assert.strictEqual((page.match(/<BarreInsertion /g) || []).length, 2);
-    assert.match(page, /onInserer\(`\[\$\{mots\.trim\(\)\}\]\(\$\{url\.trim\(\)\}\)`\)/, 'le lien s’insère en texte');
-    assert.match(page, /onInserer\(`!\[\$\{r\.data\.nom \|\| "image"\}\]\(image:\$\{r\.data\.id\}\)`\)/);
+    assert.match(page, /inserer\(`\[\$\{mots\.trim\(\)\}\]\(\$\{url\.trim\(\)\}\)`\)/, 'le lien s’insère en texte');
+    assert.match(page, /inserer\(`!\[\$\{nom\}\]\(image:\$\{r\.data\.id\}\)`\)/);
+    /* LE DÉFAUT GELÉ : une image insérée ne « faisait rien » à l'écran — le marqueur partait
+       dans le corps sans se voir. La bande de vignettes relit le corps et la montre ; sans elle,
+       le geste redevient muet. */
+    assert.match(page, /mail-images-jointes/, 'une image insérée se voit dans le message');
     /* L'ADRESSE EST VÉRIFIÉE À LA SAISIE aussi : le serveur refuse déjà tout ce qui n'est pas
        http(s), mais le dire tout de suite évite d'envoyer un message dont le lien a disparu. */
     assert.match(page, /L'adresse doit commencer par http:\/\/ ou https:\/\//);
