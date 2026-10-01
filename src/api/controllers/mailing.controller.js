@@ -10,7 +10,7 @@ const { DECLENCHEURS, UNITES, SENS, phraseRegle, lireRegle } = require('../lib/m
 const { JETONS_REGLE } = require('../lib/passageMailsProgrammes.js');
 /* Les règles déclenchées par un document + le ciblage stagiaire/entreprise (migration 196). */
 const { DECLENCHEURS_DOC, DESTINATAIRES, estDeclencheurDoc } = require('../lib/reglesDocument.js');
-const { colonneExiste } = require('../lib/colonnes.js');
+const { colonneExiste, tableExiste } = require('../lib/colonnes.js');
 const modeles = require('../lib/mailTemplates.js');
 
 /**
@@ -558,6 +558,20 @@ const supprimerImage = async (req, res) => {
 
 const MIGRATION_179 = 'Migration 179 non jouée : les envois programmés ne sont pas encore disponibles.';
 const MIGRATION_196 = 'Migration 196 non jouée : les règles par document et le ciblage stagiaire/entreprise ne sont pas encore disponibles.';
+const MIGRATION_198 = 'Migration 198 non jouée : viser plusieurs formations n’est pas encore disponible.';
+
+/* Écrit les formations d'une règle dans la table d'association (migration 198). Sans la table, ne
+   fait rien : la règle garde son unique `mail_regle.program_id` (repli). On remplace en bloc
+   (DELETE puis INSERT) : c'est plus simple à raisonner qu'un diff, et une règle a peu de formations. */
+async function ecrireFormations(conn, regleId, programIds) {
+    if (!(await tableExiste(conn, 'mail_regle_formation'))) return;
+    await conn.query('DELETE FROM mail_regle_formation WHERE regle_id = ?', [regleId]);
+    const ids = Array.isArray(programIds) ? programIds.filter(Boolean) : [];
+    if (ids.length) {
+        await conn.query('INSERT INTO mail_regle_formation (regle_id, program_id) VALUES ?',
+            [ids.map((pid) => [regleId, pid])]);
+    }
+}
 
 /* LE VOCABULAIRE DE L'ÉCRAN, au même endroit que les règles (pas une liste recopiée à côté) :
    déclencheurs de date ET d'événement, destinataires, unités, sens, modèles de document, jetons. */
@@ -617,9 +631,31 @@ const getRegles = async (req, res) => {
                LEFT JOIN training_program p ON p.id = r.program_id
                ${join196}
               WHERE r.organization_id = ? ORDER BY r.created_at DESC`, [orgId]);
+        /* LES FORMATIONS DE CHAQUE RÈGLE (migration 198) : la table d'association si elle existe,
+           sinon l'unique program_id (repli). On rend `formations` (avec les noms, pour l'affichage) et
+           `program_ids` (pour l'éditeur), plus un drapeau `formations_multiples` pour que l'écran ne
+           propose le multi que quand la table est là. */
+        const a198 = await tableExiste(conn, 'mail_regle_formation');
+        const formationsParRegle = new Map();
+        if (a198 && rows.length) {
+            const [fs] = await conn.query(
+                `SELECT mrf.regle_id, p.id, p.code, p.title
+                   FROM mail_regle_formation mrf JOIN training_program p ON p.id = mrf.program_id
+                  WHERE mrf.regle_id IN (?)`, [rows.map((r) => r.id)]);
+            for (const f of fs) {
+                if (!formationsParRegle.has(f.regle_id)) formationsParRegle.set(f.regle_id, []);
+                formationsParRegle.get(f.regle_id).push({ id: f.id, code: f.code, title: f.title });
+            }
+        }
         res.json({
-            data: rows.map((r) => ({ ...r, phrase: phraseRegle(r) })),
+            data: rows.map((r) => {
+                const multi = formationsParRegle.get(r.id) || [];
+                const formations = multi.length ? multi
+                    : (r.program_id ? [{ id: r.program_id, code: r.formation_code, title: r.formation_titre }] : []);
+                return { ...r, formations, program_ids: formations.map((f) => f.id), phrase: phraseRegle(r) };
+            }),
             catalogue: catalogueRegles(modeles),
+            formations_multiples: a198,
             disponible: true,
         });
     } catch (err) {
@@ -649,6 +685,11 @@ const creerRegle = async (req, res) => {
            196 : le dire (503) plutôt que d'écrire une règle amputée. Une règle de DATE ordinaire passe. */
         const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
         if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
+        /* PLUSIEURS FORMATIONS (198) : le dire plutôt que de retomber en silence sur « toutes » (une
+           seule formation, elle, tient dans program_id, donc passe sans la 198). */
+        if (v.program_ids.length > 1 && !(await tableExiste(conn, 'mail_regle_formation'))) {
+            return res.status(503).json({ message: MIGRATION_198 });
+        }
         const id = crypto.randomUUID();
         if (a196) {
             await conn.query(
@@ -665,6 +706,7 @@ const creerRegle = async (req, res) => {
                 [id, req.user.organization_id, v.nom, v.declencheur, v.sens, v.decalage, v.unite,
                     v.program_id, v.objet, v.corps, v.actif, req.user.id]);
         }
+        await ecrireFormations(conn, id, v.program_ids);
         logAudit(req, 'mail.regle', 'MailRegle', id);
         res.status(201).json({ data: { id, ...v, phrase: phraseRegle(v) } });
     } catch (err) {
@@ -684,6 +726,9 @@ const modifierRegle = async (req, res) => {
         const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
         const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
         if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
+        if (v.program_ids.length > 1 && !(await tableExiste(conn, 'mail_regle_formation'))) {
+            return res.status(503).json({ message: MIGRATION_198 });
+        }
         const [r] = a196
             ? await conn.query(
                 `UPDATE mail_regle SET nom = ?, declencheur = ?, sens = ?, decalage = ?, unite = ?,
@@ -700,6 +745,7 @@ const modifierRegle = async (req, res) => {
                 [v.nom, v.declencheur, v.sens, v.decalage, v.unite, v.program_id, v.objet, v.corps,
                     v.actif, req.params.id, req.user.organization_id]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Règle introuvable.' });
+        await ecrireFormations(conn, req.params.id, v.program_ids);
         logAudit(req, 'mail.regle', 'MailRegle', req.params.id);
         res.json({ data: { id: req.params.id, ...v, phrase: phraseRegle(v) } });
     } catch (err) {

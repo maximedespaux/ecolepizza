@@ -24,7 +24,8 @@
 const { FUSEAU } = require('./fuseau.js');
 const { DECLENCHEURS, MAX_PAR_PASSAGE, dateCible, jourDe } = require('./mailsProgrammes.js');
 const { rendre } = require('./mailsPersonnalises.js');
-const { colonneExiste } = require('./colonnes.js');
+const { formationsDeRegle } = require('./reglesDocument.js');
+const { colonneExiste, tableExiste } = require('./colonnes.js');
 
 /** Aujourd'hui, dans le fuseau de l'organisme — le serveur, lui, tourne en UTC. */
 function aujourdhuiA(zone = FUSEAU, instant = new Date()) {
@@ -64,6 +65,20 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
         if (err && (err.code === 'ER_NO_SUCH_TABLE' || err.code === 'ER_BAD_FIELD_ERROR')) return { envoyes: 0, echecs: 0, regles: 0 };
         throw err;
     }
+    /* FORMATIONS MULTIPLES (migration 198) : la table d'association prime quand elle porte des
+       lignes ; sinon on retombe sur program_id (cf. formationsDeRegle). Table absente → chaque règle
+       garde son unique formation, comme avant. */
+    if (regles.length && await tableExiste(conn, 'mail_regle_formation')) {
+        const [liens] = await conn.query(
+            'SELECT regle_id, program_id FROM mail_regle_formation WHERE regle_id IN (?)',
+            [regles.map((r) => r.id)]);
+        const parRegle = new Map();
+        for (const l of liens) {
+            if (!parRegle.has(l.regle_id)) parRegle.set(l.regle_id, []);
+            parRegle.get(l.regle_id).push(l.program_id);
+        }
+        for (const r of regles) r.program_ids = parRegle.get(r.id) || [];
+    }
     let envoyes = 0;
     let echecs = 0;
     for (const r of regles) {
@@ -74,7 +89,10 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
         const bas = decale(r.depuis, r.sens === 'avant' ? -2 : -marge);
         const haut = decale(aujourdhui, r.sens === 'avant' ? marge : 2);
         const params = [r.organization_id, bas, haut];
-        if (r.program_id) params.push(r.program_id);
+        /* UNE, PLUSIEURS, ou TOUTES les formations (migration 198) : `formations` est un tableau non
+           vide, ou null (= toutes). mysql2 déplie `IN (?)` à partir du tableau. */
+        const formations = formationsDeRegle(r);
+        if (formations) params.push(formations);
         /* CIBLAGE (migration 196) : un stagiaire précis, ou une entreprise précise (tous ses
            dossiers), au lieu d'une formation entière. NULL = pas de restriction de ce côté. */
         if (aCible && r.learner_id) params.push(r.learner_id);
@@ -90,7 +108,7 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
                JOIN training_session s ON s.id = e.session_id
                LEFT JOIN training_program p ON p.id = s.program_id
               WHERE e.organization_id = ? AND ${d.colonne} BETWEEN ? AND ?
-                    ${r.program_id ? 'AND s.program_id = ?' : ''}
+                    ${formations ? 'AND s.program_id IN (?)' : ''}
                     ${aCible && r.learner_id ? 'AND e.learner_id = ?' : ''}
                     ${aCible && r.company_id ? 'AND e.company_id = ?' : ''}
               ORDER BY ${d.colonne}`, params);

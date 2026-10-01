@@ -26,15 +26,28 @@ const DESTINATAIRES = {
 const destinataireValide = (d) => Object.prototype.hasOwnProperty.call(DESTINATAIRES, d);
 
 /**
+ * L'ensemble des formations d'une règle (migration 198), ou `null` pour « toutes ». `program_ids`
+ * (la table d'association) fait autorité quand elle porte des lignes ; sinon on retombe sur la
+ * colonne `program_id` d'avant (une formation, ou NULL = toutes). Les deux restent donc lisibles,
+ * avant comme après la migration.
+ */
+function formationsDeRegle(regle) {
+    const liste = Array.isArray(regle && regle.program_ids) ? regle.program_ids.filter(Boolean) : [];
+    if (liste.length) return liste;
+    return regle && regle.program_id ? [regle.program_id] : null;
+}
+
+/**
  * La règle vise-t-elle CE document ? Chaque filtre renseigné doit correspondre ; un filtre NULL
- * laisse passer. Le modèle (`template_slug`), le stagiaire, l'entreprise, la formation.
+ * laisse passer. Le modèle (`template_slug`), le stagiaire, l'entreprise, la ou les formations.
  */
 function regleViseDocument(regle, doc) {
     if (!regle || !doc) return false;
     if (regle.template_slug && regle.template_slug !== doc.template_slug) return false;
     if (regle.learner_id && regle.learner_id !== doc.learner_id) return false;
     if (regle.company_id && regle.company_id !== doc.company_id) return false;
-    if (regle.program_id && regle.program_id !== doc.program_id) return false;
+    const formations = formationsDeRegle(regle);
+    if (formations && !formations.includes(doc.program_id)) return false;
     return true;
 }
 
@@ -54,5 +67,5 @@ function destinatairesDe(regle, { stagiaireEmail, entrepriseEmail } = {}) {
 
 module.exports = {
     DECLENCHEURS_DOC, estDeclencheurDoc, DESTINATAIRES, destinataireValide,
-    regleViseDocument, destinatairesDe,
+    regleViseDocument, formationsDeRegle, destinatairesDe,
 };

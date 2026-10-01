@@ -6279,6 +6279,12 @@ label .requis {
 .sig-badge{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;
   border:1px solid var(--border);border-radius:8px;background:#fff}
 .sig-badge img{max-height:46px;max-width:150px;height:auto;display:block}
+/* Choix de plusieurs formations pour une règle (migration 198) : une liste de cases, qui défile
+   au-delà d'une poignée de formations. « Toutes » = aucune cochée. */
+.mail-form-multi{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto;
+  border:1px solid var(--border);border-radius:10px;padding:6px 8px;margin-top:2px}
+.mail-form-opt{display:flex;align-items:center;gap:8px;padding:4px;border-radius:7px;font-size:13px;cursor:pointer}
+.mail-form-opt:hover{background:var(--surface2)}
 .mail-ed-resume{display:flex;align-items:center;gap:10px;margin-top:16px;padding:11px 14px;border-radius:12px;
   background:color-mix(in srgb,var(--blue) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--blue) 22%,var(--border-soft));font-size:13px;line-height:1.5}
 .mail-ed-resume svg{color:var(--blue);flex-shrink:0}

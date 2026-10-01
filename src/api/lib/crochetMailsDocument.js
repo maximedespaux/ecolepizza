@@ -31,6 +31,21 @@ async function declencherReglesDocument(conn, { orgId, documentId, evenement, en
         [orgId, evenement]);
     if (!regles.length) return { envoyes: 0, echecs: 0, regles: 0 };
 
+    /* LES FORMATIONS DE CHAQUE RÈGLE (migration 198) : la table d'association fait autorité quand elle
+       porte des lignes ; sinon on garde `program_id` (cf. formationsDeRegle). Table absente → chaque
+       règle reste sur son unique program_id, comme avant. */
+    if (await tableExiste(conn, 'mail_regle_formation')) {
+        const [liens] = await conn.query(
+            'SELECT regle_id, program_id FROM mail_regle_formation WHERE regle_id IN (?)',
+            [regles.map((r) => r.id)]);
+        const parRegle = new Map();
+        for (const l of liens) {
+            if (!parRegle.has(l.regle_id)) parRegle.set(l.regle_id, []);
+            parRegle.get(l.regle_id).push(l.program_id);
+        }
+        for (const r of regles) r.program_ids = parRegle.get(r.id) || [];
+    }
+
     // Le document et son stagiaire.
     const [docs] = await conn.query(
         `SELECT gd.id, gd.learner_id, gd.template_slug, gd.title,

@@ -135,9 +135,16 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
     const inconnu = [...(objet.match(/\{[^{}]+\}/g) || []), ...(corps.match(/\{[^{}]+\}/g) || [])]
         .map((j) => j.slice(1, -1).trim()).find((j) => !connus.has(j));
     if (inconnu) return { erreur: `Le jeton {${inconnu}} n’existe pas. Disponibles : ${jetons.map((j) => `{${j}}`).join(', ')}.` };
+    /* UNE OU PLUSIEURS FORMATIONS (migration 198). `program_ids` est la liste choisie ; vide = toutes.
+       `program_id` reste EN PHASE : une seule formation → cette colonne la porte (et un revert de la
+       198 la conserve) ; zéro ou plusieurs → NULL. L'ancien client n'envoie que `program_id` : on le
+       relit comme une liste d'un élément, pour ne rien perdre d'une page ouverte avant le déploiement. */
+    const brut = Array.isArray(b.program_ids) ? b.program_ids : (b.program_id ? [b.program_id] : []);
+    const program_ids = [...new Set(brut.filter((x) => typeof x === 'string' && x).map(String))].slice(0, 50);
+    const program_id = program_ids.length === 1 ? program_ids[0] : null;
     return { valeurs: {
         nom, declencheur, sens, decalage, unite,
-        program_id: b.program_id ? String(b.program_id) : null,
+        program_id, program_ids,
         /* Le modèle filtré n'a de sens que pour un événement de document ; une règle de date filtre
            par formation. Le ciblage stagiaire / entreprise vaut pour les deux familles. */
         template_slug: (estDoc && b.template_slug) ? String(b.template_slug).slice(0, 60) : null,
