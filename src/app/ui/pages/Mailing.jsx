@@ -407,6 +407,10 @@ function Groupe({ onStatus }) {
   /* UNE SEMAINE SE DÉSIGNE PAR DEUX NOMBRES, pas par un identifiant : « S38 — 2026 » n'est pas
      une ligne en base, c'est ce qu'ont en commun les sessions de ces jours-là. */
   const [semaine, setSemaine] = useState("");
+  /* DES STAGIAIRES CHOISIS UN À UN (mode « stagiaires ») : une liste qu'on construit par la
+     recherche, et l'id du mode « entreprise » voyage dans `id`, comme pour une session. */
+  const [picks, setPicks] = useState([]);
+  const [entrepriseLabel, setEntrepriseLabel] = useState("");
   /* CEUX QU'ON RETIRE DE L'ENVOI. On part de « tout le monde » : décocher est un geste rare, et
      une liste qu'il faudrait cocher personne par personne ferait manquer quelqu'un. */
   const [ecartes, setEcartes] = useState(() => new Set());
@@ -428,12 +432,14 @@ function Groupe({ onStatus }) {
   useEffect(() => {
     setCibles(null);
     setEcartes(new Set());
-    const quoi = type === "semaine"
-      ? (semaine ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) } : null)
-      : (id ? { type, id } : null);
+    let quoi;
+    if (type === "semaine") quoi = semaine ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) } : null;
+    else if (type === "stagiaires") quoi = picks.length ? { type: "stagiaires", ids: picks.map((p) => p.id) } : null;
+    else if (type === "entreprise") quoi = id ? { type: "entreprise", id } : null;
+    else quoi = id ? { type, id } : null;
     if (!quoi) return;
     destinatairesMail(quoi).then((r) => setCibles(r.data)).catch((e) => onStatus({ type: "error", message: e.message }));
-  }, [type, id, semaine, onStatus]);
+  }, [type, id, semaine, picks, onStatus]);
 
   /* LES SEMAINES QUI ONT DES SESSIONS, tirées des sessions elles-mêmes : proposer les
      cinquante-deux semaines de l'année ferait chercher les trois qui comptent. */
@@ -463,17 +469,25 @@ function Groupe({ onStatus }) {
 
   async function envoyer() {
     const n = retenus.length;
-    if (!window.confirm(`Envoyer ce message à ${n} stagiaire${n > 1 ? "s" : ""} ? L'envoi part tout de suite et ne se rattrape pas.`)) return;
+    if (!window.confirm(`Envoyer ce message à ${n} destinataire${n > 1 ? "s" : ""} ? L'envoi part tout de suite et ne se rattrape pas.`)) return;
     setBusy(true); onStatus(null);
     try {
       /* ON GARDE LA CIBLE D'ORIGINE tant que personne n'est écarté : le journal dit alors
-         « Semaine 38 — 2026 (2 sessions) », ce qui se relit. Dès qu'on décoche, l'envoi porte la
-         liste des personnes — le serveur ne saurait pas deviner lesquelles on a retirées. */
-      const cible = ecartes.size === 0
-        ? (type === "semaine"
-          ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) }
-          : { type, id })
-        : { type: "stagiaires", ids: retenus.map((d) => d.id) };
+         « Semaine 38 — 2026 (2 sessions) » ou « Entreprise X », ce qui se relit. Dès qu'on décoche,
+         l'envoi porte la liste des personnes — le serveur ne saurait pas deviner lesquelles on a
+         retirées. Un représentant d'entreprise se redésigne par l'id de son entreprise, pas par un
+         id de stagiaire : d'où les deux tableaux du mode « choisis ». */
+      let cible;
+      if (ecartes.size === 0) {
+        if (type === "semaine") cible = { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) };
+        else if (type === "stagiaires") cible = { type: "stagiaires", ids: picks.map((p) => p.id) };
+        else if (type === "entreprise") cible = { type: "entreprise", id };
+        else cible = { type, id };
+      } else {
+        const stagiaires = retenus.filter((d) => (d.kind || "stagiaire") === "stagiaire").map((d) => d.id);
+        const representants = retenus.filter((d) => d.kind === "representant").map((d) => d.company_id);
+        cible = representants.length ? { type: "choisis", stagiaires, representants } : { type: "stagiaires", ids: stagiaires };
+      }
       const r = await envoyerMailGroupe({ ...cible, objet, corps });
       const d = r.data;
       const comment = d.mode === "cci" ? " en un seul envoi, adresses masquées" : "";
@@ -509,17 +523,22 @@ function Groupe({ onStatus }) {
           <div className="field">
             <label htmlFor="mail-type">À qui</label>
             <select id="mail-type" className="inp" value={type}
-              onChange={(e) => { setType(e.target.value); setId(""); setSemaine(""); }}>
+              onChange={(e) => { setType(e.target.value); setId(""); setSemaine(""); setPicks([]); setEntrepriseLabel(""); }}>
               <option value="session">Les inscrits d'une session</option>
               {/* LA SEMAINE, parce que c'est ainsi que l'école voit son planning : la S38 porte
                   deux sessions et cinq personnes, et on leur écrit UNE fois. */}
               <option value="semaine">Tous les inscrits d'une semaine</option>
               <option value="formation">Tous les inscrits d'une formation</option>
+              {/* VISER UNE PERSONNE, ou une entreprise : un rappel à un seul stagiaire, un mot à
+                  l'entreprise et à ses stagiaires — sans passer par une session entière. */}
+              <option value="stagiaires">Des stagiaires (choisis un à un)</option>
+              <option value="entreprise">Une entreprise (stagiaires + représentant)</option>
             </select>
           </div>
           <div className="field">
             <label htmlFor="mail-cible">
-              {type === "session" ? "Session" : type === "semaine" ? "Semaine" : "Formation"}
+              {type === "session" ? "Session" : type === "semaine" ? "Semaine"
+                : type === "formation" ? "Formation" : type === "entreprise" ? "Entreprise" : "Stagiaires"}
             </label>
             {type === "semaine" ? (
               <select id="mail-cible" className="inp" value={semaine} onChange={(e) => setSemaine(e.target.value)}>
@@ -530,6 +549,28 @@ function Groupe({ onStatus }) {
                   </option>
                 ))}
               </select>
+            ) : type === "stagiaires" ? (
+              /* CHOISIS UN À UN : la recherche ajoute, et chaque pastille se retire. On part donc
+                 d'une liste VIDE (contrairement aux autres modes) — ici, cocher est le geste. */
+              <>
+                <RechercheCible type="stagiaire" labelActuel={null}
+                  onChoisir={(o) => setPicks((p) => (p.some((x) => x.id === o.id) ? p : [...p, o]))}
+                  onEffacer={() => {}} />
+                {picks.length > 0 && (
+                  <div className="mail-picks">
+                    {picks.map((p) => (
+                      <span key={p.id} className="mail-pick">{p.label}
+                        <button type="button" aria-label={`Retirer ${p.label}`}
+                          onClick={() => setPicks((l) => l.filter((x) => x.id !== p.id))}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : type === "entreprise" ? (
+              <RechercheCible type="entreprise" labelActuel={entrepriseLabel || null}
+                onChoisir={(o) => { setId(o.id); setEntrepriseLabel(o.label); }}
+                onEffacer={() => { setId(""); setEntrepriseLabel(""); }} />
             ) : (
               <select id="mail-cible" className="inp" value={id} onChange={(e) => setId(e.target.value)}>
                 <option value="">Choisir…</option>
@@ -558,7 +599,7 @@ function Groupe({ onStatus }) {
                       if (n2.has(d.id)) n2.delete(d.id); else n2.add(d.id);
                       return n2;
                     })} />
-                  <span>{d.nom}</span>
+                  <span>{d.nom}{d.kind === "representant" && <span className="mail-badge-rep">représentant</span>}</span>
                   <span className="hint">{d.email}</span>
                 </label>
               ))}

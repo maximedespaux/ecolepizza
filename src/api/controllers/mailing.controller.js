@@ -267,7 +267,60 @@ async function resoudreCibles(conn, orgId, b) {
         const [rows] = await conn.query(
             `SELECT id, first_name, last_name, email FROM learner
               WHERE organization_id = ? AND id IN (?) ORDER BY last_name, first_name`, [orgId, ids]);
-        return { liste: rows, cible: `${rows.length} stagiaire${rows.length > 1 ? 's' : ''} choisi${rows.length > 1 ? 's' : ''}` };
+        return { liste: rows.map((l) => ({ ...l, kind: 'stagiaire' })),
+            cible: `${rows.length} stagiaire${rows.length > 1 ? 's' : ''} choisi${rows.length > 1 ? 's' : ''}` };
+    }
+    /* UNE ENTREPRISE : ses stagiaires ET son représentant, pour que l'école CHOISISSE à la case qui
+       reçoit (demandé le 2026-10-01). « Ses stagiaires » = `learner.company_id`, le lien de la fiche
+       entreprise (cf. company.controller : learner_count, liste des stagiaires) — pas l'inscription,
+       qui ne dirait que ceux d'une session. Le représentant est une case de plus, pas un stagiaire :
+       son adresse est celle de son espace (user.email) sinon celle de la fiche (company.email), comme
+       le crochet des règles (196). Sans adresse, il n'apparaît pas — on ne coche pas un vide. */
+    if (type === 'entreprise' && b.id) {
+        const [stagiaires] = await conn.query(
+            `SELECT id, first_name, last_name, email FROM learner
+              WHERE company_id = ? AND organization_id = ? ORDER BY last_name, first_name`, [b.id, orgId]);
+        const [[c]] = await conn.query(
+            `SELECT c.name, c.email AS cemail, u.email AS uemail,
+                    c.representative_first_name AS rfirst, c.representative_name AS rlast
+               FROM company c LEFT JOIN user u ON u.id = c.user_id
+              WHERE c.id = ? AND c.organization_id = ?`, [b.id, orgId]);
+        const liste = stagiaires.map((l) => ({ ...l, kind: 'stagiaire' }));
+        const repEmail = c && (c.uemail || c.cemail);
+        if (repEmail) {
+            liste.push({ id: `rep:${b.id}`, first_name: (c.rfirst || ''), last_name: (c.rlast || c.name || ''),
+                email: repEmail, kind: 'representant', company_id: b.id });
+        }
+        return { liste, cible: c ? `Entreprise ${c.name || ''}`.trim() : 'Entreprise' };
+    }
+    /* UNE SÉLECTION MIXTE : des stagiaires choisis un à un ET/OU des représentants d'entreprise — ce
+       que l'envoi porte dès qu'on décoche une case d'un envoi « entreprise ». Un représentant n'est
+       pas un `learner` : il ne se redésigne pas par un id de stagiaire mais par l'id de SON
+       entreprise, réouvert ici côté serveur (jamais une adresse venue du client). */
+    if (type === 'choisis') {
+        const sIds = Array.isArray(b.stagiaires) ? b.stagiaires.filter((x) => typeof x === 'string') : [];
+        const rIds = Array.isArray(b.representants) ? b.representants.filter((x) => typeof x === 'string') : [];
+        const liste = [];
+        if (sIds.length) {
+            const [rows] = await conn.query(
+                `SELECT id, first_name, last_name, email FROM learner
+                  WHERE organization_id = ? AND id IN (?) ORDER BY last_name, first_name`, [orgId, sIds]);
+            for (const l of rows) liste.push({ ...l, kind: 'stagiaire' });
+        }
+        for (const cid of rIds) {
+            const [[c]] = await conn.query(
+                `SELECT c.name, c.email AS cemail, u.email AS uemail,
+                        c.representative_first_name AS rfirst, c.representative_name AS rlast
+                   FROM company c LEFT JOIN user u ON u.id = c.user_id
+                  WHERE c.id = ? AND c.organization_id = ?`, [cid, orgId]);
+            const repEmail = c && (c.uemail || c.cemail);
+            if (repEmail) {
+                liste.push({ id: `rep:${cid}`, first_name: (c.rfirst || ''), last_name: (c.rlast || c.name || ''),
+                    email: repEmail, kind: 'representant', company_id: cid });
+            }
+        }
+        const n = liste.length;
+        return { liste, cible: `${n} destinataire${n > 1 ? 's' : ''} choisi${n > 1 ? 's' : ''}` };
     }
     return { liste: [], cible: '' };
 }
@@ -280,7 +333,8 @@ const getDestinataires = async (req, res) => {
         const avec = liste.filter((l) => l.email);
         res.json({ data: {
             cible,
-            destinataires: avec.map((l) => ({ id: l.id, nom: [l.last_name, l.first_name].filter(Boolean).join(' '), email: l.email })),
+            destinataires: avec.map((l) => ({ id: l.id, nom: [l.last_name, l.first_name].filter(Boolean).join(' ') || l.email,
+                email: l.email, kind: l.kind || 'stagiaire', company_id: l.company_id || null })),
             /* CEUX QU'ON NE PEUT PAS JOINDRE SE DISENT AUSSI : ils sont l'information utile, pas
                un détail à masquer — c'est une fiche à compléter. */
             sans_email: liste.filter((l) => !l.email).map((l) => [l.last_name, l.first_name].filter(Boolean).join(' ')),
@@ -677,4 +731,4 @@ const supprimerRegle = async (req, res) => {
 module.exports = { getModeles, saveModele, resetModele, apercu, getDestinataires, envoyerGroupe, getEnvois,
     getRegles, creerRegle, modifierRegle, supprimerRegle,
     televerserImage, listerImages, servirImage, supprimerImage, chargerImages, piecesImages,
-    MAX_DESTINATAIRES, MIGRATION, JETONS_GROUPE };
+    resoudreCibles, MAX_DESTINATAIRES, MIGRATION, JETONS_GROUPE };

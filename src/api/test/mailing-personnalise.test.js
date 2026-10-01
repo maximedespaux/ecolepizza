@@ -330,9 +330,12 @@ test('on écrit à une SEMAINE, et on peut en retirer quelqu\'un', () => {
        ferait manquer quelqu'un. Décocher est le geste rare. */
     assert.match(page, /const retenus = \(cibles\?\.destinataires \|\| \[\]\)\.filter\(\(d\) => !ecartes\.has\(d\.id\)\)/);
     /* ET LA CIBLE D'ORIGINE EST GARDÉE tant que personne n'est écarté : le journal reste
-       lisible (« Semaine 38 »), au lieu d'une liste d'identifiants. */
-    assert.match(page, /const cible = ecartes\.size === 0/);
-    assert.match(page, /\{ type: "stagiaires", ids: retenus\.map\(\(d\) => d\.id\) \}/);
+       lisible (« Semaine 38 », « Entreprise X »), au lieu d'une liste d'identifiants. Dès qu'on
+       décoche, l'envoi porte la liste explicite des retenus (le détail — dont le représentant qui
+       se redésigne par l'id de son entreprise — est gelé dans mailing-cibles). */
+    assert.match(page, /if \(ecartes\.size === 0\)/);
+    assert.match(page, /const stagiaires = retenus\.filter\(\(d\) => \(d\.kind \|\| "stagiaire"\) === "stagiaire"\)\.map\(\(d\) => d\.id\)/);
+    assert.match(page, /\{ type: "stagiaires", ids: stagiaires \}/);
     /* UN NOM DÉCOCHÉ RESTE LISIBLE : le cacher ferait croire qu'il n'a jamais été dans la liste. */
     assert.match(lire(path.join(UI, 'styles/app.css')), /\.mail-destinataires-liste label\.off\{opacity:\.5;text-decoration:line-through\}/);
 });
