@@ -30,8 +30,29 @@ test('le menu « type de devis » est dans l’entête du parcours et s’enregi
 
     const det = lire('pages/StagiaireDetail.jsx');
     assert.match(det, /onChangeFinancing=\{peutEncaisser \? changerDevis : undefined\}/, 'éditable pour qui peut écrire');
-    assert.match(det, /await updateEnrollment\(curEnrId, \{ financing: v \}\)/, 'enregistré par dossier (PATCH)');
+    assert.match(det, /await updateEnrollment\(curEnrId, payload\)/, 'enregistré par dossier (PATCH)');
     assert.match(det, /setParcoursRefresh/, 'le parcours se recharge : le type change les documents applicables');
+});
+
+test('Professionnel ⇒ l’entreprise du dossier : menu, pré-rempli de l’employeur, détaché en Particulier', () => {
+    /* C'est enrollment.company_id (le rattachement) qui range le stagiaire sous son entreprise sur
+       la session — financing seul ne suffit pas. Passer en Professionnel pré-remplit l'employeur de
+       la fiche et ouvre un menu d'entreprises ; repasser en Particulier détache (avec confirmation). */
+    const parc = lire('components/EnrollmentParcours.jsx');
+    assert.match(parc, /onChangeCompany/, 'un menu entreprise, passé en prop');
+    assert.match(parc, /financingValue === "PROFESSIONNEL"/, 'proposé seulement en professionnel');
+    assert.match(parc, /aria-label="Entreprise du dossier"/);
+
+    const det = lire('pages/StagiaireDetail.jsx');
+    assert.match(det, /financing: "PROFESSIONNEL", company_id: curEnr\?\.company_id \|\| l\.company_id \|\| null/, 'pro ⇒ pré-remplit l’employeur');
+    assert.match(det, /financing: "PARTICULIER", company_id: null/, 'particulier ⇒ détache l’entreprise');
+    assert.match(det, /window\.confirm\(`Ce dossier est rattaché à/, 'un dossier rattaché se détache sur confirmation');
+    assert.match(det, /async function changerEntreprise/, 'changer l’entreprise du dossier');
+
+    /* Le dossier doit porter company_id / company_name pour que le menu pré-remplisse et nomme le détachement. */
+    const ctrl = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'document.controller.js'), 'utf8');
+    assert.match(ctrl, /e\.company_id, c\.name AS company_name/);
+    assert.match(ctrl, /LEFT JOIN company c ON c\.id = e\.company_id/);
 });
 
 test('le « type de devis » a quitté la fiche ; l’entreprise (employeur) y reste, toujours visible', () => {
