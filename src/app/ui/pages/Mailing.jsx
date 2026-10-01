@@ -700,10 +700,15 @@ function Programmes({ onStatus }) {
   const [cat, setCat] = useState(null);
   const [indispo, setIndispo] = useState(null);
   const [formations, setFormations] = useState([]);
+  const [multiFormations, setMultiFormations] = useState(false); // la 198 est-elle jouée ?
   const [edite, setEdite] = useState(null); // règle en cours d'édition, ou "neuve"
 
   const charger = () => getReglesMail()
-    .then((r) => { setRegles(r.data || []); setCat(r.catalogue || null); setIndispo(r.disponible === false ? r.message : null); })
+    .then((r) => {
+      setRegles(r.data || []); setCat(r.catalogue || null);
+      setMultiFormations(!!r.formations_multiples);
+      setIndispo(r.disponible === false ? r.message : null);
+    })
     .catch((e) => onStatus({ type: "error", message: e.message }));
   useEffect(() => {
     charger();
@@ -742,6 +747,7 @@ function Programmes({ onStatus }) {
 
         {edite && (
           <EditeurRegle regle={edite === "neuve" ? null : edite} cat={cat} formations={formations}
+            formationsMultiples={multiFormations}
             onFerme={() => setEdite(null)} onEnregistre={() => { setEdite(null); charger(); }} onStatus={onStatus} />
         )}
 
@@ -813,7 +819,9 @@ const libelleDestinataireMail = (d) => ({
 function cibleRegleTexte(r) {
   if (r.cible_stagiaire) return `pour ${r.cible_stagiaire}`;
   if (r.cible_entreprise) return `pour ${r.cible_entreprise}`;
-  return (r.formation_code || r.formation_titre) ? (r.formation_code || r.formation_titre) : "toutes les formations";
+  const fs = Array.isArray(r.formations) ? r.formations : [];
+  if (fs.length) return fs.map((f) => f.code || f.title).join(", ");
+  return (r.formation_code || r.formation_titre) || "toutes les formations";
 }
 
 /* La règle dite en une phrase VIVANTE, mise à jour à chaque frappe — « 3 mois après la fin de la
@@ -834,17 +842,21 @@ function resumeRegle(v, cat, formations) {
   }
   const dest = est ? libelleDestinataireMail(v.destinataire || "stagiaire") : "au stagiaire";
   let scope;
+  const nomFormation = (id) => { const f = formations.find((x) => x.id === id); return f ? (f.code || f.title) : "une formation"; };
   if (v.learner_id) scope = v.cible_stagiaire || "un stagiaire";
   else if (v.company_id) scope = v.cible_entreprise || "une entreprise";
-  else if (v.program_id) { const f = formations.find((x) => x.id === v.program_id); scope = f ? (f.code || f.title) : "une formation"; }
+  else if (v.program_ids && v.program_ids.length) {
+    scope = v.program_ids.length > 2 ? `${v.program_ids.length} formations` : v.program_ids.map(nomFormation).join(", ");
+  }
+  else if (v.program_id) scope = nomFormation(v.program_id);
   else scope = "toutes les formations";
   return { est, quand, dest, scope };
 }
 
-function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus }) {
+function EditeurRegle({ regle, cat, formations, formationsMultiples, onFerme, onEnregistre, onStatus }) {
   const [v, setV] = useState(() => regle || {
     nom: "", declencheur: "fin_session", sens: "apres", decalage: 3, unite: "mois",
-    program_id: null, template_slug: null, destinataire: "stagiaire",
+    program_id: null, program_ids: [], template_slug: null, destinataire: "stagiaire",
     learner_id: null, company_id: null, objet: "", corps: "", actif: 1,
   });
   const [busy, setBusy] = useState(false);
@@ -875,8 +887,10 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
   async function enregistrer() {
     setBusy(true); onStatus(null);
     try {
+      const program_ids = Array.isArray(v.program_ids) ? v.program_ids.filter(Boolean) : (v.program_id ? [v.program_id] : []);
       const payload = {
-        ...v, decalage: Number(v.decalage) || 0, program_id: v.program_id || null,
+        ...v, decalage: Number(v.decalage) || 0,
+        program_ids, program_id: program_ids.length === 1 ? program_ids[0] : null,
         template_slug: v.template_slug || null, destinataire: v.destinataire || "stagiaire",
         learner_id: v.learner_id || null, company_id: v.company_id || null, actif: v.actif !== 0,
       };
@@ -961,7 +975,7 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
             </select>
           </div>
         )}
-        <CibleRegle v={v} setV={setV} formations={formations} />
+        <CibleRegle v={v} setV={setV} formations={formations} formationsMultiples={formationsMultiples} />
       </section>
 
       <section className="mail-ed-bloc">
@@ -1005,15 +1019,20 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
    précise — « au lieu d'une session entière » (196). Les trois s'excluent : choisir l'un efface
    les autres. La recherche va au serveur pour les stagiaires (ils sont un millier) et filtre en
    local les entreprises (elles sont quelques centaines). */
-function CibleRegle({ v, setV, formations }) {
+function CibleRegle({ v, setV, formations, formationsMultiples }) {
   const [mode, setMode] = useState(v.learner_id ? "stagiaire" : v.company_id ? "entreprise" : "formation");
   function choisirMode(m) {
     setMode(m);
     setV((p) => ({ ...p,
       program_id: m === "formation" ? p.program_id : null,
+      program_ids: m === "formation" ? (p.program_ids || []) : [],
       learner_id: null, company_id: null, cible_stagiaire: null, cible_entreprise: null }));
   }
-  const MODES = [["formation", "Une formation", "target"], ["stagiaire", "Un stagiaire", "user"], ["entreprise", "Une entreprise", "building"]];
+  /* Une seule formation vit dans program_id ET program_ids (une liste d'un) : l'affichage (résumé,
+     carte) lit program_ids, et program_id tient le repli sans la 198. On garde donc les deux d'accord. */
+  const poser = (ids) => setV((p) => ({ ...p, program_ids: ids, program_id: ids.length === 1 ? ids[0] : null }));
+  const choisies = v.program_ids || [];
+  const MODES = [["formation", formationsMultiples ? "Formations" : "Une formation", "target"], ["stagiaire", "Un stagiaire", "user"], ["entreprise", "Une entreprise", "building"]];
   return (
     <div className="mail-cible">
       <div className="seg mail-cible-seg">
@@ -1023,15 +1042,33 @@ function CibleRegle({ v, setV, formations }) {
           </button>
         ))}
       </div>
-      {mode === "formation" && (
+      {mode === "formation" && (formationsMultiples ? (
+        /* TOUTES / une / plusieurs (migration 198) : « Toutes » = aucune cochée ; cocher restreint. */
+        <div className="mail-form-multi">
+          <label className="mail-form-opt">
+            <input type="checkbox" checked={choisies.length === 0} onChange={() => poser([])} />
+            <span>Toutes les formations</span>
+          </label>
+          {formations.map((f) => (
+            <label key={f.id} className="mail-form-opt">
+              <input type="checkbox" checked={choisies.includes(f.id)} onChange={() => {
+                const s = new Set(choisies);
+                if (s.has(f.id)) s.delete(f.id); else s.add(f.id);
+                poser([...s]);
+              }} />
+              <span>{f.code ? `${f.code} — ` : ""}{f.title}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
         <div className="field" style={{ margin: 0 }}>
           <select className="inp" value={v.program_id || ""} aria-label="Formation"
-            onChange={(e) => setV((p) => ({ ...p, program_id: e.target.value || null }))}>
+            onChange={(e) => poser(e.target.value ? [e.target.value] : [])}>
             <option value="">Toutes les formations</option>
             {formations.map((f) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ""}{f.title}</option>)}
           </select>
         </div>
-      )}
+      ))}
       {mode === "stagiaire" && (
         <RechercheCible type="stagiaire" labelActuel={v.cible_stagiaire}
           onChoisir={(o) => setV((p) => ({ ...p, learner_id: o.id, company_id: null, cible_stagiaire: o.label, cible_entreprise: null }))}

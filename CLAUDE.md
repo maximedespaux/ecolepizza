@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-01** : **2464 tests — 2457 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-01** : **2470 tests — 2463 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,9 +262,30 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 197, la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
-**197 est À JOUER** (`197_organisme_signature_email.sql`, la SIGNATURE des e-mails — demandée le 2026-10-01). Une colonne
+**198 est À JOUER** (`198_mail_regle_formation.sql`, PLUSIEURS FORMATIONS pour un envoi programmé — demandée le 2026-10-01 :
+« pour qui → Formation → Toutes, une, plusieurs »). Une table d'association `mail_regle_formation` (regle_id, program_id),
+comme `mail_regle_doc` : clé primaire sur le couple, les deux liens ON DELETE CASCADE. Une règle ne filtrait que sur UNE
+formation (`mail_regle.program_id`, NULL = toutes) ; elle peut désormais en viser plusieurs. La table FAIT AUTORITÉ quand
+elle porte des lignes ; sinon on retombe sur `program_id` (`formationsDeRegle`, reglesDocument.js) — avant comme après la
+migration. `program_id` reste EN PHASE : une SEULE formation choisie y est écrite (un revert de la 198 la garde) ; zéro ou
+plusieurs → NULL (une règle multi redevient « toutes » au revert, perte assumée). Les deux points de filtrage suivent : le
+passage des règles de DATE (`passageMailsProgrammes.js`, `AND s.program_id IN (?)`) et le crochet des règles de DOCUMENT
+(`regleViseDocument` : le document doit être de l'une des formations visées). L'écran (Formations → cases « Toutes / une /
+plusieurs ») ne propose le multi que si la table existe (`formations_multiples` dans `GET /api/mailing/regles`) ; sinon un
+select d'une formation, comme avant. Sans la migration, rien ne casse : une règle à UNE formation marche (program_id),
+viser PLUSIEURS répond 503 « migration 198 non jouée » (au lieu d'un repli silencieux sur « toutes »). **Elle se vérifie
+par l'API, sans SQL** : enregistrer une règle sur DEUX formations répond 200, puis `GET /api/mailing/regles` rend
+`program_ids` à deux éléments et `formations_multiples: true`. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='mail_regle_formation';`
+⚠️ Son revert supprime la table : les règles à UNE formation la gardent (program_id), celles à plusieurs redeviennent
+« toutes formations ». Tests : `mail-regle-formations.test.js`.
+
+**197 est JOUÉE — constaté le 2026-10-01 par l'API, sans SQL** : `GET /api/mailing/signature` répond 200 `disponible: true`
+(et non 503). Son paragraphe garde ce qu'elle fait et son revert.
+
+**197** (`197_organisme_signature_email.sql`, la SIGNATURE des e-mails — demandée le 2026-10-01). Une colonne
 JSON sur `organization` : `email_signature`, à l'image de `logo_image` (une data URL en base). Elle porte les champs
 modifiables (sous-titre « Administration », site, liens Facebook/Instagram/YouTube, mention des labels) ET les images de la
 signature — un logo PROPRE à la signature (choisi par l'école, indépendant du logo de l'organisme) et jusqu'à 4 badges
