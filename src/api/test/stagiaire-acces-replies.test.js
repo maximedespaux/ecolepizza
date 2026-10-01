@@ -21,7 +21,7 @@ const src = MODALE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\
 test('la section est la DERNIÈRE du formulaire', () => {
     const volet = src.indexOf('<details className="acces-formations">');
     assert.ok(volet > -1, 'le volet existe');
-    for (const avant of ['>Statut actuel &amp; financement</h3>', '>Votre projet</h3>', '>Entreprise</h3>']) {
+    for (const avant of ['>Statut actuel &amp; financement</h3>', '>Votre projet</h3>', '>Entreprise (employeur)</h3>']) {
         assert.ok(src.indexOf(avant) > -1 && src.indexOf(avant) < volet, `${avant} doit précéder le volet`);
     }
     const finVolet = src.indexOf('</details>', volet);

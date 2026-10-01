@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -304,6 +304,20 @@ function StagiaireDetail() {
       await updateStagiaire(id, { completed_levels: [...terminees, curEnr.program_code].join(",") });
       await loadLearner();
       setStatus({ type: "success", message: `Formation ${curEnr.program_code} marquée comme terminée.` });
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
+  }
+
+  /* CHANGER LE TYPE DE DEVIS DE CE DOSSIER (menu du parcours). Il décide quels documents s'appliquent
+     (devis particulier ⇄ professionnel) : on recharge les dossiers (pour le menu) ET le parcours. */
+  async function changerDevis(v) {
+    if (!curEnrId || v === curEnr?.financing) return;
+    setStatus(null);
+    try {
+      await updateEnrollment(curEnrId, { financing: v });
+      await loadDocs();
+      await loadLearner();
+      setParcoursRefresh((n) => n + 1);
+      setStatus({ type: "success", message: `Type de devis : ${v === "PROFESSIONNEL" ? "Professionnel" : "Particulier"}.` });
     } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
 
@@ -641,7 +655,8 @@ function StagiaireDetail() {
 
         <Card title={T("euro", "Statut & financement")}>
           <Row label="Statut" value={l.professional_status} />
-          <Row label="Type de devis" value={l.financing === "PROFESSIONNEL" ? "Professionnel" : "Particulier"} />
+          {/* LE TYPE DE DEVIS N'EST PLUS ICI : il se décide à l'inscription et se change dossier par
+              dossier, dans le menu du parcours (section « Parcours & documents »). */}
           <Row label="OPCO / financeur" value={l.opco} />
           <Row label="Montant CPF" value={l.cpf_amount ? euro(l.cpf_amount) : null} />
           <Row label="Identifiant France Travail" value={l.france_travail_id} />
@@ -707,6 +722,10 @@ function StagiaireDetail() {
             <EnrollmentParcours
               enrollmentId={curEnrId}
               refresh={parcoursRefresh}
+              /* LE TYPE DE DEVIS DE CE DOSSIER, changé ici (menu), pas sur la fiche. Changer le type
+                 change les documents du parcours (devis particulier ⇄ professionnel) : on recharge. */
+              financingValue={curEnr?.financing}
+              onChangeFinancing={peutEncaisser ? changerDevis : undefined}
               onOpenDoc={(docId) => setViewId(docId)}
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}

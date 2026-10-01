@@ -1082,6 +1082,12 @@ export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });
 }
 
+/* Met à jour UN dossier : le type de devis (financing), l'étape CRM… Le type de devis se change
+   d'ici, dossier par dossier, depuis le menu du parcours sur la fiche stagiaire. */
+export function updateEnrollment(id, payload) {
+  return request(`/enrollments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 /* Retirer un stagiaire : `effacer` supprime AUSSI ses documents non signés et ses réponses QCM
    (jamais un document signé, un émargement, une facture). Le plan se lit d'abord : getRetraitDossier. */
 export function deleteEnrollment(id, { effacer = false } = {}) {

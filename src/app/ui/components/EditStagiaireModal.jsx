@@ -36,7 +36,7 @@ const EMPTY = {
   diploma_level: "", diploma_name: "", diploma_year: "", last_experience: "",
   experience_value: "", experience_unit: "", professional_status: "", cpf_amount: "",
   france_travail_id: "", current_contract: "", social_security: "",
-  financing: "PARTICULIER", opco: "", levels: "", completed_levels: "", company_id: "",
+  opco: "", levels: "", completed_levels: "", company_id: "",
   /* Les cases de « Votre projet », toutes décochées : elles viennent du catalogue (lib/projet.js),
      comme `BOOL_FIELDS` ci-dessous et les cases rendues — une seule liste, qui ne peut plus diverger. */
   ...Object.fromEntries(CASES_PROJET.map((k) => [k, false])),
@@ -58,7 +58,8 @@ function toForm(d) {
   for (const b of BOOL_FIELDS) form[b] = !!d[b];
   form.contacted_at = dateOnly(d.contacted_at);
   form.birthday = dateOnly(d.birthday);
-  form.financing = d.financing || "PARTICULIER";
+  /* Plus de « type de devis » sur la fiche : il vit sur chaque dossier (enrollment.financing), réglé
+     à l'inscription et au menu du parcours. L'entreprise (employeur) se saisit, elle, toujours ici. */
   form.company_id = d.company_id || (d.company && d.company.id) || "";
   form.cpf_amount = montantEnSaisie(d.cpf_amount); // « 1500.00 » de la base s'affiche « 1500,00 »
   return form;
@@ -160,7 +161,6 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
   const motsNote = compterMots(form.note_libre);
   const noteTropLongue = motsNote > NOTE_STAGIAIRE_MOTS_MAX;
 
-  const isPro = form.financing === "PROFESSIONNEL";
   const isJobSeeker = form.professional_status === "Demandeur d'emploi";
   const isEmployed = form.professional_status === "En activité";
 
@@ -180,7 +180,7 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
     setSaving(true);
     try {
       // On lie l'entreprise via sa FK (company_id) : plus de saisie dupliquée par stagiaire.
-      const payload = { ...form, company_id: isPro ? (form.company_id || null) : null };
+      const payload = { ...form, company_id: form.company_id || null };
       /* LE SERVEUR DIT CE QU'IL A LAISSÉ TOMBER (`ignores` : colonne absente, migration non jouée).
          Même règle que l'écran de l'organisme : un « enregistré » qui tairait la note perdue serait
          un succès qui ment — elle aurait disparu à la réouverture, sans un mot. */
@@ -311,11 +311,9 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                   </SelectField>
                 </div>
               )}
+              {/* Plus de « Type de devis » ici : il se décide à l'inscription (un stagiaire = particulier,
+                  par une entreprise = professionnel) et se change dossier par dossier, au menu du parcours. */}
               <div className="row2">
-                <SelectField label="Type de devis" value={form.financing} onChange={set("financing")}>
-                  <option value="PARTICULIER">Personnel (particulier)</option>
-                  <option value="PROFESSIONNEL">Professionnel (entreprise)</option>
-                </SelectField>
                 <SelectField label="OPCO / financeur" value={form.opco} onChange={set("opco")}>
                   <option value="">-</option>
                   {[...new Set([...(form.opco ? [form.opco] : []), ...opcoNames])].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -369,10 +367,12 @@ function EditStagiaireModal({ id, onClose, onSaved, onError, onDelete }) {
                 </div>
               </div>
 
-              {isPro && (
+              {/* ENTREPRISE (employeur) TOUJOURS VISIBLE : la rattacher n'est plus lié au « type de devis »
+                  (retiré). Un dossier devient professionnel par la MÉTHODE d'inscription, pas par ce lien. */}
+              {(
                 <>
                   <div className="divider" />
-                  <h3 style={{ fontSize: 15, marginBottom: 4 }}>Entreprise</h3>
+                  <h3 style={{ fontSize: 15, marginBottom: 4 }}>Entreprise (employeur)</h3>
                   <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>Rattache le stagiaire à une entreprise. Ses coordonnées (SIRET, adresse, représentant, OPCO…) se gèrent dans la section <b>Entreprises</b> et servent aux documents.</p>
                   <div className="row2">
                     <SelectField label="Entreprise rattachée" value={form.company_id} onChange={set("company_id")}>

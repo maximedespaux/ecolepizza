@@ -217,6 +217,21 @@ const getParcours = async (req, res) => {
 /**
  * POST /api/enrollments — crée un dossier.
  */
+/* LE « TYPE DE DEVIS » DE LA FICHE N'EST PLUS SAISI : c'est un RÉSUMÉ, recalculé des dossiers —
+   professionnel si AU MOINS UN dossier l'est, particulier sinon. Il ne sert qu'à l'affichage et au
+   filtre de la liste des stagiaires (et à la carte) ; le vrai type vit sur chaque dossier
+   (`enrollment.financing`). On le recalcule donc à chaque fois qu'un dossier naît, change ou part. */
+async function recalcFinancementStagiaire(conn, learnerId, orgId) {
+    if (!learnerId) return;
+    await conn.query(
+        `UPDATE learner SET financing =
+           CASE WHEN EXISTS (SELECT 1 FROM enrollment e
+                              WHERE e.learner_id = ? AND e.organization_id = ? AND e.financing = 'PROFESSIONNEL')
+                THEN 'PROFESSIONNEL' ELSE 'PARTICULIER' END
+         WHERE id = ? AND organization_id = ?`,
+        [learnerId, orgId, learnerId, orgId]);
+}
+
 const createEnrollment = async (req, res) => {
     const { learner_id, session_id, company_id, crm_stage = 'PROSPECT' } = req.body;
     if (!learner_id || !session_id) {
@@ -263,10 +278,15 @@ const createEnrollment = async (req, res) => {
         const refus = await parcoursManquant(conn, orgId, session_id, !!company_id);
         if (refus) return res.status(422).json({ error: refus });
 
-        // Le financement (type de devis) suit celui du stagiaire s'il n'est pas fourni.
+        /* LE TYPE DE DEVIS SUIT LA MÉTHODE D'INSCRIPTION, plus la fiche. « Un stagiaire » (sans
+           entreprise) = PARTICULIER ; par une entreprise = PROFESSIONNEL. On ne lit PLUS
+           `learner.financing` : il est devenu un simple résumé dérivé des dossiers (cf.
+           recalcFinancementStagiaire), et s'en servir ferait naître un dossier individuel en
+           PROFESSIONNEL dès qu'une fiche a été passée en pro une fois. Le type se corrige après coup,
+           dossier par dossier, par le menu du parcours (PATCH /enrollments/:id). */
         let financing = req.body.financing;
         if (financing !== 'PARTICULIER' && financing !== 'PROFESSIONNEL') {
-            financing = l && l.financing ? l.financing : 'PARTICULIER';
+            financing = company_id ? 'PROFESSIONNEL' : 'PARTICULIER';
         }
 
         await conn.query(
@@ -275,6 +295,7 @@ const createEnrollment = async (req, res) => {
              VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ROUGE')`,
             [orgId, learner_id, session_id, company_id || null, financing, crm_stage]
         );
+        await recalcFinancementStagiaire(conn, learner_id, orgId);
 
         // À l'inscription : ajoute automatiquement le badge de la formation au stagiaire.
         if (l && sess && sess.badge) {
@@ -358,6 +379,8 @@ const deleteEnrollment = async (req, res) => {
         for (const id of effaces.documents) logAudit(req, 'document.delete', 'GeneratedDocument', id, precisions(id));
         for (const id of effaces.reponses) logAudit(req, 'quiz.response_delete', 'QuizResponse', id, precisions(id));
         logAudit(req, 'enrollment.delete', 'Learner', e.learner_id, { libelle: await libelleSession(conn, orgId, e.session_id) });
+        /* Un dossier professionnel retiré peut faire repasser la fiche en particulier (résumé dérivé). */
+        await recalcFinancementStagiaire(conn, e.learner_id, orgId);
         res.status(200).json({
             success: true, message: 'Stagiaire retiré',
             effaces: { documents: effaces.documents.length, reponses: effaces.reponses.length },
@@ -371,7 +394,7 @@ const deleteEnrollment = async (req, res) => {
 /**
  * PATCH /api/enrollments/:id — met à jour l'étape CRM ou le score de conformité.
  */
-const updateEnrollment = (req, res) => {
+const updateEnrollment = async (req, res) => {
     const allowedFields = ['financing', 'crm_stage', 'conformite_score', 'company_id'];
     const updates = [];
     const values = [];
@@ -385,18 +408,23 @@ const updateEnrollment = (req, res) => {
         return res.status(400).json({ message: 'Aucun champ valide à mettre à jour' });
     }
     values.push(req.params.id, req.user.organization_id);
-
-    db.query(
-        `UPDATE enrollment SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`,
-        values,
-        (err) => {
-            if (err) {
-                console.error('Erreur mise à jour dossier :', err);
-                return res.status(400).json({ message: 'Erreur mise à jour' });
-            }
-            res.status(200).json({ success: true, message: 'Dossier mis à jour' });
+    try {
+        const conn = db.promise();
+        const [r] = await conn.query(
+            `UPDATE enrollment SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`, values);
+        if (!r.affectedRows) return res.status(404).json({ message: 'Dossier introuvable' });
+        /* LE TYPE DE DEVIS D'UN DOSSIER A PU CHANGER (menu du parcours) : on remet à jour le résumé
+           dérivé de la fiche, dont dépend le filtre de la liste des stagiaires et la carte. */
+        if (req.body.financing !== undefined) {
+            const [[e]] = await conn.query('SELECT learner_id FROM enrollment WHERE id = ? AND organization_id = ?',
+                [req.params.id, req.user.organization_id]);
+            if (e) await recalcFinancementStagiaire(conn, e.learner_id, req.user.organization_id);
         }
-    );
+        res.status(200).json({ success: true, message: 'Dossier mis à jour' });
+    } catch (err) {
+        console.error('Erreur mise à jour dossier :', err);
+        res.status(400).json({ message: 'Erreur mise à jour' });
+    }
 };
 
-module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment, getRetrait };
+module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment, getRetrait, recalcFinancementStagiaire };
