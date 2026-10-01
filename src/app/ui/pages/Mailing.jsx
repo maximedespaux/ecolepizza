@@ -287,13 +287,14 @@ function Apercu({ rendu }) {
  * ICI », on colle l'adresse, et le marqueur `[ICI](https://…)` part dans le texte — c'est lui
  * qu'on relit, et il se corrige comme le reste.
  */
-function BarreInsertion({ jetons, onInserer, onStatus }) {
+function BarreInsertion({ jetons, corps = "", onChangeCorps, onStatus }) {
   const fichierRef = useRef(null);
   const [envoi, setEnvoi] = useState(false);
   /* LA BIBLIOTHÈQUE EST REPLIÉE PAR DÉFAUT, et c'est elle qui justifie la table : une école
      réutilise son affiche ou son logo d'un message à l'autre. Sans elle, chaque envoi
      redéposerait le même fichier, et la base grossirait d'autant de copies. */
   const [biblio, setBiblio] = useState(null); // null = jamais ouverte
+  const inserer = (txt) => onChangeCorps(`${corps || ""}${txt}`);
   const voirBiblio = () => (biblio
     ? setBiblio(null)
     : getImagesMail().then((r) => setBiblio(r.data || [])).catch((e) => onStatus?.({ type: "error", message: e.message })));
@@ -316,7 +317,7 @@ function BarreInsertion({ jetons, onInserer, onStatus }) {
       onStatus?.({ type: "error", message: "L'adresse doit commencer par http:// ou https://." });
       return;
     }
-    onInserer(`[${mots.trim()}](${url.trim()})`);
+    inserer(`[${mots.trim()}](${url.trim()})`);
   }
 
   async function choisirImage(e) {
@@ -330,17 +331,28 @@ function BarreInsertion({ jetons, onInserer, onStatus }) {
          3 à 5 — elle repartait en 413 sans que rien n'explique quoi faire. Et l'image voyage
          en PIÈCE JOINTE avec CHAQUE message du groupe : son poids se multiplie par le nombre
          de destinataires. */
+      /* LE NOM VISIBLE vient du fichier CHOISI, pas du serveur : une image réduite y est stockée
+         sous « blob » (un Blob sans nom), et « ![blob](…) » dans le message n'apprenait rien. */
+      const nom = (f.name || "image").replace(/\.[^.]+$/, "").trim() || "image";
       const r = await televerserImageMail(await reduireSiImage(f, PROFILS.mail));
-      onInserer(`![${r.data.nom || "image"}](image:${r.data.id})`);
-      onStatus?.({ type: "success", message: "Image ajoutée : elle partira avec le message." });
+      inserer(`![${nom}](image:${r.data.id})`);
+      onStatus?.({ type: "success", message: `Image « ${nom} » ajoutée : elle apparaît ci-dessous et dans l'aperçu.` });
     } catch (err) { onStatus?.({ type: "error", message: err.message }); }
     finally { setEnvoi(false); }
   }
 
+  /* LES IMAGES DU MESSAGE, en vignettes : le message est un simple champ texte, et une image s'y
+     écrit « ![nom](image:id) » — un marqueur que personne ne reconnaît. On montre donc, sous les
+     boutons, ce qui est réellement attaché, avec un × pour retirer. C'est LE retour qui manquait :
+     cliquer « Image », choisir un fichier, et VOIR la vignette apparaître. */
+  const imagesCorps = [...String(corps || "").matchAll(/!\[([^\]]*)\]\(image:([A-Za-z0-9-]+)\)/g)]
+    .map((m) => ({ nom: m[1] || "image", id: m[2], marqueur: m[0] }));
+  const retirerDuCorps = (marqueur) => onChangeCorps(String(corps || "").replace(marqueur, "").replace(/\n{3,}/g, "\n\n"));
+
   return (
     <div className="mail-jetons">
       {jetons.map((j) => (
-        <button key={j} type="button" className="btn ghost sm" onClick={() => onInserer(`{${j}}`)}>{`{${j}}`}</button>
+        <button key={j} type="button" className="btn ghost sm" onClick={() => inserer(`{${j}}`)}>{`{${j}}`}</button>
       ))}
       <button type="button" className="btn ghost sm" onClick={poserLien}>
         <Icon name="link" size={13} /> Lien
@@ -363,11 +375,23 @@ function BarreInsertion({ jetons, onInserer, onStatus }) {
               {/* La vignette passe par l'API (authentifiée) ; l'aperçu de l'e-mail, lui, porte
                   l'image en `data:` — son iframe en bac à sable ne peut rien aller chercher. */}
               <button type="button" title={`Insérer « ${img.nom} »`}
-                onClick={() => onInserer(`![${img.nom}](image:${img.id})`)}>
+                onClick={() => inserer(`![${img.nom}](image:${img.id})`)}>
                 <img src={`${API_BASE_URL}/mailing/images/${img.id}`} alt={img.nom} />
               </button>
               <button type="button" className="mail-biblio-x" onClick={() => retirer(img)}
                 aria-label={`Retirer ${img.nom}`}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      {imagesCorps.length > 0 && (
+        <div className="mail-images-jointes">
+          <span className="hint">Images du message :</span>
+          {imagesCorps.map((im) => (
+            <span key={im.marqueur} className="mail-img-jointe" title={im.nom}>
+              <img src={`${API_BASE_URL}/mailing/images/${im.id}`} alt={im.nom} />
+              <button type="button" className="mail-biblio-x" onClick={() => retirerDuCorps(im.marqueur)}
+                aria-label={`Retirer ${im.nom} du message`}>×</button>
             </span>
           ))}
         </div>
@@ -554,7 +578,7 @@ function Groupe({ onStatus }) {
         )}
 
         <BarreInsertion jetons={["Prénom", "Nom", "Organisme"]} onStatus={onStatus}
-          onInserer={(txt) => setCorps((c) => `${c}${txt}`)} />
+          corps={corps} onChangeCorps={setCorps} />
         <div className="field">
           <label htmlFor="mail-objet">Objet</label>
           <input id="mail-objet" className="inp" value={objet} onChange={(e) => setObjet(e.target.value)}
@@ -903,7 +927,7 @@ function EditeurRegle({ regle, cat, formations, onFerme, onEnregistre, onStatus 
         <div className="field">
           <label htmlFor="regle-corps">Contenu</label>
           <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
-            onInserer={(txt) => setV((p) => ({ ...p, corps: `${p.corps}${txt}` }))} />
+            corps={v.corps} onChangeCorps={(c) => setV((p) => ({ ...p, corps: c }))} />
           <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
             placeholder={estDoc ? "Bonjour {Prénom},\n\nNous avons bien reçu votre {Document} signé. Merci !"
               : "Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
