@@ -22,6 +22,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
    à 200 Ko décodés font ~1,35 Mo en base64 : sous la barre, avec de la marge pour le texte. Un logo
    ou un badge réel pèse quelques dizaines de Ko — ces plafonds ne sont qu'un garde-fou. */
 const MAX_BADGES = 4;
+const MAX_RESEAUX = 6;
 const MAX_OCTETS_IMAGE = 200 * 1024;         // par image, octets décodés
 const FORMATS_MAIL = /^data:(image\/(?:png|jpeg|gif));base64,([A-Za-z0-9+/=]+)$/; // PAS de webp : Outlook ne le lit pas
 
@@ -92,13 +93,21 @@ function validerConfig(entree) {
             const data = image(typeof b === 'string' ? b : (b && b.data), 'Un badge');
             if (data) badges.push({ data, alt: txt(b && b.alt, 80) || 'Label qualité' });
         }
+        /* LES RÉSEAUX SONT UNE LISTE qu'on ajoute et retire (plus de champs figés Facebook/Instagram/
+           YouTube) : chacun porte un nom et un lien http(s). Un réseau sans nom OU sans lien est écarté
+           — un lien sans libellé ne se cliquerait pas, un libellé sans lien ne mènerait nulle part. */
+        const reseauxEntree = Array.isArray(entree.reseaux) ? entree.reseaux.slice(0, MAX_RESEAUX) : [];
+        const reseaux = [];
+        for (const r of reseauxEntree) {
+            const nom = txt(r && r.nom, 40);
+            const url = lien(r && r.url, nom || 'du réseau');
+            if (nom && url) reseaux.push({ nom, url });
+        }
         return { valeur: {
             actif: entree.actif !== false,
             sous_titre: txt(entree.sous_titre, 80),
             site: txt(entree.site, 120),
-            facebook: lien(entree.facebook, 'Facebook'),
-            instagram: lien(entree.instagram, 'Instagram'),
-            youtube: lien(entree.youtube, 'YouTube'),
+            reseaux,
             certif_mention: txt(entree.certif_mention, 400),
             logo: image(entree.logo, 'Le logo'),
             badges,
@@ -121,17 +130,19 @@ function signatureHtml(c, org = {}, { pourApercu = false } = {}) {
     const badges = images.filter((im) => im.cid !== 'sig-logo');
     const src = (im) => (pourApercu ? im.data : `cid:${im.cid}`);
 
+    /* Téléphone, e-mail, site CHACUN SUR SA LIGNE (demandé le 2026-10-01, cf. la maquette) — une
+       ligne unique « tél · mail · site » devenait vite trop large. Les réseaux, eux, restent EN
+       LIGNE (une seule rangée, séparés par « · »). */
     const contact = [
         org.phone ? `Tél.&nbsp;: ${esc(org.phone)}` : '',
-        org.email ? `${esc(org.email)}` : '',
-        c.site ? `${esc(c.site)}` : '',
-    ].filter(Boolean).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+        org.email ? esc(org.email) : '',
+        c.site ? esc(c.site) : '',
+    ].filter(Boolean).map((l) => `<div>${l}</div>`).join('');
     const adresse = [org.address, [org.zip_code, org.town].filter(Boolean).join(' - ')].filter(Boolean).map(esc).join('&nbsp;·&nbsp;');
-    const reseaux = [
-        c.facebook ? `<a href="${esc(c.facebook)}" style="color:#c0392b;text-decoration:none">Facebook</a>` : '',
-        c.instagram ? `<a href="${esc(c.instagram)}" style="color:#c0392b;text-decoration:none">Instagram</a>` : '',
-        c.youtube ? `<a href="${esc(c.youtube)}" style="color:#c0392b;text-decoration:none">YouTube</a>` : '',
-    ].filter(Boolean).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+    const reseaux = (Array.isArray(c.reseaux) ? c.reseaux : [])
+        .filter((r) => r && r.nom && r.url)
+        .map((r) => `<a href="${esc(r.url)}" style="color:#c0392b;text-decoration:none">${esc(r.nom)}</a>`)
+        .join('&nbsp;&nbsp;·&nbsp;&nbsp;');
 
     const logoCell = logo
         ? `<td width="150" valign="top" style="padding:0 16px 0 0"><img src="${src(logo)}" alt="${esc(marque)}" width="140" style="width:140px;max-width:140px;height:auto;border:0;display:block"></td>`
@@ -149,8 +160,8 @@ function signatureHtml(c, org = {}, { pourApercu = false } = {}) {
         <td valign="top">
           <div style="font-size:16px;font-weight:700;color:#2b2f6b">${esc(marque)}</div>
           ${c.sous_titre ? `<div style="color:#c0392b;font-weight:600;margin:0 0 6px">${esc(c.sous_titre)}</div>` : ''}
-          ${contact ? `<div>${contact}</div>` : ''}
-          ${reseaux ? `<div style="margin-top:4px">${reseaux}</div>` : ''}
+          ${contact}
+          ${reseaux ? `<div style="margin-top:6px">${reseaux}</div>` : ''}
         </td>
       </tr>
       ${adresse ? `<tr><td colspan="2" style="padding:12px 0 0"><span style="display:inline-block;padding:6px 14px;background:#2b2f6b;color:#fff;border-radius:7px;font-size:12px">${adresse}</span></td></tr>` : ''}

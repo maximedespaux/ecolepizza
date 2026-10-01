@@ -34,15 +34,17 @@ test('validerConfig : refuse le WebP, le trop lourd, un lien non http(s) ; borne
     assert.match(sig.validerConfig({ logo: 'data:image/webp;base64,AAAA' }).erreur || '', /PNG, JPEG ou GIF/);
     const lourd = 'data:image/png;base64,' + 'A'.repeat(300000); // ~225 Ko décodés > 200 Ko
     assert.match(sig.validerConfig({ logo: lourd }).erreur || '', /200 Ko/);
-    assert.match(sig.validerConfig({ facebook: 'ftp://x' }).erreur || '', /http/);
+    assert.match(sig.validerConfig({ reseaux: [{ nom: 'Site', url: 'ftp://x' }] }).erreur || '', /http/);
 
     const { valeur, erreur } = sig.validerConfig({
-        sous_titre: '  Administration  ', site: ' ecole-pizza.com ', facebook: 'https://fb.com/x',
+        sous_titre: '  Administration  ', site: ' ecole-pizza.com ',
+        reseaux: [{ nom: ' Facebook ', url: 'https://fb.com/x' }, { nom: 'SansLien', url: '' }, { nom: '', url: 'https://x.fr' }],
         logo: PNG, badges: [{ data: PNG }, { data: PNG }, { data: PNG }, { data: PNG }, { data: PNG }],
     });
     assert.strictEqual(erreur, undefined);
     assert.strictEqual(valeur.sous_titre, 'Administration', 'coupé et nettoyé');
     assert.strictEqual(valeur.site, 'ecole-pizza.com');
+    assert.deepStrictEqual(valeur.reseaux, [{ nom: 'Facebook', url: 'https://fb.com/x' }], 'un réseau sans nom OU sans lien est écarté');
     assert.strictEqual(valeur.badges.length, 4, 'cinq badges proposés → quatre gardés');
     assert.strictEqual(valeur.actif, true);
 });
@@ -61,7 +63,8 @@ test('signatureAttachments : un cid et un buffer par image, les invalides écart
 
 test('signatureHtml : cid dans l’e-mail, data: dans l’aperçu, null sans config', () => {
     assert.strictEqual(sig.signatureHtml(null), null);
-    const c = { sous_titre: 'Administration', logo: PNG, badges: [{ data: PNG }] };
+    const c = { sous_titre: 'Administration', logo: PNG, badges: [{ data: PNG }],
+        reseaux: [{ nom: 'Notre page', url: 'https://fb.com/ecolepizza' }] };
     const org = { short_name: 'École Pizza', phone: '05 62 50 18 64', email: 'contact@ecole-pizza.com' };
 
     const mail = sig.signatureHtml(c, org);
@@ -70,6 +73,8 @@ test('signatureHtml : cid dans l’e-mail, data: dans l’aperçu, null sans con
     assert.match(mail, /Administration/);
     assert.match(mail, /École Pizza/);
     assert.match(mail, /contact@ecole-pizza\.com/);
+    /* UN RÉSEAU = le NOM saisi (plus de libellé figé « Facebook ») pointant sur le lien saisi. */
+    assert.match(mail, /<a href="https:\/\/fb\.com\/ecolepizza"[^>]*>Notre page<\/a>/);
     assert.doesNotMatch(mail, /data:image\/png/, 'un e-mail n’embarque pas l’image en data: — elle est en pièce jointe');
 
     const apercu = sig.signatureHtml(c, org, { pourApercu: true });
@@ -96,6 +101,10 @@ test('l’éditeur : un onglet Signature, des images forcées en PNG, un aperçu
     /* PNG et non WebP : reduireEnPngDataUrl, pas reduireEnDataUrl (cf. ci-dessus, Outlook). */
     assert.match(page, /reduireEnPngDataUrl/);
     assert.doesNotMatch(page.match(/function Signature[\s\S]*?\n}/)?.[0] || '', /reduireEnDataUrl\b(?!Png)/);
+    /* LES RÉSEAUX SONT UNE LISTE qu'on ajoute et retire — plus de champs figés Facebook/Instagram/YouTube. */
+    assert.match(page, /Ajouter un réseau/);
+    assert.match(page, /const majReseau =/);
+    assert.doesNotMatch(page, /id="sig-fb"/, 'plus de champ Facebook figé');
     const client = lire(path.join(UI, 'api', 'apiClient.js'));
     assert.match(client, /export function saveSignatureMail/);
     assert.match(client, /export function apercuSignatureMail/);

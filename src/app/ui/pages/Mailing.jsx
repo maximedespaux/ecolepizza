@@ -1144,9 +1144,17 @@ function RechercheCible({ type, labelActuel, onChoisir, onEffacer }) {
  * pas le WebP. L'aperçu vient du SERVEUR (apercuSignatureMail), par la même fonction que l'e-mail
  * réel : le recomposer ici donnerait une seconde version à tenir.
  */
-const SIGNATURE_VIDE = () => ({ actif: true, sous_titre: "", site: "", facebook: "", instagram: "", youtube: "", certif_mention: "", logo: "", badges: [] });
+const SIGNATURE_VIDE = () => ({ actif: true, sous_titre: "", site: "", reseaux: [], certif_mention: "", logo: "", badges: [] });
 const normBadge = (b) => (typeof b === "string" ? { data: b, alt: "" } : { data: (b && b.data) || "", alt: (b && b.alt) || "" });
+/* Les réseaux sont désormais une liste { nom, url } ; une ancienne signature (champs figés Facebook/
+   Instagram/YouTube) est convertie à l'ouverture, pour ne pas perdre ce qui était déjà saisi. */
+const normReseaux = (data) => {
+  if (data && Array.isArray(data.reseaux)) return data.reseaux.map((r) => ({ nom: (r && r.nom) || "", url: (r && r.url) || "" }));
+  return [["Facebook", "facebook"], ["Instagram", "instagram"], ["YouTube", "youtube"]]
+    .filter(([, k]) => data && data[k]).map(([nom, k]) => ({ nom, url: data[k] }));
+};
 const MAX_BADGES_SIG = 4;
+const MAX_RESEAUX_SIG = 6;
 
 function Signature({ onStatus }) {
   const [v, setV] = useState(null);
@@ -1160,12 +1168,13 @@ function Signature({ onStatus }) {
     getSignatureMail()
       .then((r) => {
         if (r.disponible === false) { setIndispo(r.message); setV(SIGNATURE_VIDE()); return; }
-        setV({ ...SIGNATURE_VIDE(), ...(r.data || {}), badges: ((r.data && r.data.badges) || []).map(normBadge) });
+        setV({ ...SIGNATURE_VIDE(), ...(r.data || {}), badges: ((r.data && r.data.badges) || []).map(normBadge), reseaux: normReseaux(r.data) });
       })
       .catch((e) => { onStatus({ type: "error", message: e.message }); setV(SIGNATURE_VIDE()); });
   }, [onStatus]);
 
   const champ = (k) => (e) => { setV((p) => ({ ...p, [k]: e.target.value })); setApercu(null); };
+  const majReseau = (i, k, val) => { setV((p) => ({ ...p, reseaux: p.reseaux.map((r, j) => (j === i ? { ...r, [k]: val } : r)) })); setApercu(null); };
 
   async function choisirImage(e, pose) {
     const f = e.target.files?.[0];
@@ -1220,14 +1229,27 @@ function Signature({ onStatus }) {
         <div className="field"><label htmlFor="sig-site">Site web</label>
           <input id="sig-site" className="inp" value={v.site} onChange={champ("site")} placeholder="ecole-pizza.com" /></div>
       </div>
-      <div className="row2" style={{ alignItems: "flex-start" }}>
-        <div className="field"><label htmlFor="sig-fb">Facebook (lien)</label>
-          <input id="sig-fb" className="inp" value={v.facebook} onChange={champ("facebook")} placeholder="https://facebook.com/…" /></div>
-        <div className="field"><label htmlFor="sig-ig">Instagram (lien)</label>
-          <input id="sig-ig" className="inp" value={v.instagram} onChange={champ("instagram")} placeholder="https://instagram.com/…" /></div>
+      {/* RÉSEAUX : une liste qu'on ajoute et retire — un nom (ce qui s'affiche) et un lien. */}
+      <div className="field">
+        <label>Réseaux sociaux</label>
+        {v.reseaux.map((r, i) => (
+          <div key={i} className="sig-reseau">
+            <input className="inp" aria-label="Nom du réseau" value={r.nom}
+              onChange={(e) => majReseau(i, "nom", e.target.value)} placeholder="Facebook" />
+            <input className="inp" aria-label="Lien du réseau" value={r.url}
+              onChange={(e) => majReseau(i, "url", e.target.value)} placeholder="https://…" />
+            <button type="button" className="btn ghost sm icone" aria-label={`Retirer ${r.nom || "ce réseau"}`}
+              onClick={() => { setV((p) => ({ ...p, reseaux: p.reseaux.filter((_, j) => j !== i) })); setApercu(null); }}>
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        ))}
+        <button type="button" className="btn ghost sm" disabled={v.reseaux.length >= MAX_RESEAUX_SIG}
+          onClick={() => { setV((p) => ({ ...p, reseaux: [...p.reseaux, { nom: "", url: "" }] })); setApercu(null); }}>
+          <Icon name="plus" size={13} /> Ajouter un réseau
+        </button>
+        {v.reseaux.length >= MAX_RESEAUX_SIG && <span className="hint"> &nbsp;{MAX_RESEAUX_SIG} au maximum.</span>}
       </div>
-      <div className="field"><label htmlFor="sig-yt">YouTube (lien)</label>
-        <input id="sig-yt" className="inp" value={v.youtube} onChange={champ("youtube")} placeholder="https://youtube.com/…" /></div>
 
       {/* BADGES : les labels qualité (Qualiopi, ICPF, cofrac…), qu'on ajoute et retire. */}
       <div className="field">
