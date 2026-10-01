@@ -130,11 +130,14 @@ function signatureHtml(c, org = {}, { pourApercu = false } = {}) {
     const badges = images.filter((im) => im.cid !== 'sig-logo');
     const src = (im) => (pourApercu ? im.data : `cid:${im.cid}`);
 
+    /* Téléphone, e-mail, site CHACUN SUR SA LIGNE (demandé le 2026-10-01, cf. la maquette) — une
+       ligne unique « tél · mail · site » devenait vite trop large. Les réseaux, eux, restent EN
+       LIGNE (une seule rangée, séparés par « · »). */
     const contact = [
         org.phone ? `Tél.&nbsp;: ${esc(org.phone)}` : '',
-        org.email ? `${esc(org.email)}` : '',
-        c.site ? `${esc(c.site)}` : '',
-    ].filter(Boolean).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+        org.email ? esc(org.email) : '',
+        c.site ? esc(c.site) : '',
+    ].filter(Boolean).map((l) => `<div>${l}</div>`).join('');
     const adresse = [org.address, [org.zip_code, org.town].filter(Boolean).join(' - ')].filter(Boolean).map(esc).join('&nbsp;·&nbsp;');
     const reseaux = (Array.isArray(c.reseaux) ? c.reseaux : [])
         .filter((r) => r && r.nom && r.url)
@@ -157,8 +160,8 @@ function signatureHtml(c, org = {}, { pourApercu = false } = {}) {
         <td valign="top">
           <div style="font-size:16px;font-weight:700;color:#2b2f6b">${esc(marque)}</div>
           ${c.sous_titre ? `<div style="color:#c0392b;font-weight:600;margin:0 0 6px">${esc(c.sous_titre)}</div>` : ''}
-          ${contact ? `<div>${contact}</div>` : ''}
-          ${reseaux ? `<div style="margin-top:4px">${reseaux}</div>` : ''}
+          ${contact}
+          ${reseaux ? `<div style="margin-top:6px">${reseaux}</div>` : ''}
         </td>
       </tr>
       ${adresse ? `<tr><td colspan="2" style="padding:12px 0 0"><span style="display:inline-block;padding:6px 14px;background:#2b2f6b;color:#fff;border-radius:7px;font-size:12px">${adresse}</span></td></tr>` : ''}
