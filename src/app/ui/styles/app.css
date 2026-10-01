@@ -6279,6 +6279,10 @@ label .requis {
 .sig-badge{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;
   border:1px solid var(--border);border-radius:8px;background:#fff}
 .sig-badge img{max-height:46px;max-width:150px;height:auto;display:block}
+/* Réseaux sociaux : une ligne par réseau — un nom court, un lien large, et la corbeille. */
+.sig-reseau{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.sig-reseau input:first-child{max-width:150px}
+.sig-reseau input:nth-child(2){flex:1}
 /* Choix de plusieurs formations pour une règle (migration 198) : une liste de cases, qui défile
    au-delà d'une poignée de formations. « Toutes » = aucune cochée. */
 .mail-form-multi{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto;
