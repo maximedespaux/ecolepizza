@@ -47,6 +47,24 @@ test('un jeton inconnu est refusé AVANT l\'enregistrement', () => {
     assert.match(lib.lireModeleMail('facture', { objet: 'x', titre: 'y' }).erreur || '', /inconnu/);
 });
 
+test('l\'aperçu d\'une règle connaît SES jetons — {Document} passe (sinon l\'image paraît cassée)', () => {
+    /* LE BUG : l'aperçu d'un mail automatique réutilisait les trois jetons d'« Écrire à un groupe ».
+       Une règle « document signé » dont le message porte {Document} — le texte par défaut — répondait
+       « jeton inconnu », l'aperçu échouait, et l'école, qui venait d'y glisser une image, croyait son
+       image en cause. L'aperçu reçoit désormais les jetons de la RÈGLE. */
+    const { JETONS_REGLE } = require('../lib/passageMailsProgrammes.js');
+    const avecImage = 'Votre {Document} est bien reçu. ![qr](image:QR1)';
+    assert.match(lib.lireEnvoiGroupe({ objet: 'x', corps: avecImage }).erreur || '', /\{Document\}.*n’existe pas/,
+        'par défaut (groupe), {Document} est refusé');
+    const ok = lib.lireEnvoiGroupe({ objet: 'x', corps: avecImage }, JETONS_REGLE);
+    assert.ok(ok.valeurs, 'avec les jetons de règle, {Document} passe');
+    assert.match(ok.valeurs.corps, /image:QR1/, 'et le marqueur d’image reste intact');
+    /* Un jeton vraiment inconnu reste refusé, et la liste proposée inclut bien les jetons de règle. */
+    const ko = lib.lireEnvoiGroupe({ objet: 'x', corps: 'Bonjour {Zzz}' }, JETONS_REGLE);
+    assert.match(ko.erreur || '', /\{Zzz\}.*n’existe pas/);
+    assert.match(ko.erreur || '', /\{Document\}/);
+});
+
 test('le texte de l\'école est du TEXTE : échappé, en paragraphes, liens cliquables', () => {
     /* UN ÉDITEUR RICHE AURAIT PRODUIT DU HTML que les clients mail rendent chacun à leur façon —
        et une balise mal fermée casse l'e-mail là où personne ne peut plus la corriger. */

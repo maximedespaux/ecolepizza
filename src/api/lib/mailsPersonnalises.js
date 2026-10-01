@@ -206,15 +206,18 @@ function lireModeleMail(cle, b = {}) {
 }
 
 /** Ce qu'un envoi à un groupe doit porter → `{ valeurs }` ou `{ erreur }`. */
-function lireEnvoiGroupe(b = {}) {
+/* `jetons` : les jetons autorisés. « Écrire à un groupe » n'en connaît que trois ({Prénom}, {Nom},
+   {Organisme}) ; l'APERÇU d'une règle d'envoi en connaît plus (formation, session, dates, {Document}),
+   et l'appelant les lui passe — sinon l'aperçu refuserait {Document} et l'image paraîtrait cassée. */
+function lireEnvoiGroupe(b = {}, jetons = JETONS_GROUPE) {
     const objet = String(b.objet == null ? '' : b.objet).replace(/\s+/g, ' ').trim().slice(0, MAX_OBJET);
     const corps = String(b.corps == null ? '' : b.corps).replace(/\r\n?/g, '\n').trim().slice(0, MAX_ZONE * 2);
     if (!objet) return { erreur: 'L’objet est obligatoire.' };
     if (!corps) return { erreur: 'Écrivez le message avant de l’envoyer.' };
-    const connus = new Set(JETONS_GROUPE);
+    const connus = new Set(jetons);
     const inconnu = [...jetonsDe(objet), ...jetonsDe(corps)].find((j) => !connus.has(j));
     if (inconnu) {
-        return { erreur: `Le jeton {${inconnu}} n’existe pas. Disponibles : ${JETONS_GROUPE.map((j) => `{${j}}`).join(', ')}.` };
+        return { erreur: `Le jeton {${inconnu}} n’existe pas. Disponibles : ${jetons.map((j) => `{${j}}`).join(', ')}.` };
     }
     return { valeurs: { objet, corps } };
 }
