@@ -14,7 +14,7 @@ import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
-import { dateHeure, dateFr } from "../lib/format.js";
+import { dateHeure, dateFr, colorOf } from "../lib/format.js";
 import { documentsDeLEtape, documentsEntrepriseHorsParcours, cibleImportGroupe, signeDansLApplication } from "../lib/documentsDossier.js";
 import { ACCEPT_DOCUMENT, ACCEPT_PIECE, refusDocumentRecu } from "../lib/formatsDepot.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
@@ -643,16 +643,37 @@ export default function EntrepriseDetail() {
                     {sessQ && <button className="gs-clear" onClick={() => setSessQ("")}><Icon name="x" size={13} /></button>}
                   </span>
                   {sessFocus && (
-                    <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4, maxHeight: 280, overflow: "auto" }}>
-                      {filtrees.length === 0
-                        ? <div className="cat-opt"><span className="hint">Aucune session ne correspond.</span></div>
-                        : filtrees.map((s) => (
-                          <div key={s.id} className="cat-opt" style={{ cursor: "pointer" }}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => { setEnrollSessionId(s.id); setSessQ(""); setSessFocus(false); }}>
-                            {sessLabel(s)}
+                    <div className="cat-pop" style={{ position: "absolute", left: 0, right: 0, top: "100%", zIndex: 5, marginTop: 4, maxHeight: 320, overflow: "auto" }}>
+                      {filtrees.length === 0 ? (
+                        <div className="cat-opt"><span className="hint">Aucune session ne correspond.</span></div>
+                      ) : (() => {
+                        /* GROUPÉES PAR SEMAINE (en-têtes), chaque formation en PASTILLE COLORÉE — ses
+                           couleurs, celles du suivi et du pipeline (colorOf) : on repère la bonne d'un
+                           coup d'œil, au lieu de lire toute une longue ligne. */
+                        const groupes = [];
+                        const parCle = new Map();
+                        for (const s of filtrees) {
+                          const cle = `${s.year}-${s.week}`;
+                          if (!parCle.has(cle)) { const g = { cle, week: s.week, year: s.year, items: [] }; parCle.set(cle, g); groupes.push(g); }
+                          parCle.get(cle).items.push(s);
+                        }
+                        return groupes.map((g) => (
+                          <div key={g.cle}>
+                            <div className="sess-sem">Semaine {g.week} · {g.year}</div>
+                            {g.items.map((s) => {
+                              const d = s.start_date ? `${frDateCourt(s.start_date)}${s.end_date && s.end_date !== s.start_date ? ` → ${frDateCourt(s.end_date)}` : ""}` : "";
+                              return (
+                                <div key={s.id} className="cat-opt sess-opt"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => { setEnrollSessionId(s.id); setSessQ(""); setSessFocus(false); }}>
+                                  <span className="badge n mono" style={{ background: colorOf(s.program_code), color: "#fff", borderColor: "transparent" }}>{s.program_code}</span>
+                                  <span className="sess-opt-txt">{s.program_title}{d && <span className="hint"> · {d}</span>}</span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
+                        ));
+                      })()}
                     </div>
                   )}
                 </>
