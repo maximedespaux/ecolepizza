@@ -3,7 +3,7 @@ import { importStagiaires, importEntreprises } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import Badge from "./Badge.jsx";
 import { decoderCsv, lireCsv } from "../lib/csv.js";
-import { CHAMPS_IMPORT, associerColonnes, lignesPourServeur, modeleCsv, nomModele } from "../lib/importFiches.js";
+import { CHAMPS_IMPORT, associerColonnes, lignesPourServeur, modeleCsv, nomModele, resumeImport } from "../lib/importFiches.js";
 
 /**
  * L'IMPORT D'UN FICHIER CSV — stagiaires ou entreprises (demandé le 2026-09-22).
@@ -140,6 +140,9 @@ export default function ImportCsv({ type, onClose, onImporte }) {
 
           {b && (
             <div className="import-csv-bilan" aria-live="polite">
+              {/* Le résumé en clair, AVANT les pastilles : « X nouvelles fiches seront créées · Y déjà
+                 présentes seront ignorées · Z refusées » (au futur pour l'essai, au passé une fois fait). */}
+              <p className="import-csv-resume">{resumeImport(b, { fait: !!fait })}</p>
               <p className="import-csv-comptes">
                 {fait
                   ? <Badge tone="g">{pluriel(b.crees, ["fiche créée", "fiches créées"])}</Badge>

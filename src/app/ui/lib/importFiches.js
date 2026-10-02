@@ -78,3 +78,30 @@ export function lignesPourServeur(lignes, colonnes) {
     return o;
   });
 }
+
+/**
+ * La PHRASE DE RÉSUMÉ de l'aperçu d'import, en clair, avant les pastilles : « 12 nouvelles fiches
+ * seront créées · 3 déjà présentes seront ignorées · 1 refusée ». Avant l'import (essai), au FUTUR ;
+ * après, au PASSÉ. On dit toujours les nouvelles (même « aucune »), et les déjà présentes / refusées
+ * quand il y en a. Les « avertissements » n'y entrent pas : ils portent sur des CHAMPS laissés de
+ * côté, pas sur des fiches. Les fiches sont féminines → tout s'accorde au féminin.
+ * @param bilan  { a_creer, crees, doublons, erreurs } renvoyé par le serveur
+ * @param fait   true une fois l'import réellement fait (passé), false pour l'essai (futur)
+ */
+export function resumeImport(bilan, { fait = false } = {}) {
+  if (!bilan) return "";
+  const s = (n) => (n > 1 ? "s" : "");           // pluriel
+  const ser = (n) => (n > 1 ? "seront" : "sera"); // conjugaison du futur
+  const parts = [];
+  if (fait) {
+    parts.push(bilan.crees ? `${bilan.crees} nouvelle${s(bilan.crees)} fiche${s(bilan.crees)} créée${s(bilan.crees)}` : "aucune fiche créée");
+    if (bilan.doublons) parts.push(`${bilan.doublons} déjà présente${s(bilan.doublons)} ignorée${s(bilan.doublons)}`);
+  } else {
+    parts.push(bilan.a_creer
+      ? `${bilan.a_creer} nouvelle${s(bilan.a_creer)} fiche${s(bilan.a_creer)} ${ser(bilan.a_creer)} créée${s(bilan.a_creer)}`
+      : "aucune nouvelle fiche à créer");
+    if (bilan.doublons) parts.push(`${bilan.doublons} déjà présente${s(bilan.doublons)} ${ser(bilan.doublons)} ignorée${s(bilan.doublons)}`);
+  }
+  if (bilan.erreurs) parts.push(`${bilan.erreurs} refusée${s(bilan.erreurs)}`);
+  return parts.join(" · ");
+}
