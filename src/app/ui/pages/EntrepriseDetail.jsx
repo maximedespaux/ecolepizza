@@ -323,7 +323,7 @@ export default function EntrepriseDetail() {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} />;
+  if (!data) return <StatusMessage status={status || { type: "info", message: "Chargement…" }} inline />;
 
   /* IMPORTER L'EXEMPLAIRE SIGNÉ RENVOYÉ PAR L'ENTREPRISE (demandé le 2026-09-28 : « pour une
      entreprise, seulement Préparer le document, alors que le stagiaire peut importer »). Même geste

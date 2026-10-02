@@ -612,6 +612,26 @@ tbody tr:last-child td{border-bottom:none}
    cas — le composant ne connaissait que « erreur » et « le reste ». */
 .status.info{color:var(--muted);background:var(--surface2);border:1px solid var(--border-soft)}
 
+/* BANDE D'ÉTAT flottante en haut de l'écran (StatusMessage) — la confirmation (vert) ou l'erreur
+   (rouge) ne monte plus dans le flux de la page : elle flotte en haut, s'efface seule, et porte une
+   croix. La ZONE prend toute la largeur pour centrer la bande, mais ne capte pas les clics
+   (pointer-events:none) : seule la bande les reçoit, le reste de l'écran reste cliquable dessous.
+   z-index AU-DESSUS de la barre du haut (30), de la barre latérale (40) et du voile des fenêtres
+   (35), SOUS la barre de chargement (400). */
+.status-bande-zone{position:fixed;top:12px;left:0;right:0;z-index:300;display:flex;justify-content:center;padding:0 16px;pointer-events:none}
+.status-bande{pointer-events:auto;display:flex;align-items:center;gap:10px;max-width:min(560px,100%);
+  padding:10px 10px 10px 15px;border-radius:12px;font-size:13.5px;font-weight:500;line-height:1.35;
+  border:1px solid transparent;box-shadow:0 10px 30px -8px rgba(15,17,40,.28);animation:statusBande .22s var(--ease)}
+.status-bande.ok{color:var(--green);background:var(--green-bg);border-color:color-mix(in srgb,var(--green) 22%,transparent)}
+.status-bande.err{color:var(--ember1);background:var(--rosso-bg);border-color:color-mix(in srgb,var(--ember1) 22%,transparent)}
+.status-bande.info{color:var(--muted);background:var(--surface2);border-color:var(--border-soft)}
+.status-bande-txt{flex:1 1 auto;min-width:0}
+.status-bande-x{flex:0 0 auto;display:grid;place-items:center;width:26px;height:26px;padding:0;border:none;border-radius:8px;
+  background:transparent;color:inherit;cursor:pointer;opacity:.7;transition:opacity .15s var(--ease),background .15s var(--ease)}
+.status-bande-x:hover{opacity:1;background:color-mix(in srgb,currentColor 14%,transparent)}
+@keyframes statusBande{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.status-bande{animation:none}}
+
 /* ═══ SQUELETTES DE CHARGEMENT ══════════════════════════════════════════════════════════════
    Un balayage lent, pas une pulsation : la pulsation attire l'œil et le retient, alors que
    ce bloc est justement ce qu'on ne regarde pas — il occupe la place le temps que le contenu
