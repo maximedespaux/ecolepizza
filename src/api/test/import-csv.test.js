@@ -198,6 +198,10 @@ test('téléphone : un numéro français est nettoyé ; ce qui n\'en est pas un 
     assert.strictEqual(imp.normaliserTelephone('+33 6 12 34 56 78'), '0612345678', 'préfixe +33 ramené à 0');
     assert.strictEqual(imp.normaliserTelephone('0033612345678'), '0612345678');
     assert.strictEqual(imp.normaliserTelephone('0123456789'), '0123456789', 'un fixe aussi');
+    assert.strictEqual(imp.normaliserTelephone('623456789'), '0623456789', 'neuf chiffres : Excel a mangé le 0 de tête');
+    assert.strictEqual(imp.normaliserTelephone('6 23 45 67 89'), '0623456789', 'neuf chiffres, séparateurs compris');
+    assert.strictEqual(imp.normaliserTelephone('123456789'), '0123456789', 'neuf chiffres, un fixe');
+    assert.strictEqual(imp.normaliserTelephone('012345678'), null, 'neuf chiffres déjà menés d\'un 0 : pas un 0 à rendre');
     assert.strictEqual(imp.normaliserTelephone('Marie'), null, 'un nom n\'est pas un numéro');
     assert.strictEqual(imp.normaliserTelephone('0612345'), null, 'trop court');
     assert.strictEqual(imp.normaliserTelephone('06123456789'), null, 'onze chiffres : trop long');
