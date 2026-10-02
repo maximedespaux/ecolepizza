@@ -48,6 +48,11 @@ export const NAV = [
     grp: "Commercial",           // acquisition & relations
     items: [
       { to: "/pipeline", ic: "columns", label: "Pipeline CRM", roles: ADMIN },
+      /* ÉCRIRE À UN GROUPE — un e-mail ponctuel à des stagiaires/entreprises choisis (une relance,
+         une annonce). Rangé ici, et non dans « Mailing » (Paramètres), parce que c'est un acte de
+         relation, pas un réglage : les envois automatiques, leurs textes, les règles et la
+         signature restent, eux, dans le réglage Mailing. L'écran est pages/EcrireGroupe.jsx. */
+      { to: "/ecrire-groupe", ic: "send", label: "Écrire à un groupe", roles: ADMIN },
       { to: "/partenaires", ic: "handshake", label: "Partenaires", roles: STAFF },
       { to: "/carte", ic: "map", label: "Carte des stagiaires", roles: ADMIN },
     ],
@@ -145,6 +150,7 @@ export const PAGE_TITLES = {
   "/stagiaires": "Stagiaires",
   "/entreprises": "Entreprises",
   "/pipeline": "Pipeline CRM",
+  "/ecrire-groupe": "Écrire à un groupe",
   "/sessions": "Sessions",
   "/suivi": "Suivi Qualiopi",
   "/qcm-resultats": "Résultats QCM",
@@ -271,7 +277,7 @@ export function peutEcrire(user, rubrique) {
 // Les sous-pages (détails) partagent la rubrique parente.
 const SECTION_OF = {
   "/stagiaires": "/stagiaires", "/entreprises": "/entreprises", "/sessions": "/sessions", "/formations": "/formations",
-  "/pipeline": "/pipeline", "/qcm": "/qcm", "/partenaires": "/partenaires",
+  "/pipeline": "/pipeline", "/ecrire-groupe": "/ecrire-groupe", "/qcm": "/qcm", "/partenaires": "/partenaires",
   "/communaute": "/communaute",
   "/fiches-techniques": "/fiches-techniques", "/mercuriale": "/mercuriale", "/notions": "/notions",
   "/pizza-quest-admin": "/pizza-quest-admin",

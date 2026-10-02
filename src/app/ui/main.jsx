@@ -30,6 +30,7 @@ import Quiz from "./pages/Quiz.jsx";
 import QuestManager from "./pages/QuestManager.jsx";
 import Sessions from "./pages/Sessions.jsx";
 import Pipeline from "./pages/Pipeline.jsx";
+import EcrireGroupe from "./pages/EcrireGroupe.jsx";
 import SessionDetail from "./pages/SessionDetail.jsx";
 import Suivi from "./pages/Suivi.jsx";
 import ResultatsQCM from "./pages/ResultatsQCM.jsx";
@@ -233,6 +234,7 @@ function AppRoutes() {
           <Route path="entreprises" element={<Guard nav="/entreprises" roles={ADMIN}><Entreprises /></Guard>} />
           <Route path="entreprises/:id" element={<Guard nav="/entreprises" roles={ADMIN}><EntrepriseDetail /></Guard>} />
           <Route path="pipeline" element={<Guard nav="/pipeline" roles={ADMIN}><Pipeline /></Guard>} />
+          <Route path="ecrire-groupe" element={<Guard nav="/ecrire-groupe" roles={ADMIN}><EcrireGroupe /></Guard>} />
           <Route path="sessions" element={<Guard nav="/sessions" roles={STAFF}><Sessions /></Guard>} />
           <Route path="sessions/:id" element={<Guard nav="/sessions" roles={STAFF}><SessionDetail /></Guard>} />
           <Route path="formations" element={<Guard nav="/formations" roles={STAFF}><Formations /></Guard>} />
