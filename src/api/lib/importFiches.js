@@ -92,13 +92,17 @@ function lireDate(v, maintenant = new Date()) {
 }
 
 /* UN TÉLÉPHONE FRANÇAIS : dix chiffres commençant par 0 (fixe 01–05, mobile 06/07, etc.). On nettoie
-   ce qui se tape autour (espaces, points, tirets, parenthèses) et on ramène un préfixe international
-   à un 0 — « +33 6 12 34 56 78 » comme « 0033… » deviennent « 0612345678 ». Rend les DIX CHIFFRES, ou
-   null si ça ne ressemble pas à un numéro français : l'appelant l'écarte et le dit, comme l'e-mail. */
+   ce qui se tape autour (espaces, points, tirets, parenthèses), on ramène un préfixe international à
+   un 0 — « +33 6 12 34 56 78 » comme « 0033… » deviennent « 0612345678 » —, et on rend le 0 de tête
+   qu'Excel mange quand il enregistre le numéro en NOMBRE (« 0623456789 » ressort « 623456789 »). Rend
+   les DIX CHIFFRES, ou null si ça ne ressemble pas à un numéro français : l'appelant l'écarte et le
+   dit, comme l'e-mail. */
 function normaliserTelephone(v) {
     let d = String(v ?? '').replace(/\D/g, ''); // ne garder que les chiffres
     if (d.startsWith('0033')) d = '0' + d.slice(4);
     else if (d.length === 11 && d.startsWith('33')) d = '0' + d.slice(2);
+    // Neuf chiffres commençant par 1–9 : le 0 de tête a sauté (Excel) — la place est libre, on le rend.
+    if (d.length === 9 && /^[1-9]/.test(d)) d = '0' + d;
     return /^0\d{9}$/.test(d) ? d : null;
 }
 
