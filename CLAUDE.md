@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-02** : **2485 tests — 2478 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-02** : **2490 tests — 2483 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,24 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**200 est À JOUER** (`200_connexion_jour.sql`, les STATISTIQUES de connexion — page Statistiques, Qualité &
+conformité, demandée le 2026-10-02). Une table `connexion_jour` (user_id, jour, organization_id, est_stagiaire ;
+clé primaire (user_id, jour)). `user.last_login_at` ne garde que la DERNIÈRE connexion : impossible d'en tirer une
+courbe. On enregistre donc, à chaque connexion réussie, le JOUR — une ligne par compte et par jour (INSERT IGNORE,
+requête À PART et tolérée dans le handler de connexion ; `est_stagiaire` fige le rôle du jour pour séparer stagiaires
+et équipe sans jointure). La page (`GET /api/statistiques/connexions`, rôles AUDIT = bureau + auditeur) montre DEUX
+vues, stagiaires et équipe séparés : la RÉPARTITION PAR RÉCENCE (lue sur `last_login_at`, dispo tout de suite) et les
+CONNEXIONS PAR JOUR sur DEUX SEMAINES (lues sur `connexion_jour`). Les règles pures (tranches, fenêtre, densification)
+sont dans `lib/statsConnexions.js`. Sans la migration, rien ne casse : la connexion n'écrit pas la ligne (requête à
+part), et la page rend la récence mais pas la courbe (`par_jour: null` → « se remplira à partir du déploiement »).
+**Elle se vérifie par l'API, sans SQL** : se connecter, puis `GET /api/statistiques/connexions` rend `par_jour` non
+nul (14 jours) avec au moins une connexion aujourd'hui ; sans la table, `par_jour` est null. Ou une requête, qui doit
+rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='connexion_jour';`
+⚠️ Son revert supprime la table : l'historique des connexions par jour (la courbe) est perdu ; `last_login_at` reste,
+donc la récence aussi. Tests : `statistiques-connexions.test.js`.
 
 **199 est À JOUER** (`199_user_desactivation.sql`, la DÉSACTIVATION volontaire d'un profil stagiaire — demandée le
 2026-10-02). Une colonne `user.deactivated_at` (datetime). Un stagiaire désactive son profil depuis « Mon profil →

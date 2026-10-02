@@ -239,6 +239,11 @@ export function getAudit(q = "") {
   return request(`/audit${query}`);
 }
 
+// Statistiques de connexion (page Statistiques, Qualité & conformité) : récence + connexions/jour.
+export function getStatistiquesConnexions() {
+  return request("/statistiques/connexions");
+}
+
 // --- Notes CRM (dossier) ---
 export function getNotes(enrollmentId) {
   return request(`/enrollments/${enrollmentId}/notes`);
