@@ -260,3 +260,25 @@ test('l\'écran : le modèle d\'emblée, la vérification avant l\'import, aucun
         assert.match(P, new RegExp(`<ImportCsv type="${type}" onClose=\\{\\(\\) => setImporter\\(false\\)\\}`), page);
     }
 });
+
+test('la phrase de résumé de l\'aperçu dit, en clair : nouvelles / déjà présentes / refusées', async () => {
+    const { resumeImport } = await catalogue();
+    // AVANT l'import (essai) : au FUTUR ; les nouvelles sont toujours dites.
+    assert.strictEqual(resumeImport({ a_creer: 12, crees: 0, doublons: 3, erreurs: 1 }),
+        '12 nouvelles fiches seront créées · 3 déjà présentes seront ignorées · 1 refusée');
+    assert.strictEqual(resumeImport({ a_creer: 1, crees: 0, doublons: 1, erreurs: 0 }),
+        '1 nouvelle fiche sera créée · 1 déjà présente sera ignorée', 'singulier accordé');
+    assert.strictEqual(resumeImport({ a_creer: 0, crees: 0, doublons: 2, erreurs: 0 }),
+        'aucune nouvelle fiche à créer · 2 déjà présentes seront ignorées');
+    assert.strictEqual(resumeImport({ a_creer: 5, crees: 0, doublons: 0, erreurs: 0 }),
+        '5 nouvelles fiches seront créées', 'rien d\'autre quand il n\'y a ni doublon ni refus');
+    // APRÈS l'import (fait) : au PASSÉ, sur les fiches réellement créées.
+    assert.strictEqual(resumeImport({ a_creer: 0, crees: 12, doublons: 3, erreurs: 1 }, { fait: true }),
+        '12 nouvelles fiches créées · 3 déjà présentes ignorées · 1 refusée');
+    assert.strictEqual(resumeImport({ a_creer: 0, crees: 0, doublons: 4, erreurs: 0 }, { fait: true }),
+        'aucune fiche créée · 4 déjà présentes ignorées');
+    assert.strictEqual(resumeImport(null), '', 'sans bilan, pas de phrase');
+    // L'écran l'affiche AU-DESSUS des pastilles, et la conjugue selon l'état (essai / fait).
+    const C = lireUi('components/ImportCsv.jsx');
+    assert.match(C, /<p className="import-csv-resume">\{resumeImport\(b, \{ fait: !!fait \}\)\}<\/p>/);
+});
