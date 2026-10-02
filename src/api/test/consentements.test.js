@@ -319,8 +319,8 @@ test('les messages de la carte de consentement s\'affichent vraiment', () => {
        était le seul, et c'est justement ce qui le rendait invisible. */
     const composant = lire(path.join(UI, 'components/SessionConsentements.jsx'));
     const attendue = lire(path.join(UI, 'components/StatusMessage.jsx'));
-    assert.match(attendue, /function StatusMessage\(\{ status \}\)/,
-        'Ce test suppose que StatusMessage ne lit que `status` — si la signature change, le relire.');
+    assert.match(attendue, /function StatusMessage\(\{ status, inline = false \}\)/,
+        'Ce test suppose que le MESSAGE passe par `status` (et non `type=`/`message=`) — si la signature change, le relire.');
     assert.doesNotMatch(composant, /<StatusMessage[^>]*\b(type|message)=/,
         'Un message passé en `type=`/`message=` ne s\'affiche PAS : StatusMessage attend `status`.');
     assert.match(composant, /<StatusMessage status=\{\{ type: "error", message: erreur \}\} \/>/,
