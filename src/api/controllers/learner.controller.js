@@ -410,6 +410,19 @@ const getLearner = async (req, res) => {
             france_travail_id: decrypt(rows[0].france_travail_id),
         };
 
+        /* BADGES TRADUITS À LA LECTURE, exactement comme la liste (getLearners) : un stagiaire
+           RS7404 porte « RS » en base (le NIVEAU, pas le CODE ; lib/badges.js dit le pourquoi, et
+           pourquoi on ne migre pas — « RS » est un préfixe de « RS7404 »). Sans cette traduction,
+           la fenêtre « Modifier » proposait la MÊME formation deux fois : « RS7404 » (venu des
+           formations) ET « RS » (le badge stocké). resoudreCsv fond les deux après traduction.
+           On traduit aussi `completed_levels`, pour que le « terminé » coché reste aligné sur la
+           pastille — mais seulement s'il est là (le code marche avant comme après sa migration). */
+        const traduireBadges = await resolveurBadges(conn, req.user.organization_id);
+        learner.levels = resoudreCsv(learner.levels, traduireBadges);
+        if (Object.prototype.hasOwnProperty.call(rows[0], 'completed_levels')) {
+            learner.completed_levels = resoudreCsv(learner.completed_levels, traduireBadges);
+        }
+
         // Entreprise liée (pour préremplir la section « professionnel »).
         if (learner.company_id) {
             const [cRows] = await conn.query('SELECT * FROM company WHERE id = ?', [learner.company_id]);

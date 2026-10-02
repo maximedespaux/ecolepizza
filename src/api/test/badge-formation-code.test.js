@@ -92,3 +92,15 @@ test('la liste des stagiaires traduit les badges avant de les rendre', () => {
         'sans traduction, les stagiaires inscrits avant le correctif gardent « RS » à l\'écran');
     assert.match(STAGIAIRES, /await resolveurBadges\(db\.promise\(\), req\.user\.organization_id\)/);
 });
+
+test('la FICHE d\'un stagiaire traduit aussi ses badges (plus de même formation en double au « Modifier »)', () => {
+    /* getLearner rendait `...rows[0]` brut : un stagiaire RS7404 arrivait avec levels="RS" dans la
+       fenêtre « Modifier », qui propose alors « RS7404 » (venu des formations) ET « RS » (le badge
+       stocké) — la même formation deux fois. La fiche doit traduire comme la liste, et
+       completed_levels avec, pour que le « terminé » coché reste aligné sur la pastille. */
+    assert.match(STAGIAIRES, /learner\.levels = resoudreCsv\(learner\.levels, traduireBadges\)/,
+        'getLearner doit traduire levels, sinon « RS » reparaît dans la fenêtre « Modifier »');
+    assert.match(STAGIAIRES, /learner\.completed_levels = resoudreCsv\(learner\.completed_levels, traduireBadges\)/,
+        'completed_levels traduit aussi : le « terminé » suit la même pastille');
+    assert.match(STAGIAIRES, /const traduireBadges = await resolveurBadges\(conn, req\.user\.organization_id\)/);
+});
