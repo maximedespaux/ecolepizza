@@ -27,7 +27,7 @@ const COMPLETE = {
     address: '1 rue de la Paix', zip_code: '65300', town: 'LANNEMEZAN', professional_status: 'Salarié',
     project_oven: 1,
 };
-const cles = (l, transmis) => champsManquants(l, transmis).map((m) => m.cle);
+const cles = (l, transmis, opts) => champsManquants(l, transmis, opts).map((m) => m.cle);
 
 test('une fiche complète ne réclame rien', () => {
     assert.deepStrictEqual(champsManquants(COMPLETE, ['civilite', 'nom', 'email', 'adresse', 'code_postal', 'ville', 'projet', 'statut']), []);
@@ -65,6 +65,46 @@ test('ni la formation ni l\'entreprise ne se complètent sur la fiche stagiaire'
     for (const cle of tout) assert.ok(!cles(rien, tout).includes(cle), `${cle} ne vient pas de la fiche`);
 });
 
+test('adresse COUVERTE PAR L\'ENTREPRISE : un dossier pur pro ne réclame plus l\'adresse postale', () => {
+    /* Décision de l'école (2026-10-02) : l'entreprise paie et a son adresse — inutile de réclamer
+       celle du stagiaire. Mais s'il a AUSSI un dossier particulier, ses documents à lui s'y
+       impriment : on la réclame de nouveau. L'e-mail et le téléphone ne sont JAMAIS couverts. */
+    const sansAdresse = { ...COMPLETE, address: null, zip_code: '', town: '   ' };
+    const ent = { adresse: '9 av. Abbé Bordes', code_postal: '40380', ville: 'MONTFORT EN CHALOSSE' };
+
+    // Pur pro, l'entreprise a tout : plus rien de l'adresse, même « envoyée aux partenaires ».
+    assert.deepStrictEqual(cles(sansAdresse, ['adresse', 'code_postal', 'ville'],
+        { aUnDossierParticulier: false, adresseEntreprise: ent }), []);
+
+    // Un dossier particulier en plus : on exige de nouveau les trois.
+    assert.deepStrictEqual(cles(sansAdresse, ['adresse', 'code_postal', 'ville'],
+        { aUnDossierParticulier: true, adresseEntreprise: ent }), ['adresse', 'code_postal', 'ville']);
+
+    // Pro, mais l'entreprise n'a PAS la ville : seule la ville reste réclamée.
+    assert.deepStrictEqual(cles(sansAdresse, ['adresse', 'code_postal', 'ville'],
+        { aUnDossierParticulier: false, adresseEntreprise: { ...ent, ville: '' } }), ['ville']);
+
+    // L'e-mail et le téléphone restent exigés, l'entreprise ne les couvre pas.
+    assert.deepStrictEqual(cles({ ...sansAdresse, phone: '', email: '' }, [],
+        { aUnDossierParticulier: false, adresseEntreprise: ent }), ['email', 'telephone']);
+
+    // Sans contexte (appel à deux arguments) : on exige comme avant.
+    assert.deepStrictEqual(cles(sansAdresse, []), ['adresse', 'code_postal', 'ville']);
+});
+
+test('contexteAdresse lit les dossiers : particulier → on exige ; pro → l\'entreprise peut couvrir', () => {
+    const { contexteAdresse } = require('../lib/ficheIncomplete.js');
+    // Pur pro, deux entreprises : on prend la première qui renseigne chaque champ.
+    assert.deepStrictEqual(contexteAdresse([
+        { financing: 'PROFESSIONNEL', adresse: '', code_postal: '40380', ville: 'MONTFORT' },
+        { financing: 'PROFESSIONNEL', adresse: '9 av.', code_postal: '', ville: '' },
+    ]), { aUnDossierParticulier: false, adresseEntreprise: { adresse: '9 av.', code_postal: '40380', ville: 'MONTFORT' } });
+    // Un dossier particulier présent : aUnDossierParticulier, quoi que fasse le pro.
+    assert.strictEqual(contexteAdresse([{ financing: 'PARTICULIER' }, { financing: 'PROFESSIONNEL', adresse: 'x' }]).aUnDossierParticulier, true);
+    // Aucun dossier : pas de couverture (adresses nulles) → on exige à l'arrivée.
+    assert.deepStrictEqual(contexteAdresse([]), { aUnDossierParticulier: false, adresseEntreprise: { adresse: null, code_postal: null, ville: null } });
+});
+
 test('le bandeau lit les MÊMES colonnes que l\'export envoyé aux partenaires', async () => {
     /* Sinon il dirait complet un champ que l'export enverrait vide — ou l'inverse. */
     const EXPORT = lire('controllers/consentement.controller.js');
@@ -96,8 +136,11 @@ test('la fiche est servie avec ce qui lui manque, et ne tombe pas si le calcul �
     /* Personne ne reçoit rien (la 131 démarre à zéro destinataire) : rien n'est « envoyé aux
        partenaires ». */
     assert.match(corps, /\(await aDesDestinataires\(conn, orgId\)\) \? await champsOrganisme\(conn, orgId\) : \[\]/);
-    assert.match(corps, /learner\.champs_manquants = champsManquants\(learner, transmis\);/);
-    assert.match(corps, /try \{[\s\S]*champsManquants\(learner, transmis\)[\s\S]*\} catch \(e\) \{/,
+    // Le contexte « adresse » vient des dossiers du stagiaire, et il est passé au calcul.
+    assert.match(corps, /ctxAdresse = contexteAdresse\(doss\)/, 'la fiche lit les dossiers pour l\'adresse');
+    assert.match(corps, /FROM enrollment e LEFT JOIN company c ON c\.id = e\.company_id/);
+    assert.match(corps, /learner\.champs_manquants = champsManquants\(learner, transmis, ctxAdresse\);/);
+    assert.match(corps, /try \{[\s\S]*champsManquants\(learner, transmis, ctxAdresse\)[\s\S]*\} catch \(e\) \{/,
         'un registre illisible prive du bandeau, pas de la fiche');
 });
 

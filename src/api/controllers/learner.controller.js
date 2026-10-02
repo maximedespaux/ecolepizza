@@ -18,7 +18,7 @@ const { MAX_LIGNES, analyserStagiaires, bilan } = require('../lib/importFiches.j
    pour que « 128 / 128 » affiché pendant la frappe ne soit jamais refusé à l'enregistrement. */
 const { compterMots, CARACTERES_MAX } = require('../lib/reponseLibre.js');
 const { colonneExiste, largeurColonne } = require('../lib/colonnes.js');
-const { champsManquants } = require('../lib/ficheIncomplete.js');
+const { champsManquants, contexteAdresse } = require('../lib/ficheIncomplete.js');
 const { PRECISIONS_FOUR, COLONNES_PHRASE, colonnesProjetSql } = require('../lib/projet.js');
 const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js');
 const { lireMontant } = require('../lib/montantSaisi.js');
@@ -293,8 +293,34 @@ const getLearners = async (req, res) => {
             } catch (e) {
                 console.error('Liste des stagiaires, champs manquants :', e.message);
             }
+            /* LE CONTEXTE « adresse » DE CHAQUE STAGIAIRE, en UN seul agrégat sur les dossiers (la
+               liste compte plus de mille lignes) : a-t-il un dossier particulier (→ on exige son
+               adresse), et l'entreprise d'un dossier pro renseigne-t-elle adresse / CP / ville (→ elle
+               la couvre) ? La même décision que la fiche (contexteAdresse). Un stagiaire sans dossier
+               n'y figure pas : contexte vide, on exige — comme avant. Sans la table, on retombe de même. */
+            const ctxParLearner = new Map();
+            try {
+                const [agg] = await db.promise().query(
+                    `SELECT e.learner_id AS lid,
+                            MAX(e.financing <> 'PROFESSIONNEL' OR e.financing IS NULL) AS particulier,
+                            MAX(e.financing = 'PROFESSIONNEL' AND c.address  IS NOT NULL AND TRIM(c.address)  <> '') AS pro_adresse,
+                            MAX(e.financing = 'PROFESSIONNEL' AND c.zip_code IS NOT NULL AND TRIM(c.zip_code) <> '') AS pro_cp,
+                            MAX(e.financing = 'PROFESSIONNEL' AND c.town     IS NOT NULL AND TRIM(c.town)     <> '') AS pro_ville
+                       FROM enrollment e LEFT JOIN company c ON c.id = e.company_id
+                      WHERE e.organization_id = ?
+                      GROUP BY e.learner_id`,
+                    [organizationId]);
+                for (const r of agg) ctxParLearner.set(r.lid, {
+                    aUnDossierParticulier: !!Number(r.particulier),
+                    adresseEntreprise: {
+                        adresse: Number(r.pro_adresse) ? 'x' : '', code_postal: Number(r.pro_cp) ? 'x' : '', ville: Number(r.pro_ville) ? 'x' : '',
+                    },
+                });
+            } catch (e) {
+                if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) console.error('Liste des stagiaires, dossiers :', e.message);
+            }
             const data = results.map((ligne) => {
-                const manque = transmis ? champsManquants(ligne, transmis).map((m) => m.libelle) : [];
+                const manque = transmis ? champsManquants(ligne, transmis, ctxParLearner.get(ligne.id) || {}).map((m) => m.libelle) : [];
                 const { account_email, levels, ...rest } = ligne;
                 for (const c of ['civility', ...COLONNES_PHRASE]) delete rest[c]; // lus, jamais renvoyés
                 return {
@@ -429,6 +455,22 @@ const getLearner = async (req, res) => {
             learner.company = cRows[0] || null;
         }
 
+        /* LE CONTEXTE « adresse » — ses dossiers, pour décider si on réclame son adresse postale ou
+           si l'entreprise la couvre (ficheIncomplete.contexteAdresse). Un dossier particulier l'exige
+           (ses documents sont à son adresse) ; sinon l'entreprise d'un dossier pro peut la fournir.
+           Sans la table (jamais en prod), on retombe sur « on exige », le comportement d'avant. */
+        let ctxAdresse = {};
+        try {
+            const [doss] = await conn.query(
+                `SELECT e.financing, c.address AS adresse, c.zip_code AS code_postal, c.town AS ville
+                 FROM enrollment e LEFT JOIN company c ON c.id = e.company_id
+                 WHERE e.learner_id = ? AND e.organization_id = ?`,
+                [req.params.id, req.user.organization_id]);
+            ctxAdresse = contexteAdresse(doss);
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        }
+
         /* CE QUI MANQUE À LA FICHE, pour le bandeau de l'écran (lib/ficheIncomplete.js) : ce que
            l'école envoie aux partenaires — si quelqu'un reçoit —, plus l'essentiel. Un échec ici,
            registre illisible par exemple, ne doit pas priver de la fiche : l'écran s'en passe, et
@@ -436,7 +478,7 @@ const getLearner = async (req, res) => {
         try {
             const orgId = req.user.organization_id;
             const transmis = (await aDesDestinataires(conn, orgId)) ? await champsOrganisme(conn, orgId) : [];
-            learner.champs_manquants = champsManquants(learner, transmis);
+            learner.champs_manquants = champsManquants(learner, transmis, ctxAdresse);
         } catch (e) {
             console.error('Fiche stagiaire, champs manquants :', e.message);
         }
