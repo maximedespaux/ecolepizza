@@ -509,6 +509,14 @@ export function changeMyPassword(payload) {
 export function changeMyEmail(payload) {
   return request("/auth/email", { method: "PATCH", body: JSON.stringify(payload) });
 }
+// Le stagiaire désactive / réactive son propre profil (migration 199). Désactiver pose seulement
+// la date ; la purge et la coupure d'accès se font 15 semaines plus tard, SI aucune reconnexion.
+export function deactivateMyProfile() {
+  return request("/auth/deactivate", { method: "POST" });
+}
+export function reactivateMyProfile() {
+  return request("/auth/reactivate", { method: "POST" });
+}
 // Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
 export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
 export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }

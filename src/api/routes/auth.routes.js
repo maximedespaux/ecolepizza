@@ -1,5 +1,5 @@
 const express = require('express');
-const { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification } = require('../controllers/auth.controller.js');
+const { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification, deactivateMyAccount, reactivateMyAccount } = require('../controllers/auth.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 const { rateLimit } = require('../middlewares/rateLimit.js');
 
@@ -48,5 +48,9 @@ router.get('/me', authenticateToken, getCurrentUser);
 router.patch('/password', authenticateToken, passwordLimiter, changePassword);
 router.patch('/email', authenticateToken, passwordLimiter, changeEmail);
 router.post('/logout', authenticateToken, logout);
+/* Désactivation volontaire du profil stagiaire (migration 199) : pose/efface la date. La purge et
+   la coupure d'accès se font plus tard, au passage quotidien (lib/purgeComptesDesactives.js). */
+router.post('/deactivate', authenticateToken, deactivateMyAccount);
+router.post('/reactivate', authenticateToken, reactivateMyAccount);
 
 module.exports = router;

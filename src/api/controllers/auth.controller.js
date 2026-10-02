@@ -135,6 +135,11 @@ const userAuthentification = async (req, res) => {
 
         // Trace de la dernière connexion (non bloquant).
         conn.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id]).catch(() => {});
+        /* SE RECONNECTER ANNULE UNE DÉSACTIVATION EN ATTENTE (migration 199) : le profil est gardé,
+           rien n'est purgé. Requête À PART — et non fondue dans celle du dessus — pour qu'une
+           colonne absente (migration non jouée) n'empêche jamais la trace de connexion. On n'arrive
+           ici qu'avec `active = 1` : un compte déjà purgé (active = 0) a répondu 403 plus haut. */
+        conn.query('UPDATE user SET deactivated_at = NULL WHERE id = ? AND deactivated_at IS NOT NULL', [user.id]).catch(() => {});
 
         // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
@@ -387,4 +392,46 @@ async function annulerModification(req, res) {
     }
 }
 
-module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification, couperSessions };
+/**
+ * POST /api/auth/deactivate — le stagiaire demande la désactivation de SON profil (migration 199).
+ *
+ * On pose seulement la date : la connexion reste ouverte, et toute reconnexion l'efface. Au bout de
+ * 15 semaines sans connexion, un passage quotidien purge les données non essentielles et coupe
+ * l'accès (lib/purgeComptesDesactives.js). RÉSERVÉ AUX STAGIAIRES : un compte du bureau qui se
+ * désactiverait verrait son accès coupé après 15 semaines — on ne risque pas de verrouiller l'école.
+ */
+const deactivateMyAccount = async (req, res) => {
+    if (req.user.role !== 'STAGIAIRE') {
+        return res.status(403).json({ message: 'La désactivation de profil est réservée aux stagiaires.' });
+    }
+    try {
+        await db.promise().query(
+            'UPDATE user SET deactivated_at = NOW() WHERE id = ? AND deactivated_at IS NULL', [req.user.id]);
+        return res.status(200).json({ success: true });
+    } catch (e) {
+        if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) {
+            return res.status(503).json({ message: 'Migration 199 non jouée.' });
+        }
+        console.error('Désactivation du profil :', e.message);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/auth/reactivate — annule une désactivation en attente (le stagiaire change d'avis sans
+ * se déconnecter). N'efface que la date ; il n'y a rien à restaurer tant que la purge n'a pas eu lieu.
+ */
+const reactivateMyAccount = async (req, res) => {
+    try {
+        await db.promise().query('UPDATE user SET deactivated_at = NULL WHERE id = ?', [req.user.id]);
+        return res.status(200).json({ success: true });
+    } catch (e) {
+        if (e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE')) {
+            return res.status(503).json({ message: 'Migration 199 non jouée.' });
+        }
+        console.error('Réactivation du profil :', e.message);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { userAuthentification, getCurrentUser, changePassword, changeEmail, logout, forgotPassword, resetPassword, annulerModification, couperSessions, deactivateMyAccount, reactivateMyAccount };

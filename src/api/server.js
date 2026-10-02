@@ -293,4 +293,16 @@ app.listen(port, () => {
         .catch((err) => console.error('Envois programmés :', err.message));
     setTimeout(passerMails, 2 * 60 * 1000).unref?.();
     setInterval(passerMails, 30 * 60 * 1000).unref?.();
+
+    /* PROFILS DÉSACTIVÉS — un stagiaire qui a demandé la désactivation de son profil et ne s'est pas
+       reconnecté depuis 15 SEMAINES voit ses données non essentielles supprimées et son accès coupé
+       (migration 199, lib/purgeComptesDesactives.js). UNE FOIS PAR JOUR : le délai se compte en
+       semaines, repasser plus souvent n'avancerait rien. Premier passage trois minutes après le
+       démarrage. Sans la colonne, le passage sort sans rien faire. */
+    const { purgerComptesDesactives } = require('./lib/purgeComptesDesactives.js');
+    const purgerDesactives = () => purgerComptesDesactives({ conn: require('./config/database.js').promise() })
+        .then((n) => { if (n) console.log(`[désactivation] ${n} profil(s) purgé(s) et désactivé(s)`); })
+        .catch((err) => console.error('Purge des profils désactivés :', err.message));
+    setTimeout(purgerDesactives, 3 * 60 * 1000).unref?.();
+    setInterval(purgerDesactives, 24 * 60 * 60 * 1000).unref?.();
 });
