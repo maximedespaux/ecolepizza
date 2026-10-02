@@ -53,6 +53,7 @@ import EmargementEditor from "./pages/EmargementEditor.jsx";
 import Equipe from "./pages/Equipe.jsx";
 import AccessRoles from "./pages/AccessRoles.jsx";
 import Audit from "./pages/Audit.jsx";
+import Statistiques from "./pages/Statistiques.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import Platform from "./pages/Platform.jsx";
 import MonEspace from "./pages/MonEspace.jsx";
@@ -274,6 +275,7 @@ function AppRoutes() {
           <Route path="equipe" element={<Guard nav="/equipe" roles={OWNER}><Equipe /></Guard>} />
           <Route path="roles" element={<Guard nav="/roles" roles={OWNER}><AccessRoles /></Guard>} />
           <Route path="audit" element={<Guard nav="/audit" roles={SUIVI}><Audit /></Guard>} />
+          <Route path="statistiques" element={<Guard nav="/statistiques" roles={SUIVI}><Statistiques /></Guard>} />
           <Route path="qcm-resultats" element={<Guard nav="/qcm-resultats" roles={SUIVI}><ResultatsQCM /></Guard>} />
           {/* STAFF et non SUIVI : la notation est un acte pédagogique, et le FORMATEUR en est
               le premier lecteur — c'est lui qui a noté. Un auditeur, lui, lit le Suivi. */}

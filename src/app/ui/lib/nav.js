@@ -81,6 +81,10 @@ export const NAV = [
       { to: "/notation", ic: "clipboard-check", label: "Notation", roles: STAFF },
       { to: "/qcm-resultats", ic: "list-checks", label: "Résultats QCM", roles: AUDIT },
       { to: "/audit", ic: "history", label: "Journal d'audit", roles: AUDIT },
+      /* STATISTIQUES — qui se connecte, et quand. Rangé en Qualité : savoir si les stagiaires
+         utilisent leur espace est une question d'engagement, pas de commerce. Mêmes rôles que le
+         Suivi et l'audit (bureau + auditeur). L'écran est pages/Statistiques.jsx. */
+      { to: "/statistiques", ic: "bar-chart", label: "Statistiques", roles: AUDIT },
     ],
   },
   {
@@ -177,6 +181,7 @@ export const PAGE_TITLES = {
   "/modeles": "Modèles de documents",
   "/opcos": "OPCO / financeurs",
   "/audit": "Journal d'audit",
+  "/statistiques": "Statistiques",
   "/notifications": "Notifications",
 };
 
@@ -294,7 +299,7 @@ const SECTION_OF = {
      consultation : il clique, et le serveur refuse. Le bandeau et les clics interceptés
      dépendent tous les deux de cette ligne. */
   "/roles": "/roles",
-  "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/notation": "/notation",
+  "/audit": "/audit", "/suivi": "/suivi", "/qcm-resultats": "/qcm-resultats", "/notation": "/notation", "/statistiques": "/statistiques",
   "/dashboard": "/dashboard",
 };
 

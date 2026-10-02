@@ -140,6 +140,12 @@ const userAuthentification = async (req, res) => {
            colonne absente (migration non jouée) n'empêche jamais la trace de connexion. On n'arrive
            ici qu'avec `active = 1` : un compte déjà purgé (active = 0) a répondu 403 plus haut. */
         conn.query('UPDATE user SET deactivated_at = NULL WHERE id = ? AND deactivated_at IS NOT NULL', [user.id]).catch(() => {});
+        /* STATISTIQUES DE CONNEXION (migration 200) : une ligne par compte et par jour (INSERT IGNORE
+           sur la clé primaire — les connexions suivantes du jour ne changent rien). `est_stagiaire`
+           fige le rôle du jour, pour séparer stagiaires et équipe sans jointure. À part et tolérée :
+           sans la table, ça échoue seul, sans gêner la connexion. */
+        conn.query('INSERT IGNORE INTO connexion_jour (user_id, jour, organization_id, est_stagiaire) VALUES (?, CURDATE(), ?, ?)',
+            [user.id, user.organization_id, user.role === 'STAGIAIRE' ? 1 : 0]).catch(() => {});
 
         // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
