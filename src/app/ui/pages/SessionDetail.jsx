@@ -263,10 +263,13 @@ function SessionDetail() {
 
   const enrollments = session.enrollments || [];
 
+  /* « Retour au calendrier » passe la DATE de la session : au retour, le calendrier rouvre SON mois
+     (là où on était), au lieu de rejouer la règle d'ouverture (prochaine session). Le bouton
+     « Sessions » de la navigation, lui, n'a pas d'état : la règle s'y applique toujours. */
   return (
     <>
       <PageHead
-        eyebrow={<Link to="/sessions" className="card-more" style={{ WebkitTextFillColor: "var(--ember1)" }}>← Retour au calendrier</Link>}
+        eyebrow={<Link to="/sessions" state={{ date: session.start_date }} className="card-more" style={{ WebkitTextFillColor: "var(--ember1)" }}>← Retour au calendrier</Link>}
         title={session.program_title}
         lead={`Semaine ${session.week} · ${session.year} · du ${dateHeure(session.start_date)} au ${dateHeure(session.end_date)} · ${session.program_hours} h`}
         actions={
