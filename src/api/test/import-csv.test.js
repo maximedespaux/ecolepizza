@@ -190,6 +190,37 @@ test('entreprises : le nom seul suffit ; déjà là par le SIRET, ou par le nom 
     assert.match(r[4].motif, /même entreprise que la ligne/);
 });
 
+test('téléphone : un numéro français est nettoyé ; ce qui n\'en est pas un est laissé de côté, et dit', () => {
+    // La règle pure : « 0 » + neuf chiffres ; espaces, points, tirets et préfixe international nettoyés.
+    assert.strictEqual(imp.normaliserTelephone('06 12 34 56 78'), '0612345678');
+    assert.strictEqual(imp.normaliserTelephone('06.12.34.56.78'), '0612345678');
+    assert.strictEqual(imp.normaliserTelephone('(06) 12-34-56-78'), '0612345678');
+    assert.strictEqual(imp.normaliserTelephone('+33 6 12 34 56 78'), '0612345678', 'préfixe +33 ramené à 0');
+    assert.strictEqual(imp.normaliserTelephone('0033612345678'), '0612345678');
+    assert.strictEqual(imp.normaliserTelephone('0123456789'), '0123456789', 'un fixe aussi');
+    assert.strictEqual(imp.normaliserTelephone('Marie'), null, 'un nom n\'est pas un numéro');
+    assert.strictEqual(imp.normaliserTelephone('0612345'), null, 'trop court');
+    assert.strictEqual(imp.normaliserTelephone('06123456789'), null, 'onze chiffres : trop long');
+    assert.strictEqual(imp.normaliserTelephone('1612345678'), null, 'ne commence pas par 0');
+
+    // STAGIAIRE : le valide est normalisé dans la fiche, l'invalide écarté avec un avertissement (fiche créée quand même).
+    base = nouvelleBase();
+    const [bon, mauvais] = stagiaires([
+        { last_name: 'A', first_name: 'A', phone: '06 12 34 56 78' },
+        { last_name: 'B', first_name: 'B', phone: 'Marie' },
+    ]);
+    assert.strictEqual(bon.valeurs.phone, '0612345678');
+    assert.strictEqual(bon.avertissements.length, 0);
+    assert.ok(!('phone' in mauvais.valeurs), 'le téléphone illisible n\'entre pas en base');
+    assert.match(mauvais.avertissements[0], /téléphone « Marie » invalide/);
+    assert.strictEqual(mauvais.statut, 'a_creer', 'la fiche est créée quand même');
+
+    // ENTREPRISE : la même règle (un standard fixe convient aussi).
+    const [ent] = imp.analyserEntreprises([{ name: 'Four SARL', phone: '01.02.03.04.05' }],
+        { existantes: [], normaliser: normaliserEntreprise, reEmail: RE_EMAIL_ENT, erreurTva: () => null });
+    assert.strictEqual(ent.valeurs.phone, '0102030405');
+});
+
 // ── Les routes ───────────────────────────────────────────────────────────────────────────────
 
 test('l\'essai n\'écrit rien — et une requête qui oublie le drapeau reste un essai', async () => {
