@@ -145,3 +145,15 @@ test('l\'écran pose le repère sur la ligne, avec la liste en info-bulle', () =
     assert.match(LISTE, /<Icon name="alert-triangle" size=\{11\} aria-hidden="true" \/>Fiche incomplète/);
     assert.doesNotMatch(CSS, /fiche-chip-t/);
 });
+
+test('la liste lit le contexte « adresse » de chaque stagiaire, comme la fiche', () => {
+    /* La fiche ne réclame plus l'adresse d'un stagiaire pur pro dont l'entreprise l'a
+       (fiche-incomplete.test.js) : la liste doit poser le MÊME repère, sinon une fiche dite complète
+       resterait marquée « incomplète » dans la liste. Un seul agrégat sur les dossiers (mille lignes). */
+    const CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'learner.controller.js'), 'utf8');
+    const corps = CTRL.slice(CTRL.indexOf('const getLearners ='), CTRL.indexOf('const getLearner ='));
+    assert.match(corps, /FROM enrollment e LEFT JOIN company c ON c\.id = e\.company_id/, 'un agrégat des dossiers');
+    assert.match(corps, /GROUP BY e\.learner_id/);
+    assert.match(corps, /champsManquants\(ligne, transmis, ctxParLearner\.get\(ligne\.id\) \|\| \{\}\)/,
+        'chaque ligne reçoit le contexte de ses dossiers');
+});

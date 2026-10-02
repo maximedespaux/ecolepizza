@@ -39,20 +39,52 @@ const PROJETS = COLONNES_PHRASE;
 /** Toujours vérifiés, que l'école transmette ou non. */
 const ESSENTIELS = ['email', 'telephone', 'adresse', 'code_postal', 'ville'];
 
+/* L'ADRESSE POSTALE — les trois champs qu'une ENTREPRISE peut couvrir pour un dossier pro. */
+const ADRESSE_POSTALE = new Set(['adresse', 'code_postal', 'ville']);
+
 // Des espaces ne sont pas une adresse : la saisie les laisse passer, l'export les enverrait tels quels.
 const vide = (v) => v === null || v === undefined || String(v).trim() === '';
 
 /**
+ * Le CONTEXTE « adresse » d'un stagiaire, tiré de ses dossiers — pour décider si on réclame son
+ * adresse postale ou si l'entreprise la couvre.
+ * @param dossiers  [{ financing, adresse, code_postal, ville }] — une ligne par dossier, l'adresse
+ *   étant celle de l'ENTREPRISE du dossier (vide si le dossier n'en a pas).
+ * @returns { aUnDossierParticulier, adresseEntreprise:{adresse,code_postal,ville} }
+ */
+function contexteAdresse(dossiers) {
+    const d = dossiers || [];
+    const pro = d.filter((x) => x.financing === 'PROFESSIONNEL');
+    const premier = (cle) => { for (const x of pro) if (!vide(x[cle])) return x[cle]; return null; };
+    return {
+        // Un dossier NON professionnel (particulier) exige l'adresse du stagiaire : ses documents s'y impriment.
+        aUnDossierParticulier: d.some((x) => x.financing !== 'PROFESSIONNEL'),
+        adresseEntreprise: { adresse: premier('adresse'), code_postal: premier('code_postal'), ville: premier('ville') },
+    };
+}
+
+/**
  * @param learner   la ligne `learner` (SELECT *)
  * @param transmis  les clés que l'école envoie aux partenaires — `[]` si personne ne reçoit rien
+ * @param opts      { aUnDossierParticulier, adresseEntreprise } — le CONTEXTE des dossiers (cf.
+ *   contexteAdresse). Décision de l'école (2026-10-02) : pour un stagiaire dont AUCUN dossier n'est
+ *   particulier, un champ d'adresse postale que l'entreprise d'un dossier PRO renseigne n'est PLUS
+ *   réclamé — l'entreprise paie, et ses coordonnées tiennent lieu des siennes sur les documents et
+ *   l'export. L'e-mail et le téléphone restent exigés (c'est par eux qu'on joint la personne). SANS
+ *   contexte (appel à deux arguments), on exige comme avant — l'adresse reste toujours réclamée.
  * @returns [{ cle, libelle, partenaires }] dans l'ordre du catalogue ; vide si rien ne manque
  */
-function champsManquants(learner, transmis = []) {
+function champsManquants(learner, transmis = [], opts = {}) {
     const l = learner || {};
     const envoyes = new Set(transmis || []);
+    const aUnDossierParticulier = opts.aUnDossierParticulier !== false; // défaut : on exige (comme avant)
+    const entreprise = opts.adresseEntreprise || null;
     const out = [];
     for (const cle of Object.keys(CHAMPS_TRANSMISSIBLES)) {
         if (cle !== 'projet' && !COLONNES[cle]) continue; // session ou entreprise
+        /* ADRESSE COUVERTE PAR L'ENTREPRISE : aucun dossier particulier, et l'entreprise d'un dossier
+           pro renseigne ce champ → on ne le réclame plus (ni essentiel, ni « envoyé aux partenaires »). */
+        if (ADRESSE_POSTALE.has(cle) && !aUnDossierParticulier && entreprise && !vide(entreprise[cle])) continue;
         const partenaires = envoyes.has(cle);
         if (!partenaires && !ESSENTIELS.includes(cle)) continue;
         const manque = cle === 'projet' ? phraseProjet(l) === '' : vide(l[COLONNES[cle]]);
@@ -61,4 +93,4 @@ function champsManquants(learner, transmis = []) {
     return out;
 }
 
-module.exports = { champsManquants, COLONNES, PROJETS, ESSENTIELS };
+module.exports = { champsManquants, contexteAdresse, COLONNES, PROJETS, ESSENTIELS };
