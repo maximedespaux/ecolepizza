@@ -1002,6 +1002,40 @@ function articleRowTokens(l, i) {
 }
 
 /**
+ * Jetons disponibles À L'INTÉRIEUR d'un bloc {#Formations}…{/Formations}.
+ *
+ * Même principe que `articleRowTokens` / `stagiaireRowTokens` : le bloc est répété une fois par
+ * FORMATION du dossier, et {Formation}, {Prix}, {Heures}… y prennent la valeur de LA formation
+ * de la ligne — et non l'agrégat (intitulés joints, somme des prix) que `resolveTokens` en donne
+ * HORS du bloc. C'est ce qui rend un devis « une ligne par formation » possible : une ligne
+ * NIV1 850 €, une ligne NIV2 1 180 €, puis {Prix} global (2 030 €) pour le total.
+ *
+ * Le prix d'une ligne est le prix NÉGOCIÉ du dossier (`enroll_price`), à défaut le tarif
+ * catalogue (`price`) — exactement la base que l'agrégat `totalPrice` additionne (resolveTokens),
+ * pour que la somme des lignes tombe sur le {Prix} global au centime.
+ */
+function formationRowTokens(f, i) {
+    f = f || {};
+    const prix = Number(f.enroll_price || f.price || 0);
+    const heures = Number(f.hours) || 0;
+    return {
+        'N°': String(i + 1),
+        Formation: f.title || '',
+        Code: f.code || f.rs_code || '',
+        Public: f.audience || '',
+        Heures: f.hours != null ? decimaleFr(f.hours) : '',
+        Jours: f.days != null ? decimaleFr(f.days) : '',
+        Prix: euro(prix), PrixFormation: euro(prix),
+        // Coût horaire de CETTE formation : prix ÷ heures, arrondi au centime (même règle que l'agrégat).
+        'Coût horaire': heures > 0 && prix > 0 ? euro(Math.round((prix / heures) * 100) / 100) : '',
+        Jour1: frDate(f.start_date), endDate: frDate(f.end_date),
+        'Début en toutes lettres': frDateLong(f.start_date), 'Fin en toutes lettres': frDateLong(f.end_date),
+        Semaine: f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(f.start_date),
+        Formateur: f.trainer || '',
+    };
+}
+
+/**
  * Développe les blocs répétés d'une LISTE nommée : {#Articles}…{/Articles}.
  *
  * Généralise ce que `expandGroupBlocks` faisait pour les seuls stagiaires. Deux blocs, deux
@@ -1216,9 +1250,13 @@ function expandGroupBlocks(html, list, customDefs, globalValues) {
         }).join('');
     });
 }
-// Retire les blocs {#Stagiaires}…{/Stagiaires} (pour l'analyse « jetons manquants » :
-// leur contenu est résolu par stagiaire, pas globalement).
-const stripGroupBlocks = (s) => String(s || '').replace(/\{#\s*Stagiaires\s*\}[\s\S]*?\{\/\s*Stagiaires\s*\}/g, '');
+// Retire les blocs répétés (pour l'analyse « jetons manquants ») : leur contenu est résolu
+// ligne par ligne — par stagiaire du groupe ({#Stagiaires}), ou par formation du dossier
+// ({#Formations}) — et non globalement. Sans ça, {Prénom} (par stagiaire) ou {Coût horaire}
+// (par formation) seraient signalés « vides » alors qu'ils se remplissent dans le bloc.
+const stripGroupBlocks = (s) => String(s || '')
+    .replace(/\{#\s*Stagiaires\s*\}[\s\S]*?\{\/\s*Stagiaires\s*\}/g, '')
+    .replace(/\{#\s*Formations\s*\}[\s\S]*?\{\/\s*Formations\s*\}/g, '');
 
 // Rend une image de signature (ou un emplacement en pointillés si absente).
 // Cadre de signature à TAILLE FIXE : l'image (dessin du stagiaire ou signature de
@@ -1636,4 +1674,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, frDateLong, euro, businessDay, horairesParJour};
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, formationRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, frDateLong, euro, businessDay, horairesParJour};
