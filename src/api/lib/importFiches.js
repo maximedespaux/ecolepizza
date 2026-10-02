@@ -91,6 +91,17 @@ function lireDate(v, maintenant = new Date()) {
     return `${a}-${String(m).padStart(2, '0')}-${String(j).padStart(2, '0')}`;
 }
 
+/* UN TÉLÉPHONE FRANÇAIS : dix chiffres commençant par 0 (fixe 01–05, mobile 06/07, etc.). On nettoie
+   ce qui se tape autour (espaces, points, tirets, parenthèses) et on ramène un préfixe international
+   à un 0 — « +33 6 12 34 56 78 » comme « 0033… » deviennent « 0612345678 ». Rend les DIX CHIFFRES, ou
+   null si ça ne ressemble pas à un numéro français : l'appelant l'écarte et le dit, comme l'e-mail. */
+function normaliserTelephone(v) {
+    let d = String(v ?? '').replace(/\D/g, ''); // ne garder que les chiffres
+    if (d.startsWith('0033')) d = '0' + d.slice(4);
+    else if (d.length === 11 && d.startsWith('33')) d = '0' + d.slice(2);
+    return /^0\d{9}$/.test(d) ? d : null;
+}
+
 /* Le nom d'une entreprise pour la reconnaître : sans casse, sans accents, sans ponctuation, sans sa
    forme juridique — « SARL Le Petit Four » et « le petit four » sont la même. */
 const FORMES = new Set(['SARL', 'SAS', 'SASU', 'EURL', 'EI', 'EIRL', 'SA', 'SCI', 'SNC', 'SELARL', 'SOCIETE', 'STE', 'ETS', 'ETABLISSEMENTS']);
@@ -153,6 +164,10 @@ function analyserStagiaires(lignes, { existants = [], entreprises = [], normalis
         if (v.birthday !== undefined) {
             const d = lireDate(v.birthday);
             if (d) v.birthday = d; else { avertissements.push(`date de naissance « ${v.birthday} » illisible (JJ/MM/AAAA) : laissée de côté`); delete v.birthday; }
+        }
+        if (v.phone !== undefined) {
+            const tel = normaliserTelephone(v.phone);
+            if (tel) v.phone = tel; else { avertissements.push(`téléphone « ${v.phone} » invalide (10 chiffres, ex. 0612345678) : laissé de côté`); delete v.phone; }
         }
         largeurs(v, 'stagiaire', avertissements, LIBELLES_STAGIAIRE);
         // Le seul refus : sans nom ni prénom (ou trop longs pour leur colonne), pas de fiche.
@@ -232,6 +247,10 @@ function analyserEntreprises(lignes, { existantes = [], normaliser, reEmail, err
             if (d) v.date_creation = d; else { avertissements.push(`date de création « ${v.date_creation} » illisible (JJ/MM/AAAA) : laissée de côté`); delete v.date_creation; }
         }
         if (v.naf_ape) v.naf_ape = String(v.naf_ape).replace(/[\s.]/g, '').toUpperCase(); // « 56.10C » s'écrit « 5610C » ici
+        if (v.phone !== undefined) {
+            const tel = normaliserTelephone(v.phone);
+            if (tel) v.phone = tel; else { avertissements.push(`téléphone « ${v.phone} » invalide (10 chiffres, ex. 0612345678) : laissé de côté`); delete v.phone; }
+        }
         largeurs(v, 'entreprise', avertissements, LIBELLES_ENTREPRISE);
         if (vide(v.name)) return { ligne, nom, statut: 'erreur', motif: 'nom de l\'entreprise requis', avertissements };
 
@@ -255,5 +274,5 @@ function bilan(resultats) {
 
 module.exports = {
     MAX_LIGNES, CHAMPS_STAGIAIRE, CHAMPS_ENTREPRISE, STATUTS_PRO,
-    civilite, situation, lireDate, nomCanonique, analyserStagiaires, analyserEntreprises, bilan,
+    civilite, situation, lireDate, normaliserTelephone, nomCanonique, analyserStagiaires, analyserEntreprises, bilan,
 };
