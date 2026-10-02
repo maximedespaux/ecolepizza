@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { getSessions, getFormations, createSession, getLocations, getEnrollments, getConsentsManquants } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -13,6 +13,12 @@ import { ouvertureDuCalendrier } from "../lib/ouvertureCalendrier.js";
 
 function Sessions() {
   const navigate = useNavigate();
+  const location = useLocation();
+  /* MOIS À ROUVRIR APRÈS UN RETOUR DE SESSION : « Retour au calendrier » passe la date de la session
+     (location.state). Tant qu'elle est là, la règle d'ouverture (prochaine session) ne s'applique
+     PAS — on revient là où on était. Le bouton « Sessions » de la navigation n'a pas d'état : la
+     règle s'applique alors, comme avant. */
+  const dateRetour = location.state?.date;
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -55,13 +61,21 @@ function Sessions() {
     getConsentsManquants().then((r) => setASolliciter(r.data || {})).catch(() => {});
   }, []);
 
+  // RETOUR DE SESSION : on rouvre le mois de cette session (une fois). La règle d'ouverture est
+  // court-circuitée par la garde `dateRetour` ci-dessous tant qu'on arrive de « Retour au calendrier ».
   useEffect(() => {
-    if (ouverture || !sessionsChargees || !dossiersCharges) return;
+    if (!dateRetour) return;
+    const d = new Date(`${String(dateRetour).slice(0, 10)}T00:00:00`);
+    setYear(d.getFullYear()); setMonth(d.getMonth());
+  }, [dateRetour]);
+
+  useEffect(() => {
+    if (ouverture || dateRetour || !sessionsChargees || !dossiersCharges) return;
     const o = ouvertureDuCalendrier(sessions, enrollments, ymd(new Date()));
     setOuverture(o);
     const d = new Date(`${o.date}T00:00:00`);
     setYear(d.getFullYear()); setMonth(d.getMonth());
-  }, [ouverture, sessionsChargees, dossiersCharges, sessions, enrollments]);
+  }, [ouverture, dateRetour, sessionsChargees, dossiersCharges, sessions, enrollments]);
 
   // `T00:00:00` : lecture en heure locale, sinon la date recule d'un jour en fuseau négatif.
   const frDate = (d) => (d ? new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "-");

@@ -89,8 +89,8 @@ test('LA RÈGLE « À FINIR » EST CELLE DU TABLEAU DE BORD, pas une copie', asy
 });
 
 test('LA PAGE décide une fois, quand sessions ET dossiers sont là, et dit pourquoi', () => {
-    assert.match(PAGE, /if \(ouverture \|\| !sessionsChargees \|\| !dossiersCharges\) return;/,
-        'une seule fois : recharger après un ajout ne ramène pas l\'utilisateur en arrière');
+    assert.match(PAGE, /if \(ouverture \|\| dateRetour \|\| !sessionsChargees \|\| !dossiersCharges\) return;/,
+        'une seule fois ; et JAMAIS au retour d\'une session (dateRetour) : on rouvre là où on était');
     assert.match(PAGE, /const o = ouvertureDuCalendrier\(sessions, enrollments, ymd\(new Date\(\)\)\);/);
     assert.match(PAGE, /getEnrollments\(\)\.then\(\(r\) => \{ setEnrollments\(r\.data\); setDossiersCharges\(true\); \}\)\.catch\(\(\) => \{\}\);/,
         'sans les dossiers (refusés), on ne décide rien : le mois du jour');
@@ -98,4 +98,15 @@ test('LA PAGE décide une fois, quand sessions ET dossiers sont là, et dit pour
     assert.match(PAGE, /Ouvert sur la session précédente \(\{quoi\}\)/);
     // « Aujourd'hui » reste le chemin du retour.
     assert.match(PAGE, /onClick=\{\(\) => \{ setYear\(now\.getFullYear\(\)\); setMonth\(now\.getMonth\(\)\); \}\}/);
+});
+
+test('AU RETOUR D\'UNE SESSION, le calendrier rouvre SON mois — pas la règle d\'ouverture', () => {
+    /* « Retour au calendrier » emporte la date de la session (location.state) ; la page rouvre ce
+       mois et court-circuite la règle d'ouverture. Le bouton « Sessions » de la navigation, lui,
+       n'a pas d'état : la règle s'y applique toujours (cf. la garde `dateRetour` ci-dessus). */
+    const detail = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'ui', 'pages', 'SessionDetail.jsx'), 'utf8');
+    assert.match(detail, /<Link to="\/sessions" state=\{\{ date: session\.start_date \}\}/, 'le retour emporte la date de la session');
+    assert.match(PAGE, /const dateRetour = location\.state\?\.date;/);
+    assert.match(PAGE, /if \(!dateRetour\) return;[\s\S]*?setYear\(d\.getFullYear\(\)\); setMonth\(d\.getMonth\(\)\);/,
+        'la page rouvre le mois de la session');
 });
