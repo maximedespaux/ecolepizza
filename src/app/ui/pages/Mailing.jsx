@@ -18,10 +18,12 @@ import { reduireSiImage, reduireEnPngDataUrl, PROFILS } from "../lib/image.js";
 /**
  * MAILING — les e-mails de l'école : ceux qui partent tout seuls, et ceux qu'elle écrit.
  *
- * TROIS ONGLETS, TROIS QUESTIONS :
- *   · ENVOIS AUTOMATIQUES — lesquels partent (les interrupteurs, migration 138) ;
- *   · TEXTES — ce qu'ils disent, réécrit par l'école (migration 178) ;
- *   · ÉCRIRE À UN GROUPE — un message, une fois, à des stagiaires choisis.
+ * CETTE PAGE EST UN RÉGLAGE (Paramètres → Mailing) : les e-mails AUTOMATIQUES — lesquels partent
+ * (interrupteurs, 138), ce qu'ils disent (textes, 178) —, les ENVOIS PROGRAMMÉS (règles, 179) et la
+ * SIGNATURE (197). « ÉCRIRE À UN GROUPE » — un message, une fois, à des stagiaires ou entreprises
+ * choisis — a sa propre page, rangée en « Commercial » (pages/EcrireGroupe.jsx) : c'est un acte de
+ * relation, pas un réglage. Son composant (`Groupe`) reste ici, EXPORTÉ, aux côtés de la barre
+ * d'insertion et de l'aperçu qu'il partage avec les textes et les règles.
  *
  * CE QUI N'EST PAS MODIFIABLE EST DIT, pas caché : la charpente d'un e-mail (l'encadré des
  * identifiants, le bouton, le garde-fou d'une alerte de sécurité) reste au code. Une école qui
@@ -58,10 +60,6 @@ function Mailing() {
           className={"tab" + (onglet === "textes" ? " on" : "")} onClick={() => { setOnglet("textes"); setStatus(null); }}>
           Textes des e-mails
         </button>
-        <button type="button" role="tab" aria-selected={onglet === "groupe"}
-          className={"tab" + (onglet === "groupe" ? " on" : "")} onClick={() => { setOnglet("groupe"); setStatus(null); }}>
-          Écrire à un groupe
-        </button>
         <button type="button" role="tab" aria-selected={onglet === "programmes"}
           className={"tab" + (onglet === "programmes" ? " on" : "")} onClick={() => { setOnglet("programmes"); setStatus(null); }}>
           Envois programmés
@@ -73,7 +71,6 @@ function Mailing() {
       </div>
       {onglet === "envois" && <Interrupteurs onStatus={setStatus} />}
       {onglet === "textes" && <Textes onStatus={setStatus} />}
-      {onglet === "groupe" && <Groupe onStatus={setStatus} />}
       {onglet === "programmes" && <Programmes onStatus={setStatus} />}
       {onglet === "signature" && <Signature onStatus={setStatus} />}
     </>
@@ -406,8 +403,10 @@ function BarreInsertion({ jetons, corps = "", onChangeCorps, onStatus }) {
   );
 }
 
-/* ── 3. Écrire à un groupe (migration 178) ─────────────────────────────────────────────────── */
-function Groupe({ onStatus }) {
+/* ── Écrire à un groupe (migration 178) — EXPORTÉ : rendu par sa propre page pages/EcrireGroupe.jsx,
+   rangée en « Commercial ». Reste ici pour partager BarreInsertion, Apercu et RechercheCible avec
+   les textes et les règles programmées (une copie à part finirait par diverger). ──────────────── */
+export function Groupe({ onStatus }) {
   const [type, setType] = useState("session");
   const [id, setId] = useState("");
   /* UNE SEMAINE SE DÉSIGNE PAR DEUX NOMBRES, pas par un identifiant : « S38 — 2026 » n'est pas

@@ -205,10 +205,16 @@ test('l\'écran dit ce qui n\'est pas modifiable, et ce que cet envoi n\'est pas
     assert.match(page, /Pas de démarchage/, 'l’envoi à un groupe annonce sa nature');
     /* L'APERÇU EST ISOLÉ : du HTML d'e-mail injecté dans la page emporterait ses styles. */
     assert.match(page, /<iframe title="Aperçu de l'e-mail" sandbox="" srcDoc=\{rendu\.html\}/);
-    /* LES TROIS ONGLETS : couper un e-mail, changer son texte, en écrire un. */
-    for (const t of ['Envois automatiques', 'Textes des e-mails', 'Écrire à un groupe']) {
+    /* LES ONGLETS DU RÉGLAGE : couper un e-mail, changer son texte, programmer un envoi, la
+       signature. « Écrire à un groupe » n'est plus un onglet ici — il a sa propre page, en
+       « Commercial » (pages/EcrireGroupe.jsx) —, mais son composant Groupe reste dans Mailing.jsx. */
+    for (const t of ['Envois automatiques', 'Textes des e-mails', 'Envois programmés', 'Signature']) {
         assert.ok(page.includes(t), `l’onglet « ${t} » doit exister`);
     }
+    assert.doesNotMatch(page, /onglet === "groupe"/, '« Écrire à un groupe » n’est plus un onglet du réglage Mailing');
+    const ecrire = sansCommentaires(lire(path.join(UI, 'pages/EcrireGroupe.jsx')));
+    assert.match(ecrire, /import \{ Groupe \} from "\.\/Mailing\.jsx"/, 'sa page rend le Groupe resté dans Mailing.jsx');
+    assert.match(ecrire, /<Groupe onStatus=\{setStatus\} \/>/);
     /* ENVOYER SE CONFIRME : un envoi part tout de suite et ne se rattrape pas. */
     assert.match(page, /window\.confirm\(`Envoyer ce message/);
 });
