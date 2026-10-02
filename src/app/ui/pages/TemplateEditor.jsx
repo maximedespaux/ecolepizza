@@ -79,6 +79,45 @@ function descParStagiaire(t) {
     + "en dehors, Prénom, Nom… désignent le stagiaire du dossier — et un document d'entreprise n'en a pas.";
 }
 
+/* Bloc « par formation » prêt à l'emploi : un dossier peut couvrir PLUSIEURS formations (NIV1 + NIV2).
+   Hors de ce bloc, {Formation}/{Prix} donnent les intitulés JOINTS et la SOMME ; ici, une ligne par
+   formation. Trois lignes : l'en-tête, la ligne répétée (entre les marqueurs), et un TOTAL dont les
+   jetons — hors marqueurs — reprennent les valeurs globales (somme des prix, somme des heures). */
+const BLOC_FORMATIONS = '<table><tbody><tr>'
+  + '<th>Formation</th><th>Durée</th><th>Prix HT</th>'
+  + '</tr><tr>'
+  + `<td>{#Formations}${pill('Formation', 'Intitulé')}</td><td>${pill('Heures', 'Durée (h)')}</td>`
+  + `<td>${pill('Prix', 'Prix HT')}{/Formations}</td>`
+  + '</tr><tr>'
+  + `<td><b>Total</b></td><td>${pill('Heures', 'Durée (h)')}</td><td>${pill('Prix', 'Prix HT')}</td>`
+  + '</tr></tbody></table>';
+
+/* Jetons résolus PAR FORMATION à l'intérieur d'un bloc {#Formations}…{/Formations}. Mêmes noms que
+   les jetons du groupe Formation, mais la valeur est celle de LA formation de la ligne (et non
+   l'agrégat). TOUT ce que la ligne sait remplir (formationRowTokens, src/api/lib/tokens.js). */
+const FORMATION_ROW_TOKENS = [
+  { key: "Formation", label: "Intitulé", sample: "Pizzaïolo niveau 1" },
+  { key: "Code", label: "Code (ou code RS)", sample: "NIV1PRO" },
+  { key: "Public", label: "Public visé", sample: "Tout public" },
+  { key: "Heures", label: "Nombre d’heures", sample: "35" },
+  { key: "Jours", label: "Nombre de jours", sample: "5" },
+  { key: "Prix", label: "Prix HT (€)", sample: "850 €" },
+  { key: "Coût horaire", label: "Coût horaire (€)", sample: "24,29 €" },
+  { key: "Jour1", label: "Date de début", sample: "02/06/2025" },
+  { key: "endDate", label: "Date de fin", sample: "06/06/2025" },
+  { key: "Semaine", label: "Semaine / année", sample: "Semaine 23 — 2025" },
+  { key: "Formateur", label: "Formateur", sample: "Marc Leblanc" },
+];
+
+/* L'info-bulle d'un jeton « par formation ». Comme pour les stagiaires : dans le bloc, chaque
+   formation du dossier tour à tour ; en dehors, {Formation}/{Prix} donnent l'agrégat (intitulés
+   joints, somme des prix) — ce qui est exactement ce qu'on veut pour la ligne « Total ». */
+function descParFormation(t) {
+  const quoi = t.key === "N°" ? "Le numéro d'ordre (1, 2, 3…)" : `« ${t.label} »`;
+  return `${quoi} de chaque formation, tour à tour. À placer entre {#Formations} et {/Formations} : `
+    + "en dehors, Intitulé, Prix… réunissent toutes les formations du dossier (intitulés joints, somme des prix).";
+}
+
 /* LE CADRE DE L'ENTREPRISE a une clé FIXE, et non dérivée de son libellé : `representant`, la
    case que remplissent l'espace du représentant (« signer avec mon cachet ») et le lien de
    signature envoyé à l'entreprise. Dérivé du libellé comme les autres blocs nommés, « Cachet de
@@ -680,6 +719,36 @@ function TemplateEditor() {
                       {GROUP_ROW_TOKENS.map((t) => (
                         <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
                           onMouseEnter={(e) => montrerTip(e, { ...t, desc: descParStagiaire(t) }, g.group)} onMouseLeave={cacherTip}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
+                          onClick={() => insertToken(t)}>{t.label}</button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Groupe Formation : un dossier peut couvrir PLUSIEURS formations (NIV1 + NIV2). Les
+                      jetons ci-dessus les RÉUNISSENT (intitulés joints, somme des prix) ; pour les
+                      DÉTAILLER une par ligne — un devis « NIV1 850 €, NIV2 1 180 €, Total 2 030 € » —
+                      il faut un bloc répété, sans quoi {Formation}/{Prix} ne donnent que l'agrégat. */}
+                  {g.group === "Formation" && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-soft)" }}>
+                      <p className="sub" style={{ margin: "0 0 6px", fontSize: 11 }}>
+                        Les jetons ci-dessus réunissent <b>toutes les formations</b> du dossier : les
+                        intitulés sont joints, les prix additionnés. Pour les <b>détailler</b> — une ligne
+                        par formation, utile pour un devis couvrant deux niveaux — insérez un <b>bloc
+                        « par formation »</b> : ce qui est placé entre <code>{"{#Formations}"}</code> et
+                        <code>{" {/Formations}"}</code> se répète pour chacune, et les jetons ci-dessous y
+                        prennent ses valeurs. La ligne <b>Total</b> reste, elle, sur la somme.
+                      </p>
+                      <button className="tok-chip" style={categoryChipStyle(g.group)} title="Insère un tableau {#Formations} … {/Formations} : une ligne d'exemple et un total"
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("application/x-rawtoken", BLOC_FORMATIONS)}
+                        onClick={() => insertRaw(BLOC_FORMATIONS)}>
+                        <Icon name="plus" size={13} /> Bloc « par formation »
+                      </button>
+                      <div style={{ height: 6 }} />
+                      {FORMATION_ROW_TOKENS.map((t) => (
+                        <button key={t.key} className="tok-chip" style={categoryChipStyle(g.group)}
+                          onMouseEnter={(e) => montrerTip(e, { ...t, desc: descParFormation(t) }, g.group)} onMouseLeave={cacherTip}
                           draggable
                           onDragStart={(e) => e.dataTransfer.setData("application/x-token", JSON.stringify({ key: t.key, label: t.label }))}
                           onClick={() => insertToken(t)}>{t.label}</button>
