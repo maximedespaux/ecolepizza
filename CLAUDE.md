@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-02** : **2479 tests — 2472 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-02** : **2485 tests — 2478 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,28 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**199 est À JOUER** (`199_user_desactivation.sql`, la DÉSACTIVATION volontaire d'un profil stagiaire — demandée le
+2026-10-02). Une colonne `user.deactivated_at` (datetime). Un stagiaire désactive son profil depuis « Mon profil →
+Compte » : ça pose seulement la DATE, la connexion reste ouverte. TOUTE CONNEXION l'efface (se reconnecter = garder
+son profil — requête À PART de celle de `last_login_at`, pour qu'une colonne absente ne casse pas la trace de
+connexion). Au bout de **15 SEMAINES** sans connexion, un passage QUOTIDIEN (`lib/purgeComptesDesactives.js`, lancé de
+`server.js`) SUPPRIME ses données non essentielles — progression Pizza Quest (`learner_quest_progress`,
+`learner_quest_life`), mercuriale (`mercuriale_item`), fiches techniques (`recipe` + cascade, et ses `recipe_like` /
+`recipe_comment` / `recipe_read` sur les fiches des autres), avatar/cadre (`learner.avatar`/`cadre`) — et COUPE son
+accès (`active = 0`). Ce qui RESTE toujours : documents, pièces, parcours, émargement, factures, consentements (les
+preuves), plus `levels`/`completed_levels` et `cadres_exclusifs` (accès formation + cadres de l'école). La purge est
+TOLÉRANTE (une table absente — cœurs retirés en 115, mercuriale — n'arrête pas les autres) et IDÉMPOTENTE (`active = 0`
+exclut du passage suivant). La désactivation est RÉSERVÉE aux STAGIAIRES (le serveur refuse 403 au bureau : sinon on
+couperait l'accès de l'école après 15 semaines). Sans la migration, rien ne casse : le bouton s'affiche mais la
+désactivation répond 503, et le passage sort sans rien faire (colonne absente). ⚠️ Son revert efface les demandes de
+désactivation EN ATTENTE (aucune donnée n'est supprimée pour autant) ; les comptes DÉJÀ purgés restent désactivés et
+vidés — le revert ne leur rend rien. **Elle se vérifie par l'API, sans SQL** : en tant que stagiaire, `POST
+/api/auth/deactivate` répond 200 (et non 503), puis `GET /api/auth/me` rend `deactivated_at` rempli ; une reconnexion
+le remet à null. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='user' AND column_name='deactivated_at';`
+Tests : `desactivation-profil.test.js`.
 
 **198 est À JOUER** (`198_mail_regle_formation.sql`, PLUSIEURS FORMATIONS pour un envoi programmé — demandée le 2026-10-01 :
 « pour qui → Formation → Toutes, une, plusieurs »). Une table d'association `mail_regle_formation` (regle_id, program_id),

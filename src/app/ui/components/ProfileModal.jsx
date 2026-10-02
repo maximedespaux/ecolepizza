@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile, deactivateMyProfile, reactivateMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
@@ -230,7 +230,7 @@ export default function ProfileModal({ onClose }) {
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
           {tab === "confidentialite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
-          {tab === "compte" && <CompteTab currentEmail={user?.email} onEmailChanged={refreshUser} />}
+          {tab === "compte" && <CompteTab currentEmail={user?.email} role={user?.role} deactivatedAt={user?.deactivated_at} onEmailChanged={refreshUser} onChanged={refreshUser} />}
         </div>
         <div className="mfoot">
           <button className="btn primary" onClick={onClose}>Terminé</button>
@@ -447,7 +447,7 @@ function VisibiliteTab({ who }) {
 
   return (
     <div>
-      <p className="hint" style={{ margin: "0 0 12px" }}>Choisis ce que les autres stagiaires voient sur ton profil dans la communauté. Ton nom, ton avatar, ton cadre et tes fiches partagées restent toujours visibles.</p>
+      <p className="hint" style={{ margin: "0 0 12px" }}>Ces réglages décident de ce que les autres stagiaires voient de vous dans la communauté : cochez ce que vous acceptez de montrer. Votre nom, votre avatar, votre cadre et les fiches que vous avez partagées restent, eux, toujours visibles.</p>
       <div className="vis-list">
         <Row k="company" label="Entreprise" value={f.company} />
         <Row k="phone" label="Téléphone" value={f.phone} />
@@ -459,7 +459,7 @@ function VisibiliteTab({ who }) {
   );
 }
 
-function CompteTab({ currentEmail, onEmailChanged }) {
+function CompteTab({ currentEmail, role, deactivatedAt, onEmailChanged, onChanged }) {
   const [email, setEmail] = useState("");
   const [emailPw, setEmailPw] = useState("");
   const [eMsg, setEMsg] = useState(null);
@@ -470,6 +470,28 @@ function CompteTab({ currentEmail, onEmailChanged }) {
   const [confPw, setConfPw] = useState("");
   const [pMsg, setPMsg] = useState(null);
   const [pBusy, setPBusy] = useState(false);
+
+  // Désactivation volontaire du profil (migration 199).
+  const [dBusy, setDBusy] = useState(false);
+  const [dMsg, setDMsg] = useState(null);
+  // La purge tombe 15 semaines après la demande (le serveur fait foi ; ici, c'est l'échéance annoncée).
+  const datePurge = deactivatedAt ? new Date(new Date(deactivatedAt).getTime() + 15 * 7 * 24 * 60 * 60 * 1000) : null;
+
+  async function desactiver() {
+    if (!window.confirm(
+      "Désactiver votre profil ?\n\nSi vous ne vous reconnectez pas pendant 15 semaines, votre progression Pizza Quest, votre mercuriale et vos fiches techniques seront définitivement supprimées, et votre accès fermé. Vos documents (attestations, conventions…) sont toujours conservés.\n\nVous reconnecter avant ce délai annule tout."
+    )) return;
+    setDBusy(true); setDMsg(null);
+    try { await deactivateMyProfile(); onChanged && onChanged(); }
+    catch (e) { setDMsg({ ok: false, text: e.message || "Échec." }); }
+    finally { setDBusy(false); }
+  }
+  async function reactiver() {
+    setDBusy(true); setDMsg(null);
+    try { await reactivateMyProfile(); onChanged && onChanged(); }
+    catch (e) { setDMsg({ ok: false, text: e.message || "Échec." }); }
+    finally { setDBusy(false); }
+  }
 
   async function saveEmail() {
     setEBusy(true); setEMsg(null);
@@ -513,6 +535,38 @@ function CompteTab({ currentEmail, onEmailChanged }) {
       <div className="field"><label>Confirmer le nouveau mot de passe</label><input className="inp" type="password" value={confPw} onChange={(e) => setConfPw(e.target.value)} autoComplete="new-password" /></div>
       {pMsg && <p className="hint" style={{ color: pMsg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "2px 0 10px" }}>{pMsg.text}</p>}
       <button className="btn primary" disabled={pBusy || !curPw || !newPw || !confPw} onClick={savePw} style={{ width: "100%", justifyContent: "center" }}><Icon name="check" size={14} /> Changer le mot de passe</button>
+
+      {/* Désactiver mon profil — réservé aux stagiaires (le serveur le refuse aux autres, pour ne
+          pas couper l'accès du bureau). Pose seulement la demande ; la purge vient 15 semaines plus
+          tard, sauf reconnexion. */}
+      {role === "STAGIAIRE" && (
+        <>
+          <div style={{ borderTop: "1px solid var(--border-soft)", margin: "18px 0 14px" }} />
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Désactiver mon profil</div>
+          {deactivatedAt ? (
+            <>
+              <p className="hint" style={{ margin: "0 0 10px" }}>
+                Désactivation demandée. Sans reconnexion de votre part, votre progression Pizza Quest,
+                votre mercuriale et vos fiches techniques seront supprimées
+                {datePurge && <> <b>le {datePurge.toLocaleDateString("fr-FR")}</b></>} et votre accès fermé.{" "}
+                <b>Vous reconnecter annule cette suppression.</b> Vos documents restent conservés.
+              </p>
+              <button className="btn ghost" disabled={dBusy} onClick={reactiver} style={{ width: "100%", justifyContent: "center" }}>Réactiver mon profil</button>
+            </>
+          ) : (
+            <>
+              <p className="hint" style={{ margin: "0 0 10px" }}>
+                Vous pouvez désactiver votre profil. Si vous ne vous reconnectez pas pendant <b>15 semaines</b>, votre
+                progression Pizza Quest, votre mercuriale et vos fiches techniques seront <b>définitivement supprimées</b> et
+                votre accès fermé. Vos <b>documents</b> (attestations, conventions…) sont toujours conservés — vous reconnecter
+                avant ce délai annule tout.
+              </p>
+              <button className="btn ghost" disabled={dBusy} onClick={desactiver} style={{ width: "100%", justifyContent: "center" }}>Désactiver mon profil</button>
+            </>
+          )}
+          {dMsg && <p className="hint" style={{ color: dMsg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "8px 0 0" }}>{dMsg.text}</p>}
+        </>
+      )}
     </div>
   );
 }
