@@ -10,6 +10,7 @@
 // rétro-compatibles ({Personne}, {Niveau suggérer}, {Nom entreprise}…).
 
 const { resolveCustomTokens, shiftDate } = require('./customtokens.js');
+const { joindreFr } = require('./agregationChamps.js');
 const { montantFr, pourcentFr } = require('./montants.js');
 const { parseDaySchedules, fmtHM } = require('./emargement.js');
 const { cadrer } = require('./imagesPdf.js');
@@ -236,7 +237,14 @@ const TOKEN_CATALOG = [
               desc: 'La date de fin écrite en toutes lettres : « vendredi 6 juin 2025 ».' },
             { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025',
               desc: '« Semaine 23 — 2025 » : la semaine de la session et son année. À défaut de '
-                  + 'semaine, la date de début.' },
+                  + 'semaine, la date de début. Plusieurs formations : « Semaines 6 et 12 — 2026 ».' },
+            /* Les dates de CHAQUE formation, appariées — « du … au … et du … au … » — pour un devis
+               qui couvre plusieurs formations. À poser à la place de « du {Date de début} au {Date
+               de fin} », qui donnent, eux, une seule période globale (premier début, dernière fin). */
+            { key: 'Périodes', label: 'Dates de chaque formation', sample: 'du 02/06/2025 au 06/06/2025',
+              desc: 'Les dates de chaque formation du dossier, appariées : « du 02/06/2025 au '
+                  + '06/06/2025 », et « … et du … au … » quand il y en a plusieurs. Idéal pour un '
+                  + 'devis couvrant deux niveaux, à la place de « du {Date de début} au {Date de fin} ».' },
             { key: 'Formateur', label: 'Formateur', sample: 'Marc Leblanc',
               desc: 'Le formateur de la session.' },
             /* CES CINQ JETONS NE DONNENT PAS LE JOUR QU'ILS NOMMENT, et le libellé le disait
@@ -1490,7 +1498,8 @@ function resolveTokens(ctx = {}) {
     // Agrégations multi-formations (un document peut couvrir plusieurs formations).
     const multi = forms.length > 1;
     const uniq = (arr) => [...new Set(arr.filter(Boolean))];
-    const joinTitles = uniq(forms.map((x) => x.title)).join(', ') || (f.title || '');
+    // « A et B » plutôt que « A, B » : un devis de deux formations se lit « niveau 1 et niveau 2 ».
+    const joinTitles = joindreFr(uniq(forms.map((x) => x.title))) || (f.title || '');
     const sumHours = forms.reduce((s, x) => s + (Number(x.hours) || 0), 0);
     const sumDays = forms.reduce((s, x) => s + (Number(x.days) || 0), 0);
     const block = (field) => (!multi
@@ -1504,7 +1513,23 @@ function resolveTokens(ctx = {}) {
     const start = starts[0] || f.start_date || '';
     const end = ends[ends.length - 1] || f.end_date || '';
     const today = frDate(new Date());
-    const semaine = f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start);
+    /* LA SEMAINE DEVIENT LES SEMAINES quand le document couvre plusieurs formations : « Semaines 6
+       et 12 — 2026 » plutôt que la seule première (demandé le 2026-10-03). Une seule : inchangé. */
+    const weeks = uniq(forms.map((x) => x.week));
+    const years = uniq(forms.map((x) => x.year));
+    const semaine = weeks.length
+        ? `${weeks.length > 1 ? 'Semaines' : 'Semaine'} ${joindreFr(weeks)}${years.length ? ` — ${joindreFr(years)}` : ''}`
+        : (f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start));
+    /* {Périodes} — les dates de CHAQUE formation, appariées : « du 18/05/2026 au 22/05/2026 et du
+       01/06/2026 au 03/06/2026 ». {Jour1}/{endDate} donnent, eux, le premier début et la dernière
+       fin (une période globale) — à employer séparément. Une seule formation : « du … au … ». */
+    const periodeDe = (x) => {
+        const d1 = frDate(x.start_date), d2 = frDate(x.end_date);
+        if (d1 && d2) return `du ${d1} au ${d2}`;
+        if (d1) return `à partir du ${d1}`;
+        return d2 ? `jusqu'au ${d2}` : '';
+    };
+    const periodes = joindreFr((multi ? forms : [f]).map(periodeDe).filter(Boolean));
     const sig = ctx.signature || {};
     // Le représentant de l'entreprise signe dans le cadre `representant` (document_signature) : sa
     // date de signature vient de LÀ, pas de la signature « principale » du document (sig, le stagiaire).
@@ -1565,7 +1590,7 @@ function resolveTokens(ctx = {}) {
         // Le coût horaire : montant ÷ heures, arrondi au centime (sinon `euro` en montrerait trois).
         'Coût horaire': sumHours > 0 && totalPrice > 0 ? euro(Math.round((totalPrice / sumHours) * 100) / 100) : '',
         // Session
-        Jour1: frDate(start), endDate: frDate(end), Semaine: semaine,
+        Jour1: frDate(start), endDate: frDate(end), Semaine: semaine, 'Périodes': periodes,
         'Début en toutes lettres': frDateLong(start), 'Fin en toutes lettres': frDateLong(end),
         'Semaine de la formation': semaine, Formateur: f.trainer || '',
         Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
