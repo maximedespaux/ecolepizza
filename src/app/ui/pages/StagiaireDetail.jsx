@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -514,6 +514,25 @@ function StagiaireDetail() {
   }
 
   function gestesEtape(s) {
+    /* UN DOCUMENT DE GROUPE (entreprise) ne se gère pas depuis la fiche stagiaire : il se prépare,
+       s'envoie et s'importe sur la fiche ENTREPRISE (décidé le 2026-10-03). Plutôt que des gestes qui
+       n'y ont pas leur place, on y MÈNE — sur la bonne session. Sans entreprise au dossier, rien. */
+    if (s.company_level) {
+      if (!curEnr?.company_id) return null;
+      const dg = s.docId ? docs.find((x) => x.id === s.docId) : null;
+      const trace = dg && (dg.signed_at ? `signé le ${dateFr(dg.signed_at)}`
+        : dg.sent_at ? `envoyé le ${dateFr(dg.sent_at)}` : "préparé");
+      return (
+        <>
+          {trace && <span className="parc-trace">{trace}</span>}
+          <Link className="btn ghost" to={`/entreprises/${curEnr.company_id}`}
+            state={{ session: curEnr.session_id, info: `« ${s.label} » est un document de groupe : préparez-le ici, depuis le parcours de l'entreprise.` }}
+            title="Les documents de groupe se gèrent sur la fiche entreprise">
+            <Icon name="building" size={14} /> Gérer sur la fiche entreprise
+          </Link>
+        </>
+      );
+    }
     const d = s.docId ? docs.find((x) => x.id === s.docId) : null;
     if (!d) return null;
     /* LA TRACE, sur une ligne : importé, signé ou envoyé, avec sa date — le détail complet au
