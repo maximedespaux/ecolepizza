@@ -142,8 +142,12 @@ export default function EntrepriseDetail() {
       const d = r.data || {};
       setData(d);
       setForm({ ...d, date_creation: d.date_creation ? String(d.date_creation).slice(0, 10) : "" });
-      // Vue par défaut = session la plus récente DE L'ENTREPRISE.
-      setViewSessionId((cur) => cur || (r.data?.sessions?.[0]?.id || ""));
+      /* Vue par défaut = la session DEMANDÉE si on arrive de la fiche stagiaire (« Gérer sur la
+         fiche entreprise », location.state.session) et qu'elle est bien une session de l'entreprise ;
+         sinon la plus récente. */
+      const ssn = d.sessions || [];
+      const voulue = location.state?.session && ssn.some((x) => x.id === location.state.session) ? location.state.session : null;
+      setViewSessionId((cur) => cur || voulue || (ssn[0]?.id || ""));
     }).catch((e) => setStatus({ type: "error", message: e.message }));
   }
   useEffect(() => { load(); }, [id]);

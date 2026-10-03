@@ -571,7 +571,7 @@ const listDocuments = async (req, res) => {
                l'entreprise quand on passe en professionnel, et pour nommer le détachement en repassant
                en particulier. C'est l'entreprise DU DOSSIER (e.company_id), jamais l'employeur de la
                fiche (l.company_id). */
-            `SELECT e.id, e.financing, e.company_id, c.name AS company_name,
+            `SELECT e.id, e.session_id, e.financing, e.company_id, c.name AS company_name,
                     p.code AS program_code, p.title AS program_title,
                     s.year, s.week,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,

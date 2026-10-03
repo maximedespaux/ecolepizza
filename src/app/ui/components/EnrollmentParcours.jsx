@@ -108,6 +108,11 @@ function lineFor(s) {
 function importPossible(s) {
   if (String(s.key || "").startsWith("quiz:")) return false;
   if (s.remise) return etatDe(s) !== "SANS_OBJET";
+  /* Un document de GROUPE vu depuis la fiche STAGIAIRE (donc pas `isGroup` : la fiche stagiaire ne
+     porte pas les compteurs du groupe) ne se gère pas ici — il se génère, s'envoie et s'importe sur
+     la fiche ENTREPRISE (2026-10-03). On n'y propose donc pas « Importer un document reçu » : la
+     fiche stagiaire y mène par un bouton « Gérer sur la fiche entreprise » (renderGestes). */
+  if (!isGroup(s) && s.company_level) return false;
   return !(isGroup(s) && !s.company_level);
 }
 /* LE MOT CHANGE PARCE QUE LE GESTE CHANGE : une pièce reçue se dépose et se valide, un document remis se
