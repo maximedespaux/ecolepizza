@@ -319,6 +319,13 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
      Un jalon « OU » se coche d'un geste pour toutes ses variantes — d'où une LISTE de slugs. */
   const toggleFacultatif = (slugs, valeur) => setSteps((ss) => ss.map((s) => (slugs.includes(s.slug) ? { ...s, facultatif: valeur } : s)));
 
+  /* COMPTEURS DES SEGMENTS. « Dossier particulier » : étapes actives / total. « Dossier
+     professionnel » : les slugs qui résolvent ENCORE vers une étape (CompanySection n'affiche que
+     ceux-là) — un slug périmé, resté dans `company_steps`, gonflait le compteur d'un cran sans
+     carte en face. Le compteur colle désormais aux cartes. */
+  const nbActives = steps.filter((s) => s.active).length;
+  const companyStepsResolus = companySteps.filter((sl) => steps.some((s) => s.slug === sl));
+
   async function save() {
     if (!String(form.code).trim()) { onError("Le code est requis."); return; }
     if (!String(form.title).trim()) { onError("L'intitulé est requis."); return; }
@@ -365,7 +372,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
           <button type="button" role="tab" className={"tab" + (tab === "infos" ? " on" : "")} onClick={() => setTab("infos")}>Informations</button>
           {!isNew && (
             <button type="button" role="tab" className={"tab" + (tab === "parcours" ? " on" : "")} onClick={() => setTab("parcours")}>
-              Parcours documentaire{steps.length ? ` (${steps.filter((s) => s.active).length}/${steps.length})` : ""}
+              Parcours documentaire
             </button>
           )}
           {!isNew && (
@@ -461,8 +468,8 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
 
           <div style={{ display: tab === "parcours" ? "block" : "none" }}>
           <div className="seg" style={{ marginBottom: 12 }}>
-            <button type="button" className={"seg-btn" + (parcoursKind === "stagiaire" ? " on" : "")} onClick={() => setParcoursKind("stagiaire")}>Parcours du dossier</button>
-            <button type="button" className={"seg-btn" + (parcoursKind === "entreprise" ? " on" : "")} onClick={() => setParcoursKind("entreprise")}>À l'arrivée via une entreprise{companySteps.length ? ` (${companySteps.length})` : ""}</button>
+            <button type="button" className={"seg-btn" + (parcoursKind === "stagiaire" ? " on" : "")} onClick={() => setParcoursKind("stagiaire")}>Dossier particulier{steps.length ? ` (${nbActives}/${steps.length})` : ""}</button>
+            <button type="button" className={"seg-btn" + (parcoursKind === "entreprise" ? " on" : "")} onClick={() => setParcoursKind("entreprise")}>Dossier professionnel{companyStepsResolus.length ? ` (${companyStepsResolus.length})` : ""}</button>
           </div>
 
           {parcoursKind === "stagiaire" ? (
@@ -1011,7 +1018,15 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
               <span className="pf-grip" {...glisser.poignee(i)} title="Glisser pour réordonner">⠿</span>
               <div className="pf-variante">
                 <span className="pf-label">{s.label}</span>
-                {badge(s)}
+                {/* MÊME BADGE DE CONTENU QU'EN « Dossier particulier » (stepBadge : J-7, à signer, à
+                    fournir…) : la même étape s'affiche pareil des deux côtés. On y AJOUTE le seul
+                    repère propre à cette section — « 🏢 Groupe » (signé collectivement, pas par
+                    stagiaire) ; un document stagiaire se reconnaît à l'absence de ce repère, comme
+                    en particulier. L'ancien badge de type (❓ QCM, Stagiaire) reste au sélecteur. */}
+                {s.company_level && (
+                  <span className="pf-badge" style={{ background: "var(--ember1,#c0392b)", color: "#fff" }}>🏢 Groupe</span>
+                )}
+                {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
                 {/* SANS CE REPÈRE, ON NE COMPRENDRAIT PAS pourquoi l'étape est absente de
                     l'autre onglet. Un document choisi ici et inactif dans le parcours du
                     dossier n'existe QUE pour les stagiaires inscrits par une entreprise —
@@ -1061,7 +1076,7 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
           {eligible.length === 0 ? (
             <>
               <div className="pf-add-title">Étapes disponibles</div>
-              <div className="pf-add-empty">Aucun document disponible, activez-le d'abord dans « Parcours du dossier ».</div>
+              <div className="pf-add-empty">Aucun document disponible, activez-le d'abord dans « Dossier particulier ».</div>
             </>
           ) : (
             (() => {
