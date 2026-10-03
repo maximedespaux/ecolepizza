@@ -307,4 +307,16 @@ app.listen(port, () => {
         .catch((err) => console.error('Purge des profils désactivés :', err.message));
     setTimeout(purgerDesactives, 3 * 60 * 1000).unref?.();
     setInterval(purgerDesactives, 24 * 60 * 60 * 1000).unref?.();
+
+    /* MÉMOS FAITS — un pense-bête coché « fait » est SUPPRIMÉ, en base, UN JOUR plus tard (lui, ses
+       liens et pièces jointes par cascade ; lib/purgeMemosFaits.js). Décocher le remet à faire et l'y
+       soustrait. TOUTES LES HEURES, non une fois par jour : le délai se compte en jours, mais un
+       passage horaire colle au « 1 jour après » sans peser. Premier passage quatre minutes après le
+       démarrage. Sans la table (migration 176 non jouée), le passage ne fait rien. */
+    const { purgerMemosFaits } = require('./lib/purgeMemosFaits.js');
+    const purgerMemos = () => purgerMemosFaits({ conn: require('./config/database.js').promise() })
+        .then((n) => { if (n) console.log(`[mémos] ${n} mémo(s) fait(s) supprimé(s)`); })
+        .catch((err) => console.error('Purge des mémos faits :', err.message));
+    setTimeout(purgerMemos, 4 * 60 * 1000).unref?.();
+    setInterval(purgerMemos, 60 * 60 * 1000).unref?.();
 });
