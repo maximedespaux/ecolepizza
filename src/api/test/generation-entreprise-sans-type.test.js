@@ -71,12 +71,13 @@ async function repondre(sql, params) {
         return [{ affectedRows: 1 }];
     }
     if (/FROM company WHERE id = \?/.test(sql)) return [[{ id: 'c1', opco: null }]];
-    if (/SELECT id FROM training_session WHERE id = \?/.test(sql)) return [[{ id: 's1' }]];
+    // Validation des sessions : une LISTE désormais (un document de groupe peut en couvrir plusieurs).
+    if (/SELECT id FROM training_session WHERE id IN \(\?\)/.test(sql)) return [[{ id: 's1' }]];
     if (/FROM training_session s JOIN training_program p/.test(sql)) {
         return [[{ id: 's1', program_id: 'p1', program_code: 'RS7404', days: 5, hygiene: 0, rs_code: 'RS7404' }]];
     }
     if (/FROM enrollment e JOIN learner l ON l\.id = e\.learner_id/.test(sql)) {
-        return [[{ id: 'e1', learner_id: 'l1', financing: 'OPCO', opco: 'OCAPIAT' }]];
+        return [[{ id: 'e1', session_id: 's1', learner_id: 'l1', financing: 'OPCO', opco: 'OCAPIAT' }]];
     }
     if (/FROM document_template/.test(sql)) return [LIGNES_MODELES];
     return [[]];

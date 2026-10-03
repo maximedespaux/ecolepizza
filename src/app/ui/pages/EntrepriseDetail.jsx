@@ -235,21 +235,20 @@ export default function EntrepriseDetail() {
     return [...map.values()];
   })();
   const togglePrepSession = (sid) => setPrep((p) => { const n = new Set(p.sessionIds); n.has(sid) ? n.delete(sid) : n.add(sid); return { ...p, sessionIds: n }; });
-  // Génère le document de groupe pour chaque session cochée qui le propose.
+  // Génère UN SEUL document de groupe réunissant toutes les formations cochées qui le proposent
+  // (2026-10-03) : le PDF agrège les formations, et le document coche l'étape « Devis » de chacune.
   // `fermer` : referme le formulaire ouvert dans l'étape du parcours, une fois le document généré.
   async function prepareGroupDoc(ev, fermer) {
     ev.preventDefault();
     if (!prep.slug || prep.sessionIds.size === 0) return;
+    // Seules les formations cochées qui PROPOSENT ce modèle entrent dans le document.
+    const sessions = [...prep.sessionIds].filter((sid) => (groupTplsBySession[sid] || []).some((t) => t.slug === prep.slug));
+    if (!sessions.length) { setStatus({ type: "error", message: "Ce document n'existe pas dans les formations sélectionnées." }); return; }
     setPreparing(true); setStatus(null);
     try {
-      let n = 0;
-      for (const sid of prep.sessionIds) {
-        if (!(groupTplsBySession[sid] || []).some((t) => t.slug === prep.slug)) continue; // pas dans cette formation
-        await createCompanyDocument(id, { session_id: sid, template_slug: prep.slug });
-        n++;
-      }
-      setStatus({ type: n ? "success" : "error", message: n ? `Document de groupe préparé (${n} formation(s)).` : "Ce document n'existe pas dans les formations sélectionnées." });
-      if (n) { setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); fermer?.(); }
+      await createCompanyDocument(id, { session_ids: sessions, template_slug: prep.slug });
+      setStatus({ type: "success", message: sessions.length > 1 ? `Document de groupe préparé (${sessions.length} formations réunies).` : "Document de groupe préparé." });
+      setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); fermer?.();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setPreparing(false); }
   }
