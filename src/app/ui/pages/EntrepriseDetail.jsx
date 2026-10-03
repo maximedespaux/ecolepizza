@@ -16,6 +16,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure, dateFr, colorOf } from "../lib/format.js";
 import { documentsDeLEtape, documentsEntrepriseHorsParcours, cibleImportGroupe, signeDansLApplication } from "../lib/documentsDossier.js";
+import ImportSessionsModal from "../components/ImportSessionsModal.jsx";
 import { ACCEPT_DOCUMENT, ACCEPT_PIECE, refusDocumentRecu } from "../lib/formatsDepot.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 
@@ -110,6 +111,9 @@ export default function EntrepriseDetail() {
      un nouveau rendu — et rien ne l'affiche. */
   const fichierRef = useRef(null);
   const cibleImport = useRef(null);
+  // Import d'un document de groupe couvrant PLUSIEURS formations (2026-10-03) : la fenêtre de choix
+  // des sessions. Une fois validée, on crée UN document pour toutes, puis on y rattache le fichier.
+  const [importMulti, setImportMulti] = useState(null);
   // Les remises des stagiaires du groupe, session affichée : les lignes des étapes de remise.
   const [remisesGroupe, setRemisesGroupe] = useState([]);
   const [learnerDocs, setLearnerDocs] = useState([]); // docs stagiaires à signer par le représentant
@@ -355,7 +359,29 @@ export default function EntrepriseDetail() {
       setStatus({ type: "info", message: `« ${cible.doc.title} » a été signé dans l'application : il n'y a rien à importer.` });
       return;
     }
+    /* PLUSIEURS FORMATIONS, UN SEUL DOCUMENT (2026-10-03). Si l'étape n'a pas encore de document
+       (`cible.doc` nul) et que l'entreprise a plusieurs sessions qui proposent ce modèle, on demande
+       d'abord lesquelles couvrir : `createCompanyDocument` les réunit en un document (voir aussi la
+       génération). Document déjà préparé, ou une seule session concernée → fichier direct, comme avant. */
+    if (!cible.doc) {
+      const eligibles = (data.sessions || []).filter((s) => (groupTplsBySession[s.id] || []).some((t) => t.slug === step.key));
+      if (eligibles.length > 1) {
+        setImportMulti({
+          slug: step.key, label: step.label,
+          options: eligibles.map((s) => ({ id: s.id, label: `${s.program_code || s.program_title} · S${s.week} ${s.year}` })),
+          defaut: viewSessionId ? [viewSessionId] : [],
+        });
+        return;
+      }
+    }
     ouvrirSelecteur({ doc: cible.doc || null, slug: step.key, label: step.label });
+  }
+  // La fenêtre a rendu les sessions cochées : on les retient sur la cible, puis fichier.
+  function validerImportMulti(sessionIds) {
+    const m = importMulti;
+    setImportMulti(null);
+    if (!m) return;
+    ouvrirSelecteur({ doc: null, slug: m.slug, label: m.label, sessionIds });
   }
   // Sur la LIGNE d'un document (un par OPCO, ou « Autres documents ») : il n'y a rien à deviner.
   function demanderImportDocument(d) { ouvrirSelecteur({ doc: d, slug: d.template_slug, label: d.title }); }
@@ -401,8 +427,10 @@ export default function EntrepriseDetail() {
       if (!docId) {
         /* L'ÉTAPE N'A JAMAIS ÉTÉ PRÉPARÉE : elle l'est par le MÊME chemin que « Préparer le
            document » (un document par OPCO, le groupe listé), puis le fichier s'y rattache. Deux
-           chemins de préparation finiraient par produire deux documents différents. */
-        await createCompanyDocument(id, { session_id: viewSessionId, template_slug: cible.slug });
+           chemins de préparation finiraient par produire deux documents différents.
+           Les sessions cochées (fenêtre multi-formations) réunissent tout en un document ; à défaut,
+           la seule session affichée. */
+        await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug });
         const r = await listCompanyDocuments(id);
         setCompanyDocs(r.data || []);
         const prepares = documentsDeLEtape(r.data || [], cible.slug, viewSessionId);
@@ -846,6 +874,11 @@ export default function EntrepriseDetail() {
           {/* Sélecteur partagé par l'étape et par chaque ligne ; `accept` est posé par `ouvrirSelecteur`,
               selon le geste (document reçu ou document remis), aligné sur ce que le serveur accepte. */}
           <input ref={fichierRef} type="file" style={{ display: "none" }} onChange={envoyerImportGroupe} />
+          {/* Import d'un document de groupe couvrant plusieurs formations : cocher lesquelles, puis fichier. */}
+          {importMulti && (
+            <ImportSessionsModal label={importMulti.label} options={importMulti.options} defaut={importMulti.defaut}
+              onValider={validerImportMulti} onClose={() => setImportMulti(null)} />
+          )}
           {autresDocs.length > 0 && (
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
               <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Autres documents</h3>

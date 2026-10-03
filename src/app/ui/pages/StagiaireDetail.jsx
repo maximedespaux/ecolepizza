@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
+import ImportSessionsModal from "../components/ImportSessionsModal.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
@@ -92,6 +93,10 @@ function StagiaireDetail() {
      l'erreur #310, ce qui vide la page. Un hook ne se met jamais derrière un `return`. */
   const fichierRef = useRef(null);
   const [etapeImport, setEtapeImport] = useState(null);
+  // Import d'un document reçu couvrant PLUSIEURS formations (2026-10-03) : la fenêtre de choix des
+  // sessions, et les inscriptions retenues, lues par `envoyerImport` au moment de créer le document.
+  const [importMulti, setImportMulti] = useState(null);
+  const importEnrIds = useRef(null);
   /* LES DOCUMENTS QUE MONTRENT LES ÉTAPES du parcours affiché (leurs identifiants) : la liste du bas
      ne garde que les autres. `null` tant que le parcours de l'onglet n'est pas arrivé — sans quoi
      la liste afficherait tout, puis se viderait d'un coup. */
@@ -357,6 +362,23 @@ function StagiaireDetail() {
      — et l'utilisateur croirait que le bouton ne marche plus. */
 
   function demanderImport(step) {
+    /* PLUSIEURS FORMATIONS, UN SEUL DOCUMENT (2026-10-03). Un document reçu (ni pièce ni remise)
+       jamais généré, quand le stagiaire a plus d'une inscription : on demande d'abord QUELLES
+       formations il couvre, pour le créer UNE fois lié à toutes — plutôt qu'un doublon par session.
+       Une pièce / une remise se déposent par inscription (pas de fusion) ; un document déjà généré
+       se rattache à l'existant : dans ces cas, le fichier s'ouvre directement, comme avant. */
+    if (!step.piece && !step.remise && !step.docId && enrollments.length > 1) {
+      setImportMulti({
+        step,
+        options: enrollments.map((e) => ({ id: e.id, label: `${e.program_code || "Formation"}${e.week ? ` · S${e.week}${e.year ? ` ${e.year}` : ""}` : ""}` })),
+        defaut: curEnrId ? [curEnrId] : [],
+      });
+      return;
+    }
+    importEnrIds.current = null;
+    ouvrirSelecteurFichier(step);
+  }
+  function ouvrirSelecteurFichier(step) {
     setEtapeImport(step);
     /* `multiple` SE POSE AVANT LE CLIC, sur l'unique sélecteur partagé par toutes les étapes.
        Un document reçu remplace une étape : il est seul par nature. Une pièce, elle, peut en
@@ -372,6 +394,14 @@ function StagiaireDetail() {
     if (fichierRef.current) fichierRef.current.accept = step.piece || step.remise ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
     fichierRef.current?.click();
   }
+  // La fenêtre de choix a rendu les formations cochées : on retient leurs inscriptions, puis fichier.
+  function validerImportMulti(enrIds) {
+    const step = importMulti?.step;
+    setImportMulti(null);
+    if (!step) return;
+    importEnrIds.current = enrIds && enrIds.length ? enrIds : null;
+    ouvrirSelecteurFichier(step);
+  }
 
   async function envoyerImport(e) {
     // Lus AVANT la remise à zéro : vider le champ vide aussi sa liste de fichiers.
@@ -380,6 +410,9 @@ function StagiaireDetail() {
     e.target.value = "";
     const step = etapeImport;
     setEtapeImport(null);
+    // Les formations cochées dans la fenêtre (sinon l'inscription affichée seule), lues puis oubliées.
+    const enrIdsImport = importEnrIds.current;
+    importEnrIds.current = null;
     if (!file || !step) return;
 
     /* UNE ÉTAPE « PIÈCE » NE PASSE PAS PAR LES DOCUMENTS GÉNÉRÉS. Une carte d'identité n'est
@@ -472,7 +505,8 @@ function StagiaireDetail() {
       fd.append("type", tpl.doc_type || tpl.slug.toUpperCase().replace(/-/g, "_"));
       fd.append("template_slug", tpl.slug);
       fd.append("title", step.label || tpl.label || "");
-      fd.append("enrollment_ids", JSON.stringify([curEnrId]));
+      // Toutes les formations cochées (un seul document pour elles), ou l'inscription affichée.
+      fd.append("enrollment_ids", JSON.stringify(enrIdsImport && enrIdsImport.length ? enrIdsImport : [curEnrId]));
     }
     try {
       await importDocumentFile(fd);
@@ -782,6 +816,11 @@ function StagiaireDetail() {
                 valeur du JSX n'est donc qu'un DÉFAUT, le plus restrictif des deux. */}
             <input ref={fichierRef} type="file" onChange={envoyerImport} style={{ display: "none" }}
               accept={ACCEPT_PIECE} aria-hidden="true" tabIndex={-1} />
+            {/* Import d'un document reçu couvrant plusieurs formations : cocher lesquelles, puis fichier. */}
+            {importMulti && (
+              <ImportSessionsModal label={importMulti.step.label} options={importMulti.options} defaut={importMulti.defaut}
+                onValider={validerImportMulti} onClose={() => setImportMulti(null)} />
+            )}
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
             <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
             {/* L'AUTRE SENS, juste en dessous : ce que l'ÉCOLE remet. Les deux cartes se
