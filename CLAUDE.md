@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (305 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-03** : **2498 tests — 2491 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~5 s** (285 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-03** : **2491 tests — 2484 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -1106,19 +1106,6 @@ rien ne se transmet avant.
   un opérande sans nombre retombe sur la valeur de base (un reste sans acompte = le prix). Aucune
   migration, aucune donnée : le modèle d'un jeton perso est déjà du texte libre. Tests :
   `jetons-perso-calcul.test.js` (valeurs + aperçu/serveur à l'identique).
-
-- **Bloc {#Formations}…{/Formations} : un devis DÉTAILLÉ, une ligne par formation** (2026-10-03). Un
-  dossier peut couvrir plusieurs formations (NIV1 + NIV2) ; {Formation}/{Prix}/{Heures} les AGRÈGENT
-  (intitulés joints, somme), si bien qu'un devis professionnel ne pouvait pas imprimer « NIV1 850 €,
-  NIV2 1 180 €, Total 2 030 € ». Le bloc se développe comme {#Articles}/{#Stagiaires} :
-  `formationRowTokens(f,i)` (tokens.js) donne les valeurs de CHAQUE formation, `expandListBlocks(out,
-  'Formations', ctx.formations, …)` (htmlfill.js) répète la ligne. **Le prix d'une ligne est
-  `enroll_price || price`** — la base même que `totalPrice` additionne —, donc la somme des lignes
-  tombe au centime sur le {Prix} global. Hors du bloc (la ligne « Total »), les mêmes jetons gardent
-  leur sens agrégé ; `findMissingTokens` NE réclame PAS les jetons placés dans le bloc (ils sont
-  résolus par formation, cf. `stripGroupBlocks`, étendu à {#Formations}). Éditeur : groupe Formation,
-  bouton « Bloc « par formation » » (`BLOC_FORMATIONS`) + palette `FORMATION_ROW_TOKENS`. Aucune
-  migration (ctx.formations porte déjà tout). Tests : `formations-bloc.test.js`.
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
 (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des
