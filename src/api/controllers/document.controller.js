@@ -51,6 +51,7 @@ const { logAudit } = require('../lib/audit.js');
 const { supprimerDocument } = require('../lib/suppressionDocument.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { getEnabledFields, champsDesConditions, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
+const { agregerChamps, joindreFr, uniq } = require('../lib/agregationChamps.js');
 const { matchStep } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
 const { resultatDossier, resultatJuryDossier } = require('./evaluation.controller.js');
@@ -181,7 +182,10 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 ${await colonneOuNull(conn, 'enrollment', 'acompte_moyen', 'e.')},
                 ${await colonneOuNull(conn, 'enrollment', 'acompte_ref', 'e.')},
                 ${await colonneOuNull(conn, 'enrollment', 'solde_moyen', 'e.')},
-                ${await colonneOuNull(conn, 'enrollment', 'solde_ref', 'e.')}
+                ${await colonneOuNull(conn, 'enrollment', 'solde_ref', 'e.')},
+                /* L'inscription, pour agréger les « Champs documents » sur TOUTES les formations
+                   du document dans le MÊME ordre que les jetons nommés (cf. agregationChamps). */
+                df.enrollment_id AS __eid
          FROM document_formation df
          JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
@@ -293,25 +297,34 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
     }
     // Champs « documents » (colonnes du dossier activées) : valeurs pour les jetons
-    // field:<table.column>. Chargées pour le dossier lié au document.
+    // field:<table.column>. Agrégés sur TOUTES les inscriptions du document : un devis qui couvre
+    // plusieurs formations (NIV1 + NIV2) montrait jusqu'ici la SEULE première (ancien `LIMIT 1`) —
+    // intitulé, objectifs, prix, dates, tout restait sur NIV1. On somme les montants et les durées,
+    // on joint le reste « et », formation par formation (lib/agregationChamps.js).
     const fields = {};
-    if (documentId) {
+    const enrIdsDoc = formations.map((f) => f.__eid).filter(Boolean);
+    if (enrIdsDoc.length) {
         try {
-            const [[df]] = await conn.query('SELECT enrollment_id FROM document_formation WHERE document_id = ? LIMIT 1', [documentId]);
-            if (df && df.enrollment_id) {
-                const catalog = await getEnabledFields(conn, organizationId);
-                const facts = (await loadDossierFactsMap(conn, organizationId, [df.enrollment_id], catalog)).get(df.enrollment_id) || {};
-                for (const [k, v] of Object.entries(facts)) fields[k] = (typeof v === 'string') ? decrypt(v) : v;
-                // Lieu de formation de la session (jetons field:location.<colonne>).
-                try {
-                    const [[loc]] = await conn.query(
-                        `SELECT tl.name, tl.address, tl.zip_code, tl.town
-                         FROM enrollment e JOIN training_session s ON s.id = e.session_id
-                         LEFT JOIN training_location tl ON tl.id = s.location_id
-                         WHERE e.id = ?`, [df.enrollment_id]);
-                    if (loc) for (const k of ['name', 'address', 'zip_code', 'town']) fields['location.' + k] = loc[k] || '';
-                } catch { /* migration des lieux (067) non appliquée */ }
-            }
+            const catalog = await getEnabledFields(conn, organizationId);
+            const factsMap = await loadDossierFactsMap(conn, organizationId, enrIdsDoc, catalog);
+            const listeFaits = enrIdsDoc.map((id) => {
+                const faits = factsMap.get(id) || {};
+                const clair = {};
+                for (const [k, v] of Object.entries(faits)) clair[k] = (typeof v === 'string') ? decrypt(v) : v;
+                return clair;
+            });
+            Object.assign(fields, agregerChamps(listeFaits, catalog));
+            // Lieu(x) de formation (jetons field:location.<colonne>) : les lieux DISTINCTS joints « et ».
+            try {
+                const [locs] = await conn.query(
+                    `SELECT tl.name, tl.address, tl.zip_code, tl.town
+                     FROM enrollment e JOIN training_session s ON s.id = e.session_id
+                     LEFT JOIN training_location tl ON tl.id = s.location_id
+                     WHERE e.id IN (?)`, [enrIdsDoc]);
+                for (const k of ['name', 'address', 'zip_code', 'town']) {
+                    fields['location.' + k] = joindreFr(uniq(locs.map((l) => l && l[k]).filter(Boolean)));
+                }
+            } catch { /* migration des lieux (067) non appliquée */ }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
     }
     /* ÉVALUATION PRATIQUE du dossier (migration 148) — jetons {NoteTotale}, {NoteDétail}…

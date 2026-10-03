@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (305 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-03** : **2498 tests — 2491 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~7 s** (306 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-03** : **2506 tests — 2499 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -1107,18 +1107,29 @@ rien ne se transmet avant.
   migration, aucune donnée : le modèle d'un jeton perso est déjà du texte libre. Tests :
   `jetons-perso-calcul.test.js` (valeurs + aperçu/serveur à l'identique).
 
-- **Bloc {#Formations}…{/Formations} : un devis DÉTAILLÉ, une ligne par formation** (2026-10-03). Un
-  dossier peut couvrir plusieurs formations (NIV1 + NIV2) ; {Formation}/{Prix}/{Heures} les AGRÈGENT
-  (intitulés joints, somme), si bien qu'un devis professionnel ne pouvait pas imprimer « NIV1 850 €,
-  NIV2 1 180 €, Total 2 030 € ». Le bloc se développe comme {#Articles}/{#Stagiaires} :
-  `formationRowTokens(f,i)` (tokens.js) donne les valeurs de CHAQUE formation, `expandListBlocks(out,
-  'Formations', ctx.formations, …)` (htmlfill.js) répète la ligne. **Le prix d'une ligne est
-  `enroll_price || price`** — la base même que `totalPrice` additionne —, donc la somme des lignes
-  tombe au centime sur le {Prix} global. Hors du bloc (la ligne « Total »), les mêmes jetons gardent
-  leur sens agrégé ; `findMissingTokens` NE réclame PAS les jetons placés dans le bloc (ils sont
-  résolus par formation, cf. `stripGroupBlocks`, étendu à {#Formations}). Éditeur : groupe Formation,
-  bouton « Bloc « par formation » » (`BLOC_FORMATIONS`) + palette `FORMATION_ROW_TOKENS`. Aucune
-  migration (ctx.formations porte déjà tout). Tests : `formations-bloc.test.js`.
+- **Un devis qui couvre PLUSIEURS formations (NIV1 + NIV2) — NATIVEMENT** (2026-10-03, demandé par
+  l'école pour l'entreprise Gervais Christelle). Deux manques se cumulaient : (1) les jetons
+  `field:training_program.*` / `field:training_session.*` (dont le devis professionnel est fait :
+  intitulé, objectifs, prérequis, prix, déroulé…) se chargeaient depuis `document_formation … LIMIT 1`
+  — la SEULE première inscription (`document.controller`, `loadContext`), donc NIV1 seul ; (2) {Semaine}
+  et les dates ne lisaient que `formations[0]`. **Corrigé sans bloc à écrire** : `loadContext` agrège
+  désormais TOUTES les inscriptions du document (`enrIdsDoc = formations.map(f => f.__eid)`,
+  `agregerChamps`, lib/agregationChamps.js) — montants et durées SOMMÉS (prix, acompte, heures, jours),
+  textes longs en BLOCS par formation (objectifs…), le reste joint « et » ; **seules les tables
+  training_program / training_session / enrollment s'agrègent** (le stagiaire, l'entreprise et
+  l'organisme ne changent pas d'une inscription à l'autre → première valeur, comme avant). Côté jetons
+  nommés (`resolveTokens`) : {Formation} joint « et » (`joindreFr`), {Semaine} devient « Semaines 6 et
+  12 — 2026 », et un jeton {Périodes} apparie les dates (« du 18/05 au 22/05/2026 et du 01/06 au
+  03/06/2026 ») — à poser à la place de « du {Jour1} au {endDate} », qui restent, eux, une période
+  globale (premier début, dernière fin). **Une SEULE formation : tout est inchangé** (somme d'un, pas de
+  bloc, « Semaine 6 — 2026 »). Aucune migration. Tests : `multi-formation-natif.test.js`.
+- **Complément — le bloc {#Formations}…{/Formations}** (même jour, pour un devis en TABLEAU itemisé) :
+  `formationRowTokens(f,i)` (tokens.js) + `expandListBlocks(out, 'Formations', ctx.formations, …)`
+  (htmlfill.js) répètent une ligne par formation ({Formation}/{Prix}/{Heures}…), le prix de ligne étant
+  `enroll_price || price` (la base de `totalPrice`, somme au centime). `findMissingTokens` ignore les
+  jetons DANS le bloc (`stripGroupBlocks` étendu à {#Formations}). Éditeur : groupe Formation, bouton
+  « Bloc « par formation » » (`BLOC_FORMATIONS`) + palette `FORMATION_ROW_TOKENS`. Tests :
+  `formations-bloc.test.js`.
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
 (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des
