@@ -87,13 +87,23 @@ export function documentsHorsParcours(docs, idsEtapes, codeFormation) {
  * Un document dont la session n'est plus celle de l'entreprise n'aurait de place nulle part : il
  * reste listé, sous toutes les sessions — mieux vaut le voir deux fois que ne plus le voir.
  */
+/* Les sessions qu'un document COUVRE : celles de ses inscriptions liées (`session_ids`, servies par
+   l'API depuis le 2026-10-03), à défaut sa seule session d'ancrage. Un devis de groupe fusionné en
+   couvre plusieurs, et doit apparaître sous l'étape « Devis » de CHACUNE. */
+const sessionsDuDocument = (d) => (Array.isArray(d && d.session_ids) && d.session_ids.length ? d.session_ids : (d && d.session_id ? [d.session_id] : []));
+const couvreSession = (d, sessionId) => sessionsDuDocument(d).includes(sessionId);
+
 export function documentsDeLEtape(docs, slug, sessionId) {
-  return (docs || []).filter((d) => d.session_id === sessionId && d.template_slug === slug);
+  return (docs || []).filter((d) => d.template_slug === slug && couvreSession(d, sessionId));
 }
 export function documentsEntrepriseHorsParcours(docs, slugsEtapes, sessionId, sessionsConnues) {
   const slugs = slugsEtapes instanceof Set ? slugsEtapes : new Set(slugsEtapes || []);
   const connues = sessionsConnues instanceof Set ? sessionsConnues : new Set(sessionsConnues || []);
-  return (docs || []).filter((d) => (d.session_id === sessionId ? !slugs.has(d.template_slug) : !connues.has(d.session_id)));
+  // Couvre la session affichée : « hors parcours » seulement si ce n'est pas une étape. Sinon, « hors
+  // parcours » quand il ne couvre AUCUNE session connue de l'entreprise (document d'une session partie).
+  return (docs || []).filter((d) => (couvreSession(d, sessionId)
+    ? !slugs.has(d.template_slug)
+    : !sessionsDuDocument(d).some((x) => connues.has(x))));
 }
 
 /**

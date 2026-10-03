@@ -581,11 +581,20 @@ const listCompanyDocuments = async (req, res) => {
                     DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS created_at,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
+                    /* Les sessions que le document COUVRE réellement, via ses inscriptions liées : un
+                       devis de groupe fusionné (2026-10-03) en couvre plusieurs. L'écran s'en sert pour
+                       le rattacher à l'étape « Devis » de chaque formation (documentsDeLEtape). */
+                    (SELECT GROUP_CONCAT(DISTINCT e2.session_id) FROM document_formation df2
+                       JOIN enrollment e2 ON e2.id = df2.enrollment_id WHERE df2.document_id = d.id) AS session_ids_csv,
                     ${importe ? "fi.nom AS fichier_nom, DATE_FORMAT(fi.importe_le, '%Y-%m-%d %H:%i') AS importe_le"
                         : 'NULL AS fichier_nom, NULL AS importe_le'}
              FROM generated_document d
              ${importe ? 'LEFT JOIN document_fichier fi ON fi.document_id = d.id' : ''}
              WHERE ${where} ORDER BY d.created_at DESC`, params);
+        for (const r of rows) {
+            r.session_ids = r.session_ids_csv ? String(r.session_ids_csv).split(',') : (r.session_id ? [r.session_id] : []);
+            delete r.session_ids_csv;
+        }
         res.json({ data: rows });
     } catch (err) {
         if (isMissingSchema(err)) return res.json({ data: [] }); // migration 077 non jouée
@@ -597,25 +606,40 @@ const listCompanyDocuments = async (req, res) => {
 /** POST /api/companies/:id/documents — génère un document « entreprise » (liste le groupe). */
 const createCompanyDocument = async (req, res) => {
     const orgId = req.user.organization_id;
-    const { session_id, template_slug } = req.body || {};
-    if (!session_id || !template_slug) return res.status(422).json({ error: 'Session et modèle requis.' });
+    const { template_slug } = req.body || {};
+    /* UN DEVIS (ou tout document de groupe) PEUT COUVRIR PLUSIEURS FORMATIONS À LA FOIS (2026-10-03,
+       demandé par l'école pour l'entreprise Gervais Christelle, inscrite à NIV1 + NIV2). On accepte
+       donc une LISTE de sessions ; `session_id` seul reste accepté (import d'un exemplaire signé,
+       anciens appels). Toutes les inscriptions des sessions choisies sont RÉUNIES dans un même
+       document (un par OPCO), et le PDF agrège les formations (cf. loadContext / agregationChamps). */
+    const sessionIds = [...new Set(
+        (Array.isArray(req.body.session_ids) ? req.body.session_ids : [])
+            .concat(req.body.session_id ? [req.body.session_id] : [])
+            .filter(Boolean)
+    )];
+    if (!sessionIds.length || !template_slug) return res.status(422).json({ error: 'Session(s) et modèle requis.' });
     try {
         const conn = db.promise();
         const [[company]] = await conn.query('SELECT id, opco FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        const [[sess]] = await conn.query('SELECT id FROM training_session WHERE id = ? AND organization_id = ?', [session_id, orgId]);
-        if (!sess) return res.status(404).json({ message: 'Session introuvable.' });
+        const [sessOk] = await conn.query('SELECT id FROM training_session WHERE id IN (?) AND organization_id = ?', [sessionIds, orgId]);
+        const sessions = sessOk.map((s) => s.id);
+        if (!sessions.length) return res.status(404).json({ message: 'Session introuvable.' });
 
         const steps = await loadOrgSteps(orgId);
         const step = steps.find((s) => s.slug === template_slug && s.active && s.company_level);
         if (!step) return res.status(422).json({ error: 'Modèle « entreprise » introuvable.' });
 
+        // Les inscriptions de l'entreprise sur TOUTES les sessions choisies. `session_id` est gardé
+        // pour ancrer le document (archive, listing) sur la 1re session de son groupe.
         const [enr] = await conn.query(
-            `SELECT e.id, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
-             WHERE e.session_id = ? AND e.company_id = ? AND e.organization_id = ?`,
-            [session_id, company.id, orgId]
+            `SELECT e.id, e.session_id, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
+             WHERE e.session_id IN (?) AND e.company_id = ? AND e.organization_id = ?`,
+            [sessions, company.id, orgId]
         );
-        if (!enr.length) return res.status(422).json({ error: 'Aucun stagiaire de cette entreprise dans cette session.' });
+        if (!enr.length) return res.status(422).json({ error: 'Aucun stagiaire de cette entreprise dans ces sessions.' });
+        const enrIds = enr.map((e) => e.id);
+        const sessionOf = new Map(enr.map((e) => [e.id, e.session_id]));
 
         // La colonne `opco` (migration 089) est-elle présente ? Si oui, on produit UN
         // document par OPCO (un dirigeant a souvent un OPCO ≠ de ses salariés) ; sinon
@@ -632,24 +656,29 @@ const createCompanyDocument = async (req, res) => {
         if (opcoSupported) {
             groups = groupesParOpco(enr, company.opco);
         } else {
-            groups.set('', { opco: null, ids: enr.map((e) => e.id) });
+            groups.set('', { opco: null, ids: enrIds });
         }
 
-        // Nettoyage global : on retire TOUTES les versions non signées de ce document
-        // (toutes OPCO confondues) pour éviter les doublons issus d'un ancien regroupement
-        // (ex. une version « sans OPCO » restée d'une génération précédente).
+        /* Nettoyage : on retire les versions NON signées de ce document qui couvrent ces sessions —
+           soit par leur session d'ancrage, soit (document fusionné) par une inscription liée (DELETE
+           en cascade sur document_formation). On évite ainsi les doublons d'une génération précédente,
+           y compris un ancien document « par session » que la fusion remplace. */
         try {
             await conn.query(
-                "DELETE FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status <> 'SIGNE'",
-                [orgId, company.id, session_id, template_slug]);
+                `DELETE FROM generated_document
+                  WHERE organization_id = ? AND company_id = ? AND template_slug = ? AND scope = 'COMPANY' AND status <> 'SIGNE'
+                    AND (session_id IN (?) OR id IN (SELECT document_id FROM document_formation WHERE enrollment_id IN (?)))`,
+                [orgId, company.id, template_slug, sessions, enrIds]);
         } catch (e) { if (!isMissingSchema(e)) throw e; }
-        // OPCO déjà signés (on ne les régénère pas : on garde la version signée).
+        // OPCO déjà signés (on ne les régénère pas : on garde la version signée), par ancrage OU par lien.
         const signedOpcos = new Set();
         if (opcoSupported) {
             try {
                 const [srows] = await conn.query(
-                    "SELECT opco FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND status = 'SIGNE'",
-                    [orgId, company.id, session_id, template_slug]);
+                    `SELECT DISTINCT opco FROM generated_document
+                      WHERE organization_id = ? AND company_id = ? AND template_slug = ? AND scope = 'COMPANY' AND status = 'SIGNE'
+                        AND (session_id IN (?) OR id IN (SELECT document_id FROM document_formation WHERE enrollment_id IN (?)))`,
+                    [orgId, company.id, template_slug, sessions, enrIds]);
                 for (const r of srows) signedOpcos.add(cleOpco(r.opco));
             } catch (e) { if (!isMissingSchema(e)) throw e; }
         }
@@ -662,22 +691,25 @@ const createCompanyDocument = async (req, res) => {
 
             const id = crypto.randomUUID();
             const title = step.label + (g.opco ? ` — ${g.opco}` : '');
+            const ancre = sessionOf.get(g.ids[0]) || sessions[0]; // session d'ancrage (1re du groupe)
             try {
                 if (opcoSupported) {
                     await conn.query(
                         `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id, opco)
                          VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?, ?)`,
-                        [id, orgId, type, template_slug, title, company.id, session_id, g.opco]);
+                        [id, orgId, type, template_slug, title, company.id, ancre, g.opco]);
                 } else {
                     await conn.query(
                         `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
                          VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
-                        [id, orgId, type, template_slug, title, company.id, session_id]);
+                        [id, orgId, type, template_slug, title, company.id, ancre]);
                 }
             } catch (e) {
                 if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
                 throw e;
             }
+            // Toutes les inscriptions du groupe, TOUTES sessions confondues : c'est ce lien qui fait
+            // que le document couvre — et coche — l'étape « Devis » de CHAQUE session (getCompanyParcours).
             for (const eid of g.ids) await conn.query('INSERT INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [id, eid]);
             created++;
         }
@@ -794,11 +826,20 @@ const getCompanyParcours = async (req, res) => {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
                 // pas une par stagiaire. On le représente comme une seule étape signée /
                 // à signer (peu importe le nombre de stagiaires ou d'OPCO).
+                /* DÉTECTÉ PAR LES STAGIAIRES LIÉS, pas par la session (2026-10-03). Un devis de groupe
+                   peut couvrir plusieurs formations (NIV1 + NIV2) en UN document : il coche alors
+                   l'étape « Devis » de CHAQUE session dont il réunit des stagiaires. Un document d'UNE
+                   seule session est trouvé pareil (il lie des inscriptions de cette session). */
                 let docs = [];
+                const idsGroupe = grp.enrollments.map((e) => e.id);
                 try {
-                    [docs] = await conn.query(
-                        "SELECT id, status FROM generated_document WHERE organization_id = ? AND company_id = ? AND session_id = ? AND template_slug = ? AND scope = 'COMPANY' ORDER BY created_at DESC",
-                        [orgId, company.id, sessionId, s.slug]);
+                    if (idsGroupe.length) [docs] = await conn.query(
+                        `SELECT gd.id, gd.status, gd.created_at FROM generated_document gd
+                         JOIN document_formation df ON df.document_id = gd.id
+                         WHERE gd.organization_id = ? AND gd.company_id = ? AND gd.template_slug = ? AND gd.scope = 'COMPANY'
+                           AND df.enrollment_id IN (?)
+                         GROUP BY gd.id, gd.status, gd.created_at ORDER BY gd.created_at DESC`,
+                        [orgId, company.id, s.slug, idsGroupe]);
                 } catch (e) { if (!isMissingSchema(e)) throw e; }
                 const allSigned = docs.length > 0 && docs.every((d) => d.status === 'SIGNE');
                 gen = docs.length ? 1 : 0;

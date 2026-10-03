@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (306 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-03** : **2506 tests — 2499 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~7 s** (307 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-03** : **2512 tests — 2505 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -1123,6 +1123,22 @@ rien ne se transmet avant.
   03/06/2026 ») — à poser à la place de « du {Jour1} au {endDate} », qui restent, eux, une période
   globale (premier début, dernière fin). **Une SEULE formation : tout est inchangé** (somme d'un, pas de
   bloc, « Semaine 6 — 2026 »). Aucune migration. Tests : `multi-formation-natif.test.js`.
+- **UN devis d'entreprise qui réunit plusieurs formations en UN document** (2026-10-03, décidé avec
+  l'école — AskUserQuestion « fusionner l'étape Devis »). Les documents de GROUPE (company_level) sont
+  rattachés à UNE session : la fiche entreprise appelait `createCompanyDocument` une fois par formation
+  cochée → un devis PAR formation (le vrai « ça ne marche pas » de Gervais Christelle, que l'agrégation
+  native ne pouvait pas corriger — chaque document ne tenait qu'une session). Désormais
+  `createCompanyDocument` accepte une **liste** de sessions (`session_ids` ; `session_id` seul reste
+  accepté pour l'import d'un signé et les anciens appels), réunit leurs inscriptions (un document par
+  OPCO) et les lie TOUTES par `document_formation`. **C'est ce lien, et non plus `session_id`, qui
+  détecte l'étape** : `getCompanyParcours` (branche `company_level`) cherche les documents de groupe par
+  inscription liée (`df.enrollment_id IN` les inscriptions du groupe de la session), si bien qu'UN devis
+  fusionné coche l'étape « Devis » de CHAQUE formation couverte. `listCompanyDocuments` rend
+  `session_ids` (les sessions des inscriptions liées) ; l'écran (`documentsDeLEtape`,
+  `documentsEntrepriseHorsParcours`, lib/documentsDossier.js) rattache un document à CHAQUE session
+  couverte. Le PDF agrège les formations via loadContext/agregationChamps (ci-dessus). L'ancrage
+  `session_id` = 1re session du groupe (archive, listing). Nettoyage et reprise d'un OPCO signé : par
+  session OU par inscription liée. Aucune migration. Tests : `devis-groupe-multi-session.test.js`.
 - **Complément — le bloc {#Formations}…{/Formations}** (même jour, pour un devis en TABLEAU itemisé) :
   `formationRowTokens(f,i)` (tokens.js) + `expandListBlocks(out, 'Formations', ctx.formations, …)`
   (htmlfill.js) répètent une ligne par formation ({Formation}/{Prix}/{Heures}…), le prix de ligne étant

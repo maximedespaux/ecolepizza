@@ -84,6 +84,8 @@ test('et un document de GROUPE aussi : la liste de la fiche entreprise le propos
     /* C'EST CETTE LISTE QUI AUTORISE L'ENVOI, côté écran : le formulaire refuse AVANT d'appeler
        le serveur, si bien que la garde du serveur ne pouvait même pas rattraper le coup. */
     const page = readFileSync(path.join(__dirname, '../../app/ui/pages/EntrepriseDetail.jsx'), 'utf8');
-    assert.match(page, /if \(!\(groupTplsBySession\[sid\] \|\| \[\]\)\.some\(\(t\) => t\.slug === prep\.slug\)\) continue;/);
+    // Un SEUL document réunit les formations cochées qui proposent le modèle (fusion 2026-10-03) :
+    // on filtre ces sessions côté écran, et on refuse avant le serveur si aucune ne le propose.
+    assert.match(page, /\.filter\(\(sid\) => \(groupTplsBySession\[sid\] \|\| \[\]\)\.some\(\(t\) => t\.slug === prep\.slug\)\)/);
     assert.match(page, /Ce document n'existe pas dans les formations sélectionnées\./);
 });
