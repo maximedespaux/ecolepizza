@@ -123,7 +123,7 @@ test('LE PARCOURS DE GROUPE n\'offre l\'import que sur un document de GROUPE (ou
 test('LA FICHE ENTREPRISE : vérifier, préparer au besoin par le chemin de « Préparer », puis rattacher', () => {
     const envoyer = fonction(ENTREPRISE, 'async function envoyerImportGroupe');
     const verif = envoyer.indexOf('const refus = refusDocumentRecu(file);');
-    const prep = envoyer.indexOf('await createCompanyDocument(id, { session_id: viewSessionId, template_slug: cible.slug });');
+    const prep = envoyer.indexOf('await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug });');
     const imp = envoyer.indexOf('await importDocumentFile(fd);');
     assert.ok(verif > 0 && prep > verif && imp > prep, 'le fichier est vérifié AVANT toute préparation');
     assert.match(envoyer, /if \(refus\) \{ setStatus\(\{ type: "error", message: refus \}\); return; \}/);
