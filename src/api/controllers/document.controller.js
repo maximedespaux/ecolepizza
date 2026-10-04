@@ -1302,7 +1302,7 @@ async function signAndStoreDocument(conn, orgId, doc, signerName) {
     let pdf = await composeDocPdf(conn, r);
     // 1) Signature du STAGIAIRE (certificat à son nom).
     const learnerP12 = await getLearnerSigner(conn, doc.learner_id, signerName);
-    pdf = await signPdf(pdf, learnerP12, { name: signerName || 'Stagiaire', reason: 'Signature du stagiaire', incremental: false });
+    pdf = await signPdf(pdf, learnerP12, { name: signerName || 'Stagiaire', reason: 'Signature du stagiaire', incremental: false, timestamp: true });
     let count = 1;
     // 2) Contre-signature AUTOMATIQUE de l'organisme (si le modèle prévoit « À signer »),
     //    en mise à jour incrémentale : la signature du stagiaire reste valide.
@@ -1310,7 +1310,7 @@ async function signAndStoreDocument(conn, orgId, doc, signerName) {
         if (orgSignsDoc(orgSteps, doc)) {
             const orgName = org.legal_name || org.short_name || 'Organisme';
             const orgP12 = await getOrgSigner(conn, orgId, orgName);
-            pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true });
+            pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true, timestamp: true });
             count = 2;
         }
     } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
@@ -2021,14 +2021,14 @@ async function applySlotSignature(conn, orgId, doc, { slot, label, signerName, s
         const ctx = await loadContext(conn, orgId, doc.learner_id, doc.id);
         let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
         const repP12 = generateSelfSignedP12(signerName || 'Signataire');
-        pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false });
+        pdf = await signPdf(pdf, repP12, { name: signerName || 'Signataire', reason: label || 'Signature', incremental: false, timestamp: true });
         let count = 1;
         try {
             if (orgSigne) {
                 const org = ctx.org || {};
                 const orgName = org.legal_name || org.short_name || 'Organisme';
                 const orgP12 = await getOrgSigner(conn, orgId, orgName);
-                pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true });
+                pdf = await signPdf(pdf, orgP12, { name: orgName, reason: "Signature de l'organisme", contact: org.email || '', location: org.town || '', incremental: true, timestamp: true });
                 count = 2;
             }
         } catch (e) { console.error('Contre-signature organisme ignorée :', e.message); }
