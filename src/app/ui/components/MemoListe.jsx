@@ -371,11 +371,47 @@ export default function MemoListe({ autoFocus = false, onNaviguer }) {
 }
 
 function LigneMemo({ m, agir, onNaviguer }) {
+  /* MODIFIER UN MÉMO (demandé le 2026-10-04) : son texte et son échéance, l'auteur seul (le bouton
+     n'apparaît que sur `m.mien`, et le serveur l'exige aussi). Les liens et les pièces jointes
+     restent — on ne retouche que la phrase et la date. */
+  const [editing, setEditing] = useState(false);
+  const [et, setEt] = useState("");
+  const [ee, setEe] = useState("");
+  const ouvrirEdition = () => { setEt(m.texte); setEe(m.echeance || ""); setEditing(true); };
+  async function enregistrer(ev) {
+    ev.preventDefault();
+    if (!et.trim()) return;
+    await agir(() => updateMemo(m.id, { texte: et, echeance: ee || null }));
+    setEditing(false);
+  }
+
   const etat = m.fait_le ? null : etatEcheance(m.echeance);
   /* Les libellés parlés prennent le mémo EN UNE LIGNE : « Supprimer : Il faut faire : * 1 * 2 »
      ferait annoncer des étoiles au milieu d'une phrase. */
   const dit = resumeMemo(m.texte);
   const du = etat && (etat.ton === "retard" || etat.ton === "jour");
+
+  if (editing) {
+    return (
+      <li className="memo-ligne memo-ligne-edit">
+        <form className="memo-edit" onSubmit={enregistrer}>
+          <textarea className="inp memo-saisie" rows={2} value={et} onChange={(e) => setEt(e.target.value)}
+            maxLength={MAX_TEXTE} aria-label="Modifier le mémo" autoFocus />
+          <div className="memo-form-options">
+            <label className="memo-date" title="Échéance (facultatif)">
+              <Icon name="calendar" size={14} aria-hidden="true" />
+              <input type="date" className="inp" value={ee} onChange={(e) => setEe(e.target.value)} aria-label="Échéance (facultatif)" />
+            </label>
+            <span className="memo-form-fin">
+              <button type="button" className="btn ghost sm" onClick={() => setEditing(false)}>Annuler</button>
+              <button type="submit" className="btn primary sm" disabled={!et.trim()}><Icon name="check" size={14} aria-hidden="true" /> Enregistrer</button>
+            </span>
+          </div>
+        </form>
+      </li>
+    );
+  }
+
   return (
     <li className={"memo-ligne" + (m.fait_le ? " fait" : "") + (du ? " du" : "") + (m.nouveau ? " neuf" : "")}>
       <input type="checkbox" checked={!!m.fait_le} onChange={() => agir(() => updateMemo(m.id, { fait: !m.fait_le }))}
@@ -433,6 +469,10 @@ function LigneMemo({ m, agir, onNaviguer }) {
       </div>
       {m.mien && (
         <span className="memo-actions">
+          <button type="button" className="memo-action" onClick={ouvrirEdition}
+            title="Modifier" aria-label={`Modifier : ${dit}`}>
+            <Icon name="pencil" size={15} />
+          </button>
           <button type="button" className={"memo-action" + (m.partage ? " on" : "")} aria-pressed={m.partage}
             onClick={() => agir(() => updateMemo(m.id, { partage: !m.partage }))}
             title={m.partage ? "Ne plus partager" : "Partager avec l'équipe"}

@@ -5266,6 +5266,9 @@ button.av-wrap:active{transform:scale(.94)}
 .memo-partage{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
 /* « Effacer » et « Ajouter » restent ensemble, à droite : ce sont les deux sorties du brouillon. */
 .memo-form-fin{margin-left:auto;display:inline-flex;align-items:center;gap:6px}
+/* MODIFIER UN MÉMO (2026-10-04) : le formulaire remplace la ligne, pleine largeur. */
+.memo-ligne-edit{display:block;background:var(--surface2);border:1px solid var(--border)}
+.memo-edit{display:flex;flex-direction:column;gap:8px;width:100%}
 /* LE TROMBONE (migration 193) : joindre une image ou un PDF, deux au plus. */
 .memo-joindre{display:inline-grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid var(--border);
   border-radius:8px;background:var(--surface);color:var(--muted);cursor:pointer}

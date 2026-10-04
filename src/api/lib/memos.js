@@ -84,20 +84,24 @@ function dateValide(v) {
  * être une vraie date — la refuser vaut mieux que l'ignorer : on croirait avoir posé un rappel.
  * Le partage n'est vrai que s'il est explicitement vrai : un mémo naît privé.
  */
-function lireNouveauMemo(b = {}) {
-    /* PLUSIEURS LIGNES SONT ACCEPTÉES, ET C'EST TOUT L'INTÉRÊT : « ce qu'il faut faire » s'écrit en
-       liste. Trois nettoyages, et pas un de plus — on garde ce qui a été tapé :
-         · les fins de ligne de Windows deviennent des « \n », sinon le compte de caractères et le
-           découpage en puces varieraient selon le navigateur ;
-         · les espaces en bout de ligne partent : invisibles, ils feraient d'une puce vide (« * »
-           suivi d'une espace) une ligne que rien ne distingue d'une puce écrite ;
-         · au-delà de deux retours d'affilée, on retombe à deux : un mémo fait de vingt lignes
-           vides pousserait tout le reste de la liste hors de l'écran, pour rien. */
-    const texte = String(b.texte == null ? '' : b.texte)
+/* LE NETTOYAGE DU TEXTE D'UN MÉMO — le même à la création et à la MODIFICATION (2026-10-04). Trois
+   gestes, et pas un de plus — on garde ce qui a été tapé :
+     · les fins de ligne de Windows deviennent des « \n », sinon le compte de caractères et le
+       découpage en puces varieraient selon le navigateur ;
+     · les espaces en bout de ligne partent : invisibles, ils feraient d'une puce vide (« * » suivi
+       d'une espace) une ligne que rien ne distingue d'une puce écrite ;
+     · au-delà de deux retours d'affilée, on retombe à deux : un mémo fait de vingt lignes vides
+       pousserait tout le reste de la liste hors de l'écran, pour rien. */
+function nettoyerTexte(v) {
+    return String(v == null ? '' : v)
         .replace(/\r\n?/g, '\n')
         .replace(/[ \t]+$/gm, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+}
+
+function lireNouveauMemo(b = {}) {
+    const texte = nettoyerTexte(b.texte);
     if (!texte) return { erreur: 'Écrivez le mémo avant de l’ajouter.' };
     if (texte.length > MAX_TEXTE) return { erreur: `Un mémo tient en ${MAX_TEXTE} caractères au plus.` };
     let echeance = null;
@@ -109,9 +113,14 @@ function lireNouveauMemo(b = {}) {
 }
 
 /**
- * Ce qu'une modification demande → `{ fait?, partage? }` ou `{ erreur }`. Deux gestes seulement :
- * cocher (ou décocher), et partager (ou reprendre). Chacun doit être un vrai booléen — « oui »,
- * 1 ou "true" ne cochent rien, pour qu'une réponse illisible ne passe pas pour un accord.
+ * Ce qu'une modification demande → `{ fait?, partage?, texte?, echeance? }` ou `{ erreur }`.
+ *   · cocher/décocher (`fait`) et partager/reprendre (`partage`) : un vrai booléen — « oui », 1 ou
+ *     "true" ne valent rien, pour qu'une réponse illisible ne passe pas pour un accord ;
+ *   · ÉDITER (demandé le 2026-10-04) : le `texte` (mêmes bornes qu'à la création) et/ou l'`echeance`
+ *     (une vraie date, ou vide/null pour l'enlever). L'édition est réservée à l'auteur (contrôleur).
+ * `echeance` fournie VIDE est un effacement VOULU, distinct d'un champ absent : on la met à null, et
+ * le contrôleur la distingue par `hasOwnProperty`, pour ne pas confondre « enlève la date » et « n'y
+ * touche pas ».
  */
 function lireModification(b = {}) {
     const out = {};
@@ -119,6 +128,20 @@ function lireModification(b = {}) {
         if (b[k] === undefined) continue;
         if (typeof b[k] !== 'boolean') return { erreur: `« ${k} » attend vrai ou faux.` };
         out[k] = b[k];
+    }
+    if (b.texte !== undefined) {
+        const texte = nettoyerTexte(b.texte);
+        if (!texte) return { erreur: 'Écrivez le mémo avant de l’enregistrer.' };
+        if (texte.length > MAX_TEXTE) return { erreur: `Un mémo tient en ${MAX_TEXTE} caractères au plus.` };
+        out.texte = texte;
+    }
+    if (b.echeance !== undefined) {
+        if (b.echeance === null || b.echeance === '') { out.echeance = null; }
+        else {
+            const d = dateValide(b.echeance);
+            if (!d) return { erreur: 'Échéance illisible, choisissez une date dans le calendrier.' };
+            out.echeance = d;
+        }
     }
     if (!Object.keys(out).length) return { erreur: 'Rien à modifier.' };
     return { modification: out };
