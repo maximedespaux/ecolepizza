@@ -94,7 +94,11 @@ test('LA PAGE décide une fois, quand sessions ET dossiers sont là, et dit pour
     assert.match(PAGE, /const o = ouvertureDuCalendrier\(sessions, enrollments, ymd\(new Date\(\)\)\);/);
     assert.match(PAGE, /getEnrollments\(\)\.then\(\(r\) => \{ setEnrollments\(r\.data\); setDossiersCharges\(true\); \}\)\.catch\(\(\) => \{\}\);/,
         'sans les dossiers (refusés), on ne décide rien : le mois du jour');
-    assert.match(PAGE, /Ouvert sur la prochaine session \(\{quoi\}\)/);
+    /* Le message « Ouvert sur la prochaine session … les dossiers de la session précédente sont
+       finis » a été RETIRÉ (demandé le 2026-10-05), avec la légende du calendrier : il ne disait
+       rien d'actionnable. On gèle le retrait. Seule reste l'explication qui, elle, appelle un geste
+       (des dossiers encore à finir). */
+    assert.doesNotMatch(PAGE, /les dossiers de la session précédente sont finis/);
     assert.match(PAGE, /Ouvert sur la session précédente \(\{quoi\}\)/);
     // « Aujourd'hui » reste le chemin du retour.
     assert.match(PAGE, /onClick=\{\(\) => \{ setYear\(now\.getFullYear\(\)\); setMonth\(now\.getMonth\(\)\); \}\}/);
