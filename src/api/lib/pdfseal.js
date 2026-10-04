@@ -61,7 +61,7 @@ const generateOrgP12 = generateSelfSignedP12;
  *
  * En cas d'erreur (PDF non chargeable, etc.), relance : l'appelant décide du repli.
  */
-async function signPdf(pdfBuffer, p12, { name = 'Signataire', reason = 'Signature', contact = '', location = '', incremental = false } = {}) {
+async function signPdf(pdfBuffer, p12, { name = 'Signataire', reason = 'Signature', contact = '', location = '', incremental = false, timestamp = false } = {}) {
     let base = pdfBuffer;
     if (!incremental) {
         // Ré-sérialise en table xref classique (lisible par plainAddPlaceholder).
@@ -70,15 +70,25 @@ async function signPdf(pdfBuffer, p12, { name = 'Signataire', reason = 'Signatur
             base = Buffer.from(await doc.save({ useObjectStreams: false }));
         } catch { base = pdfBuffer; }
     }
+    /* HORODATER (PAdES-T) élargit le CMS du jeton de la TSA (+ sa chaîne de certificats) : on réserve
+       alors beaucoup plus de place dans le PDF (/Contents). Du remplissage, sans coût réel. Sans
+       horodatage, on garde la place d'origine. */
+    const signatureLength = timestamp ? 32768 : 8192;
     const prepared = plainAddPlaceholder({
         pdfBuffer: base,
         reason: String(reason).slice(0, 120),
         contactInfo: String(contact || '').slice(0, 120),
         name: String(name).slice(0, 120),
         location: String(location || '').slice(0, 120),
-        signatureLength: 8192,
+        signatureLength,
     });
-    return signpdf.sign(prepared, new P12Signer(p12, { passphrase: P12_PASS }));
+    // Signataire horodaté (RFC 3161) quand demandé ET qu'une TSA est configurée ; sinon signataire nu.
+    const { SignerP12Horodate, cfgTSA } = require('./horodatage.js');
+    const tsa = cfgTSA();
+    const signer = (timestamp && tsa.url)
+        ? new SignerP12Horodate(p12, { passphrase: P12_PASS, tsa, maxLen: signatureLength })
+        : new P12Signer(p12, { passphrase: P12_PASS });
+    return signpdf.sign(prepared, signer);
 }
 
 /**

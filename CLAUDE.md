@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (314 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-04** : **2542 tests — 2535 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-04** : **2551 tests — 2544 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -1194,6 +1194,21 @@ rien ne se transmet avant.
   renforcement de preuve ; restent possibles l'horodatage RFC 3161 (PAdES-T, appel TSA externe) et le certificat
   qualifié (QES, prestataire payant). Signature auto-signée = avancée, non qualifiée (« Source de confiance :
   Aucun » attendu dans un validateur eIDAS). Tests : `attestation-signature.test.js`.
+- **HORODATAGE RFC 3161 des signatures — PAdES-T** (2026-10-04, niveau B) : l'« heure déclarée de dépôt » d'une
+  signature était l'horloge DU SERVEUR, invérifiable. Chaque VRAIE signature (stagiaire, représentant,
+  contreseing de l'organisme — `timestamp: true` sur `signPdf`) est désormais horodatée par une autorité (TSA) :
+  on n'envoie que l'EMPREINTE SHA-256 de la valeur de signature, jamais le document. `lib/horodatage.js` construit
+  la requête RFC 3161, appelle la TSA, lit le jeton À L'OCTET PRÈS (sa signature interne ne tolère pas un octet
+  de plus — garde de ré-encodage) et l'ajoute en ATTRIBUT NON SIGNÉ du CMS (`id-aa-timeStampToken`) : il S'AJOUTE
+  à la signature sans jamais l'invalider. Le cachet « à la volée » d'un téléchargement (`sealPdf`, fréquent) n'est
+  PAS horodaté — seules les signatures stockées le sont (`SignerP12Horodate` étend le signataire de @signpdf). La
+  place réservée dans le PDF passe à 32 Ko quand on horodate (le jeton + la chaîne TSA pèsent ~5 Ko ; vérifié en
+  vrai contre DigiCert et freetsa.org). **TOLÉRANT** : TSA injoignable/lente/de travers → on garde la signature
+  NON horodatée (PAdES-B) plutôt que de bloquer une signature — un horodatage ne doit jamais empêcher de signer.
+  **Configurable par l'ENV** : `TSA_URL` (défaut `http://timestamp.digicert.com` ; **vide = coupé** ; pointer une
+  TSA QUALIFIÉE pour un horodatage qualifié eIDAS), `TSA_TIMEOUT_MS` (défaut 10 s). Aucune migration. Reste C
+  (certificat qualifié QES, prestataire payant) pour retirer « Source de confiance : Aucun ». Tests :
+  `horodatage.test.js` (mécanique ASN.1 + replis, sans réseau).
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
 (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des
