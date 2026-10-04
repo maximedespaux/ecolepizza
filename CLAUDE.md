@@ -272,7 +272,11 @@ clic — un jeton JWT signé (`lib/newsletter.js`, rien à stocker) qui ne vaut 
 doit toujours marcher). La désinscription s'écrit au registre des consentements (130, déjà jouée), finalité
 `'newsletter'` — gardée HORS de `FINALITES` (sinon elle redeviendrait une case « Oui » à cocher dans l'écran de
 consentement) : `enregistrerNewsletter` / `desinscritsNewsletter` / `estInscritNewsletter` (consentements.js). Le PUBLIC
-= stagiaires de l'org avec e-mail, compte non désactivé (`user.active`), moins les désinscrits, dédoublonné par adresse.
+= stagiaires de l'org AYANT UN COMPTE ACTIF (`learner.user_id` + `user.active = 1`), avec e-mail, moins les désinscrits,
+dédoublonné par adresse. ⚠️ **Restreint aux titulaires d'un compte le 2026-10-05** (limite d'envoi OVH ~1000/j + un cap
+horaire ; l'envoi est UN e-mail par personne, pas un Cci — écrire à tous les anciens stagiaires = rafale + rebonds, le
+pire signal de spam). Élargir « le reste » demandera une FILE qui respecte la limite et étale l'envoi, pas un simple
+relâchement du filtre d'audience.
 Case « Envoyer aussi en newsletter » sur le formulaire d'annonce (bureau), avec le nombre de destinataires affiché
 AVANT (`GET /api/community/newsletter/apercu`). Envoi fire-and-forget (`declencherNewsletter`, jamais bloquant),
 journalisé dans `mail_envoi` (178). Désinscription PUBLIQUE sans login (`/api/public/newsletter/:token`, page front

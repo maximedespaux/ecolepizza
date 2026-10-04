@@ -81,7 +81,7 @@ function baseAudience({ learners, desinscrits = [] }) {
         query: async (sql) => {
             const q = plat(sql);
             requetes.push(q);
-            if (/FROM learner l LEFT JOIN user u/.test(q)) return [learners];
+            if (/FROM learner l JOIN user u/.test(q)) return [learners];
             if (/FROM consent_record c JOIN/.test(q)) {
                 return [desinscrits.map((id) => ({ learner_id: id, accorde: 0 }))];
             }
@@ -104,12 +104,15 @@ test('le public exclut les désinscrits et dédoublonne les adresses', async () 
     assert.deepEqual(ids, [U(1)], 'B est désinscrit, le 3e est un doublon d\'adresse du 1er');
 });
 
-test('la requête du public exclut les sans-e-mail et les comptes désactivés (contrat SQL)', () => {
+test('le public = SEULEMENT les titulaires d\'un compte actif, avec e-mail (contrat SQL)', () => {
     const conn = baseAudience({ learners: [] });
     return newsletter.audienceNewsletter(conn, ORG).then(() => {
-        const q = conn.requetes.find((r) => /FROM learner l LEFT JOIN user u/.test(r));
+        const q = conn.requetes.find((r) => /FROM learner l JOIN user u/.test(r));
         assert.match(q, /l\.email IS NOT NULL AND TRIM\(l\.email\) <> ''/);
-        assert.match(q, /u\.id IS NULL OR u\.active = 1/, 'un compte désactivé (active=0) est exclu ; sans compte, on garde');
+        // Jointure INTERNE sur le compte actif : un stagiaire SANS compte (user_id nul) ou dont
+        // l'accès est coupé (active=0) n'est pas destinataire. (2026-10-05, limite d'envoi OVH.)
+        assert.match(q, /JOIN user u ON u\.id = l\.user_id AND u\.active = 1/);
+        assert.doesNotMatch(q, /LEFT JOIN user/, 'plus de LEFT JOIN : les sans-compte sont exclus');
     });
 });
 

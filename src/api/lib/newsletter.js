@@ -46,21 +46,24 @@ function verifierLienDesinscription(token) {
 }
 
 /**
- * Le PUBLIC de la newsletter : les stagiaires de l'organisme qui ont un e-mail, dont le compte
- * n'est pas désactivé, et qui ne se sont pas désinscrits. Dédoublonné par adresse (deux fiches pour
- * une même personne → un seul envoi).
+ * Le PUBLIC de la newsletter : les stagiaires de l'organisme qui ont un COMPTE actif, un e-mail, et
+ * qui ne se sont pas désinscrits. Dédoublonné par adresse (deux fiches pour une même personne → un
+ * seul envoi).
  *
- * `learner.user_id` NUL = stagiaire sans compte de connexion : il reste destinataire (il a une
- * adresse). `user.active = 0` = accès coupé (désactivation manuelle ou purge, migration 199) : exclu.
+ * RESTREINT AUX TITULAIRES D'UN COMPTE — décidé le 2026-10-05, pour tenir sous la limite d'envoi
+ * d'OVH et ménager la réputation du domaine. Écrire à TOUS les stagiaires jamais connectés, c'est
+ * un envoi de masse vers des adresses souvent anciennes (rebonds = pire signal de spam). On s'en
+ * tient donc à ceux qui ont ouvert un compte (`learner.user_id` renseigné) et dont l'accès n'est pas
+ * coupé (`user.active = 1`, désactivation manuelle ou purge migration 199). Élargir plus tard
+ * demandera une FILE qui respecte la limite (cf. CHANTIERS), pas un simple relâchement de ce filtre.
  */
 async function audienceNewsletter(conn, orgId) {
     const [rows] = await conn.query(
         `SELECT l.id, l.first_name, l.last_name, l.email
            FROM learner l
-           LEFT JOIN user u ON u.id = l.user_id
+           JOIN user u ON u.id = l.user_id AND u.active = 1
           WHERE l.organization_id = ?
             AND l.email IS NOT NULL AND TRIM(l.email) <> ''
-            AND (u.id IS NULL OR u.active = 1)
           ORDER BY l.last_name, l.first_name`,
         [orgId]);
     const vus = new Set();
