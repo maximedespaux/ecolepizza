@@ -8,7 +8,7 @@ import { parseAvatar } from "../lib/gamification.js";
 import { useEchap } from "../lib/useEchap.js";
 import { reduireImage, PHOTO_MAX_KO, PHOTO_MAX_PX } from "../lib/image.js";
 import PriseDePhoto from "./PriseDePhoto.jsx";
-import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, postImageUrl, uploadPostImage } from "../api/apiClient.js";
+import { getPost, createPost, deletePost, addAnswer, deleteAnswer, updatePost, postImageUrl, uploadPostImage, apercuNewsletter } from "../api/apiClient.js";
 
 /**
  * L'espace d'échange : poser une QUESTION, y répondre, marquer ce qui a aidé.
@@ -323,6 +323,10 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
   // puis sur l'onglet pour la même intention, c'est demander deux fois la même chose.
   const [kind, setKind] = useState(kindInitial);
   const [epingler, setEpingler] = useState(false);
+  /* NEWSLETTER : une annonce peut aussi partir par e-mail. On montre le nombre de destinataires
+     AVANT de cocher (confirmation éclairée), chargé une fois qu'on passe en mode annonce. */
+  const [newsletter, setNewsletter] = useState(false);
+  const [countNl, setCountNl] = useState(null);
   const [photo, setPhoto] = useState(null);     // Blob réduit, prêt à l'envoi
   const [apercu, setApercu] = useState(null);   // URL objet, pour l'aperçu
   const [busy, setBusy] = useState(false);
@@ -347,6 +351,16 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
   // Libère l'URL d'aperçu : sans ça, chaque photo choisie laisse un blob en mémoire.
   useEffect(() => () => { if (apercu) URL.revokeObjectURL(apercu); }, [apercu]);
 
+  /* Le nombre de destinataires de la newsletter, chargé dès qu'on passe en mode annonce : le
+     bureau voit « 142 stagiaires » avant de décider d'envoyer. Silencieux en cas d'échec — c'est
+     une aide, pas un verrou. */
+  useEffect(() => {
+    if (!(annonce && peutAnnoncer)) return;
+    let vivant = true;
+    apercuNewsletter().then((r) => { if (vivant) setCountNl(r?.data?.count ?? null); }).catch(() => {});
+    return () => { vivant = false; };
+  }, [annonce, peutAnnoncer]);
+
   const choisirPhoto = (e) => accepterPhoto(e.target.files?.[0]);
 
   /* Un seul chemin pour les TROIS origines — fichier choisi, appareil natif, capture en direct.
@@ -368,7 +382,10 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
     if (!t) return;
     setBusy(true); setErreur(null);
     try {
-      const r = await createPost({ title: t, body: corps.trim(), kind, pinned: annonce && epingler });
+      const r = await createPost({
+        title: t, body: corps.trim(), kind, pinned: annonce && epingler,
+        envoyer_newsletter: annonce && newsletter,
+      });
       /* LA FERMETURE SUIT L'ÉCHEC, PAS LA PRÉSENCE D'UNE PHOTO. C'était `if (!photo) onClose()` :
          publier AVEC une photo laissait le formulaire ouvert même quand tout s'était bien passé.
          On voyait la publication apparaître derrière et le formulaire rester là — on cliquait
@@ -431,6 +448,20 @@ export function QuestionForm({ onClose, onCreated, peutAnnoncer, kindInitial = "
                 <p className="hint" style={{ marginTop: 4 }}>
                   Une annonce épinglée passe devant les autres, quel que soit son âge. À garder
                   pour ce qui doit être vu tout de suite.
+                </p>
+                {/* NEWSLETTER : envoyer l'annonce par e-mail. Décoché par défaut — toutes les
+                    annonces ne méritent pas un e-mail de masse. Le nombre de destinataires est
+                    affiché pour que le choix soit éclairé. */}
+                <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer", fontSize: 14, marginTop: 10 }}>
+                  <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />
+                  <Icon name="send" size={14} /> Envoyer aussi par e-mail (newsletter)
+                </label>
+                <p className="hint" style={{ marginTop: 4 }}>
+                  {countNl === null
+                    ? "L'annonce partira aux stagiaires de l'école qui ne se sont pas désinscrits."
+                    : countNl === 0
+                      ? "Aucun stagiaire inscrit à la newsletter pour le moment."
+                      : `L'annonce sera envoyée à ${countNl} stagiaire${countNl > 1 ? "s" : ""}. Chaque e-mail porte un lien de désinscription.`}
                 </p>
               </div>
             )}

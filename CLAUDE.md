@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-04** : **2559 tests — 2552 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-04** : **2574 tests — 2567 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,27 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**202 est À JOUER** (`202_community_newsletter.sql`, la NEWSLETTER — une annonce de la Communauté envoyée aussi par
+e-mail aux stagiaires, demandée le 2026-10-04). Une colonne `community_post.newsletter_envoye_le` (datetime) : une
+TRACE (afficher « Newsletter envoyée le… », empêcher un second envoi). Modèle « soft opt-in client existant » décidé
+avec l'école : on écrit aux stagiaires SANS second « oui », mais CHAQUE e-mail porte un lien de DÉSINSCRIPTION en un
+clic — un jeton JWT signé (`lib/newsletter.js`, rien à stocker) qui ne vaut QUE pour ça et n'expire pas (se désinscrire
+doit toujours marcher). La désinscription s'écrit au registre des consentements (130, déjà jouée), finalité
+`'newsletter'` — gardée HORS de `FINALITES` (sinon elle redeviendrait une case « Oui » à cocher dans l'écran de
+consentement) : `enregistrerNewsletter` / `desinscritsNewsletter` / `estInscritNewsletter` (consentements.js). Le PUBLIC
+= stagiaires de l'org avec e-mail, compte non désactivé (`user.active`), moins les désinscrits, dédoublonné par adresse.
+Case « Envoyer aussi en newsletter » sur le formulaire d'annonce (bureau), avec le nombre de destinataires affiché
+AVANT (`GET /api/community/newsletter/apercu`). Envoi fire-and-forget (`declencherNewsletter`, jamais bloquant),
+journalisé dans `mail_envoi` (178). Désinscription PUBLIQUE sans login (`/api/public/newsletter/:token`, page front
+`/desinscription/:token`) : le GET valide sans rien changer (anti pré-chargement), seul le POST désinscrit. **AUCUNE
+donnée ne dépend de la 202** : l'envoi marche avant comme après (la date est écrite en try/catch, le fil relu en
+cascade). **Elle se vérifie par l'API, sans SQL** : `GET /api/community/posts` rend la clé `newsletter_envoye_le` sur
+une annonce envoyée en newsletter. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='community_post' AND column_name='newsletter_envoye_le';`
+⚠️ Son revert retire la colonne (on n'affiche plus « envoyée le… ») ; les e-mails partis sont partis, les
+désinscriptions (consent_record) restent. Tests : `newsletter.test.js`.
 
 **201 est À JOUER** (`201_document_jetons_figes.sql`, les DONNÉES d'un document FIGÉES à son émission — demandé le
 2026-10-04, « URGENT »). Une colonne `generated_document.jetons_figes` (longtext, JSON CHIFFRÉ au repos comme

@@ -3,7 +3,7 @@ const multer = require('multer');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 const {
     listPosts, getPost, createPost, updatePost, deletePost,
-    addAnswer, deleteAnswer, savePostImage, getPostImage,
+    addAnswer, deleteAnswer, savePostImage, getPostImage, apercuNewsletter,
 } = require('../controllers/community.controller.js');
 
 const router = express.Router();
@@ -16,6 +16,9 @@ const router = express.Router();
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 800 * 1024, files: 1 } });
 
 router.use(authenticateToken);
+
+/* AVANT `/posts/:id` ? Non : chemin distinct (`/newsletter/...`), aucun risque de capture. */
+router.get('/newsletter/apercu', apercuNewsletter);
 
 router.get('/posts', listPosts);
 router.post('/posts', createPost);

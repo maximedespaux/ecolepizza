@@ -4,6 +4,8 @@ const db = require('../config/database.js');
 const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument } = require('./document.controller.js');
 const { libellesEnClair } = require('../lib/zonesARemplir.js');
 const { estSignatureValide } = require('../lib/signatures.js');
+const { verifierLienDesinscription } = require('../lib/newsletter.js');
+const { enregistrerNewsletter, estInscritNewsletter } = require('../lib/consentements.js');
 
 /* Le document attend une réponse que seul le stagiaire peut donner, depuis son espace. */
 const messageAttente = (manquants) => (manquants.length > 1
@@ -161,4 +163,55 @@ const submitSign = async (req, res) => {
     }
 };
 
-module.exports = { getSignPage, submitSign };
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   NEWSLETTER — la désinscription publique (le lien au bas de chaque e-mail, sans login).
+
+   DEUX TEMPS, exprès. Le GET ne CHANGE RIEN : il valide le jeton et dit l'état. Le POST, lui,
+   désinscrit — et c'est le seul qui écrit. Pourquoi : des clients mail et des antivirus
+   PRÉ-CHARGENT les liens d'un message (un GET), ce qui désinscrirait des gens qui n'ont jamais
+   cliqué. La désinscription exige donc un geste délibéré (le bouton → POST).
+
+   Le jeton (JWT signé) porte l'identifiant du stagiaire et de l'organisme : aucune table, et il ne
+   permet QUE la désinscription. On ne révèle que le prénom (le lien est déjà dans l'e-mail de la
+   personne). */
+async function chargerStagiaireDuJeton(conn, token) {
+    const v = verifierLienDesinscription(token);
+    if (!v) return null;
+    const [[l]] = await conn.query(
+        'SELECT id, first_name, organization_id FROM learner WHERE id = ? AND organization_id = ?',
+        [v.learnerId, v.orgId]);
+    return l ? { learnerId: l.id, orgId: l.organization_id, prenom: l.first_name || '' } : null;
+}
+
+/** GET /api/public/newsletter/:token — valide le lien SANS rien changer, et dit l'état courant. */
+const getNewsletterUnsub = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const s = await chargerStagiaireDuJeton(conn, req.params.token);
+        if (!s) return res.status(404).json({ message: 'Lien de désinscription invalide.' });
+        const inscrit = await estInscritNewsletter(conn, s.orgId, s.learnerId);
+        res.json({ data: { prenom: s.prenom, deja_desinscrit: !inscrit } });
+    } catch (err) {
+        console.error('Erreur page désinscription :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/public/newsletter/:token — enregistre la désinscription (geste délibéré du stagiaire). */
+const postNewsletterUnsub = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const s = await chargerStagiaireDuJeton(conn, req.params.token);
+        if (!s) return res.status(404).json({ message: 'Lien de désinscription invalide.' });
+        const r = await enregistrerNewsletter(conn, {
+            orgId: s.orgId, learnerId: s.learnerId, accorde: false, source: 'lien_email',
+        });
+        if (!r.ok) return res.status(503).json({ message: r.message });
+        res.json({ success: true, message: 'C’est fait : vous ne recevrez plus les actualités de l’école.' });
+    } catch (err) {
+        console.error('Erreur désinscription :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getSignPage, submitSign, getNewsletterUnsub, postNewsletterUnsub };

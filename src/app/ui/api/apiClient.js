@@ -716,6 +716,9 @@ export function createSignLink(documentId, payload = {}) {
 // Signature publique par le représentant de l'entreprise (page /signer/:token).
 export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
 export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
+/** Désinscription PUBLIQUE de la newsletter (lien au bas de chaque e-mail, sans compte). */
+export function getDesinscriptionNewsletter(token) { return request(`/public/newsletter/${token}`, { silent: true }); }
+export function desinscrireNewsletter(token) { return request(`/public/newsletter/${token}`, { method: "POST" }); }
 
 // --- Formations ---
 export function getFormations() {
@@ -1231,6 +1234,8 @@ export function updatePost(id, patch) { return request(`/community/posts/${id}`,
 export function deletePost(id) { return request(`/community/posts/${id}`, { method: "DELETE" }); }
 export function addAnswer(id, body) { return request(`/community/posts/${id}/answers`, { method: "POST", body: JSON.stringify({ body }) }); }
 export function deleteAnswer(id) { return request(`/community/answers/${id}`, { method: "DELETE" }); }
+/** Combien de stagiaires recevraient une annonce envoyée en newsletter (aperçu avant l'envoi). */
+export function apercuNewsletter() { return request("/community/newsletter/apercu", { silent: true }); }
 /** URL de la photo — servie par une route authentifiée, donc utilisable directement en `src`. */
 export function postImageUrl(id) { return `${API_BASE_URL}/community/posts/${id}/image`; }
 /** Envoi de la photo. Le fichier est DÉJÀ redimensionné et compressé par le navigateur. */

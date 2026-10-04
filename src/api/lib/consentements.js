@@ -622,6 +622,101 @@ async function enregistrer(conn, { orgId, learnerId, finalite, accorde, source, 
     }
 }
 
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   LA NEWSLETTER — un consentement OPT-OUT, et c'est pourquoi il ne vit PAS dans `FINALITES`.
+
+   Les finalités ci-dessus (partenaires, droit à l'image) sont des OPT-IN : tant que le stagiaire
+   n'a pas dit « oui », rien ne part, et `etatCourant` les lui présente comme des questions à
+   répondre. La newsletter est l'inverse — un « soft opt-in client existant » (CNIL) : le stagiaire
+   est déjà client de l'école, on PEUT lui adresser les actualités de l'école sans lui réclamer un
+   second « oui », À CONDITION qu'il puisse se désinscrire en un clic depuis chaque e-mail.
+
+   La ranger dans `FINALITES` la ferait apparaître dans l'écran de consentement du stagiaire avec
+   `accorde: null` (« jamais demandé ») — soit exactement la case « Oui je veux la newsletter »
+   qu'on cherche à NE PAS imposer. On la garde donc à part :
+     - ABSENCE de ligne = inscrit (le défaut, le cas de tout le monde) ;
+     - une ligne `accorde = 0` = désinscrit (posée par le lien de désinscription) ;
+     - une ligne `accorde = 1` plus récente = réinscrit.
+   La table `consent_record` accueille tout ça sans migration (finalité en texte libre), et la trace
+   (phrase montrée, date, source) est aussi complète que pour les autres finalités. ⚠️ Ne pas
+   ajouter 'newsletter' à `FINALITES` : les lectures génériques (etatCourant, manquantsParSession)
+   doivent continuer de l'ignorer. */
+const NEWSLETTER_FINALITE = 'newsletter';
+const NEWSLETTER_DESTINATAIRES = 'Moi uniquement — l\'école ne communique mon adresse à personne.';
+const NEWSLETTER_FORMULATION = 'L\'école peut m\'adresser par e-mail ses actualités (les annonces de '
+    + 'la Communauté). Je peux me désinscrire à tout moment, en un clic, depuis le lien présent au bas '
+    + 'de chaque e-mail. Me désinscrire n\'a aucune conséquence sur ma formation, mon inscription ni '
+    + 'mon accès aux services de l\'école.';
+/* Les origines possibles d'une décision « newsletter ». 'lien_email' est propre à l'opt-out public
+   (le clic depuis l'e-mail) ; les autres valent pour une (ré)inscription depuis l'espace ou saisie
+   par le secrétariat. `consent_record.source` est un varchar libre, donc rien à migrer. */
+const NEWSLETTER_SOURCES = new Set(['lien_email', 'espace_stagiaire', 'papier', 'oral', 'inscription']);
+
+/**
+ * Écrit une décision « newsletter » (inscription ou désinscription) — une ligne de plus au registre,
+ * comme toute réponse. Volontairement HORS de `enregistrer` (qui refuse une finalité absente de
+ * `FINALITES`) : la newsletter a sa phrase fixe et ses propres sources. Tolérant : sans la 130, on
+ * le dit sans jeter.
+ */
+async function enregistrerNewsletter(conn, { orgId, learnerId, accorde, source = 'lien_email', saisiPar = null }) {
+    if (!learnerId) return { ok: false, message: 'Stagiaire inconnu.' };
+    const src = NEWSLETTER_SOURCES.has(source) ? source : 'lien_email';
+    try {
+        await conn.query(
+            `INSERT INTO consent_record
+               (id, organization_id, learner_id, finalite, accorde, destinataires, formulation, source, saisi_par)
+             VALUES (uuid(), ?, ?, '${NEWSLETTER_FINALITE}', ?, ?, ?, ?, ?)`,
+            [orgId, learnerId, accorde ? 1 : 0,
+             NEWSLETTER_DESTINATAIRES.slice(0, 500), NEWSLETTER_FORMULATION.slice(0, 600), src, saisiPar]);
+        return { ok: true };
+    } catch (e) {
+        if (isMissingSchema(e)) return { ok: false, message: 'Migration 130 non jouée : désinscription non enregistrable.' };
+        throw e;
+    }
+}
+
+/**
+ * Les stagiaires DÉSINSCRITS parmi une liste — ceux dont la décision 'newsletter' la plus récente
+ * est un refus. Rend un `Set` d'identifiants. Un stagiaire absent du registre n'y est PAS (il est
+ * inscrit par défaut : soft opt-in). Sans la 130, personne n'est désinscrit (Set vide) : l'envoi
+ * marche quand même.
+ *
+ * SÉCURITÉ DE VIE PRIVÉE : en cas d'égalité à la seconde près (import, double écriture), un refus
+ * présent dans la dernière seconde l'emporte — mieux vaut ne pas écrire à quelqu'un qui vient de se
+ * désinscrire que l'inverse.
+ */
+async function desinscritsNewsletter(conn, orgId, learnerIds) {
+    const ids = (learnerIds || []).filter(Boolean);
+    if (!ids.length) return new Set();
+    const trous = ids.map(() => '?').join(',');
+    try {
+        const [rows] = await conn.query(
+            `SELECT c.learner_id, c.accorde
+               FROM consent_record c
+               JOIN (SELECT learner_id, MAX(decide_at) AS m
+                       FROM consent_record
+                      WHERE organization_id = ? AND finalite = '${NEWSLETTER_FINALITE}'
+                        AND learner_id IN (${trous})
+                      GROUP BY learner_id) d
+                 ON d.learner_id = c.learner_id AND d.m = c.decide_at
+              WHERE c.organization_id = ? AND c.finalite = '${NEWSLETTER_FINALITE}'`,
+            [orgId, ...ids, orgId]);
+        const out = new Set();
+        for (const r of rows) if (Number(r.accorde) !== 1) out.add(r.learner_id);
+        return out;
+    } catch (e) {
+        if (isMissingSchema(e)) return new Set();
+        throw e;
+    }
+}
+
+/** Ce stagiaire reçoit-il la newsletter ? (vrai sauf si sa dernière décision est un refus). */
+async function estInscritNewsletter(conn, orgId, learnerId) {
+    if (!learnerId) return false;
+    const desinscrits = await desinscritsNewsletter(conn, orgId, [learnerId]);
+    return !desinscrits.has(learnerId);
+}
+
 
 /**
  * CETTE PERSONNE S'EST-ELLE DÉJÀ EXPRIMÉE ELLE-MÊME, une fois quelconque ?
@@ -790,4 +885,6 @@ module.exports = {
     destinatairesPartenaires, partenairesDestinataires, aDesDestinataires, manquantsParSession,
     etatCourant, etatParStagiaire, enregistrer, isMissingSchema,
     JETONS_CONSENTEMENT, finalitesDesJetons, reponsesDuDocument, valeursJetons,
+    NEWSLETTER_FINALITE, NEWSLETTER_FORMULATION, NEWSLETTER_SOURCES,
+    enregistrerNewsletter, desinscritsNewsletter, estInscritNewsletter,
 };
