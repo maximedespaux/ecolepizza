@@ -103,6 +103,9 @@ export default function EntrepriseDetail() {
   const [sessQ, setSessQ] = useState("");
   const [sessFocus, setSessFocus] = useState(false);
   const [viewSessionId, setViewSessionId] = useState("");
+  /* L'onglet affiché (Coordonnées / Stagiaires / Documents). Arriver d'une fiche stagiaire pour
+     « gérer le groupe » (location.state.session) vise les documents : on ouvre alors « Documents ». */
+  const [tab, setTab] = useState(() => (location.state?.session ? "documents" : "coordonnees"));
   const [registering, setRegistering] = useState(false);
   const [result, setResult] = useState(null); // { created: [...] }
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // recharge le parcours entreprise
@@ -622,9 +625,16 @@ export default function EntrepriseDetail() {
 
       <StatusMessage status={status} />
 
-      <div className="grid cols-2" style={{ gap: 22, alignItems: "start" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-        {/* Inscription de groupe */}
+      {/* TROIS ONGLETS (demandé le 2026-10-05, comme la fiche stagiaire) : Coordonnées (l'identité de
+          la société), Stagiaires (rattacher et inscrire le groupe), Documents (parcours de groupe et
+          signatures par le représentant). Les mêmes cartes, rangées sans rien retirer. */}
+      <span className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+        <button className={"seg-btn" + (tab === "coordonnees" ? " on" : "")} onClick={() => setTab("coordonnees")}>Coordonnées</button>
+        <button className={"seg-btn" + (tab === "stagiaires" ? " on" : "")} onClick={() => setTab("stagiaires")}>Stagiaires</button>
+        <button className={"seg-btn" + (tab === "documents" ? " on" : "")} onClick={() => setTab("documents")}>Documents</button>
+      </span>
+
+      {tab === "stagiaires" && (
         <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Inscrire un groupe de stagiaires</span>}>
           <p className="hint" style={{ margin: "0 0 12px" }}>Rattache des stagiaires, puis inscris le groupe à une session.</p>
 
@@ -756,10 +766,9 @@ export default function EntrepriseDetail() {
             </div>
           )}
         </Card>
-        </div>
+      )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Coordonnées de l'entreprise */}
+      {tab === "coordonnees" && (
           <Card title={<span className="card-ttl"><Icon name="building" size={16} /> Coordonnées</span>}>
             <div className="grid cols-2" style={{ gap: 12 }}>
               {CFIELDS.map(({ k, label, full, type, options, dyn, placeholder, requis }) => {
@@ -840,9 +849,9 @@ export default function EntrepriseDetail() {
               )}
             </div>
           </Card>
-        </div>
-      </div>
+      )}
 
+      {tab === "documents" && (<>
       {/* Parcours documentaire COMPLET du groupe (même style que la fiche stagiaire). */}
       <div style={{ marginTop: 22 }}>
         <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Parcours documentaire du groupe</span>}>
@@ -946,6 +955,7 @@ export default function EntrepriseDetail() {
           </Card>
         </div>
       )}
+      </>)}
 
       {viewId && <DocumentViewModal id={viewId} onClose={() => setViewId(null)} />}
     </>
