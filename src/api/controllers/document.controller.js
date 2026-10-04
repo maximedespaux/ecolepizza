@@ -147,11 +147,22 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     /* LE MODÈLE DE CE DOCUMENT, retenu pour plus bas : une formation peut avoir plusieurs grilles
        d'évaluation, et c'est le modèle qui dit laquelle ce document imprime (cf. resultatDossier). */
     let slugDuDocument = null;
+    /* LA DATE À LAQUELLE LE DOCUMENT EST FIGÉ (demandé le 2026-10-04). Le jeton {Date}/{Today} —
+       « Date du jour » — se résolvait avec `new Date()` à CHAQUE rendu : un devis envoyé en mai,
+       rouvert en octobre, portait octobre. Une pièce ÉMISE ne doit plus bouger. On fige donc la
+       « date du jour » à l'ÉMISSION du document : la date d'envoi (`sent_at`), à défaut celle de
+       signature (`signed_at`). Un brouillon pas encore envoyé (ni l'une ni l'autre) garde la date
+       vivante — il est encore en travail, l'aperçu doit montrer aujourd'hui jusqu'à l'envoi.
+       `resolveTokens` lit `ctx.figeLe` et retombe sur `new Date()` quand il est nul (tokens.js). */
+    let figeLe = null;
+    let docType = null; // type du document (pour ne pas figer une feuille d'émargement, cf. plus bas)
     if (org && documentId) {
         try {
-            const [[gd]] = await conn.query('SELECT org_signature_data, template_slug, type FROM generated_document WHERE id = ?', [documentId]);
+            const [[gd]] = await conn.query('SELECT org_signature_data, template_slug, type, sent_at, signed_at FROM generated_document WHERE id = ?', [documentId]);
             if (gd) {
                 slugDuDocument = gd.template_slug || null;
+                figeLe = gd.sent_at || gd.signed_at || null;
+                docType = gd.type || null;
                 const signataire = orgSignsDoc(await loadOrgSteps(organizationId), gd);
                 org.signature_image = signatureOrganismeAffichee(
                     org.signature_image, gd.org_signature_data ? decrypt(gd.org_signature_data) : null, signataire);
@@ -427,7 +438,57 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             saisies = zonesARemplir.lireSaisies(s && s.saisies);
         } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
     }
-    return { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx, saisies };
+    const ctx = { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx, saisies, figeLe };
+
+    /* FIGER LES DONNÉES DU DOCUMENT À SON ÉMISSION (demandé le 2026-10-04). Un document émis ne doit
+       plus bouger : prix, adresses, dates, intitulés… tels qu'au jour de l'envoi. On CRISTALLISE
+       donc, à la première lecture après l'émission (`figeLe` non nul = envoyé ou signé), les données
+       de fusion dans `generated_document.jetons_figes` (JSON chiffré, migration 201), puis on les
+       SERT à la place des données vivantes aux lectures suivantes. Point d'étranglement unique : tout
+       rendu passe par ici (aperçu, PDF, Word, archive, empreinte, PDF scellé, espace entreprise, lien
+       de signature) — chacun fige et relit sans qu'on ait à toucher chaque point d'envoi.
+
+       NE SONT PAS FIGÉS (volontairement) : l'ORGANISME (l'émetteur, le papier à en-tête — il change
+       à peine, et figer son logo dans CHAQUE document gonflerait la base pour rien) ; les SIGNATURES
+       (`slotSignatures`, `signature`) et le cachet apposé — ils se complètent APRÈS l'envoi ; les
+       ZONES à remplir (`saisies`) ; les CONSENTEMENTS (déjà figés à la signature, cf.
+       reponsesDuDocument) ; les JETONS PERSONNALISÉS (recalculés) ; les résultats d'EXAMEN / JURY
+       (finalisés, et porteurs des signatures des membres).
+
+       TOLÉRANT : sans la colonne (migration 201 non jouée) ou sans document, on ne fige rien et le
+       rendu reste vivant — seule la date est figée (`figeLe`, ci-dessus). Une feuille d'émargement
+       n'est jamais figée ici (ses présences se régénèrent). */
+    if (documentId && figeLe && docType !== 'EMARGEMENT') {
+        try {
+            const [[fg]] = await conn.query('SELECT jetons_figes FROM generated_document WHERE id = ?', [documentId]);
+            if (fg && fg.jetons_figes) {
+                const b = JSON.parse(decrypt(fg.jetons_figes) || '{}');
+                if (b && typeof b === 'object') {
+                    if ('learner' in b) ctx.learner = b.learner || {};
+                    if ('company' in b) ctx.company = b.company;
+                    if ('formations' in b) ctx.formations = b.formations || [];
+                    if ('fields' in b) ctx.fields = b.fields || {};
+                    if ('groupStagiaires' in b) ctx.groupStagiaires = b.groupStagiaires;
+                    if ('financeur' in b) ctx.financeur = b.financeur;
+                    if (b.figeLe) ctx.figeLe = b.figeLe;
+                }
+            } else {
+                // Première lecture après émission : on fige l'instantané des données (hors organisme et signatures).
+                const bundle = {
+                    learner: learner || {}, company: company || null,
+                    formations: formations || [], fields: fields || {},
+                    groupStagiaires: groupStagiaires || null, financeur: financeur || null, figeLe,
+                };
+                // IS NULL : on ne réécrit jamais un figé existant (idempotent, insensible aux courses).
+                await conn.query('UPDATE generated_document SET jetons_figes = ? WHERE id = ? AND jetons_figes IS NULL',
+                    [encrypt(JSON.stringify(bundle)), documentId]);
+            }
+        } catch (e) {
+            // Colonne absente (201 non jouée) : rendu vivant, date figée. Autre erreur : on remonte.
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        }
+    }
+    return ctx;
 }
 
 /* Les jetons d'un modèle, quel que soit son format : éditeur (corps, en-tête, pied) ou Word. */

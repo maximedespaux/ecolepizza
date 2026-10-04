@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (311 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-03** : **2527 tests — 2520 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~7 s** (313 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-04** : **2537 tests — 2530 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,30 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**201 est À JOUER** (`201_document_jetons_figes.sql`, les DONNÉES d'un document FIGÉES à son émission — demandé le
+2026-10-04, « URGENT »). Une colonne `generated_document.jetons_figes` (longtext, JSON CHIFFRÉ au repos comme
+`saisies`). Un document se rendait à CHAQUE ouverture depuis les données vivantes du dossier : {Date}/{Today} (« Date
+du jour », `new Date()`) redatait un devis émis en mai à la date de relecture, et prix/adresses/dates auraient suivi
+tout changement depuis. DEUX niveaux de correctif : (1) SANS migration, la DATE est déjà figée — `loadContext` lit
+`sent_at` (à défaut `signed_at`) et la passe au rendu (`ctx.figeLe`, lu par `resolveTokens` à la place de
+`new Date()`) ; un brouillon pas encore émis garde la date vivante. (2) AVEC la colonne, `loadContext` CRISTALLISE à la
+première lecture après l'émission (figeLe non nul) les données de fusion — stagiaire, entreprise, formations, champs du
+dossier (`fields`), financeur, date — puis les SERT aux lectures suivantes. Point d'étranglement UNIQUE : tout rendu
+(aperçu, PDF, Word, archive, empreinte, PDF scellé, espace entreprise, lien de signature) passe par `loadContext`.
+NE SONT PAS FIGÉS, volontairement : l'ORGANISME (l'émetteur / le papier à en-tête — figer son logo dans chaque document
+gonflerait la base), les SIGNATURES et le cachet apposé (complétés APRÈS l'envoi), les ZONES (`saisies`), les
+CONSENTEMENTS (déjà figés à la signature), les jetons PERSONNALISÉS (recalculés) et les résultats d'EXAMEN/JURY
+(finalisés, porteurs des signatures des membres). Idempotent (`WHERE jetons_figes IS NULL`), tolérant (colonne absente →
+rendu vivant, date figée ; `ER_BAD_FIELD_ERROR`/`ER_NO_SUCH_TABLE` avalés) ; une feuille d'émargement n'est jamais figée
+ici. Sans la migration, rien ne casse : seule la date est figée, le reste reste vivant comme avant. **Elle se vérifie
+par l'API, sans SQL** : ouvrir deux fois un devis ENVOYÉ en changeant une donnée du dossier entre les deux (p. ex.
+l'adresse du stagiaire) — le PDF ne bouge pas. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='generated_document' AND column_name='jetons_figes';`
+⚠️ Son revert supprime la colonne : les documents non signés se remettent à se rendre depuis les données vivantes (la
+date reste figée, via `sent_at`) ; les signés gardent leur PDF scellé. Tests : `jetons-figes.test.js`,
+`jeton-date-figee.test.js`.
 
 **200 est À JOUER** (`200_connexion_jour.sql`, les STATISTIQUES de connexion — page Statistiques, Qualité &
 conformité, demandée le 2026-10-02). Une table `connexion_jour` (user_id, jour, organization_id, est_stagiaire ;
@@ -1146,6 +1169,17 @@ rien ne se transmet avant.
   jetons DANS le bloc (`stripGroupBlocks` étendu à {#Formations}). Éditeur : groupe Formation, bouton
   « Bloc « par formation » » (`BLOC_FORMATIONS`) + palette `FORMATION_ROW_TOKENS`. Tests :
   `formations-bloc.test.js`.
+- **Un document ÉMIS NE BOUGE PLUS — ses données sont FIGÉES à l'émission** (2026-10-04, « URGENT ») :
+  cf. §4, migration 201. En deux temps. (1) La « Date du jour » ({Date}/{Today}) se résolvait par `new Date()`
+  à chaque rendu — un devis des archives se redatait du jour. Elle est désormais figée à `sent_at` (à défaut
+  `signed_at`), via `ctx.figeLe` que `loadContext` pose et que `resolveTokens` lit (sinon `new Date()`) — SANS
+  migration, vrai même pour les documents déjà émis. (2) Avec la 201, `loadContext` CRISTALLISE le reste des
+  données (stagiaire, entreprise, formations, `fields`, financeur, date) dans `generated_document.jetons_figes`
+  à la première lecture après l'émission, puis les sert. Point d'étranglement UNIQUE (`loadContext`) : aucun
+  point d'envoi à toucher. **Restent vivants** : l'organisme (émetteur/logo), les signatures et le cachet, les
+  zones (`saisies`), les consentements (figés à la signature), les jetons perso, les résultats examen/jury.
+  Les documents de concern de l'école (devis, convention, contrat, CGV, attestation, droit image) n'ont ni
+  examen ni jury : ils sont donc intégralement figés. Tests : `jeton-date-figee.test.js`, `jetons-figes.test.js`.
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
 (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des

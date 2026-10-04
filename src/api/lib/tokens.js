@@ -1512,7 +1512,10 @@ function resolveTokens(ctx = {}) {
     const ends = uniq(forms.map((x) => x.end_date)).sort();
     const start = starts[0] || f.start_date || '';
     const end = ends[ends.length - 1] || f.end_date || '';
-    const today = frDate(new Date());
+    /* « Date du jour » FIGÉE À L'ÉMISSION (2026-10-04) : un document émis ne se redate pas. `ctx.figeLe`
+       porte la date d'envoi (ou de signature) du document, posée par `loadContext` ; nul (brouillon,
+       aperçu de modèle, facture) → la date vivante, comme avant. Cf. document.controller loadContext. */
+    const today = frDate(ctx.figeLe || new Date());
     /* LA SEMAINE DEVIENT LES SEMAINES quand le document couvre plusieurs formations : « Semaines 6
        et 12 — 2026 » plutôt que la seule première (demandé le 2026-10-03). Une seule : inchangé. */
     const weeks = uniq(forms.map((x) => x.week));
