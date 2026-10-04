@@ -29,6 +29,7 @@ const ACTION_LABEL = {
        de suite se lisaient mal (2026-09-28). */
     'document.docx': ['Document généré en Word', B],
     'document.pdf': ['Document généré en PDF', B],
+    'document.preuve': ['Attestation de signature téléchargée', B],
     'document.send': ['Document envoyé', B],
     'document.sign': ['Document signé', G],
     'document.saisies': ['Zones à remplir complétées', G],

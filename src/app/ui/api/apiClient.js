@@ -1377,6 +1377,11 @@ export function downloadDocumentPdf(id, filename = "document.pdf") {
   return download(`/documents/${id}/pdf`, filename);
 }
 
+/** Attestation de signature (dossier de preuve) d'un document signé — un PDF scellé à part. */
+export function downloadDocumentPreuve(id, filename = "attestation-de-signature.pdf") {
+  return download(`/documents/${id}/preuve`, filename);
+}
+
 /** Ouvre le document IMPORTÉ d'une étape (déchiffré par le serveur à la volée). */
 export function downloadDocumentImporte(id, filename) {
   return download(`/documents/${id}/fichier`, filename || "document-recu");
