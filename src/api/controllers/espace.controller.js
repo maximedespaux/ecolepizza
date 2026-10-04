@@ -2044,6 +2044,48 @@ const setMyConsent = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/mon-espace/newsletter — le stagiaire reçoit-il les actualités de l'école par e-mail ?
+ *
+ * À PART des consentements (getMyConsents) : la newsletter est un OPT-OUT, pas une case « Oui » à
+ * cocher — inscrit par défaut, le seul geste étant de se désinscrire (cf. lib/consentements.js). On
+ * la montre donc comme un interrupteur « Inscrit / Désinscrit », jamais comme une question en attente.
+ */
+const getMyNewsletter = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.json({ data: null }); // personnel de l'organisme : pas concerné
+        const inscrit = await consentements.estInscritNewsletter(conn, learner.organization_id, learner.id);
+        res.json({ data: { inscrit } });
+    } catch (err) {
+        console.error('Erreur état newsletter :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** PUT /api/mon-espace/newsletter — se (ré)inscrire ou se désinscrire soi-même depuis son profil. */
+const setMyNewsletter = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const learner = await learnerForUser(conn, req.user.id);
+        if (!learner) return res.status(404).json({ message: 'Aucune fiche stagiaire liée à ce compte.' });
+        if (typeof req.body?.accorde !== 'boolean') {
+            return res.status(422).json({ message: 'Réponse attendue : inscrit ou désinscrit.' });
+        }
+        const r = await consentements.enregistrerNewsletter(conn, {
+            orgId: learner.organization_id, learnerId: learner.id,
+            accorde: req.body.accorde, source: 'espace_stagiaire',
+        });
+        if (!r.ok) return res.status(503).json({ message: r.message });
+        logAudit(req, `newsletter.${req.body.accorde ? 'inscrit' : 'desinscrit'}`, 'Learner', learner.id);
+        res.json({ success: true, inscrit: req.body.accorde });
+    } catch (err) {
+        console.error('Erreur réglage newsletter :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 /** PUT /api/mon-espace/visibility — enregistre ce que les autres stagiaires voient. */
 const updateMyVisibility = async (req, res) => {
     try {
@@ -2122,7 +2164,7 @@ const updateMyInfos = async (req, res) => {
 
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
-    getMyConsents, setMyConsent,
+    getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter,
     saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
     completionOf, // exporté pour le test de complétion (compte à deux casquettes)
 };

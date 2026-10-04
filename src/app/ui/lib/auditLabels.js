@@ -208,6 +208,13 @@ const ACTION_LABEL = {
     'community.reponse_supprimee': ['Réponse supprimée (modération)', R],
     'community.post_modifie': ['Publication corrigée (modération)', A],
 
+    /* Newsletter — le stagiaire règle lui-même la réception des actualités par e-mail (opt-out).
+       Comme un consentement : vert pour l'inscription, ambre pour le retrait. La désinscription par
+       le lien de l'e-mail, elle, n'a pas de compte et ne passe donc pas par le journal — la preuve
+       vit au registre des consentements. */
+    'newsletter.inscrit': ['Inscription à la newsletter', G],
+    'newsletter.desinscrit': ['Désinscription de la newsletter', A],
+
     /* Communauté — modération. Retirer la publication de quelqu'un doit laisser une trace
        lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
        Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
