@@ -2,6 +2,7 @@ const db = require('../config/database.js');
 const consentements = require('../lib/consentements.js');
 const { accesParMenuAutorise, modeFor, CONFIGURABLE_ROLES } = require('../middlewares/sectionAccess.middleware.js');
 const { OWNER_ROLES } = require('../lib/activite.js');
+const { compterNouveauxPosts } = require('../lib/communauteBadge.js');
 
 // Compte résilient : renvoie 0 si la table n'existe pas encore (migration non jouée).
 async function count(conn, sql, params) {
@@ -111,13 +112,15 @@ const getBadges = async (req, res) => {
 
        `Promise.all` ramène le tout au coût du plus lent, soit un aller-retour. Le pool en accepte
        dix simultanées (`connectionLimit`), les cinq passent sans file d'attente. */
-    const [lowStock, unpaid, shopPending, consentManquant, rappels] = await Promise.all([
+    const [lowStock, unpaid, shopPending, consentManquant, rappels, nouveauxPosts] = await Promise.all([
         count(conn, 'SELECT COUNT(*) AS n FROM inventory_item WHERE organization_id = ? AND quantity <= threshold', [org]),
         count(conn, "SELECT COUNT(*) AS n FROM invoice WHERE organization_id = ? AND type IN ('FACTURE','ACOMPTE') AND status IN ('EMISE','IMPAYEE')", [org]),
         // Demandes boutique en cours : ni remises (terminées) ni annulées.
         count(conn, "SELECT COUNT(*) AS n FROM shop_request WHERE organization_id = ? AND status NOT IN ('REMISE', 'ANNULEE')", [org]),
         sansReponsePartenaires(conn, org),
         aRecontacter(conn, req.user),
+        // Nouveaux posts de la Communauté depuis la dernière visite (lib partagée avec le stagiaire).
+        compterNouveauxPosts(conn, req.user.id, org),
     ]);
     res.json({
         data: {
@@ -126,6 +129,7 @@ const getBadges = async (req, res) => {
             '/demandes-boutique': shopPending,
             '/sessions': consentManquant,
             '/stagiaires': rappels,
+            '/communaute': nouveauxPosts,
         },
     });
 };
