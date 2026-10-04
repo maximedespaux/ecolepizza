@@ -173,16 +173,6 @@ function Sessions() {
     }
   }
 
-  // Programmes réellement planifiés ce mois (pour la légende).
-  const legend = useMemo(() => {
-    const m = new Map();
-    for (const s of sessions) {
-      const cur = m.get(s.program_code) || { title: s.program_title, n: 0 };
-      cur.n += 1; m.set(s.program_code, cur);
-    }
-    return [...m.entries()];
-  }, [sessions]);
-
   return (
     <>
       <PageHead
@@ -273,9 +263,6 @@ function Sessions() {
           if (d.getFullYear() !== year || d.getMonth() !== month) return null;
           const s = ouverture.session;
           const quoi = `${s.program_code || "la session"}${s.week ? `, semaine ${s.week}` : ""}`;
-          if (ouverture.raison === "suivante") {
-            return <p className="hint cal-ouverture">Ouvert sur la prochaine session ({quoi}) : les dossiers de la session précédente sont finis.</p>;
-          }
           if (ouverture.raison === "precedente") {
             return (
               <p className="hint cal-ouverture">
@@ -371,15 +358,6 @@ function Sessions() {
         </div>
         )}
 
-        {legend.length > 0 && (
-          <div className="cal-legend">
-            {legend.map(([code, { title, n }]) => (
-              <span key={code} className="cal-legitem">
-                <i style={{ background: colorOf(code) }} /> <b>{code}</b> {title} <span className="cal-legn">{n}</span>
-              </span>
-            ))}
-          </div>
-        )}
       </Card>
 
       <Card title="Prochaines sessions" style={{ marginTop: 16 }} more={<span className="hint">{upcoming.length} à venir</span>}>
