@@ -132,7 +132,8 @@ test('SANS COMMISSION, rien ne se remplit — et rien ne casse', async () => {
 // ── Le branchement côté documents ────────────────────────────────────────────────────────────
 const CTRL = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'document.controller.js'), 'utf8');
 const RETOUR = (() => {
-    const d = CTRL.indexOf('return { org: org || {}, learner:');
+    // `loadContext` assemble son contexte dans `const ctx = { … }` (puis le fige avant de le rendre).
+    const d = CTRL.indexOf('const ctx = { org: org || {}, learner:');
     return CTRL.slice(d, CTRL.indexOf('};', d) + 1); // l'accolade fermante comprise : la dernière clé la touche
 })();
 

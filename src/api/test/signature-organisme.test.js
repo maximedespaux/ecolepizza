@@ -29,7 +29,7 @@ const faux = {
     promise: () => ({
         query: async (sql) => {
             if (/FROM organization WHERE id = \?/.test(sql)) return [[{ id: 'o1', legal_name: 'École Pizza', signature_image: ENREGISTREE }]];
-            if (/SELECT org_signature_data, template_slug, type FROM generated_document/.test(sql)) return [[documentCourant]];
+            if (/SELECT org_signature_data, template_slug, type.*FROM generated_document/.test(sql)) return [[documentCourant]];
             if (/FROM document_template WHERE organization_id = \? AND slug = \?/.test(sql)) {
                 return [[{ kind: 'builder', body_html: CORPS, header_html: '', footer_html: '', layout: null }]];
             }
