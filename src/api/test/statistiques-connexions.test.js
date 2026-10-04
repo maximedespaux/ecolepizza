@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { trancheDe, repartition, connectesDepuis, fenetreJours, densifier, TRANCHES } = require('../lib/statsConnexions.js');
+const { trancheDe, repartition, connectesDepuis, fenetreJours, densifier, TRANCHES, FENETRES, grouperFormations, relancer } = require('../lib/statsConnexions.js');
 
 test('trancheDe range la dernière connexion dans la bonne tranche (disjointes)', () => {
     const now = new Date('2026-10-02T12:00:00');
@@ -72,4 +72,69 @@ test('chaque connexion est comptée pour le jour, et la route/nav sont en place'
     assert.match(nav, /to: "\/statistiques", ic: "bar-chart", label: "Statistiques", roles: AUDIT/);
     const main = lire(path.join(UI, 'main.jsx'));
     assert.match(main, /path="statistiques" element=\{<Guard nav="\/statistiques" roles=\{SUIVI\}><Statistiques \/><\/Guard>\}/);
+});
+
+/* ── Enrichissements du 2026-10-04 : détail par formation, résumé, assidus, à relancer, fenêtre ── */
+
+test('grouperFormations : regroupe par jour, trie du plus grand au plus petit, écarte les 0', () => {
+    const m = grouperFormations([
+        { jour: '2026-10-03', label: 'NIV2', n: 4 },
+        { jour: '2026-10-03', label: 'NIV1', n: 1 },
+        { jour: '2026-10-03', label: 'RS7404', n: 0 }, // 0 → écarté
+        { jour: '2026-10-02', label: 'NIV1', n: 2 },
+    ]);
+    assert.deepStrictEqual(m.get('2026-10-03'), [{ label: 'NIV2', n: 4 }, { label: 'NIV1', n: 1 }], 'trié desc, pas de 0');
+    assert.deepStrictEqual(m.get('2026-10-02'), [{ label: 'NIV1', n: 2 }]);
+});
+
+test('relancer : noms des JAMAIS connectés et des +30 jours, triés ; les récents sont exclus', () => {
+    const now = new Date('2026-10-04T12:00:00');
+    const comptes = [
+        { nom: 'Zoe', last_login_at: null },                              // jamais
+        { nom: 'Alice', last_login_at: null },                            // jamais
+        { nom: 'Bob', last_login_at: new Date(+now - 40 * 24 * 3600e3) }, // j90 (>30)
+        { nom: 'Carl', last_login_at: new Date(+now - 200 * 24 * 3600e3) },// vieux (>30)
+        { nom: 'Dan', last_login_at: new Date(+now - 10 * 24 * 3600e3) }, // j30 (<30) → exclu
+    ];
+    const r = relancer(comptes, now);
+    assert.deepStrictEqual(r.jamais, ['Alice', 'Zoe'], 'triés');
+    assert.deepStrictEqual(r.anciens, ['Bob', 'Carl'], 'plus de 30 jours, pas les récents');
+});
+
+test('FENETRES propose 7 / 14 / 30, défaut 14', () => {
+    assert.deepStrictEqual(FENETRES, [7, 14, 30]);
+});
+
+test('le contrôleur enrichit : fenêtre réglable, détail par formation, résumé, assidus, à relancer', () => {
+    const c = lire(path.join(API, 'controllers/statistiques.controller.js'));
+    // Fenêtre réglable, bornée aux valeurs proposées.
+    assert.match(c, /Number\(req\.query\.jours\)/);
+    assert.match(c, /if \(!stats\.FENETRES\.includes\(fenetre\)\) fenetre = FENETRE_DEFAUT/);
+    // Détail PAR FORMATION (stagiaires) : jointure inscription → session → formation.
+    assert.match(c, /JOIN training_program p ON p\.id = s\.program_id/);
+    assert.match(c, /COUNT\(DISTINCT cj\.user_id\) AS n/);
+    assert.match(c, /stats\.grouperFormations/);
+    // Résumé (personnes distinctes) + assidus (plus de jours) + à relancer.
+    assert.match(c, /COUNT\(DISTINCT user_id\) AS n\s+FROM connexion_jour/);
+    assert.match(c, /ORDER BY jours DESC, nom ASC\s+LIMIT 8/);
+    assert.match(c, /relancer: stats\.relancer\(stagiaires, maintenant\)/);
+});
+
+test('la page : courbe AVANT la récence, survol par formation, résumé, assidus, à relancer, fenêtre', () => {
+    const p = lire(path.join(UI, 'pages/Statistiques.jsx'));
+    // La courbe « Connexions des N derniers jours » passe AVANT « Depuis la dernière connexion ».
+    assert.ok(p.indexOf('Connexions des {fenetre} derniers jours') < p.indexOf('Depuis la dernière connexion'),
+        'la récence est désormais SOUS la courbe');
+    // Survol : badges par formation (NIV1 : 1…), nombres de stagiaires / équipe.
+    assert.match(p, /className="stat-badge"/);
+    assert.match(p, /j\.formations && j\.formations\.length > 0/);
+    // Les quatre enrichissements.
+    assert.match(p, /<Resume /);
+    assert.match(p, /<Assidus /);
+    assert.match(p, /<Relancer r=\{d\.stagiaires\.relancer\}/);
+    assert.match(p, /<Fenetre valeur=\{fenetre\}/);
+    // Le sélecteur refait la requête avec la fenêtre choisie.
+    assert.match(p, /getStatistiquesConnexions\(fenetre\)/);
+    const api = lire(path.join(UI, 'api/apiClient.js'));
+    assert.match(api, /\/statistiques\/connexions\$\{jours \? `\?jours=\$\{jours\}` : ""\}/);
 });

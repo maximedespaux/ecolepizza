@@ -57,4 +57,40 @@ function densifier(lignes, jours, maintenant = new Date()) {
     }));
 }
 
-module.exports = { TRANCHES, trancheDe, repartition, connectesDepuis, fenetreJours, densifier };
+// Fenêtres proposées à l'écran (le sélecteur 7 / 14 / 30 jours) ; la première est le défaut.
+const FENETRES = [7, 14, 30];
+
+/**
+ * Regroupe les lignes [{ jour, label, n }] (stagiaires connectés PAR FORMATION et par jour) en
+ * Map(jour → [{ label, n }]) triée du plus grand au plus petit. Les formations à 0 ne figurent pas
+ * (demandé : « si 0 don't display ») — et comme la requête les exclut déjà, il n'y a rien à filtrer.
+ */
+function grouperFormations(rows) {
+    const m = new Map();
+    for (const r of rows || []) {
+        const n = Number(r.n) || 0;
+        if (n <= 0 || !r.label) continue;
+        if (!m.has(r.jour)) m.set(r.jour, []);
+        m.get(r.jour).push({ label: String(r.label), n });
+    }
+    for (const list of m.values()) list.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'fr'));
+    return m;
+}
+
+/**
+ * Les comptes À RELANCER d'après leur récence : JAMAIS connectés, et plus de 30 jours sans connexion
+ * (tranches `j90` 30-90 j et `vieux` > 90 j). Rend deux listes de NOMS, triées. Sert à l'école pour
+ * relancer les stagiaires inactifs (suivi Qualiopi).
+ */
+function relancer(comptes, maintenant = new Date()) {
+    const jamais = []; const anciens = [];
+    for (const c of comptes || []) {
+        const t = trancheDe(c.last_login_at, maintenant);
+        if (t === 'jamais') jamais.push(c.nom);
+        else if (t === 'j90' || t === 'vieux') anciens.push(c.nom); // > 30 jours sans connexion
+    }
+    const triFr = (a, b) => String(a || '').localeCompare(String(b || ''), 'fr');
+    return { jamais: jamais.sort(triFr), anciens: anciens.sort(triFr) };
+}
+
+module.exports = { TRANCHES, FENETRES, trancheDe, repartition, connectesDepuis, fenetreJours, densifier, grouperFormations, relancer };
