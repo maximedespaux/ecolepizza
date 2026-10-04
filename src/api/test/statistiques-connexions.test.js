@@ -138,8 +138,9 @@ test('la page : courbe AVANT la récence, survol par formation, résumé, assidu
     // Survol : badges par formation COLORÉS (la couleur de chaque formation), nombres stagiaires / équipe.
     assert.match(p, /className="stat-badge"/);
     assert.match(p, /j\.formations && j\.formations\.length > 0/);
-    // La part stagiaire de la barre est colorée PAR FORMATION (plus un seul orange).
-    assert.match(p, /const PALETTE =/);
+    // La part stagiaire de la barre est colorée PAR FORMATION, avec les couleurs EXISTANTES de l'app.
+    assert.match(p, /from "\.\.\/lib\/levels\.js"/, 'les couleurs viennent de la source unique (badges/sessions/carte)');
+    assert.match(p, /colorForLevel\(lbl\.get\(key\) \|\| key\)/);
     assert.match(p, /couleursFormations/);
     assert.match(p, /<LegendeFormations cles=\{d\.formations_cle\} couleur=\{couleur\}/);
     assert.match(p, /fill=\{couleur\(f\.key\)\}/, 'chaque segment de formation à sa couleur');

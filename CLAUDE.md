@@ -304,7 +304,8 @@ rendre 1 :
 ⚠️ Son revert supprime la table : l'historique des connexions par jour (la courbe) est perdu ; `last_login_at` reste,
 donc la récence aussi. Tests : `statistiques-connexions.test.js`.
 ENRICHIE le 2026-10-04 (sans migration) : la courbe passe AVANT la récence ; fenêtre réglable (7/14/30 j, `?jours=`) ;
-la part STAGIAIRE de chaque barre est colorée PAR FORMATION (palette stable, légende dynamique), un stagiaire inscrit à
+la part STAGIAIRE de chaque barre est colorée PAR FORMATION (les COULEURS EXISTANTES de l'app — `colorForLevel`,
+lib/levels.js, surcharges de l'organisme comprises ; légende dynamique), un stagiaire inscrit à
 k formations étant RÉPARTI 1/k dans chacune (« niv1 niv2 → 50/50 », `pondererFormations` : la somme des parts d'un jour
 = les stagiaires distincts ; « Sans formation » pour un connecté sans inscription) ; le survol donne le détail pondéré
 (badges colorés « NIV2 : 4,5 »…) ; un résumé (personnes DISTINCTES + jour le plus actif) ; « les plus assidus » ; et les
