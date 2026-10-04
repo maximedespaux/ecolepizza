@@ -34,7 +34,7 @@ const PAS_DE_LIENS = 'Les liens des mémos arrivent avec la migration 177 (non j
  *
  * Elles suivent la règle de leur mémo, sans en ajouter une : qui VOIT le mémo ouvre ses pièces
  * (`memoVisible`), et elles partent avec lui. Elles se posent à la CRÉATION et ne se retouchent
- * plus — comme le texte, qu'aucune route ne modifie.
+ * plus ; le texte et l'échéance, eux, s'éditent (PATCH, l'auteur seul — 2026-10-04).
  *
  * MÊME CASCADE QUE LES LIENS : sans la 193, la table manque, la liste rend des mémos sans pièce et
  * dit que les pièces ne sont pas disponibles (`pieces_jointes: false`, l'écran cache alors le
@@ -407,19 +407,22 @@ const getFichier = async (req, res) => {
     }
 };
 
-/** PATCH /api/memos/:id — { fait? } (cocher : l'auteur, ou n'importe qui sur un mémo partagé)
- *  et/ou { partage? } (l'auteur seul). */
+/** PATCH /api/memos/:id — { fait? } (cocher : l'auteur, ou n'importe qui sur un mémo partagé),
+ *  { partage? } (l'auteur seul), et { texte?, echeance? } (ÉDITION, l'auteur seul — 2026-10-04). */
 const updateMemo = async (req, res) => {
     const lu = lireModification(req.body || {});
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
-    const { fait, partage } = lu.modification;
+    const { fait, partage, texte } = lu.modification;
+    const editeEcheance = Object.prototype.hasOwnProperty.call(lu.modification, 'echeance');
     try {
         const conn = db.promise();
         const m = await memoVisible(conn, req);
         if (!m) return res.status(404).json({ message: 'Mémo introuvable.' });
         const mien = String(m.auteur_id) === String(req.user.id);
-        if (partage !== undefined && !mien) {
-            return res.status(403).json({ message: 'Seul l’auteur d’un mémo peut le partager ou le reprendre.' });
+        /* PARTAGER/REPRENDRE ET ÉDITER (texte, échéance) SONT RÉSERVÉS À L'AUTEUR : le mémo est SA
+           note. COCHER, lui, reste ouvert à toute l'équipe sur un mémo partagé — c'est une tâche. */
+        if ((partage !== undefined || texte !== undefined || editeEcheance) && !mien) {
+            return res.status(403).json({ message: 'Seul l’auteur d’un mémo peut le modifier ou le partager.' });
         }
         const champs = [];
         const valeurs = [];
@@ -430,6 +433,8 @@ const updateMemo = async (req, res) => {
             valeurs.push(fait ? req.user.id : null);
         }
         if (partage !== undefined) { champs.push('partage = ?'); valeurs.push(partage ? 1 : 0); }
+        if (texte !== undefined) { champs.push('texte = ?'); valeurs.push(texte); }
+        if (editeEcheance) { champs.push('echeance = ?'); valeurs.push(lu.modification.echeance); }
         await conn.query(
             `UPDATE memo SET ${champs.join(', ')} WHERE id = ? AND organization_id = ?`,
             [...valeurs, m.id, req.user.organization_id]);

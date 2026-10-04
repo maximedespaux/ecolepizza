@@ -139,6 +139,19 @@ test('cocher et partager attendent un vrai booléen', () => {
     assert.deepStrictEqual(lib.lireModification({ fait: true, partage: false }).modification, { fait: true, partage: false });
 });
 
+test('éditer un mémo : texte et échéance, mêmes bornes qu\'à la création (demandé le 2026-10-04)', () => {
+    assert.match(lib.lireModification({ texte: '   ' }).erreur, /Écrivez le mémo/);
+    assert.match(lib.lireModification({ texte: 'x'.repeat(lib.MAX_TEXTE + 1) }).erreur, /1000 caractères/);
+    assert.match(lib.lireModification({ texte: 'ok', echeance: 'demain' }).erreur, /Échéance illisible/);
+    // Le texte est nettoyé comme à la création (espaces en bout, retours en trop).
+    assert.deepStrictEqual(lib.lireModification({ texte: '  Revoir le devis  ', echeance: '2026-10-05' }).modification,
+        { texte: 'Revoir le devis', echeance: '2026-10-05' });
+    // Une échéance VIDE l'EFFACE (distincte d'un champ absent, que l'on ne touche pas).
+    assert.deepStrictEqual(lib.lireModification({ echeance: '' }).modification, { echeance: null });
+    assert.ok(!Object.prototype.hasOwnProperty.call(lib.lireModification({ texte: 'ok' }).modification, 'echeance'),
+        'texte seul ne touche pas l\'échéance');
+});
+
 // ── Qui voit quoi ────────────────────────────────────────────────────────────────────────────
 
 test('je vois les miens et ceux que l\'équipe partage, jamais le privé d\'un autre', async () => {
@@ -203,6 +216,28 @@ test('supprimer est réservé à l\'auteur, même sur un mémo partagé', async 
     const mien = await appeler(ctrl.deleteMemo, { params: { id: 'm1' } });
     assert.strictEqual(mien.code, 200);
     assert.match(derniere(/^DELETE FROM memo WHERE id/).q, /AND auteur_id = \?/, 'la propriété est dans la requête');
+});
+
+test('éditer (texte, échéance) est réservé à l\'auteur ; cocher reste ouvert à l\'équipe', async () => {
+    reinitialiser();
+    // Moi, auteur de m1 : j'édite le texte ET l'échéance.
+    const ok = await appeler(ctrl.updateMemo, { params: { id: 'm1' }, body: { texte: 'Rappeler le fournisseur lundi', echeance: '2026-10-10' } });
+    assert.strictEqual(ok.code, 200);
+    const u = derniere(/^UPDATE memo SET/);
+    assert.match(u.q, /texte = \?/);
+    assert.match(u.q, /echeance = \?/);
+    assert.ok(u.params.includes('Rappeler le fournisseur lundi') && u.params.includes('2026-10-10'));
+    // Effacer l'échéance : une date vide passe NULL en base.
+    reinitialiser();
+    const vide = await appeler(ctrl.updateMemo, { params: { id: 'm1' }, body: { echeance: '' } });
+    assert.strictEqual(vide.code, 200);
+    assert.ok(derniere(/^UPDATE memo SET/).params.includes(null), 'échéance effacée = NULL');
+    // m2 est partagé par Marie : je le COCHE (200) mais je ne peux pas RÉÉCRIRE son texte (403).
+    reinitialiser();
+    assert.strictEqual((await appeler(ctrl.updateMemo, { params: { id: 'm2' }, body: { fait: true } })).code, 200);
+    const refus = await appeler(ctrl.updateMemo, { params: { id: 'm2' }, body: { texte: 'je réécris chez la collègue' } });
+    assert.strictEqual(refus.code, 403);
+    assert.match(refus.corps.message, /Seul l’auteur/);
 });
 
 test('« Effacer les mémos faits » n\'efface que les miens', async () => {
@@ -318,4 +353,13 @@ test('supprimer et partager ne s\'offrent qu\'à l\'auteur', () => {
        resteraient invisibles ET cliquables : on supprimerait un mémo sans avoir rien vu. */
     const css = lire(path.join(UI, 'styles/app.css'));
     assert.match(css, /@media \(hover:none\)\{ \.memo-actions\{opacity:1\} \}/);
+});
+
+test('modifier un mémo : un bouton pour l\'auteur, un formulaire, et l\'envoi du texte + échéance', () => {
+    const src = sansCommentaires(lire(path.join(UI, 'components/MemoListe.jsx')));
+    // Le bouton d'édition est dans les actions de l'auteur (`mien`), à côté de partager/supprimer.
+    assert.match(src, /onClick=\{ouvrirEdition\}/);
+    assert.match(src, /name="pencil"/);
+    // Le formulaire d'édition envoie le texte et l'échéance (vide = effacée).
+    assert.match(src, /updateMemo\(m\.id, \{ texte: et, echeance: ee \|\| null \}\)/);
 });
