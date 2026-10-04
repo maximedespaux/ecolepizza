@@ -25,6 +25,7 @@ import StagiaireDetail from "./pages/StagiaireDetail.jsx";
 import Entreprises from "./pages/Entreprises.jsx";
 import EntrepriseDetail from "./pages/EntrepriseDetail.jsx";
 import SignerPublic from "./pages/SignerPublic.jsx";
+import DesinscriptionNewsletter from "./pages/DesinscriptionNewsletter.jsx";
 import Formations from "./pages/Formations.jsx";
 import Quiz from "./pages/Quiz.jsx";
 import QuestManager from "./pages/QuestManager.jsx";
@@ -177,6 +178,8 @@ function AppRoutes() {
           AVANT de créer un compte, sinon elle arrive après la décision qu'elle éclaire. */}
       <Route path="/confidentialite" element={<Confidentialite />} />
       <Route path="/signer/:token" element={<SignerPublic />} />
+      {/* PUBLIQUE : la désinscription de la newsletter (lien au bas de chaque e-mail, sans compte). */}
+      <Route path="/desinscription/:token" element={<DesinscriptionNewsletter />} />
 
       {isPlatform ? (
         // --- Console plateforme (revente : gestion des organismes) ---

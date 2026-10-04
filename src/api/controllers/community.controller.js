@@ -32,6 +32,8 @@ const nomDe = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim(
    et à qui elle donnait le droit de parler au nom de l'école. */
 const { estStaff, peutModerer } = require('../lib/moderation.js');
 const { logAudit } = require('../lib/audit.js');
+/* La newsletter : une ANNONCE peut aussi partir par e-mail (fire-and-forget, cf. lib/newsletter.js). */
+const { declencherNewsletter, audienceNewsletter } = require('../lib/newsletter.js');
 
 /**
  * GET /api/community/posts — le fil.
@@ -50,19 +52,27 @@ const listPosts = async (req, res) => {
          * (cf. `dateHeure` dans lib/format.js) — le format est affaire d'affichage, pas de
          * transport. Un commentaire de ce genre ne peut PAS vivre dans le littéral SQL juste
          * en dessous : ses backticks y fermeraient la chaîne. */
-        const [rows] = await conn.query(
-            `SELECT p.id, p.kind, p.title, p.body, p.pinned, p.author_user_id, p.resolved_answer_id,
+        /* `newsletter_envoye_le` (migration 202) n'est demandée qu'en cascade : avant la migration,
+         * la colonne n'existe pas et on relit le fil sans elle plutôt que de le casser. */
+        const requeteFil = (avecNewsletter) => `SELECT p.id, p.kind, p.title, p.body, p.pinned, p.author_user_id, p.resolved_answer_id,
                     COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))), ''), p.author_name) AS author_name,
                     DATE_FORMAT(p.created_at, '%Y-%m-%d %H:%i') AS created_at,
                     DATE_FORMAT(p.updated_at, '%Y-%m-%d %H:%i') AS updated_at,
+                    ${avecNewsletter ? "DATE_FORMAT(p.newsletter_envoye_le, '%Y-%m-%d %H:%i') AS newsletter_envoye_le," : 'NULL AS newsletter_envoye_le,'}
                     (SELECT COUNT(*) FROM community_answer a WHERE a.post_id = p.id) AS answers,
                     (SELECT COUNT(*) FROM community_image i WHERE i.post_id = p.id) AS has_image
                FROM community_post p
                LEFT JOIN user u ON u.id = p.author_user_id
               WHERE p.organization_id = ?
-              ORDER BY p.pinned DESC, p.created_at DESC`,
-            [req.user.organization_id]
-        );
+              ORDER BY p.pinned DESC, p.created_at DESC`;
+        let rows;
+        try {
+            [rows] = await conn.query(requeteFil(true), [req.user.organization_id]);
+        } catch (e) {
+            if (!noTable(e)) throw e;
+            // Soit la 114 (table absente, repli plus bas), soit la 202 (colonne absente) : on retente sans.
+            [rows] = await conn.query(requeteFil(false), [req.user.organization_id]);
+        }
         /* Avatar, cadre et parcours des auteurs. La résolution vit dans `lib/auteurs.js` : les
          * réponses d'une question et les commentaires d'une fiche en ont besoin à l'identique,
          * et trois copies auraient divergé au premier changement — il y en a déjà eu un, le
@@ -138,12 +148,21 @@ const createPost = async (req, res) => {
         const kind = req.body?.kind === 'ANNONCE' && estStaff(req.user) ? 'ANNONCE' : 'QUESTION';
         const pinned = kind === 'ANNONCE' && req.body?.pinned ? 1 : 0;
         const id = crypto.randomUUID();
+        const corps = String(req.body?.body || '').trim() || null;
         await conn.query(
             `INSERT INTO community_post (id, organization_id, author_user_id, author_name, kind, title, body, pinned)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, req.user.id, nomDe(req.user), kind, titre,
-             String(req.body?.body || '').trim() || null, pinned]);
-        res.status(201).json({ data: { id } });
+            [id, req.user.organization_id, req.user.id, nomDe(req.user), kind, titre, corps, pinned]);
+        /* NEWSLETTER : une annonce peut aussi partir par e-mail. Réservé au bureau (même porte que
+         * l'ANNONCE), jamais pour une question. L'envoi est fire-and-forget — l'annonce est déjà
+         * publiée, un SMTP capricieux ne doit pas renvoyer une erreur au bureau. */
+        const newsletter = kind === 'ANNONCE' && estStaff(req.user) && !!req.body?.envoyer_newsletter;
+        if (newsletter) {
+            declencherNewsletter(db, {
+                orgId: req.user.organization_id, postId: id, titre, corps, envoyePar: req.user.id,
+            });
+        }
+        res.status(201).json({ data: { id, newsletter } });
     } catch (err) {
         if (noTable(err)) return res.status(503).json({ message: 'Migration 114 non jouée.' });
         console.error('Erreur création publication :', err);
@@ -333,7 +352,26 @@ const getPostImage = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/community/newsletter/apercu — combien de stagiaires recevraient la newsletter.
+ *
+ * Pour que le bureau voie le NOMBRE avant de cocher « Envoyer aussi en newsletter » (confirmation
+ * éclairée). Réservé au bureau — c'est lui qui publie les annonces.
+ */
+const apercuNewsletter = async (req, res) => {
+    try {
+        if (!estStaff(req.user)) return res.status(403).json({ message: 'Réservé au bureau.' });
+        const conn = db.promise();
+        const dest = await audienceNewsletter(conn, req.user.organization_id);
+        res.json({ data: { count: dest.length } });
+    } catch (err) {
+        if (noTable(err)) return res.json({ data: { count: 0 } }); // migration 114 non jouée
+        console.error('Erreur aperçu newsletter :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 module.exports = {
     listPosts, getPost, createPost, updatePost, deletePost,
-    addAnswer, deleteAnswer, savePostImage, getPostImage,
+    addAnswer, deleteAnswer, savePostImage, getPostImage, apercuNewsletter,
 };
