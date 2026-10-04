@@ -20,6 +20,7 @@ const { estSignatureValide } = require('../lib/signatures.js');
 const { slotsForDay, isOpenAt, minPickupDate } = require('../lib/horaires.js');
 const { notify } = require('./notification.controller.js');
 const { prixStagiaire } = require('../lib/remise.js');
+const { compterNouveauxPosts } = require('../lib/communauteBadge.js');
 // Le prix TTC d'un article et le total d'une commande : ceux que la facture imprimera.
 const { ttcDeLigne, totalDemande, tvaCentimesDeLaDemande } = require('../lib/ttc.js');
 const { formationsDesQcm, jourPour } = require('../lib/qcmFormations.js');
@@ -500,7 +501,11 @@ async function communityNewsCount(conn, userId, orgId) {
              FROM user u WHERE u.id = ?`,
             [orgId, orgId, userId]
         );
-        return (Number(row?.comments) || 0) + (Number(row?.likes) || 0);
+        /* Les NOUVEAUX POSTS (questions, annonces) s'ajoutent aux nouveautés des fiches : une seule
+           pastille pour « du neuf dans la Communauté ». Requête à part (lib partagée avec la pastille
+           du bureau), elle-même tolérante — elle ne jette pas, donc rien à rattraper ici. */
+        const posts = await compterNouveauxPosts(conn, userId, orgId);
+        return (Number(row?.comments) || 0) + (Number(row?.likes) || 0) + posts;
     } catch (e) {
         if (isMissingSchema(e)) return 0; // migration 106 non jouée
         console.error('Erreur comptage nouveautés Communauté :', e);

@@ -7,7 +7,7 @@ import { onBadgesRefresh } from "../lib/events.js";
 import { initials } from "../lib/format.js";
 import ChangePasswordModal from "./ChangePasswordModal.jsx";
 import ProfilPersonnel from "./ProfilPersonnel.jsx";
-import { parseAvatar, getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
+import { parseAvatar, getAvatar, AVATAR_EVENT, COMMUNITY_EVENT } from "../lib/gamification.js";
 import { useCadreChoisi, cadreClass } from "../lib/cadres.js";
 import { Icon } from "./Icon.jsx";
 
@@ -58,7 +58,10 @@ function Sidebar({ open, onClose }) {
     load();
     const t = setInterval(load, 60000);
     const off = onBadgesRefresh(load); // rafraîchit après une action (suppression, paiement…)
-    return () => { active = false; clearInterval(t); off(); };
+    // Ouvrir la Communauté remet sa pastille à zéro (markCommunitySeen) : on recompte tout de
+    // suite, sans attendre le sondage des 60 s — même réactivité que la pastille du stagiaire.
+    window.addEventListener(COMMUNITY_EVENT, load);
+    return () => { active = false; clearInterval(t); off(); window.removeEventListener(COMMUNITY_EVENT, load); };
   }, []);
 
   // Ferme le menu profil au clic à l'extérieur ou sur Échap.
