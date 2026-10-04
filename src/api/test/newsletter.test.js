@@ -244,3 +244,17 @@ test('la migration 202 et son revert existent, et sont tolérantes (IF [NOT] EXI
     assert.match(aller, /ADD COLUMN IF NOT EXISTS newsletter_envoye_le/);
     assert.match(revert, /DROP COLUMN IF EXISTS newsletter_envoye_le/);
 });
+
+test('Mon profil : le stagiaire se (ré)inscrit lui-même (opt-out, source de l\'espace)', () => {
+    const routes = lire('src/api/routes/espace.routes.js');
+    assert.match(routes, /router\.get\('\/newsletter', authenticateToken, getMyNewsletter\)/);
+    assert.match(routes, /router\.put\('\/newsletter', authenticateToken, setMyNewsletter\)/);
+    const src = plat(lire('src/api/controllers/espace.controller.js'));
+    // écrit par la fonction dédiée, source = l'espace stagiaire (et surtout PAS 'lien_email').
+    assert.match(src, /setMyNewsletter = async[\s\S]*?enregistrerNewsletter\(conn, \{[\s\S]*?source: 'espace_stagiaire'/);
+    // exige un booléen (422), et répond 503 si la 130 n'est pas jouée.
+    assert.match(src, /setMyNewsletter = async[\s\S]*?typeof req\.body\?\.accorde !== 'boolean'[\s\S]*?422/);
+    assert.match(src, /setMyNewsletter = async[\s\S]*?if \(!r\.ok\) return res\.status\(503\)/);
+    // le GET lit l'état sans écrire.
+    assert.match(src, /getMyNewsletter = async[\s\S]*?estInscritNewsletter/);
+});

@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-04** : **2574 tests — 2567 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-04** : **2575 tests — 2568 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -276,7 +276,10 @@ consentement) : `enregistrerNewsletter` / `desinscritsNewsletter` / `estInscritN
 Case « Envoyer aussi en newsletter » sur le formulaire d'annonce (bureau), avec le nombre de destinataires affiché
 AVANT (`GET /api/community/newsletter/apercu`). Envoi fire-and-forget (`declencherNewsletter`, jamais bloquant),
 journalisé dans `mail_envoi` (178). Désinscription PUBLIQUE sans login (`/api/public/newsletter/:token`, page front
-`/desinscription/:token`) : le GET valide sans rien changer (anti pré-chargement), seul le POST désinscrit. **AUCUNE
+`/desinscription/:token`) : le GET valide sans rien changer (anti pré-chargement), seul le POST désinscrit. Le
+stagiaire gère aussi sa réception depuis « Mon profil » (`GET/PUT /api/mon-espace/newsletter`, source
+`espace_stagiaire`) — un interrupteur « Recevoir / Ne plus recevoir », jamais une question en attente (opt-out, pas
+dans `FINALITES`). **AUCUNE
 donnée ne dépend de la 202** : l'envoi marche avant comme après (la date est écrite en try/catch, le fil relu en
 cascade). **Elle se vérifie par l'API, sans SQL** : `GET /api/community/posts` rend la clé `newsletter_envoye_le` sur
 une annonce envoyée en newsletter. Ou une requête, qui doit rendre 1 :
