@@ -61,20 +61,55 @@ function densifier(lignes, jours, maintenant = new Date()) {
 const FENETRES = [7, 14, 30];
 
 /**
- * Regroupe les lignes [{ jour, label, n }] (stagiaires connectés PAR FORMATION et par jour) en
- * Map(jour → [{ label, n }]) triée du plus grand au plus petit. Les formations à 0 ne figurent pas
- * (demandé : « si 0 don't display ») — et comme la requête les exclut déjà, il n'y a rien à filtrer.
+ * RÉPARTIT, par jour, les stagiaires connectés ENTRE LEURS FORMATIONS, de façon PONDÉRÉE : un
+ * stagiaire inscrit à k formations compte 1/k dans CHACUNE (demandé le 2026-10-04 : « niv1 niv2 →
+ * 50 % / 50 % »). Ainsi la somme des parts d'un jour = le nombre de stagiaires DISTINCTS connectés
+ * ce jour-là : les segments colorés remplissent EXACTEMENT la part stagiaire de la barre, chacun à
+ * la couleur de sa formation. Un stagiaire connecté SANS formation tombe dans « Sans formation ».
+ *
+ * @param rows               [{ jour, uid, key, label }] — une ligne par (jour, stagiaire, formation)
+ * @param stagiairesParJour  Map(jour → nombre de stagiaires DISTINCTS connectés) — pour « Sans formation »
+ * @returns { parJour: Map(jour → [{ key, label, n }] triées), cles: [{ key, label }] } — `cles` =
+ *          l'ordre GLOBAL des formations (du plus présent au moins présent), pour couleurs + légende.
  */
-function grouperFormations(rows) {
-    const m = new Map();
+function pondererFormations(rows, stagiairesParJour) {
+    const parUser = new Map(); // jour → Map(uid → Set(key))
+    const labelDe = new Map();
     for (const r of rows || []) {
-        const n = Number(r.n) || 0;
-        if (n <= 0 || !r.label) continue;
-        if (!m.has(r.jour)) m.set(r.jour, []);
-        m.get(r.jour).push({ label: String(r.label), n });
+        if (r.key == null || r.key === '') continue;
+        const key = String(r.key);
+        if (!parUser.has(r.jour)) parUser.set(r.jour, new Map());
+        const u = parUser.get(r.jour);
+        if (!u.has(r.uid)) u.set(r.uid, new Set());
+        u.get(r.uid).add(key);
+        labelDe.set(key, r.label || key);
     }
-    for (const list of m.values()) list.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'fr'));
-    return m;
+    const jours = new Set([...(stagiairesParJour ? stagiairesParJour.keys() : []), ...parUser.keys()]);
+    const out = new Map();
+    const totalParCle = new Map();
+    for (const jour of jours) {
+        const users = parUser.get(jour) || new Map();
+        const tally = new Map();
+        for (const set of users.values()) {
+            const k = set.size || 1;
+            for (const key of set) tally.set(key, (tally.get(key) || 0) + 1 / k);
+        }
+        const totalStag = Number((stagiairesParJour && stagiairesParJour.get(jour)) || 0);
+        const autre = Math.max(0, totalStag - users.size); // connectés sans aucune formation
+        const liste = [...tally.entries()].map(([key, n]) => ({ key, label: labelDe.get(key), n }));
+        if (autre > 1e-6) liste.push({ key: '__autre', label: 'Sans formation', n: autre });
+        if (!liste.length) continue; // jour sans stagiaire connecté
+        for (const f of liste) totalParCle.set(f.key, (totalParCle.get(f.key) || 0) + f.n);
+        out.set(jour, liste);
+    }
+    // Ordre global : du plus présent au moins présent ; « Sans formation » toujours en dernier.
+    const ordre = [...totalParCle.keys()].filter((k) => k !== '__autre')
+        .sort((a, b) => totalParCle.get(b) - totalParCle.get(a) || String(labelDe.get(a)).localeCompare(String(labelDe.get(b)), 'fr'));
+    const cles = ordre.map((k) => ({ key: k, label: labelDe.get(k) || k }));
+    if (totalParCle.has('__autre')) cles.push({ key: '__autre', label: 'Sans formation' });
+    const rang = new Map(cles.map((c, i) => [c.key, i]));
+    for (const liste of out.values()) liste.sort((a, b) => (rang.get(a.key) ?? 99) - (rang.get(b.key) ?? 99));
+    return { parJour: out, cles };
 }
 
 /**
@@ -93,4 +128,4 @@ function relancer(comptes, maintenant = new Date()) {
     return { jamais: jamais.sort(triFr), anciens: anciens.sort(triFr) };
 }
 
-module.exports = { TRANCHES, FENETRES, trancheDe, repartition, connectesDepuis, fenetreJours, densifier, grouperFormations, relancer };
+module.exports = { TRANCHES, FENETRES, trancheDe, repartition, connectesDepuis, fenetreJours, densifier, pondererFormations, relancer };

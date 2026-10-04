@@ -20,11 +20,39 @@ import Card from "../components/Card.jsx";
 const COUL = { stagiaires: "var(--orange)", equipe: "var(--blue)" };
 const JOURS_FR = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
 
+// Couleurs des FORMATIONS (barre et badges) — distinctes, lisibles en clair comme en sombre. La
+// première (orange) rejoint la couleur « stagiaire » du reste de la page. « Sans formation » : gris.
+const PALETTE = ["#ff6900", "#0ea5a4", "#7c5cfc", "#e8a600", "#db2777", "#16a34a", "#0284c7", "#dc2626", "#92682e", "#4f46e5"];
+const COUL_AUTRE = "#9aa0b5";
+
+// Associe une couleur stable à chaque formation, dans l'ordre global rendu par le serveur (`cles`).
+function couleursFormations(cles) {
+  const m = new Map();
+  (cles || []).forEach((c, i) => m.set(c.key, c.key === "__autre" ? COUL_AUTRE : PALETTE[i % PALETTE.length]));
+  return (key) => m.get(key) || COUL_AUTRE;
+}
+// Teinte d'un hexa (#rrggbb) avec une opacité — pour le fond des badges.
+const hexA = (h, a) => { const n = parseInt(String(h).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+// Un compte PONDÉRÉ : entier tel quel, sinon une décimale à la française (« 2,5 »).
+const fmtN = (n) => { const r = Math.round(Number(n) * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ","); };
+
 // « mer. 03/10 » — date LOCALE reconstruite depuis l'ISO, pour ne pas décaler d'un fuseau.
 function labelJour(iso) {
   const [y, m, d] = String(iso).split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   return `${JOURS_FR[dt.getDay()]} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+
+/* Légende de la courbe : une pastille par FORMATION (sa couleur), puis l'équipe. */
+function LegendeFormations({ cles, couleur }) {
+  return (
+    <div className="stat-legende">
+      {(cles || []).map((c) => (
+        <span key={c.key}><span className="stat-pastille" style={{ background: couleur(c.key) }} /> {c.label}</span>
+      ))}
+      <span><span className="stat-pastille" style={{ background: COUL.equipe }} /> Équipe</span>
+    </div>
+  );
 }
 
 function Synthese({ titre, couleur, v }) {
@@ -136,8 +164,9 @@ function Fenetre({ valeur, options, onChange }) {
   );
 }
 
-/* Connexions par jour : colonnes empilées (stagiaires sous équipe), détail par formation au survol. */
-function CourbeJours({ parJour }) {
+/* Connexions par jour : colonnes empilées — part stagiaire colorée PAR FORMATION, équipe au-dessus ;
+   détail par formation au survol. Un stagiaire multi-formations est réparti (50/50 pour NIV1+NIV2). */
+function CourbeJours({ parJour, couleur }) {
   const [tip, setTip] = useState(null); // { i, left, top } — position du survol, relative au cadre
   const wrapRef = useRef(null);
   if (!parJour) {
@@ -168,16 +197,21 @@ function CourbeJours({ parJour }) {
         {parJour.map((d, i) => {
           const x = padL + i * bw + bw * 0.18;
           const w = bw * 0.64;
-          const hS = hFor(d.stagiaires), hE = hFor(d.equipe);
-          const yS = H - padB - hS;
+          const hE = hFor(d.equipe);
+          // Part stagiaire : un segment par formation, empilé depuis la base, à la couleur de la formation.
+          let yb = H - padB;
+          const segs = (d.formations || []).map((f) => {
+            const h = hFor(f.n); const y = yb - h; yb = y;
+            return h > 0 ? <rect key={f.key} x={x} y={y} width={w} height={h} fill={couleur(f.key)} /> : null;
+          });
           return (
             <g key={d.jour} style={{ cursor: "pointer" }}
               onMouseMove={(e) => montrer(i, e)} onTouchStart={(e) => montrer(i, e.touches[0])}>
               <title>{`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s), ${d.equipe} équipe`}</title>
               {/* Zone de survol = toute la colonne, pour attraper le pointeur au-dessus des barres. */}
               <rect x={padL + i * bw} y={padT} width={bw} height={H - padB - padT} fill="transparent" />
-              {hS > 0 && <rect x={x} y={yS} width={w} height={hS} fill={COUL.stagiaires} rx="1.5" />}
-              {hE > 0 && <rect x={x} y={yS - hE} width={w} height={hE} fill={COUL.equipe} rx="1.5" />}
+              {segs}
+              {hE > 0 && <rect x={x} y={yb - hE} width={w} height={hE} fill={COUL.equipe} />}
               <text x={x + w / 2} y={H - padB + 12} textAnchor="middle" fontSize="9" fill="var(--muted)">{jj(d.jour)}</text>
             </g>
           );
@@ -188,12 +222,12 @@ function CourbeJours({ parJour }) {
           <div className="stat-tip-d">{labelJour(j.jour)}</div>
           {(j.stagiaires || j.equipe) ? (
             <>
-              {j.stagiaires > 0 && (
-                <div className="stat-tip-l"><span className="stat-pastille" style={{ background: COUL.stagiaires }} /> Stagiaires : <b>{j.stagiaires}</b></div>
-              )}
+              {j.stagiaires > 0 && <div className="stat-tip-l">Stagiaires : <b>{j.stagiaires}</b></div>}
               {j.formations && j.formations.length > 0 && (
                 <div className="stat-badges">
-                  {j.formations.map((f) => <span className="stat-badge" key={f.label}>{f.label} : {f.n}</span>)}
+                  {j.formations.map((f) => (
+                    <span className="stat-badge" key={f.key} style={{ background: hexA(couleur(f.key), 0.16), color: couleur(f.key) }}>{f.label} : {fmtN(f.n)}</span>
+                  ))}
                 </div>
               )}
               {j.equipe > 0 && (
@@ -221,6 +255,8 @@ export default function Statistiques() {
     return () => { vivant = false; };
   }, [fenetre]);
 
+  const couleur = couleursFormations(d && d.formations_cle);
+
   return (
     <>
       <PageHead eyebrow="Qualité & conformité" title="Statistiques"
@@ -240,11 +276,11 @@ export default function Statistiques() {
 
           <Card title={<span className="card-ttl">Connexions des {fenetre} derniers jours</span>} style={{ marginTop: 14 }}>
             <div className="stat-head">
-              <Legende />
+              <LegendeFormations cles={d.formations_cle} couleur={couleur} />
               <Fenetre valeur={fenetre} options={d.fenetres || [7, 14, 30]} onChange={setFenetre} />
             </div>
             <Resume parJour={d.par_jour} resume={d.resume} />
-            <CourbeJours parJour={d.par_jour} />
+            <CourbeJours parJour={d.par_jour} couleur={couleur} />
             <Assidus assidus={d.assidus} />
           </Card>
 

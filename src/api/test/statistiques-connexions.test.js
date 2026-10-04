@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { trancheDe, repartition, connectesDepuis, fenetreJours, densifier, TRANCHES, FENETRES, grouperFormations, relancer } = require('../lib/statsConnexions.js');
+const { trancheDe, repartition, connectesDepuis, fenetreJours, densifier, TRANCHES, FENETRES, pondererFormations, relancer } = require('../lib/statsConnexions.js');
 
 test('trancheDe range la dernière connexion dans la bonne tranche (disjointes)', () => {
     const now = new Date('2026-10-02T12:00:00');
@@ -76,15 +76,24 @@ test('chaque connexion est comptée pour le jour, et la route/nav sont en place'
 
 /* ── Enrichissements du 2026-10-04 : détail par formation, résumé, assidus, à relancer, fenêtre ── */
 
-test('grouperFormations : regroupe par jour, trie du plus grand au plus petit, écarte les 0', () => {
-    const m = grouperFormations([
-        { jour: '2026-10-03', label: 'NIV2', n: 4 },
-        { jour: '2026-10-03', label: 'NIV1', n: 1 },
-        { jour: '2026-10-03', label: 'RS7404', n: 0 }, // 0 → écarté
-        { jour: '2026-10-02', label: 'NIV1', n: 2 },
-    ]);
-    assert.deepStrictEqual(m.get('2026-10-03'), [{ label: 'NIV2', n: 4 }, { label: 'NIV1', n: 1 }], 'trié desc, pas de 0');
-    assert.deepStrictEqual(m.get('2026-10-02'), [{ label: 'NIV1', n: 2 }]);
+test('pondererFormations : un stagiaire multi-formations compte 50/50, et la somme = stagiaires du jour', () => {
+    const stag = new Map([['2026-10-03', 3]]); // 3 stagiaires distincts connectés ce jour
+    const rows = [
+        { jour: '2026-10-03', uid: 'u1', key: 'p1', label: 'NIV1' },
+        { jour: '2026-10-03', uid: 'u1', key: 'p2', label: 'NIV2' }, // u1 dans 2 formations → 0,5 chacune
+        { jour: '2026-10-03', uid: 'u2', key: 'p2', label: 'NIV2' }, // u2 dans NIV2 seul → 1
+        // u3 connecté sans aucune formation → « Sans formation » = 1 (3 − 2 avec formation)
+    ];
+    const { parJour, cles } = pondererFormations(rows, stag);
+    const liste = parJour.get('2026-10-03');
+    const n = Object.fromEntries(liste.map((f) => [f.key, f.n]));
+    assert.strictEqual(n.p1, 0.5, 'NIV1 : la moitié de u1');
+    assert.strictEqual(n.p2, 1.5, 'NIV2 : la moitié de u1 + u2');
+    assert.strictEqual(n.__autre, 1, 'u3, sans formation');
+    assert.strictEqual(liste.reduce((s, f) => s + f.n, 0), 3, 'la somme des parts = les stagiaires du jour');
+    // Ordre global : NIV2 (1,5) avant NIV1 (0,5), « Sans formation » en dernier.
+    assert.deepStrictEqual(cles.map((c) => c.key), ['p2', 'p1', '__autre']);
+    assert.strictEqual(cles[0].label, 'NIV2');
 });
 
 test('relancer : noms des JAMAIS connectés et des +30 jours, triés ; les récents sont exclus', () => {
@@ -110,10 +119,11 @@ test('le contrôleur enrichit : fenêtre réglable, détail par formation, résu
     // Fenêtre réglable, bornée aux valeurs proposées.
     assert.match(c, /Number\(req\.query\.jours\)/);
     assert.match(c, /if \(!stats\.FENETRES\.includes\(fenetre\)\) fenetre = FENETRE_DEFAUT/);
-    // Détail PAR FORMATION (stagiaires) : jointure inscription → session → formation.
+    // Détail PAR FORMATION (stagiaires) PONDÉRÉ : lignes brutes (jour, stagiaire, formation).
     assert.match(c, /JOIN training_program p ON p\.id = s\.program_id/);
-    assert.match(c, /COUNT\(DISTINCT cj\.user_id\) AS n/);
-    assert.match(c, /stats\.grouperFormations/);
+    assert.match(c, /p\.id AS pkey/);
+    assert.match(c, /stats\.pondererFormations/);
+    assert.match(c, /formations_cle: formationsCle/, 'l\'ordre global des formations part à l\'écran (couleurs + légende)');
     // Résumé (personnes distinctes) + assidus (plus de jours) + à relancer.
     assert.match(c, /COUNT\(DISTINCT user_id\) AS n\s+FROM connexion_jour/);
     assert.match(c, /ORDER BY jours DESC, nom ASC\s+LIMIT 8/);
@@ -125,9 +135,14 @@ test('la page : courbe AVANT la récence, survol par formation, résumé, assidu
     // La courbe « Connexions des N derniers jours » passe AVANT « Depuis la dernière connexion ».
     assert.ok(p.indexOf('Connexions des {fenetre} derniers jours') < p.indexOf('Depuis la dernière connexion'),
         'la récence est désormais SOUS la courbe');
-    // Survol : badges par formation (NIV1 : 1…), nombres de stagiaires / équipe.
+    // Survol : badges par formation COLORÉS (la couleur de chaque formation), nombres stagiaires / équipe.
     assert.match(p, /className="stat-badge"/);
     assert.match(p, /j\.formations && j\.formations\.length > 0/);
+    // La part stagiaire de la barre est colorée PAR FORMATION (plus un seul orange).
+    assert.match(p, /const PALETTE =/);
+    assert.match(p, /couleursFormations/);
+    assert.match(p, /<LegendeFormations cles=\{d\.formations_cle\} couleur=\{couleur\}/);
+    assert.match(p, /fill=\{couleur\(f\.key\)\}/, 'chaque segment de formation à sa couleur');
     // Les quatre enrichissements.
     assert.match(p, /<Resume /);
     assert.match(p, /<Assidus /);

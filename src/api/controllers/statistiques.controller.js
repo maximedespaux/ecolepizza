@@ -43,7 +43,7 @@ const connexions = async (req, res) => {
         });
 
         // Fenêtre glissante (connexion_jour, migration 200) — tolère l'absence de la table.
-        let parJour = null; let resume = null; let assidus = null;
+        let parJour = null; let resume = null; let assidus = null; let formationsCle = [];
         try {
             const borne = stats.fenetreJours(fenetre, maintenant)[0];
             const [lignes] = await conn.query(
@@ -53,26 +53,28 @@ const connexions = async (req, res) => {
                   WHERE organization_id = ? AND jour >= ?
                   GROUP BY jour`, [orgId, borne]);
 
-            // Stagiaires par FORMATION et par jour (les badges du survol : « NIV1 : 1, NIV2 : 4 »). Les
-            // jointures internes écartent d'office les formations à 0 — et un stagiaire inscrit à deux
-            // formations compte dans chacune. Tolère un schéma formations incomplet (pas de badges).
-            let formations = new Map();
+            // Stagiaires par FORMATION et par jour, de façon PONDÉRÉE (un stagiaire inscrit à k
+            // formations compte 1/k dans chacune → la barre se colore par formation, 50/50 pour NIV1+NIV2).
+            // Une ligne BRUTE par (jour, stagiaire, formation) ; la pondération se fait en JS. Tolère un
+            // schéma formations incomplet (pas de couleurs par formation, part stagiaire en « Sans formation »).
+            const stagParJour = new Map(lignes.map((l) => [l.jour, Number(l.stagiaires) || 0]));
+            let formParJour = new Map();
             try {
                 const [fr] = await conn.query(
-                    `SELECT DATE_FORMAT(cj.jour, '%Y-%m-%d') AS jour,
-                            COALESCE(NULLIF(p.code, ''), p.title, 'Formation') AS label,
-                            COUNT(DISTINCT cj.user_id) AS n
+                    `SELECT DATE_FORMAT(cj.jour, '%Y-%m-%d') AS jour, cj.user_id AS uid,
+                            p.id AS pkey, COALESCE(NULLIF(p.code, ''), p.title, 'Formation') AS label
                        FROM connexion_jour cj
                        JOIN learner l ON l.user_id = cj.user_id AND l.organization_id = cj.organization_id
                        JOIN enrollment e ON e.learner_id = l.id
                        JOIN training_session s ON s.id = e.session_id
                        JOIN training_program p ON p.id = s.program_id
-                      WHERE cj.organization_id = ? AND cj.jour >= ? AND cj.est_stagiaire = 1
-                      GROUP BY cj.jour, label`, [orgId, borne]);
-                formations = stats.grouperFormations(fr);
+                      WHERE cj.organization_id = ? AND cj.jour >= ? AND cj.est_stagiaire = 1`,
+                    [orgId, borne]);
+                const p = stats.pondererFormations(fr.map((r) => ({ jour: r.jour, uid: r.uid, key: r.pkey, label: r.label })), stagParJour);
+                formParJour = p.parJour; formationsCle = p.cles;
             } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
             parJour = stats.densifier(lignes, fenetre, maintenant)
-                .map((j) => ({ ...j, formations: formations.get(j.jour) || [] }));
+                .map((j) => ({ ...j, formations: formParJour.get(j.jour) || [] }));
 
             // Résumé de la fenêtre : combien de personnes DIFFÉRENTES se sont connectées, par groupe.
             const [uniq] = await conn.query(
@@ -104,6 +106,7 @@ const connexions = async (req, res) => {
                 stagiaires: { ...vue(stagiaires), relancer: stats.relancer(stagiaires, maintenant) },
                 equipe: vue(equipe),
                 par_jour: parJour,
+                formations_cle: formationsCle,
                 resume,
                 assidus,
                 fenetre,
