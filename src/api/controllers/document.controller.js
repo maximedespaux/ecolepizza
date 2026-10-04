@@ -1414,6 +1414,151 @@ const downloadPdf = async (req, res) => {
     }
 };
 
+// « 04/10/2026 à 16h01 » — l'heure de génération de l'attestation (heure du serveur).
+function frDateHeure(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} à ${p(d.getHours())}h${p(d.getMinutes())}`;
+}
+
+/**
+ * RÉUNIT LES SIGNATAIRES D'UN DOCUMENT pour l'attestation de preuve, de leurs TROIS sources, sans
+ * doublon : la signature principale (stagiaire/représentant, sur `generated_document`), le
+ * contreseing de l'organisme (`org_signed_at`), et les cadres signés à part (`document_signature` :
+ * représentant, formateur, membre du jury…). Dates déjà formatées en SQL (DATE_FORMAT) pour ne pas
+ * dépendre du fuseau de JS. IP et appareil sont chiffrés au repos : on les déchiffre ici.
+ */
+async function collecterSignataires(conn, doc) {
+    const sigs = [];
+    // 1) Signature principale (apposée par applyLearnerSignature) — le stagiaire, ou le
+    //    représentant signant à sa place. Son IP / appareil sont sur `generated_document`.
+    if (doc.signed_at_fr && doc.signer_name) {
+        let compte = null;
+        try {
+            const [[l]] = await conn.query('SELECT email FROM learner WHERE id = ? AND organization_id = ?',
+                [doc.learner_id, doc.organization_id]);
+            compte = (l && l.email) || null;
+        } catch { /* email indisponible : on l'omet */ }
+        sigs.push({
+            role: 'Stagiaire', nom: doc.signer_name, compte,
+            date: doc.signed_at_fr, ip: decrypt(doc.signer_ip) || null,
+            appareil: decrypt(doc.signer_user_agent) || null,
+        });
+    }
+    // 2) Cadres signés à part (représentant d'entreprise, formateur, jury…).
+    try {
+        const [slots] = await conn.query(
+            `SELECT slot, label, signer_name, signer_ip, signer_user_agent, user_id,
+                    DATE_FORMAT(signed_at, '%d/%m/%Y à %Hh%i') AS date_fr
+               FROM document_signature WHERE document_id = ? AND signed_at IS NOT NULL ORDER BY signed_at`,
+            [doc.id]);
+        const userIds = [...new Set(slots.map((s) => s.user_id).filter(Boolean))];
+        const emails = new Map();
+        if (userIds.length) {
+            try {
+                const [us] = await conn.query('SELECT id, email FROM user WHERE id IN (?)', [userIds]);
+                for (const u of us) emails.set(u.id, u.email);
+            } catch { /* comptes indisponibles */ }
+        }
+        for (const s of slots) {
+            sigs.push({
+                role: s.label || s.slot || 'Signataire', nom: s.signer_name,
+                compte: s.user_id ? (emails.get(s.user_id) || null) : null,
+                date: s.date_fr, ip: decrypt(s.signer_ip) || null,
+                appareil: decrypt(s.signer_user_agent) || null,
+            });
+        }
+    } catch (e) { if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e; }
+    // 3) Contreseing de l'organisme : apposé par le serveur (pas d'IP ni d'appareil d'un humain).
+    if (doc.org_signed_at_fr) {
+        sigs.push({
+            role: 'Organisme', nom: doc.org_signer_name || 'Organisme', compte: null,
+            date: doc.org_signed_at_fr, ip: null,
+            appareil: 'Contreseing automatique de l\'organisme (serveur)',
+        });
+    }
+    return sigs;
+}
+
+/**
+ * GET /api/documents/:id/preuve — l'ATTESTATION DE SIGNATURE (dossier de preuve) d'un document signé
+ * (demandé le 2026-10-04). Met noir sur blanc le faisceau de preuves déjà consigné à chaque
+ * signature (qui, quand, depuis quelle IP, quel appareil, sur quelle empreinte), dans un PDF scellé
+ * par l'organisme. Ne touche PAS au document signé : c'est une pièce SÉPARÉE (fusionner casserait la
+ * signature du document). Même public que le téléchargement : personnel, stagiaire propriétaire, ou
+ * signataire attribué.
+ */
+const downloadProof = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const [[doc]] = await conn.query(
+            `SELECT id, organization_id, learner_id, title, type, status, signer_name, signer_ip,
+                    signer_user_agent, signed_hash, org_signer_name,
+                    DATE_FORMAT(sent_at,      '%d/%m/%Y') AS sent_at_fr,
+                    DATE_FORMAT(signed_at,    '%d/%m/%Y à %Hh%i') AS signed_at_fr,
+                    DATE_FORMAT(org_signed_at,'%d/%m/%Y à %Hh%i') AS org_signed_at_fr
+               FROM generated_document WHERE id = ? AND organization_id = ?`,
+            [req.params.id, req.user.organization_id]);
+        if (!doc) return res.status(404).json({ message: 'Document introuvable' });
+
+        // Même garde que le téléchargement : personnel, stagiaire propriétaire, ou signataire attribué.
+        const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+        let allowed = STAFF.includes(req.user.role);
+        if (!allowed) {
+            const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
+            allowed = own.length > 0;
+        }
+        if (!allowed) {
+            const [att] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?', [doc.id, req.user.id]);
+            allowed = att.length > 0;
+        }
+        if (!allowed) return res.status(403).json({ message: 'Accès refusé' });
+
+        const signataires = await collecterSignataires(conn, doc);
+        if (!signataires.length) {
+            return res.status(422).json({ message: "Ce document n'est pas encore signé : aucune signature à attester." });
+        }
+
+        const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [doc.organization_id]);
+        const { construireAttestationHtml } = require('../lib/attestationSignature.js');
+        const empreinte = doc.signed_hash || null;
+        const html = construireAttestationHtml({
+            org: org || {},
+            doc: {
+                id: doc.id, title: doc.title, type_label: TYPE_LABELS[doc.type] || doc.type || 'Document',
+                sent_at: doc.sent_at_fr, empreinte,
+            },
+            signataires,
+            genereLe: frDateHeure(new Date()),
+        });
+
+        let pdf;
+        try { pdf = await htmlToPdf(html); }
+        catch (e) {
+            if (e && e.code === 'NO_SOFFICE') return res.status(501).json({ error: 'PDF indisponible', message: "LibreOffice n'est pas installé sur le serveur." });
+            throw e;
+        }
+        // L'attestation est elle-même scellée (son intégrité est protégée, comme les documents).
+        try {
+            const { sealPdf } = require('../lib/pdfseal.js');
+            const orgName = (org && (org.legal_name || org.short_name)) || 'Organisme';
+            const p12 = await getOrgSigner(conn, doc.organization_id, orgName);
+            pdf = await sealPdf(pdf, p12, {
+                orgName, reason: 'Attestation de signature',
+                contact: (org && org.email) || '', location: (org && org.town) || '',
+            });
+        } catch (e) { console.error('Scellement de l\'attestation ignoré :', e.message); }
+
+        logAudit(req, 'document.preuve', 'GeneratedDocument', doc.id);
+        const base = (doc.title || TYPE_LABELS[doc.type] || 'document').replace(/[\\/:*?"<>|]/g, '');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="${encodeURIComponent('Attestation de signature - ' + base + '.pdf')}"`);
+        res.send(pdf);
+    } catch (err) {
+        console.error('Erreur attestation de signature :', err);
+        res.status(500).json({ error: "Génération de l'attestation impossible" });
+    }
+};
+
 /**
  * LE FICHIER D'UN DOCUMENT POUR L'ARCHIVE ZIP DU COFFRE (2026-09-24) — celui qu'on télécharge, dans
  * le MÊME ordre que `downloadPdf` : le fichier reçu, sinon le PDF signé figé, sinon le rendu du jour,
@@ -1961,4 +2106,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };
+module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };

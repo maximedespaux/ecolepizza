@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon.jsx";
 import InfosManquantes from "./InfosManquantes.jsx";
-import { getDocument, signDocument, downloadDocumentPdf, documentPdfUrl, documentPreviewHtml, createSignLink, API_BASE_URL } from "../api/apiClient.js";
+import { getDocument, signDocument, downloadDocumentPdf, downloadDocumentPreuve, documentPdfUrl, documentPreviewHtml, createSignLink, API_BASE_URL } from "../api/apiClient.js";
 import { dateHeure, dateFr } from "../lib/format.js";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
@@ -169,6 +169,12 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
                   Empreinte SHA-256 : <span className="mono">{doc.signed_hash.slice(0, 40)}…</span> · PDF scellé (cachet de l'organisme, intégrité vérifiable)
                 </span>
               )}
+              {/* DOSSIER DE PREUVE : qui a signé, quand, depuis quelle IP et quel appareil, sur quelle
+                  empreinte — la pièce à présenter lors d'un contrôle (Qualiopi, OPCO) ou d'une contestation. */}
+              <button type="button" className="btn ghost" style={{ marginTop: 8, fontSize: 12.5 }}
+                onClick={() => downloadDocumentPreuve(id, `Attestation de signature - ${(doc.title || "document").replace(/[\\/:*?"<>|]/g, "")}.pdf`)}>
+                <Icon name="download" size={13} style={{ verticalAlign: "text-bottom" }} /> Attestation de signature (preuve)
+              </button>
             </div>
           )}
           {/* LE FICHIER REÇU D'ABORD. Un PDF s'affiche en ligne ; une image aussi. Tout autre

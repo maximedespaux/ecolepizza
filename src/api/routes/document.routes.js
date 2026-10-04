@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const {
-    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, previewHtml, sendDocument, signDocument, enregistrerSaisies, deleteDocument, createSignLink, checkDocumentConditions,
+    listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, signDocument, enregistrerSaisies, deleteDocument, createSignLink, checkDocumentConditions,
     importDocumentFile, getDocumentFile,
 } = require('../controllers/document.controller.js');
 const { signerMonDocument } = require('../controllers/intervenant.controller.js');
@@ -32,6 +32,8 @@ router.delete('/:id', authenticateToken, authorizeRoles(...ADMIN_ROLES), deleteD
 router.get('/:id', authenticateToken, getDocument);
 router.get('/:id/preview', authenticateToken, previewHtml);
 router.get('/:id/pdf', authenticateToken, downloadPdf);
+// Attestation de signature (dossier de preuve) : même garde de propriété que le PDF (dans le contrôleur).
+router.get('/:id/preuve', authenticateToken, downloadProof);
 router.get('/:id/docx', authenticateToken, downloadDocx);
 router.post('/:id/sign', authenticateToken, signDocument);
 /* LES ZONES À REMPLIR avant de signer (lib/zonesARemplir.js) : le stagiaire, ou le bureau pour lui —

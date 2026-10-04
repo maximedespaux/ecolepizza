@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~7 s** (313 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-04** : **2537 tests — 2530 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~7 s** (314 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-04** : **2542 tests — 2535 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -1180,6 +1180,20 @@ rien ne se transmet avant.
   zones (`saisies`), les consentements (figés à la signature), les jetons perso, les résultats examen/jury.
   Les documents de concern de l'école (devis, convention, contrat, CGV, attestation, droit image) n'ont ni
   examen ni jury : ils sont donc intégralement figés. Tests : `jeton-date-figee.test.js`, `jetons-figes.test.js`.
+- **L'ATTESTATION DE SIGNATURE (dossier de preuve)** (2026-10-04) : `GET /api/documents/:id/preuve` rend un PDF
+  qui met noir sur blanc le FAISCEAU DE PREUVES d'un document signé — par signataire : nom, compte, date/heure,
+  **adresse IP**, **appareil** (user-agent), et l'**empreinte SHA-256** du contenu. Ces traces étaient déjà
+  consignées à chaque signature (`generated_document.signer_ip`/`signer_user_agent`/`signed_hash`/`signed_at`,
+  `document_signature` pour les cadres, `org_signed_at` pour le contreseing) mais dormaient en base. **AUCUNE
+  migration** : on ne fait que lire et mettre en forme. Trois sources réunies sans doublon par
+  `collecterSignataires` ; mise en forme pure et testable dans `lib/attestationSignature.js` (styles en ligne,
+  bordures par l'attribut `border`, couleurs littérales — rendu LibreOffice, cf. §3) ; PDF scellé par le cachet
+  de l'organisme (son intégrité est donc protégée aussi). Pièce SÉPARÉE du document signé (fusionner casserait
+  sa signature). Même garde que le téléchargement (personnel, stagiaire propriétaire, signataire attribué).
+  Bouton « Attestation de signature (preuve) » sur un document SIGNÉ (DocumentViewModal). C'est le niveau A du
+  renforcement de preuve ; restent possibles l'horodatage RFC 3161 (PAdES-T, appel TSA externe) et le certificat
+  qualifié (QES, prestataire payant). Signature auto-signée = avancée, non qualifiée (« Source de confiance :
+  Aucun » attendu dans un validateur eIDAS). Tests : `attestation-signature.test.js`.
 
 **Reste ouvert / idées non faites** : donner un préfixe de numéro distinct à chaque entité émettrice
 (sinon collision de numéros) ; la 2ᵉ entité « Boutique » a encore `legal_name = "d"` ; ajouter des
