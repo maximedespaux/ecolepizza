@@ -87,6 +87,9 @@ function StagiaireDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [parcoursEnr, setParcoursEnr] = useState(null);
   const [parcoursRefresh, setParcoursRefresh] = useState(0); // force le rechargement du parcours après édition
+  /* L'onglet affiché (Personnel / Entreprise / Formation). Un lien profond vers un dossier précis
+     (`?dossier=`) vise le parcours : on ouvre alors directement « Formation ». */
+  const [tab, setTab] = useState(() => (parametres.get("dossier") ? "formation" : "personnel"));
   /* DÉCLARÉS ICI, ET PAS PRÈS DE LEUR GESTIONNAIRE : la fiche a un retour anticipé
      (`if (!l)`) pendant le chargement. Des hooks placés APRÈS lui ne s'exécutent qu'une fois
      la fiche arrivée — React en compte alors deux de plus qu'au rendu précédent et lève
@@ -691,6 +694,16 @@ function StagiaireDetail() {
           ci-dessous, et une adresse absente ne s'y remarquait pas (src/api/lib/ficheIncomplete.js). */}
       <FicheIncomplete manquants={l.champs_manquants} onCompleter={() => setEditOpen(true)} />
 
+      {/* TROIS ONGLETS (demandé le 2026-10-05) : Personnel (identité, parcours, règlement, projet),
+          Entreprise (l'aperçu de sa société), Formation (parcours & documents). La fiche était un
+          seul long défilé ; on la range sans rien retirer. */}
+      <span className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+        <button className={"seg-btn" + (tab === "personnel" ? " on" : "")} onClick={() => setTab("personnel")}>Personnel</button>
+        <button className={"seg-btn" + (tab === "entreprise" ? " on" : "")} onClick={() => setTab("entreprise")}>Entreprise</button>
+        <button className={"seg-btn" + (tab === "formation" ? " on" : "")} onClick={() => setTab("formation")}>Formation</button>
+      </span>
+
+      {tab === "personnel" && (
       <div className="grid cols-2">
         <Card title={T("user", "Contact & identité")}>
           <Row label="Civilité" value={l.civility} />
@@ -754,21 +767,29 @@ function StagiaireDetail() {
           )}
         </Card>
 
-        {c && (
-          <Card title={T("building", "Entreprise")} className="cols-2" >
-            <Row label="Nom" value={c.name} />
-            <Row label="Statut juridique" value={c.legal_status} />
-            <Row label="SIRET" value={c.siret} />
-            <Row label="Code NAF/APE" value={c.naf_ape} />
-            <Row label="Adresse" value={[c.address, c.zip_code, c.town].filter(Boolean).join(", ")} />
-            <Row label="Téléphone" value={c.phone} />
-            <Row label="Email" value={c.email} />
-            <Row label="OPCO" value={c.opco} />
-            <Row label="Représentant" value={[referentAvecCivilite(c), c.representative_role && `(${c.representative_role})`].filter(Boolean).join(" ")} />
-          </Card>
-        )}
       </div>
+      )}
 
+      {tab === "entreprise" && (c ? (
+        <Card title={T("building", "Entreprise")}
+          more={l.company_id ? <Link className="card-more" to={`/entreprises/${l.company_id}`}>Fiche entreprise <Icon name="chevron-right" size={13} /></Link> : null}>
+          <Row label="Nom" value={c.name} />
+          <Row label="Statut juridique" value={c.legal_status} />
+          <Row label="SIRET" value={c.siret} />
+          <Row label="Code NAF/APE" value={c.naf_ape} />
+          <Row label="Adresse" value={[c.address, c.zip_code, c.town].filter(Boolean).join(", ")} />
+          <Row label="Téléphone" value={c.phone} />
+          <Row label="Email" value={c.email} />
+          <Row label="OPCO" value={c.opco} />
+          <Row label="Représentant" value={[referentAvecCivilite(c), c.representative_role && `(${c.representative_role})`].filter(Boolean).join(" ")} />
+        </Card>
+      ) : (
+        <Card title={T("building", "Entreprise")}>
+          <p className="hint" style={{ margin: 0 }}>Aucune entreprise rattachée à ce stagiaire. Le rattachement se fait dossier par dossier, dans l'onglet Formation.</p>
+        </Card>
+      ))}
+
+      {tab === "formation" && (
       <Card title={T("file-text", "Parcours & documents")} className="fade"
         more={archiveOuvrable && enrollments.length > 0 && curEnrId ? (
           <button type="button" className="btn sm ghost" title="Les documents de ce dossier, rangés selon l'arborescence d'archivage"
@@ -910,6 +931,7 @@ function StagiaireDetail() {
           </>
         )}
       </Card>
+      )}
 
       {viewId && (
         <DocumentViewModal id={viewId} onClose={() => setViewId(null)} onChanged={() => { loadDocs(); setParcoursRefresh((n) => n + 1); }} />
