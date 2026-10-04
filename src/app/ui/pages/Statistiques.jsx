@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getStatistiquesConnexions } from "../api/apiClient.js";
+import { colorForLevel, UNKNOWN_COLOR } from "../lib/levels.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 
@@ -20,19 +21,14 @@ import Card from "../components/Card.jsx";
 const COUL = { stagiaires: "var(--orange)", equipe: "var(--blue)" };
 const JOURS_FR = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
 
-// Couleurs des FORMATIONS (barre et badges) — distinctes, lisibles en clair comme en sombre. La
-// première (orange) rejoint la couleur « stagiaire » du reste de la page. « Sans formation » : gris.
-const PALETTE = ["#ff6900", "#0ea5a4", "#7c5cfc", "#e8a600", "#db2777", "#16a34a", "#0284c7", "#dc2626", "#92682e", "#4f46e5"];
-const COUL_AUTRE = "#9aa0b5";
-
-// Associe une couleur stable à chaque formation, dans l'ordre global rendu par le serveur (`cles`).
+// Les COULEURS DES FORMATIONS sont celles de TOUTE l'application (badges, sessions, carte…) :
+// `colorForLevel` (lib/levels.js) résout le code d'une formation vers sa couleur — surcharges de
+// l'organisme comprises, chargées globalement par AppLayout (`setBadgeColors`). Ainsi une barre de
+// la courbe porte la MÊME couleur que le badge de la formation ailleurs. « Sans formation » : gris.
 function couleursFormations(cles) {
-  const m = new Map();
-  (cles || []).forEach((c, i) => m.set(c.key, c.key === "__autre" ? COUL_AUTRE : PALETTE[i % PALETTE.length]));
-  return (key) => m.get(key) || COUL_AUTRE;
+  const lbl = new Map((cles || []).map((c) => [c.key, c.label]));
+  return (key) => (key === "__autre" ? UNKNOWN_COLOR : colorForLevel(lbl.get(key) || key));
 }
-// Teinte d'un hexa (#rrggbb) avec une opacité — pour le fond des badges.
-const hexA = (h, a) => { const n = parseInt(String(h).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 // Un compte PONDÉRÉ : entier tel quel, sinon une décimale à la française (« 2,5 »).
 const fmtN = (n) => { const r = Math.round(Number(n) * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ","); };
 
@@ -202,7 +198,8 @@ function CourbeJours({ parJour, couleur }) {
           let yb = H - padB;
           const segs = (d.formations || []).map((f) => {
             const h = hFor(f.n); const y = yb - h; yb = y;
-            return h > 0 ? <rect key={f.key} x={x} y={y} width={w} height={h} fill={couleur(f.key)} /> : null;
+            // Un filet couleur du fond sépare les segments empilés (p. ex. NIV1 sombre et l'équipe).
+            return h > 0 ? <rect key={f.key} x={x} y={y} width={w} height={h} fill={couleur(f.key)} stroke="var(--surface)" strokeWidth="0.75" /> : null;
           });
           return (
             <g key={d.jour} style={{ cursor: "pointer" }}
@@ -211,7 +208,7 @@ function CourbeJours({ parJour, couleur }) {
               {/* Zone de survol = toute la colonne, pour attraper le pointeur au-dessus des barres. */}
               <rect x={padL + i * bw} y={padT} width={bw} height={H - padB - padT} fill="transparent" />
               {segs}
-              {hE > 0 && <rect x={x} y={yb - hE} width={w} height={hE} fill={COUL.equipe} />}
+              {hE > 0 && <rect x={x} y={yb - hE} width={w} height={hE} fill={COUL.equipe} stroke="var(--surface)" strokeWidth="0.75" />}
               <text x={x + w / 2} y={H - padB + 12} textAnchor="middle" fontSize="9" fill="var(--muted)">{jj(d.jour)}</text>
             </g>
           );
@@ -226,7 +223,7 @@ function CourbeJours({ parJour, couleur }) {
               {j.formations && j.formations.length > 0 && (
                 <div className="stat-badges">
                   {j.formations.map((f) => (
-                    <span className="stat-badge" key={f.key} style={{ background: hexA(couleur(f.key), 0.16), color: couleur(f.key) }}>{f.label} : {fmtN(f.n)}</span>
+                    <span className="stat-badge" key={f.key} style={{ background: couleur(f.key), color: "#fff" }}>{f.label} : {fmtN(f.n)}</span>
                   ))}
                 </div>
               )}
