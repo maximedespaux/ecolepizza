@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getStagiaires, getFormations, getSessions, getEnrollments, getSales, getAudit, getOrganisation, getInvoices, getPartenaires } from "../api/apiClient.js";
 import Card from "../components/Card.jsx";
-import DataTable from "../components/DataTable.jsx";
+import Kpi from "../components/Kpi.jsx";
 import Skeleton from "../components/Skeleton.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { etatContrat, frISO, BIENTOT_JOURS } from "../lib/contrat.js";
@@ -39,6 +39,47 @@ const QUICK = [
 // en compte des dizaines. C'est ce qui faisait diverger le tableau de bord du journal d'audit :
 // deux sources pour la même traduction. Supprimé au profit de la seule qui fait autorité.
 
+/* Complétion des dossiers suivis, en anneau : complets (100 %), en cours (1-99 %), non commencés (0 %).
+   Le centre annonce la part COMPLÈTE — le seuil que l'audit Qualiopi regarde. */
+const DONUT_SEG = [
+  { k: "complets", label: "Complets", color: "var(--green)" },
+  { k: "encours", label: "En cours", color: "var(--orange)" },
+  { k: "noncommences", label: "Non commencés", color: "#9aa0b4" },
+];
+function DonutCompletion({ data }) {
+  if (!data || !data.total) {
+    return <p className="lead" style={{ margin: 0 }}>Aucun dossier à suivre pour le moment.</p>;
+  }
+  const r = 52, C = 2 * Math.PI * r;
+  let off = 0;
+  const pct = Math.round((data.complets / data.total) * 100);
+  return (
+    <div className="don-wrap">
+      <svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label={`${pct} % de dossiers complets`}>
+        <g transform="rotate(-90 64 64)">
+          <circle cx="64" cy="64" r={r} fill="none" stroke="var(--border-soft)" strokeWidth="16" />
+          {DONUT_SEG.map((s) => {
+            const n = data[s.k] || 0;
+            if (!n) return null;
+            const len = (n / data.total) * C;
+            const seg = <circle key={s.k} cx="64" cy="64" r={r} fill="none" stroke={s.color} strokeWidth="16" strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off} />;
+            off += len;
+            return seg;
+          })}
+        </g>
+        <text x="64" y="60" textAnchor="middle" fontSize="24" fontWeight="800" fill="var(--green)">{pct}%</text>
+        <text x="64" y="78" textAnchor="middle" fontSize="11" fill="var(--muted)">complets</text>
+      </svg>
+      <div className="don-leg">
+        {DONUT_SEG.map((s) => (
+          <div className="r" key={s.k}><span className="dot" style={{ background: s.color }} />{s.label}<span className="n">{data[s.k] || 0}</span></div>
+        ))}
+        <div className="r tot">{data.total} dossier{data.total > 1 ? "s" : ""} suivi{data.total > 1 ? "s" : ""}</div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user } = useContext(UserContext);
   /* LA FICHE S'OUVRIRA-T-ELLE ? Même décision que le menu (`canOpen`), qui est celle de la garde de
@@ -55,6 +96,7 @@ function Dashboard() {
      un appel : elle ne s'affiche qu'une fois ce compte CONNU et nul. */
   const [nbRappels, setNbRappels] = useState(null);
   const [stats, setStats] = useState({ stagiaires: 0, formations: 0, sessions: 0, dossiers: 0, ca: 0 });
+  const [completion, setCompletion] = useState(null); // { complets, encours, noncommences, total } des dossiers à suivre
   // La caisse est fermée au formateur : son appel échoue, et le CA ne doit alors pas
   // s'afficher du tout — surtout pas replié sur zéro. Cf. la ligne des compteurs.
   const [caConnu, setCaConnu] = useState(false);
@@ -138,6 +180,15 @@ function Dashboard() {
            dossier ne se quitte pas des yeux parce que sa session s'achève. Règle, ordre et coupe :
            lib/dossiersASuivre.js. */
         const { aSuivre, derniers } = dossiersASuivre(enr, activeIds, isPast);
+
+        /* COMPLÉTION DES DOSSIERS SUIVIS (anneau) : complets à 100 %, en cours entre 1 et 99, non
+           commencés à 0. Même avancement RÉEL que les lignes (`percent`), pas `conformite_score`. */
+        const comp = { complets: 0, encours: 0, noncommences: 0, total: aSuivre.length };
+        for (const x of aSuivre) {
+          const p = Number(x.percent) || 0;
+          if (p >= 100) comp.complets++; else if (p > 0) comp.encours++; else comp.noncommences++;
+        }
+        setCompletion(comp);
 
         setCaConnu(v.status === "fulfilled");
         setStats({
@@ -253,19 +304,45 @@ function Dashboard() {
 
   return (
     <>
-      <div className="hero">
-        <Icon name="pizza" size={210} strokeWidth={1.1} className="hero-motif" style={{ zIndex: 0 }} />
-        <div className="eyebrow">Secrétariat · {org?.short_name || "École Pizza"}</div>
-        <h1>Bonjour</h1>
-        <p>{org ? `${org.legal_name}, SIRET ${org.siret || "-"} · NDA ${org.nda || "-"}` : "Tableau de bord"}{org?.qualiopi ? " · Certifié Qualiopi." : ""}</p>
-        <div className="badge-row">
-          {org?.qualiopi && <span className="pill" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="check" size={12} /> Qualiopi actif</span>}
-          <span className="pill">{stats.dossiers} dossier(s)</span>
-          <span className="pill">{stats.sessions} session(s)</span>
+      {/* EN-TÊTE COMPACT (refonte « true dashboard », 2026-10-04) : le grand bandeau et ses
+          compteurs ont laissé place à une ligne — salutation à gauche, repère Qualiopi à droite.
+          Le SIRET/NDA (jamais consultés au quotidien) vivent dans Paramètres → Organisme. */}
+      <div className="dash-hero">
+        <div>
+          <div className="dash-hero-eye">Secrétariat · {org?.short_name || "École Pizza"}</div>
+          <h1>Bonjour</h1>
         </div>
+        <div className="dash-hero-sp" />
+        {org?.qualiopi && <span className="pill" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="check" size={12} /> Qualiopi actif</span>}
+        {/* LE MASQUE DES MONTANTS reste sur le tableau de bord : la tuile « Ventes » y montre de
+            l'argent, et c'est la page qui reste ouverte quand quelqu'un passe derrière l'écran. */}
+        {caConnu && <MoneyToggle sm />}
       </div>
 
       <StatusMessage status={status} />
+
+      {/* LES INDICATEURS EN TUILES (refonte 2026-10-04) : les anciens compteurs en une ligne
+          situaient sans se voir ; ces tuiles donnent le chiffre au coup d'œil, et restent
+          cliquables. Le CA ne paraît qu'au personnel qui y a accès (sinon un « 0 » inventé). */}
+      <div className="grid cols-4" style={{ marginBottom: 16 }}>
+        {loading ? [0, 1, 2, 3].map((i) => (
+          <div className="kpi" key={i}><Skeleton w="55%" h={11} /><Skeleton w="50%" h={30} style={{ marginTop: 12 }} /><Skeleton w="42%" h={11} style={{ marginTop: 9 }} /></div>
+        )) : (
+          <>
+            <Kpi label="Stagiaires" value={stats.stagiaires} sub="inscrits" icon="users" tone="blue" to="/stagiaires" countUp />
+            <Kpi label="Sessions à venir" value={stats.sessions} sub={upcoming && upcoming[0] ? `prochaine le ${frDate(upcoming[0].start_date)}` : "aucune à venir"} icon="calendar" tone="orange" to="/sessions" countUp />
+            <Kpi label="Dossiers à suivre" value={completion ? completion.total : stats.dossiers} sub={completion ? ((completion.encours + completion.noncommences) > 0 ? `${completion.encours + completion.noncommences} à compléter` : "tous complets") : " "} icon="folder" tone="green" to="/suivi" countUp />
+            {/* LE CA NE S'AFFICHE QUE S'IL A ÉTÉ REÇU (caisse fermée au formateur → sinon un « 0 »
+                inventé). Pour lui, la 4ᵉ tuile montre les formations. */}
+            {caConnu && (
+              <Kpi label="Ventes" value={stats.ca} format={euro} sub="total boutique" icon="euro" tone="gold" to="/ventes" />
+            )}
+            {!caConnu && (
+              <Kpi label="Formations" value={stats.formations} sub="actives" icon="graduation" tone="ember" to="/formations" countUp />
+            )}
+          </>
+        )}
+      </div>
 
       {/* CE QUI APPELLE UNE ACTION passe devant. La question du matin est « qu'est-ce qui
           m'attend », pas « combien j'en ai » — et quatre compteurs occupaient tout le premier
@@ -296,70 +373,35 @@ function Dashboard() {
         </div>
       ) : null}
 
-      {/* LES STAGIAIRES À RECONTACTER (demandé le 2026-09-21), juste sous « À traiter » : c'est une
-          liste de gestes à faire, avec le numéro à appeler. La même carte qu'en tête de la page
-          des stagiaires ; les huit plus anciennes attentes ici, le reste là-bas. */}
-      <ARecontacter limite={8} onCharge={(l) => setNbRappels(l.length)} className="fade" style={{ marginBottom: 16 }} />
-
-      {/* LE MÉMO, juste après ce qui attend : c'est la même question, « qu'est-ce que j'ai à faire »,
-          mais ce qu'on s'est noté soi-même. La MÊME liste que le bouton de la barre du haut — l'une
-          se relit quand l'autre écrit. Cachée aux rôles qui n'en ont pas (l'auditeur). */}
-      {ROLES_MEMO.includes(user?.role) && (
-        <Card title="Mémo" className="fade" style={{ marginBottom: 16 }}><MemoListe /></Card>
-      )}
-
-      {/* Les compteurs situent, ils ne se consultent pas : une ligne suffit. Ils restent
-          cliquables — c'était leur seul usage réel. */}
-      <div className="compteurs">
-        <Link to="/stagiaires"><b className="chiffres">{stats.stagiaires}</b> stagiaires</Link><i />
-        <Link to="/suivi"><b className="chiffres">{stats.dossiers}</b> dossiers actifs</Link><i />
-        <Link to="/sessions"><b className="chiffres">{stats.sessions}</b> sessions à venir</Link><i />
-        {/* LE CA NE S'AFFICHE QUE S'IL A ÉTÉ REÇU. La caisse est fermée au formateur : son appel
-            partait en 403 et le repli de `allSettled` retombait sur 0, donc son tableau de bord
-            annonçait « 0,00 € de ventes » — un chiffre inventé, présenté comme un vrai, qui dit
-            que l'école n'a rien vendu. Mieux vaut ne rien dire que dire zéro. */}
-        {caConnu && (
-          <>
-            <Link to="/ventes"><b className="tnum">{euro(stats.ca)}</b> de ventes</Link><i />
-            <MoneyToggle sm />
-          </>
-        )}
+      {/* COMPLÉTION DES DOSSIERS (anneau) + PROCHAINES SESSIONS, côte à côte : l'avancement Qualiopi
+          d'un coup d'œil, et ce qui démarre. */}
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
+        <Card title="Complétion des dossiers" more={<Link to="/suivi" className="card-more">Suivi <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
+          {loading ? <Skeleton w="85%" h={128} r={12} /> : <DonutCompletion data={completion} />}
+        </Card>
+        <Card title="Prochaines sessions" more={<Link to="/sessions" className="card-more">Planning <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
+          {loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <Skeleton w={9} h={9} round /><Skeleton w="45%" h={14} /><Skeleton w={36} h={20} r={99} style={{ marginLeft: "auto" }} /><Skeleton w={72} h={13} />
+                </div>
+              ))}
+            </div>
+          ) : !upcoming || upcoming.length === 0 ? (
+            <p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>
+          ) : (
+            upcoming.slice(0, 5).map((s) => (
+              <Link key={s.id} to={`/sessions/${s.id}`} className="dash-sess">
+                <span className="dash-sess-d" style={{ background: colorOf(s.program_code) }} />
+                <span className="dash-sess-nm">{s.program_title || s.program_code || "Formation"}</span>
+                <span className="pill" style={{ fontSize: 11 }}>{s.stagiaires ?? 0}</span>
+                <span className="dash-sess-dt">{frDate(s.start_date)} · S{s.week}</span>
+              </Link>
+            ))
+          )}
+        </Card>
       </div>
-
-      <Card title="Prochaines sessions" className="fade" more={<Link to="/sessions" className="card-more">Planning <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>} style={{ marginBottom: 16 }}>
-        {loading ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Skeleton w={9} h={9} round />
-                <Skeleton w="45%" h={14} />
-                <Skeleton w={40} h={20} r={99} style={{ marginLeft: "auto" }} />
-                <Skeleton w={80} h={13} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <DataTable
-            rows={upcoming}
-            vide={<p className="lead" style={{ margin: 0 }}>Aucune session à venir.</p>}
-            rowKey={(s) => s.id}
-            cols={[
-              { k: "formation", t: "Formation", principal: true,
-                cell: (s) => (
-                  <Link to={`/sessions/${s.id}`} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 999, background: colorOf(s.program_code), flex: "0 0 9px" }} />
-                    {s.program_title || s.program_code || "Formation"}
-                  </Link>
-                ) },
-              { k: "inscrits", t: "Inscrits", th: { textAlign: "center" }, td: { textAlign: "center" },
-                cell: (s) => <span className="pill" style={{ fontSize: 12 }}>{s.stagiaires ?? 0}</span> },
-              { k: "date", t: "Date", td: { whiteSpace: "nowrap" }, cell: (s) => <span className="chiffres">{frDate(s.start_date)}</span> },
-              { k: "semaine", t: "Semaine", th: { textAlign: "center" }, td: { textAlign: "center", color: "var(--muted)" },
-                cell: (s) => <span className="chiffres">S{s.week} · {s.year}</span> },
-            ]}
-          />
-        )}
-      </Card>
 
       {/* `.grid` porte un `gap` ENTRE SES COLONNES, pas sous elle : une grille posée dans un
           empilement se colle donc au bloc suivant. C'est ce qui collait « Partenaires » à
@@ -447,12 +489,24 @@ function Dashboard() {
         </Card>
       </div>
 
-      {/* LES PARTENAIRES SUR LE TABLEAU DE BORD, parce qu'une échéance de contrat ne se
-          manifeste NULLE PART ailleurs : elle ne provoque ni erreur ni alerte, et le jour venu
-          les offres du partenaire disparaissent simplement de la boutique. C'est exactement le
-          genre de date qu'on ne va pas chercher — donc qu'il faut apporter. */}
-      <Card title="Partenaires" className="fade" style={{ marginBottom: 16 }}
-        more={<Link to="/partenaires" className="card-more">Annuaire <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
+      {/* LES STAGIAIRES À RECONTACTER (demandé le 2026-09-21) : une liste de gestes à faire, avec le
+          numéro à appeler. Les huit plus anciennes attentes ici, le reste sur la page Stagiaires. */}
+      <ARecontacter limite={8} onCharge={(l) => setNbRappels(l.length)} className="fade" style={{ marginBottom: 16 }} />
+
+      {/* LE MÉMO : ce qu'on s'est noté soi-même, la MÊME liste que le bouton de la barre du haut.
+          Caché aux rôles qui n'en ont pas (l'auditeur). */}
+      {ROLES_MEMO.includes(user?.role) && (
+        <Card title="Mémo" className="fade" style={{ marginBottom: 16 }}><MemoListe /></Card>
+      )}
+
+      {/* Partenaires et accès rapides, côte à côte, en bas de page. */}
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
+        {/* LES PARTENAIRES SUR LE TABLEAU DE BORD, parce qu'une échéance de contrat ne se
+            manifeste NULLE PART ailleurs : elle ne provoque ni erreur ni alerte, et le jour venu
+            les offres du partenaire disparaissent simplement de la boutique. C'est exactement le
+            genre de date qu'on ne va pas chercher — donc qu'il faut apporter. */}
+        <Card title="Partenaires" className="fade"
+          more={<Link to="/partenaires" className="card-more">Annuaire <Icon name="chevron-right" size={13} aria-hidden="true" /></Link>}>
         {recapPartenaires === null ? (
           <Skeleton w="60%" h={14} />
         ) : recapPartenaires.total === 0 ? (
@@ -503,16 +557,17 @@ function Dashboard() {
         )}
       </Card>
 
-      <Card title="Accès rapides" className="fade">
-        <div className="grid cols-4" style={{ gap: 10 }}>
-          {QUICK.map(([to, icon, label]) => (
-            <Link key={to} to={to} className="btn quick-btn" style={{ justifyContent: "flex-start" }}>
-              <span className="quick-ic"><Icon name={icon} size={17} /></span>
-              {label}
-            </Link>
-          ))}
-        </div>
-      </Card>
+        <Card title="Accès rapides" className="fade">
+          <div className="grid cols-2" style={{ gap: 10 }}>
+            {QUICK.map(([to, icon, label]) => (
+              <Link key={to} to={to} className="btn quick-btn" style={{ justifyContent: "flex-start" }}>
+                <span className="quick-ic"><Icon name={icon} size={17} /></span>
+                {label}
+              </Link>
+            ))}
+          </div>
+        </Card>
+      </div>
     </>
   );
 }
