@@ -6,7 +6,7 @@ import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
 import { CADRES, cadreFor, cadrePossede, cadrePorte, cadreDeQuest, EXPLOITS_QUEST, adopterCadreServeur, cadreClass, cadreStyle, cadreValeur, parseCadre, estCadreQuest, getCadreChoisi, setCadreChoisi } from "../lib/cadres.js";
 import { useEchap } from "../lib/useEchap.js";
-import { getMyConsents, setMyConsent } from "../api/apiClient.js";
+import { getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter } from "../api/apiClient.js";
 /* L'HEURE N'EST PAS UN DÉTAIL. Accepter puis se rétracter le même jour donne deux lignes que
    seule l'heure distingue : sans elle, l'écran affirme « votre réponse du 03/08 » pour deux
    réponses opposées, et le registre devient inutilisable là où il sert le plus. `dateHeure`
@@ -88,6 +88,57 @@ function ConsentementsBloc() {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * La newsletter (actualités de l'école par e-mail) — un OPT-OUT, à part des autorisations.
+ *
+ * Ce n'est PAS une question « Oui / Non » comme les consentements : le stagiaire est inscrit par
+ * défaut (il est déjà client de l'école), et cet interrupteur ne sert qu'à PARTIR, ou à revenir.
+ * D'où « Recevoir / Ne plus recevoir », et jamais une demande en attente.
+ */
+function NewsletterBloc() {
+  const [inscrit, setInscrit] = useState(null); // null = pas encore chargé ; undefined = non concerné
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getMyNewsletter()
+      .then((r) => setInscrit(r?.data ? !!r.data.inscrit : undefined))
+      .catch(() => setInscrit(undefined));
+  }, []);
+
+  if (inscrit === null || inscrit === undefined) return null; // en cours, ou compte sans fiche stagiaire
+
+  const basculer = async (valeur) => {
+    if (valeur === inscrit) return;
+    setBusy(true);
+    try {
+      const r = await setMyNewsletter(valeur);
+      setInscrit(r?.inscrit ?? valeur);
+    } catch { /* on garde l'ancienne valeur plutôt que d'afficher un état qui n'a pas été enregistré */ }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="consent-bloc">
+      <div className="consent-bloc-t">Les actualités de l'école</div>
+      <div className="consent-ligne">
+        <div>
+          <b>Recevoir les actualités par e-mail</b>
+          <span className="hint">
+            Les annonces de l'école, envoyées par e-mail. Se désinscrire n'a aucune conséquence sur
+            votre formation, et vous retrouverez toujours les annonces dans la Communauté.
+          </span>
+        </div>
+        <span className="seg" style={{ flex: "none" }}>
+          <button className={"seg-btn" + (inscrit === false ? " on" : "")}
+            disabled={busy} onClick={() => basculer(false)}>Ne plus recevoir</button>
+          <button className={"seg-btn" + (inscrit === true ? " on" : "")}
+            disabled={busy} onClick={() => basculer(true)}>Recevoir</button>
+        </span>
+      </div>
     </div>
   );
 }
@@ -229,7 +280,7 @@ export default function ProfileModal({ onClose }) {
             <ProfilTab avatar={avatar} choose={choose} chooseColor={chooseColor} cadre={cadre} palier={palier} suivant={suivant} pct={pct} done={done} enrolled={enrolled} attribues={attribues} quest={quest} exploits={exploits} choisirCadre={choisirCadre} />
           )}
           {tab === "infos" && <InfosTab onSaved={refreshUser} />}
-          {tab === "confidentialite" && <><VisibiliteTab who={who} /><ConsentementsBloc /></>}
+          {tab === "confidentialite" && <><VisibiliteTab who={who} /><ConsentementsBloc /><NewsletterBloc /></>}
           {tab === "compte" && <CompteTab currentEmail={user?.email} role={user?.role} deactivatedAt={user?.deactivated_at} onEmailChanged={refreshUser} onChanged={refreshUser} />}
         </div>
         <div className="mfoot">

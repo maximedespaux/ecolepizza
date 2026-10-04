@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getMyConsents, setMyConsent, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
@@ -35,6 +35,10 @@ router.put('/visibility', authenticateToken, updateMyVisibility);
    personne d'autre ne peut consentir à sa place, c'est le sens même du mot. */
 router.get('/consentements', authenticateToken, getMyConsents);
 router.put('/consentements/:finalite', authenticateToken, setMyConsent);
+/* Newsletter (actualités par e-mail) : un opt-out, séparé des consentements ci-dessus. Le stagiaire
+   se (ré)inscrit ou se désinscrit lui-même depuis son profil. */
+router.get('/newsletter', authenticateToken, getMyNewsletter);
+router.put('/newsletter', authenticateToken, setMyNewsletter);
 router.put('/avatar', authenticateToken, saveMyAvatar);
 router.put('/cadre', authenticateToken, saveMyCadre);
 router.post('/avatar-image', authenticateToken, avatarUpload.single('image'), saveMyAvatarImage);

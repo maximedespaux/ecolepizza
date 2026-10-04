@@ -541,6 +541,10 @@ export function setMyConsent(finalite, accorde, conserver) {
 }
 
 export function updateMyVisibility(visibility) { return request("/mon-espace/visibility", { method: "PUT", body: JSON.stringify({ visibility }) }); }
+/* Newsletter (actualités de l'école par e-mail) : un OPT-OUT, à part des consentements. `data` vaut
+   `null` pour un compte sans fiche stagiaire. Le stagiaire se (ré)inscrit ou se désinscrit lui-même. */
+export function getMyNewsletter() { return request("/mon-espace/newsletter", { silent: true }); }
+export function setMyNewsletter(accorde) { return request("/mon-espace/newsletter", { method: "PUT", body: JSON.stringify({ accorde }) }); }
 
 /* CÔTÉ ORGANISME — le registre des consentements d'une session, et la liste destinée à un
    partenaire (migration 130).
