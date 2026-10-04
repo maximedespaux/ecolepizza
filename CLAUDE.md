@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-04** : **2551 tests — 2544 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-04** : **2556 tests — 2549 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -303,6 +303,13 @@ rendre 1 :
 `SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='connexion_jour';`
 ⚠️ Son revert supprime la table : l'historique des connexions par jour (la courbe) est perdu ; `last_login_at` reste,
 donc la récence aussi. Tests : `statistiques-connexions.test.js`.
+ENRICHIE le 2026-10-04 (sans migration) : la courbe passe AVANT la récence ; fenêtre réglable (7/14/30 j, `?jours=`) ;
+la part STAGIAIRE de chaque barre est colorée PAR FORMATION (palette stable, légende dynamique), un stagiaire inscrit à
+k formations étant RÉPARTI 1/k dans chacune (« niv1 niv2 → 50/50 », `pondererFormations` : la somme des parts d'un jour
+= les stagiaires distincts ; « Sans formation » pour un connecté sans inscription) ; le survol donne le détail pondéré
+(badges colorés « NIV2 : 4,5 »…) ; un résumé (personnes DISTINCTES + jour le plus actif) ; « les plus assidus » ; et les
+NOMS des stagiaires à relancer (jamais connectés, +30 j) sous la récence. `formations_cle` (ordre global) part à l'écran
+pour les couleurs + la légende. Règles pures : `pondererFormations`, `relancer` (statsConnexions.js).
 
 **199 est À JOUER** (`199_user_desactivation.sql`, la DÉSACTIVATION volontaire d'un profil stagiaire — demandée le
 2026-10-02). Une colonne `user.deactivated_at` (datetime). Un stagiaire désactive son profil depuis « Mon profil →

@@ -240,8 +240,8 @@ export function getAudit(q = "") {
 }
 
 // Statistiques de connexion (page Statistiques, Qualité & conformité) : récence + connexions/jour.
-export function getStatistiquesConnexions() {
-  return request("/statistiques/connexions");
+export function getStatistiquesConnexions(jours) {
+  return request(`/statistiques/connexions${jours ? `?jours=${jours}` : ""}`);
 }
 
 // --- Notes CRM (dossier) ---

@@ -6866,3 +6866,32 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
   .stat-synth-grille{grid-template-columns:minmax(0,1fr)}
   .stat-recence-ligne{grid-template-columns:96px minmax(0,1fr)}
 }
+/* En-tête de la carte « connexions » : légende à gauche, sélecteur de fenêtre à droite. */
+.stat-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.stat-head .stat-legende{margin-bottom:0}
+.stat-fenetre{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.stat-fenetre button{border:none;background:var(--surface);color:var(--muted);font-size:12px;padding:4px 11px;cursor:pointer}
+.stat-fenetre button+button{border-left:1px solid var(--border)}
+.stat-fenetre button.actif{background:var(--blue);color:#fff;font-weight:700}
+.stat-resume{font-size:13px;color:var(--text);margin:10px 0 0;line-height:1.5}
+/* Courbe + info-bulle de survol (détail par formation). */
+.stat-chart{position:relative;margin-top:10px}
+.stat-tip{position:absolute;transform:translate(-50%,calc(-100% - 12px));background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px;color:var(--text);box-shadow:0 8px 22px rgba(0,0,0,.16);pointer-events:none;white-space:nowrap;z-index:6}
+.stat-tip-d{font-weight:700;margin-bottom:4px}
+.stat-tip-l{display:flex;align-items:center;gap:5px;margin:2px 0}
+.stat-tip-l.muted{color:var(--muted)}
+.stat-badges{display:flex;flex-wrap:wrap;gap:4px;margin:3px 0 2px 16px;max-width:260px;white-space:normal}
+.stat-badge{background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange);border-radius:5px;padding:1px 6px;font-size:11px;font-weight:600}
+/* Les plus assidus. */
+.stat-assidus{margin-top:16px}
+.stat-assidus-t{font-weight:700;font-size:13px;margin-bottom:7px}
+.stat-assidus-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.stat-assidus-l li{display:flex;align-items:center;gap:8px;font-size:13px}
+.stat-assidus-nom{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat-assidus-j{color:var(--muted);font-size:12px;font-weight:600;flex:0 0 auto}
+/* Stagiaires à relancer (noms repliés). */
+.stat-relancer-wrap{margin-top:16px;border-top:1px solid var(--border-soft);padding-top:12px}
+.stat-relancer-t{font-weight:700;font-size:13px;margin-bottom:6px}
+.stat-relancer{margin:5px 0}
+.stat-relancer summary{cursor:pointer;font-size:12.5px;color:var(--text)}
+.stat-relancer-noms{font-size:12px;color:var(--muted);margin:7px 0 2px;line-height:1.7}
