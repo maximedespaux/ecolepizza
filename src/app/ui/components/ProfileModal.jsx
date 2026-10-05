@@ -225,7 +225,10 @@ export default function ProfileModal({ onClose }) {
 
   return (
     <div className="overlay">
-      <div className="modal" style={{ maxWidth: 480 }}>
+      {/* Plus large sur PC (720 au lieu de 480) : « Mes infos » tient deux colonnes de champs et
+          respire. `.modal` est en width:100% + max-width, donc ce plafond ne joue QUE sur grand
+          écran — sur téléphone la fenêtre reste pleine largeur (bornée par le voile). */}
+      <div className="modal" style={{ maxWidth: 720 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Mon profil</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
