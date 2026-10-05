@@ -123,19 +123,30 @@ const GEOCODABLE = `(l.zip_code IS NOT NULL OR l.town IS NOT NULL OR c.address I
 const geocodeLearners = (req, res) => {
     const orgId = req.user.organization_id;
     const limit = Math.min(Number(req.body?.limit) || 80, 200);
+    /* KEYSET par id : chaque lot repart APRÈS le dernier stagiaire examiné (`since_id`). Une adresse
+       que la BAN ne sait pas résoudre reste sans coordonnées, mais n'est JAMAIS re-sélectionnée — elle
+       ne bloque donc pas les suivantes. Sans ce curseur, `LIMIT` reprenait sans cesse les mêmes échecs,
+       et la boucle de l'écran s'arrêtait au premier lot « qui ne place personne » en laissant derrière
+       des stagiaires parfaitement géocodables (relevé le 2026-10-05 : 8 sur 10 d'une formation). */
+    const since = req.body?.since_id ?? null;
+    const params = [orgId];
+    let curseur = '';
+    if (since != null && since !== '') { curseur = ' AND l.id > ?'; params.push(since); }
+    params.push(limit);
     db.query(
         `SELECT l.id, l.financing, l.zip_code, l.town, l.company_id,
                 c.address AS c_address, c.zip_code AS c_zip, c.town AS c_town
            FROM learner l LEFT JOIN company c ON c.id = l.company_id
-          WHERE l.organization_id = ? AND l.lat IS NULL AND ${GEOCODABLE}
+          WHERE l.organization_id = ? AND l.lat IS NULL AND ${GEOCODABLE}${curseur}
+          ORDER BY l.id
           LIMIT ?`,
-        [orgId, limit],
+        params,
         async (err, rows) => {
             if (err) {
                 console.error('Erreur sélection géocodage :', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
-            if (!rows.length) return res.json({ data: { done: 0, remaining: 0 } });
+            if (!rows.length) return res.json({ data: { done: 0, examined: 0, lastId: null, remaining: 0 } });
 
             /* CE QU'ON ENVOIE AU GÉOCODEUR, et la règle de confidentialité qui le commande :
                · stagiaire AVEC entreprise (professionnel) → l'adresse EXACTE de l'entreprise (une
@@ -164,7 +175,7 @@ const geocodeLearners = (req, res) => {
                       WHERE l.organization_id = ? AND l.lat IS NULL AND ${GEOCODABLE}`,
                     [orgId]
                 );
-                res.json({ data: { done, remaining } });
+                res.json({ data: { done, examined: rows.length, lastId: rows[rows.length - 1].id, remaining } });
             } catch (e) {
                 console.error('Erreur géocodage :', e);
                 res.status(500).json({ error: 'Géocodage impossible' });

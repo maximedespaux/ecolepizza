@@ -131,18 +131,23 @@ function Carte() {
   }, []);
 
   // Géocode TOUT ce qui est localisable, par lots successifs jusqu'à épuisement — en un seul clic,
-  // sans avoir à répéter l'opération à la main. Chaque lot garde la pause de politesse de l'API ; on
-  // s'arrête quand il ne reste rien À FAIRE, ou qu'un lot ne place plus PERSONNE (adresses non
-  // géocodables : inutile d'y revenir en boucle). Le garde-fou de tours borne la boucle quoi qu'il arrive.
+  // sans avoir à répéter l'opération à la main. On PARCOURT les stagiaires par id (curseur `depuis`,
+  // keyset côté serveur) et on s'arrête quand un lot ne ramène plus personne À EXAMINER (fin de liste).
+  // On NE s'arrête PAS quand un lot ne PLACE personne : une grappe d'adresses que la BAN ne résout pas
+  // laissait sinon tous les stagiaires suivants hors de la carte (relevé le 2026-10-05, 8 géocodables
+  // sur 10 d'une formation). Chaque lot garde la pause de politesse de l'API ; le garde-fou de tours
+  // borne la boucle quoi qu'il arrive.
   async function runGeocode() {
     setGeo(true); setStatus(null);
     let total = 0;
+    let depuis = null; // curseur keyset : l'id du dernier stagiaire examiné au lot précédent
     try {
-      for (let tour = 0; tour < 100; tour++) {
-        const { data: r } = await geocodeCarte(100);
+      for (let tour = 0; tour < 200; tour++) {
+        const { data: r } = await geocodeCarte(100, depuis);
         total += r.done || 0;
+        depuis = r.lastId;
         setStatus({ type: "info", message: `Géolocalisation en cours… ${total} placé(s)${r.remaining ? `, ${r.remaining} restant(s)` : ""}.` });
-        if (!r.remaining || !r.done) break;
+        if (!r.examined || !r.lastId) break; // plus aucun stagiaire à examiner : fin du parcours
       }
       await reload();
       setStatus({ type: "success", message: total ? `${total} stagiaire(s) géolocalisé(s).` : "Rien de nouveau à géolocaliser." });
