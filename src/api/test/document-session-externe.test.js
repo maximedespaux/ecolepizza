@@ -173,7 +173,7 @@ test('LE COFFRE RESTE LISIBLE SANS LA MIGRATION 157', () => {
 
 test('LA TROISIÈME FEUILLE EXISTE, ET N\'EN FAIT QU\'UNE', () => {
     assert.match(UI_SUIVI, /const isSess = r\.scope === "SESSION"/);
-    assert.match(UI_SUIVI, /: isSess \? "sess:documents"/,
+    assert.match(UI_SUIVI, /isSess \? "sess:documents"/,
         'clé CONSTANTE : une seule feuille par semaine et par formation, pas une par document');
     assert.match(UI_SUIVI, /: isSess \? "Documents de session"/);
     /* La suppression groupée doit nommer ce qu'elle efface — « Supprimer ce stagiaire » sur des

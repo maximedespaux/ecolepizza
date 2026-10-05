@@ -345,27 +345,44 @@ function buildTree(rows) {
        document, sinon chaque contrat ferait son propre dossier à un élément. */
     const isCo = r.scope === "COMPANY";
     const isSess = r.scope === "SESSION";
-    const lKey = isCo ? `co:${r.company_id || r.company_name || "?"}`
-      : isSess ? "sess:documents"
-      : (r.learner_id || `${r.last_name}${r.first_name}`);
     const Y = years[y] || (years[y] = { label: y, total: 0, weeks: {} });
     const W = Y.weeks[wKey] || (Y.weeks[wKey] = { week: r.week || 0, total: 0, formations: {} });
     const F = W.formations[fKey] || (W.formations[fKey] = { code: r.program_code || "-", title: r.program_title || "", total: 0, learners: {} });
+    Y.total++; W.total++; F.total++;
+    /* UNE ENTREPRISE REGROUPE SES STAGIAIRES (2026-10-05, « comme l'arborescence d'archivage ») : un
+       document de GROUPE, et le dossier d'un stagiaire INSCRIT PAR une entreprise, se rangent tous deux
+       SOUS le dossier de la société — ses documents de groupe, puis ses stagiaires. Un stagiaire inscrit
+       seul, ou un document de session, reste une feuille directe de la formation. */
+    const coId = isSess ? null : (r.enr_company_id || (isCo ? (r.company_id || r.company_name) : null));
+    if (coId) {
+      const C = F.learners[`co:${coId}`] || (F.learners[`co:${coId}`] = {
+        name: r.enr_company_name || r.company_name || "Entreprise", company: true, docs: [], learners: {},
+      });
+      if (isCo) { C.docs.push(r); continue; }       // document de groupe → au dossier de l'entreprise
+      const sKey = r.learner_id || `${r.last_name}${r.first_name}`;
+      const S = C.learners[sKey] || (C.learners[sKey] = {
+        name: `${r.last_name || ""} ${r.first_name || ""}`.trim() || "-", learner_id: r.learner_id, docs: [],
+      });
+      S.docs.push(r);                               // stagiaire de l'entreprise → sous elle
+      continue;
+    }
+    const lKey = isSess ? "sess:documents" : (r.learner_id || `${r.last_name}${r.first_name}`);
     const L = F.learners[lKey] || (F.learners[lKey] = {
-      name: isCo ? (r.company_name || "Entreprise")
-        : isSess ? "Documents de session"
-        : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
-      learner_id: r.learner_id, company: isCo, session: isSess, docs: [],
+      name: isSess ? "Documents de session" : (`${r.last_name || ""} ${r.first_name || ""}`.trim() || "-"),
+      learner_id: r.learner_id, session: isSess, docs: [],
     });
     L.docs.push(r);
-    Y.total++; W.total++; F.total++;
   }
   const yr = Object.values(years).sort((a, b) => b.label.localeCompare(a.label, undefined, { numeric: true }));
   for (const Y of yr) {
     Y.weeksArr = Object.values(Y.weeks).sort((a, b) => b.week - a.week);
     for (const W of Y.weeksArr) {
       W.formationsArr = Object.values(W.formations).sort((a, b) => a.code.localeCompare(b.code));
-      for (const F of W.formationsArr) F.learnersArr = Object.values(F.learners).sort((a, b) => a.name.localeCompare(b.name));
+      for (const F of W.formationsArr) {
+        F.learnersArr = Object.values(F.learners).sort((a, b) => a.name.localeCompare(b.name));
+        // Sous chaque entreprise, trier ses stagiaires.
+        for (const L of F.learnersArr) if (L.company) L.learnersArr = Object.values(L.learners).sort((a, b) => a.name.localeCompare(b.name));
+      }
     }
   }
   return yr;
@@ -529,8 +546,55 @@ function ArchivesView({ onError, onInfo }) {
       return true;
     } catch (err) { onError?.(err.message); return false; }
   }
-  const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap((L) => L.docs));
-  const formationDocs = (F) => F.learnersArr.flatMap((L) => L.docs);
+  // Les documents d'une feuille : ceux du stagiaire/session, OU — pour une entreprise — ses documents
+  // de groupe ET ceux de tous ses stagiaires rattachés.
+  const feuilleDocs = (L) => (L.company ? [...L.docs, ...(L.learnersArr || []).flatMap((s) => s.docs)] : L.docs);
+  const weekDocs = (W) => W.formationsArr.flatMap((F) => F.learnersArr.flatMap(feuilleDocs));
+  const formationDocs = (F) => F.learnersArr.flatMap(feuilleDocs);
+
+  /* UNE FEUILLE STAGIAIRE (ou « Documents de session ») : son en-tête, le geste « ajouter des
+     fichiers » (sauf session), la suppression, et ses documents. `cheminBase` (null si non rangeable)
+     porte le dossier d'import — avec l'entreprise quand la feuille est sous une entreprise. */
+  const feuilleStagiaire = (L, cheminBase) => (
+    <details key={L.learner_id || L.name}>
+      <summary className="arch-sum">
+        {L.session && <Icon name="calendar" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--dim)" }} />}
+        {L.name} <span className="arch-count">{L.docs.length}</span>
+        {peutModifier && !L.company && !L.session && (() => {
+          const enrollmentId = dossierDeLaFeuille(L.docs);
+          const chemin = cheminBase ? `${cheminBase}/${L.name.replace(/\//g, "-")}` : null;
+          if (!enrollmentId && !chemin) return null;
+          return (
+            <button type="button" className="iconbtn" disabled={busy}
+              title={enrollmentId ? "Ajouter des fichiers au dossier de ce stagiaire (PDF ou image)" : "Ajouter des PDF au dossier de ce stagiaire"}
+              aria-label={`Ajouter des fichiers au dossier de ${L.name}`}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); ajouterDans({ enrollmentId, chemin, nom: L.name }); }}
+              style={{ marginLeft: 8 }}><Icon name="plus" size={15} /></button>
+          );
+        })()}
+        {peutModifier && <DelBtn title={L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
+      </summary>
+      <DocsDuDossier docs={L.docs} />
+    </details>
+  );
+
+  /* UN DOSSIER D'ENTREPRISE : ses documents de GROUPE d'abord, puis ses stagiaires (chacun sa feuille). */
+  const noeudEntreprise = (C, cheminBase) => {
+    const sous = cheminBase ? `${cheminBase}/${C.name.replace(/\//g, "-")}` : null;
+    return (
+      <details key={`co:${C.name}`}>
+        <summary className="arch-sum">
+          <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />
+          {C.name} <span className="arch-count">{feuilleDocs(C).length}</span>
+          {peutModifier && <DelBtn title="Supprimer cette entreprise (ses documents de groupe et ses stagiaires)" onClick={() => deleteDocs(feuilleDocs(C), C.name)} />}
+        </summary>
+        <div className="arch-in">
+          {C.docs.length > 0 && <DocsDuDossier docs={C.docs} />}
+          {(C.learnersArr || []).map((S) => feuilleStagiaire(S, sous))}
+        </div>
+      </details>
+    );
+  };
   /* L'ARCHIVE ZIP D'UNE LIGNE DU COFFRE (2026-09-24) — une année, une semaine, une formation —, avec
      les clés MÊMES de l'arbre (« - » pour une valeur absente) : la ligne et son archive désignent
      exactement les mêmes documents. Rangée selon l'arborescence d'archivage. */
@@ -755,29 +819,11 @@ function ArchivesView({ onError, onInfo }) {
                             {peutModifier && <DelBtn title="Supprimer toute la formation" onClick={() => deleteDocs(formationDocs(F), F.title)} />}
                           </summary>
                           <div className="arch-in">
-                            {F.learnersArr.map((L) => (
-                              <details key={L.learner_id || L.name}>
-                                <summary className="arch-sum">
-                                  {L.company && <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />}
-                                  {L.session && <Icon name="calendar" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--dim)" }} />}
-                                  {L.name} <span className="arch-count">{L.docs.length}</span>
-                                  {peutModifier && !L.company && !L.session && (() => {
-                                    const enrollmentId = dossierDeLaFeuille(L.docs);
-                                    const chemin = /^\d{4}$/.test(Y.label) && W.week ? `${Y.label}/S${W.week}/${F.code}/${L.name.replace(/\//g, "-")}` : null;
-                                    if (!enrollmentId && !chemin) return null;
-                                    return (
-                                      <button type="button" className="iconbtn" disabled={busy}
-                                        title={enrollmentId ? "Ajouter des fichiers au dossier de ce stagiaire (PDF ou image)" : "Ajouter des PDF au dossier de ce stagiaire"}
-                                        aria-label={`Ajouter des fichiers au dossier de ${L.name}`}
-                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); ajouterDans({ enrollmentId, chemin, nom: L.name }); }}
-                                        style={{ marginLeft: 8 }}><Icon name="plus" size={15} /></button>
-                                    );
-                                  })()}
-                                  {peutModifier && <DelBtn title={L.company ? "Supprimer cette entreprise" : L.session ? "Supprimer ces documents de session" : "Supprimer ce stagiaire"} onClick={() => deleteDocs(L.docs, L.name)} />}
-                                </summary>
-                                <DocsDuDossier docs={L.docs} />
-                              </details>
-                            ))}
+                            {F.learnersArr.map((L) => {
+                              // Dossier d'import : avec l'année et la semaine quand elles existent.
+                              const cheminBase = /^\d{4}$/.test(Y.label) && W.week ? `${Y.label}/S${W.week}/${F.code}` : null;
+                              return L.company ? noeudEntreprise(L, cheminBase) : feuilleStagiaire(L, cheminBase);
+                            })}
                           </div>
                         </details>
                       ))}
