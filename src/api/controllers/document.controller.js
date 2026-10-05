@@ -870,8 +870,12 @@ const marquerDocumentFait = async (req, res) => {
         } else {
             const { learner_id, type, template_slug, title } = req.body;
             if (req.body.quiz_id) return res.status(422).json({ message: 'Un QCM ne se marque pas fait : importez son résultat, ou il se répond dans l\'app.' });
-            let enrIds = [];
-            try { enrIds = JSON.parse(req.body.enrollment_ids || '[]'); } catch { enrIds = []; }
+            /* CET ENDPOINT EST EN JSON (pas en multipart comme l'import) : express a DÉJÀ transformé
+               enrollment_ids en tableau. Un JSON.parse dessus échouerait (il attend une chaîne) et
+               l'étape repartirait vide → « inscription requise » à tort. On accepte les deux formes. */
+            let enrIds = req.body.enrollment_ids;
+            if (typeof enrIds === 'string') { try { enrIds = JSON.parse(enrIds); } catch { enrIds = []; } }
+            if (!Array.isArray(enrIds)) enrIds = [];
             if (!learner_id || !type || !enrIds.length) {
                 return res.status(422).json({ error: 'Stagiaire, type et inscription requis pour créer l\'étape.' });
             }

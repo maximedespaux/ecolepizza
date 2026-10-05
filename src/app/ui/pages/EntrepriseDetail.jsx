@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
-  importDocumentFile, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl } from "../api/apiClient.js";
+  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
@@ -379,13 +379,69 @@ export default function EntrepriseDetail() {
     }
     ouvrirSelecteur({ doc: cible.doc || null, slug: step.key, label: step.label });
   }
-  // La fenêtre a rendu les sessions cochées : on les retient sur la cible, puis fichier.
+  // La fenêtre a rendu les sessions cochées : on les retient sur la cible, puis fichier — ou, pour un
+  // « marquer fait », on marque directement (il n'y a pas de fichier à choisir).
   function validerImportMulti(sessionIds) {
     const m = importMulti;
     setImportMulti(null);
     if (!m) return;
+    if (m.intent === "marquer") { faireMarquerGroupe(m.slug, m.label, null, sessionIds); return; }
     ouvrirSelecteur({ doc: null, slug: m.slug, label: m.label, sessionIds });
   }
+
+  /* MARQUER COMME FAIT un document de GROUPE sans fichier (CGV, livret remis mais rien à stocker).
+     Même résolution et même création que l'import de groupe (un document par OPCO, les sessions
+     réunies), mais le document passe SIGNÉ SANS fichier : le journal dira « marquée faite », jamais
+     « signé », et la trace de l'écran distingue les deux. */
+  async function faireMarquerGroupe(slug, label, docIdExistant, sessionIds) {
+    if (!window.confirm(
+      `Marquer « ${label} » comme fait, sans joindre de document ?\n\nL'étape comptera faite ; le journal indiquera « marquée faite », jamais « signée ». À réserver aux documents remis que vous n'avez pas à stocker (CGV, livret d'accueil…).`
+    )) return;
+    setStatus(null);
+    try {
+      let docId = docIdExistant;
+      if (!docId) {
+        await createCompanyDocument(id, { session_ids: sessionIds || [viewSessionId], template_slug: slug });
+        const r = await listCompanyDocuments(id);
+        setCompanyDocs(r.data || []);
+        const prepares = documentsDeLEtape(r.data || [], slug, viewSessionId);
+        if (!prepares.length) throw new Error(`« ${label} » n'a pas pu être préparé.`);
+        if (prepares.length > 1) {
+          setStatus({ type: "info", message: `« ${label} » est préparé en ${prepares.length} documents, un par OPCO : marquez chaque exemplaire sur sa ligne.` });
+          return;
+        }
+        docId = prepares[0].id;
+      }
+      await marquerDocumentFait({ document_id: docId });
+      setStatus({ type: "success", message: `« ${label} » marqué comme fait.` });
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    } finally {
+      setParcoursRefresh((n) => n + 1);
+    }
+  }
+  // Depuis la CARTE d'une étape de groupe : on résout son document (ou on demande quelles sessions couvrir).
+  function marquerFaitGroupe(step) {
+    const cible = cibleImportGroupe(documentsDeLEtape(companyDocs, step.key, viewSessionId));
+    if (cible.refus === "plusieurs") {
+      setStatus({ type: "info", message: `« ${step.label} » a un document par OPCO (${cible.n}) : marquez chaque exemplaire sur sa ligne, avec son bouton.` });
+      return;
+    }
+    if (!cible.doc) {
+      const eligibles = (data.sessions || []).filter((s) => (groupTplsBySession[s.id] || []).some((t) => t.slug === step.key));
+      if (eligibles.length > 1) {
+        setImportMulti({
+          slug: step.key, label: step.label, intent: "marquer",
+          options: eligibles.map((s) => ({ id: s.id, label: `${s.program_code || s.program_title} · S${s.week} ${s.year}` })),
+          defaut: viewSessionId ? [viewSessionId] : [],
+        });
+        return;
+      }
+    }
+    faireMarquerGroupe(step.key, step.label, cible.doc?.id || null, null);
+  }
+  // Sur la LIGNE d'un document de groupe (un par OPCO) : rien à deviner, on le marque directement.
+  function marquerFaitDocument(d) { faireMarquerGroupe(d.template_slug, d.title, d.id, null); }
   // Sur la LIGNE d'un document (un par OPCO, ou « Autres documents ») : il n'y a rien à deviner.
   function demanderImportDocument(d) { ouvrirSelecteur({ doc: d, slug: d.template_slug, label: d.title }); }
   // Un seul sélecteur, caché, comme sur la fiche stagiaire : le navigateur ouvre déjà sa fenêtre.
@@ -474,11 +530,19 @@ export default function EntrepriseDetail() {
           <button className="iconbtn" title={d.importe_le ? "Remplacer le document reçu" : "Importer l'exemplaire signé reçu (e-mail, scan)"}
             aria-label={`Importer le document reçu pour ${d.title}`} onClick={() => demanderImportDocument(d)}><Icon name="upload" size={16} /></button>
         )}
+        {/* MARQUER COMME FAIT sans fichier : document remis mais rien à stocker. Pas sur un document déjà fait. */}
+        {d.status !== "SIGNE" && (
+          <button className="iconbtn" title="Marquer comme fait, sans joindre de document (remis mais rien à stocker)"
+            aria-label={`Marquer ${d.title} comme fait`} onClick={() => marquerFaitDocument(d)}><Icon name="check" size={16} /></button>
+        )}
         <button className="iconbtn del" title={d.status === "SIGNE" ? "Supprimer (document signé)" : "Supprimer"} aria-label={`Supprimer ${d.title}`} onClick={() => deleteCompanyDoc(d.id, d.title, d.status === "SIGNE")}><Icon name="trash" size={15} /></button>
       </>
     );
   }
+  /* « Marqué fait » (SIGNE sans fichier NI signataire) : avancé à la main, document remis mais rien à
+     stocker — à ne pas confondre avec une vraie signature ni un import (même exigence que la fiche stagiaire). */
   const traceDocument = (d) => (d.importe_le ? `importé le ${dateFr(d.importe_le)}`
+    : (d.status === "SIGNE" && !d.signer_name && !d.fichier_nom) ? `marqué fait le ${dateFr(d.signed_at)}`
     : d.signed_at ? `signé le ${dateFr(d.signed_at)}`
     : d.sent_at ? `envoyé le ${dateFr(d.sent_at)}`
     : d.created_at ? `préparé le ${dateFr(d.created_at)}` : "préparé");
@@ -873,6 +937,7 @@ export default function EntrepriseDetail() {
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
               onImport={demanderImportGroupe}
+              onMarquerFait={marquerFaitGroupe}
               onOpenDoc={openCompanyDoc}
               renderGestes={gestesEtapeGroupe}
               renderPreparation={formulaireGroupe}

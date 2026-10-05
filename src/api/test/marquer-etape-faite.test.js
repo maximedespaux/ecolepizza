@@ -60,3 +60,27 @@ test('l\'écran DISTINGUE « marqué fait » d\'une signature (jamais « signé 
 test('la route est gardée (bureau), et n\'est pas confondue avec un :id', () => {
     assert.match(ROUTES, /router\.post\('\/marquer-fait', authenticateToken, authorizeRoles\(\.\.\.ADMIN_ROLES\), marquerDocumentFait\)/);
 });
+
+test('l\'endpoint est en JSON : enrollment_ids est accepté en TABLEAU, pas seulement en chaîne', () => {
+    /* La route est en JSON (pas multipart comme l'import) : express livre enrollment_ids en tableau.
+       Un JSON.parse dessus échouait et l'étape repartait « inscription requise » à tort (vu le
+       2026-10-05 sur le livret d'accueil). On accepte les deux formes. */
+    assert.match(bloc, /let enrIds = req\.body\.enrollment_ids;/);
+    assert.match(bloc, /if \(typeof enrIds === 'string'\)/, 'une chaîne reste parsée');
+    assert.match(bloc, /if \(!Array\.isArray\(enrIds\)\) enrIds = \[\];/);
+});
+
+test('un document de GROUPE se marque aussi fait (CGV d\'entreprise), sans fichier', () => {
+    const ENT = fs.readFileSync(path.join(RACINE, 'src/app/ui/pages/EntrepriseDetail.jsx'), 'utf8');
+    assert.match(ENT, /onMarquerFait=\{marquerFaitGroupe\}/, 'le geste est câblé au parcours de groupe');
+    const i = ENT.indexOf('async function faireMarquerGroupe');
+    const mg = ENT.slice(i, i + 1700);
+    assert.match(mg, /createCompanyDocument\(id, \{ session_ids:/, 'créé par le même chemin que « Préparer »');
+    assert.match(mg, /marquerDocumentFait\(\{ document_id: docId \}\)/, 'puis marqué par son id');
+    // La trace distingue « marqué fait » d'une signature, même côté entreprise.
+    assert.match(ENT, /d\.status === "SIGNE" && !d\.signer_name && !d\.fichier_nom\) \? `marqué fait le/);
+    // Et pour distinguer, la liste des documents de groupe rend bien le nom du signataire.
+    const COMP = fs.readFileSync(path.join(API, 'controllers/company.controller.js'), 'utf8');
+    const j = COMP.indexOf('const listCompanyDocuments = async');
+    assert.match(COMP.slice(j, j + 1200), /d\.status, d\.session_id, d\.signer_name,/);
+});
