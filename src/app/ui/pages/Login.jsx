@@ -16,12 +16,6 @@ const svgBase = {
   strokeLinejoin: "round",
   "aria-hidden": true,
 };
-const IconBuilding = (p) => (
-  <svg {...svgBase} {...p}>
-    <path d="M3 21h18" /><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" />
-    <path d="M9 9v.01" /><path d="M9 12v.01" /><path d="M9 15v.01" /><path d="M9 18v.01" />
-  </svg>
-);
 const IconMail = (p) => (
   <svg {...svgBase} {...p}>
     <rect width="20" height="16" x="2" y="4" rx="2" />
@@ -56,6 +50,8 @@ function Login() {
   const { setUser } = useContext(UserContext);
   const navigate = useNavigate();
 
+  // Le champ « Code organisme » a été retiré de l'écran (pas encore utilisé) ; org_code reste
+  // dans l'état parce que l'API de connexion l'accepte toujours — on lui envoie une valeur vide.
   const [form, setForm] = useState({ org_code: "", email: "", password: "", stayConnected: true });
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -102,7 +98,7 @@ function Login() {
               <div className="lb-sub">École Pizza · Jean-Jacques Despaux</div>
             </div>
           </div>
-          <h2 className="login-tag">Le secrétariat de votre organisme, simplifié.</h2>
+          <h2 className="login-tag">Votre organisme et vos formations, réunis en un seul espace.</h2>
           <p className="login-blurb">
             Stagiaires, documents, signatures, émargement et suivi Qualiopi, réunis dans un seul outil, pensé pour l'École Pizza.
           </p>
@@ -120,28 +116,10 @@ function Login() {
       <section className="login-panel">
         <div className="login-card">
           <div className="eyebrow">Connexion</div>
-          <h1>Espace secrétariat</h1>
-          <p className="login-sub">Connectez-vous pour accéder à votre espace de travail.</p>
+          <h1>Votre espace de travail</h1>
+          <p className="login-sub">Accédez à vos documents, vos outils et votre suivi.</p>
 
           <form onSubmit={handleSubmit} noValidate>
-            <div className="field">
-              <label htmlFor="org_code">
-                Code organisme <span className="field-opt">(optionnel)</span>
-              </label>
-              <div className="inp-wrap">
-                <span className="inp-ic"><IconBuilding /></span>
-                <input
-                  id="org_code"
-                  className="inp inp--icon"
-                  type="text"
-                  value={form.org_code}
-                  onChange={update("org_code")}
-                  placeholder="Laisser vide si vous n'en avez pas"
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
             <div className="field">
               <label htmlFor="email">Email</label>
               <div className="inp-wrap">

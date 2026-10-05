@@ -23,6 +23,8 @@ const IconMail = (p) => (
  * puisqu'un domaine jeune y atterrit souvent au début.
  */
 function MotDePasseOublie() {
+  // « Code organisme » retiré de l'écran (pas encore utilisé) ; org_code reste dans l'état car
+  // l'API l'accepte toujours — valeur vide envoyée, comme sur la connexion.
   const [form, setForm] = useState({ org_code: "", email: "" });
   const [busy, setBusy] = useState(false);
   const [envoye, setEnvoye] = useState(false);
@@ -69,15 +71,6 @@ function MotDePasseOublie() {
               un nouveau mot de passe.
             </p>
             <form onSubmit={handleSubmit} noValidate>
-              <div className="field">
-                <label htmlFor="org_code">Code organisme <span className="field-opt">(optionnel)</span></label>
-                <div className="inp-wrap">
-                  <span className="inp-ic"><Icon name="building" size={17} /></span>
-                  <input id="org_code" className="inp inp--icon" type="text"
-                    value={form.org_code} onChange={update("org_code")}
-                    placeholder="Laisser vide si vous n'en avez pas" autoComplete="off" />
-                </div>
-              </div>
               <div className="field">
                 <label htmlFor="email">Email</label>
                 <div className="inp-wrap">
