@@ -582,7 +582,7 @@ const listCompanyDocuments = async (req, res) => {
            rende CE fichier, qui fait foi, et non un PDF recomposé depuis le modèle. */
         const importe = await colonneExiste(conn, 'document_fichier', 'document_id');
         const [rows] = await conn.query(
-            `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.session_id,
+            `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.session_id, d.signer_name,
                     DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS created_at,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
