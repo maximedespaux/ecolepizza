@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef, useState } from "react";
-import { getEnrollmentParcours } from "../api/apiClient.js";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { getEnrollmentParcours, getDocumentsRecuperables, recupererDocuments } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import Badge from "./Badge.jsx";
 
@@ -192,6 +192,15 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
   const [error, setError] = useState(null);
   // Clé de l'étape dont le formulaire de préparation est ouvert (ou AUTRE), sinon null.
   const [preparation, setPreparation] = useState(null);
+  /* RATTACHER UN DOCUMENT DÉTACHÉ (coffre) à une étape — seulement sur un dossier stagiaire
+     (enrollmentId). Une session supprimée puis recréée laisse ses documents orphelins, qui tombent
+     dans « Sans session » du coffre : on les raccroche étape par étape, sur les étapes encore VIDES,
+     à ceux qui VONT à l'étape (même modèle/QCM). Les rattacher les refile aussi sous la session. */
+  const [detaches, setDetaches] = useState([]);
+  const [attachePour, setAttachePour] = useState(null); // clé d'étape dont le sélecteur est ouvert
+  const [attacheSel, setAttacheSel] = useState(() => new Set());
+  const [attacheEnvoi, setAttacheEnvoi] = useState(false);
+  const [localRefresh, setLocalRefresh] = useState(0);
   const detailRef = useRef(null);
   // Clé de réinitialisation : dossier stagiaire (enrollmentId) ou clé fournie (ex. session entreprise).
   const key = resetKey ?? enrollmentId;
@@ -219,7 +228,18 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
       })
       .catch((e) => { if (active) { setError(e.message); onCharge?.(null); } });
     return () => { active = false; };
-  }, [key, refresh]);
+  }, [key, refresh, localRefresh]);
+
+  // Les documents détachés rattachables (coffre), rafraîchis avec le parcours. Vide en mode groupe
+  // (fiche entreprise, sans enrollmentId) : le rattachement par étape ne vaut que pour un dossier.
+  useEffect(() => {
+    if (!enrollmentId) { setDetaches([]); return undefined; }
+    let active = true;
+    getDocumentsRecuperables(enrollmentId)
+      .then((r) => { if (active) setDetaches(r.data || []); })
+      .catch(() => { if (active) setDetaches([]); });
+    return () => { active = false; };
+  }, [enrollmentId, refresh, localRefresh]);
 
   /* SANS ÉTAPE — formation sans parcours, ou parcours illisible —, il n'y a aucune étape où ouvrir
      le formulaire. Il est alors proposé tel quel, modèle au choix : préparer un document ne dépend
@@ -228,6 +248,19 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
      un titre en cours de saisie ne s'efface pas toutes les vingt secondes. */
   const sansEtapes = !!error || (!!data && data.steps.length === 0);
   useEffect(() => { if (sansEtapes && renderPreparation) onPrepare?.(null, null); }, [sansEtapes, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Un document détaché "va" à une étape si son modèle (template_slug) ou son QCM (quiz_id)
+  // correspond à la CLÉ de l'étape (le slug, ou `quiz:<id>`) — la même règle que le parcours.
+  const detachesParEtape = useMemo(() => {
+    const m = new Map();
+    for (const d of detaches) {
+      const cle = d.quiz_id ? `quiz:${d.quiz_id}` : d.template_slug;
+      if (!cle) continue;
+      if (!m.has(cle)) m.set(cle, []);
+      m.get(cle).push(d);
+    }
+    return m;
+  }, [detaches]);
 
   const messageSansEtapes = error || "Cette formation n'a pas de parcours documentaire. Définissez-le dans Formations → Parcours documentaire.";
   if (sansEtapes && renderPreparation) return (
@@ -276,6 +309,24 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
   function fermer() {
     setPreparation(null);
     if (sel === AUTRE) setSel(data.currentKey || data.steps[0]?.key || null);
+  }
+
+  // Ouvre le sélecteur de documents détachés pour une étape (tout coché par défaut).
+  function ouvrirAttache(cle) {
+    setAttachePour(cle);
+    setAttacheSel(new Set((detachesParEtape.get(cle) || []).map((d) => d.id)));
+  }
+  // Rattache les documents détachés choisis au dossier, puis recharge parcours ET liste des détachés.
+  async function rattacher() {
+    if (attacheEnvoi || !attacheSel.size) return;
+    setAttacheEnvoi(true);
+    try {
+      await recupererDocuments(enrollmentId, [...attacheSel]);
+      setAttachePour(null);
+      setAttacheSel(new Set());
+      setLocalRefresh((v) => v + 1);
+    } catch { /* silencieux : le document reste détaché, rien n'est cassé */ }
+    finally { setAttacheEnvoi(false); }
   }
 
   const h = data.header || {};
@@ -390,6 +441,28 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           <p className={`parc-ligne ${etatSel.classe}`}>{lineFor(step)}</p>
           {/* Le formulaire de préparation, SOUS la ligne d'état : le modèle est celui de l'étape. */}
           {prepareIci && renderPreparation(step, fermer)}
+          {/* Le sélecteur de documents détachés (coffre) qui vont à cette étape : cocher, rattacher. */}
+          {attachePour === step.key && (
+            <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+              <p className="hint" style={{ marginTop: 0 }}>Documents détachés du coffre qui vont à cette étape :</p>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {(detachesParEtape.get(step.key) || []).map((d) => (
+                  <li key={d.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "4px 0" }}>
+                    <input type="checkbox" checked={attacheSel.has(d.id)}
+                      onChange={() => setAttacheSel((s) => { const n = new Set(s); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n; })}
+                      style={{ marginTop: 3 }} />
+                    <span><b>{d.title || d.type}</b> <span className="hint">({(d.status || "").toLowerCase()})</span></span>
+                  </li>
+                ))}
+              </ul>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn primary" onClick={rattacher} disabled={attacheEnvoi || !attacheSel.size}>
+                  {attacheEnvoi ? "Rattachement…" : `Rattacher ${attacheSel.size}`}
+                </button>
+                <button className="btn ghost" onClick={() => setAttachePour(null)} disabled={attacheEnvoi}>Annuler</button>
+              </div>
+            </div>
+          )}
         </div>
         {/* Formulaire ouvert : ses propres boutons (Générer, Annuler) remplacent ceux de l'étape. */}
         {!prepareIci && <div className="parc-actions">
@@ -412,6 +485,14 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           {onImport && importPossible(step) && (
             <button className="btn" onClick={() => onImport(step)} title={titreImport(step)}>
               {libelleImport(step)}
+            </button>
+          )}
+          {/* RATTACHER UN DOCUMENT DÉTACHÉ (coffre) : seulement sur une étape ENCORE VIDE d'un dossier
+              stagiaire, et seulement si un document orphelin VA à cette étape (même modèle/QCM). */}
+          {enrollmentId && !step.docId && etatDe(step) === "A_FAIRE" && (detachesParEtape.get(step.key)?.length > 0) && (
+            <button className="btn" onClick={() => ouvrirAttache(step.key)}
+              title="Rattacher à cette étape un document détaché du coffre (laissé par une session recréée)">
+              🔗 Rattacher un détaché ({detachesParEtape.get(step.key).length})
             </button>
           )}
           {onSignLink && step.docId && (
