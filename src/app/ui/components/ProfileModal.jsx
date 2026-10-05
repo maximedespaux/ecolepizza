@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, searchMyCompanies, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile, deactivateMyProfile, reactivateMyProfile } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile, deactivateMyProfile, reactivateMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
@@ -419,13 +419,13 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
 }
 
 /**
- * « Mes infos » — coordonnées du stagiaire, puis SON entreprise.
+ * « Mes infos » — coordonnées du stagiaire, puis SON entreprise (lecture seule, sauf s'il en est le référent).
  *
- * L'entreprise obéit à une règle simple (décidée le 2026-10-05) :
- *  • RÉFÉRENT de l'entreprise (migration 174) → il en corrige les coordonnées ;
- *  • rattaché mais pas référent → il la voit, sans la réécrire (donnée partagée) ;
- *  • pas d'entreprise → il la CHOISIT par une recherche (≥ 3 lettres, jamais la liste entière),
- *    il ne la crée pas (ça évitait les doublons). Le serveur fait respecter tout ça.
+ * L'ENTREPRISE EST DU RESSORT DE L'ÉCOLE (tranché le 2026-10-05) : le stagiaire ne la CHOISIT pas et
+ * ne la crée pas — se rattacher soi-même à n'importe quelle entreprise laisserait affirmer un lien
+ * faux. Deux cas seulement :
+ *  • RÉFÉRENT de l'entreprise (migration 174, désigné par l'école) → il en corrige les coordonnées ;
+ *  • sinon → il la voit (lecture seule), ou lit « renseignée par votre école » s'il n'en a pas.
  * Les champs « adresse perso / entreprise » n'ont de sens que pour un stagiaire (fiche learner) :
  * le personnel (intervenant) ne voit que civilité / nom / téléphone, qui vivent sur son compte.
  */
@@ -433,9 +433,6 @@ function InfosTab({ onSaved }) {
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null); // { ok, text }
-  const [recherche, setRecherche] = useState(false); // panneau « choisir une entreprise » ouvert ?
-  const [q, setQ] = useState("");
-  const [resultats, setResultats] = useState(null); // null = rien cherché ; [] = aucun résultat
 
   useEffect(() => { getMyInfos().then((r) => setF(r.data || {})).catch(() => setF({})); }, []);
   /* Le NOM DE FAMILLE, la VILLE (perso et entreprise) et le LIEU DE NAISSANCE en capitales dès la
@@ -445,25 +442,6 @@ function InfosTab({ onSaved }) {
     ...p, [k]: k === "last_name" || k === "company_town" || k === "town" || k === "birth_place" ? e.target.value.toLocaleUpperCase("fr") : e.target.value,
   }));
 
-  // Le panneau de recherche est actif si le stagiaire n'a PAS d'entreprise, ou s'il a cliqué « Changer ».
-  const panneauRecherche = !!(recherche || (f && !f.company_id));
-  /* On ne cherche qu'à partir de TROIS caractères, et temporisé : une frappe isolée ne déclenche
-     pas de requête, et la liste complète des entreprises n'est jamais exposée. */
-  useEffect(() => {
-    if (!panneauRecherche) return;
-    const t = q.trim();
-    if (t.length < 3) { setResultats(null); return; }
-    const timer = setTimeout(() => {
-      searchMyCompanies(t).then((r) => setResultats(r.data || [])).catch(() => setResultats([]));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [q, panneauRecherche]);
-
-  function choisir(c) {
-    setF((p) => ({ ...p, company_id: c.id, company: c.name, company_zip: c.zip_code || "", company_town: c.town || "", company_address: "", company_is_owner: false }));
-    setRecherche(false); setQ(""); setResultats(null);
-  }
-
   async function save() {
     setBusy(true); setMsg(null);
     try {
@@ -471,10 +449,9 @@ function InfosTab({ onSaved }) {
         civility: f.civility, first_name: f.first_name, last_name: f.last_name, phone: f.phone,
         birthday: f.birthday, birth_place: f.birth_place,
         address: f.address, zip_code: f.zip_code, town: f.town,
-        company_id: f.company_id || "",
       };
-      // Les coordonnées de l'entreprise ne partent QUE si le stagiaire en est le référent (le
-      // serveur l'exige aussi) : un rattaché n'écrase pas une donnée que d'autres partagent.
+      // Les coordonnées de l'entreprise ne partent QUE si le stagiaire en est le référent (le serveur
+      // l'exige aussi). Il ne choisit ni ne crée jamais d'entreprise : l'école seule la lie.
       if (f.company_is_owner) {
         payload.company_name = f.company; payload.company_address = f.company_address;
         payload.company_zip = f.company_zip; payload.company_town = f.company_town;
@@ -487,7 +464,6 @@ function InfosTab({ onSaved }) {
   }
 
   if (!f) return <p className="hint">Chargement…</p>;
-  const qlen = q.trim().length;
   return (
     <div>
       <p className="hint" style={{ margin: "0 0 12px" }}>Tes coordonnées. Toute modification est visible par ton organisme de formation.</p>
@@ -512,7 +488,7 @@ function InfosTab({ onSaved }) {
         </div>
 
         <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>Mon entreprise</div>
-        {f.company_id && f.company_is_owner && !recherche ? (
+        {f.company_id && f.company_is_owner ? (
           <>
             <p className="hint" style={{ margin: "0 0 8px" }}><Icon name="check" size={12} /> Vous êtes le référent de cette entreprise : vous pouvez corriger ses coordonnées.</p>
             <div className="field"><label>Nom de l'entreprise</label><input className="inp" value={f.company || ""} onChange={set("company")} /></div>
@@ -521,30 +497,15 @@ function InfosTab({ onSaved }) {
               <div className="field"><label>Code postal</label><input className="inp" value={f.company_zip || ""} onChange={set("company_zip")} /></div>
               <div className="field"><label>Ville</label><input className="inp" value={f.company_town || ""} onChange={set("company_town")} placeholder="LANNEMEZAN" /></div>
             </div>
-            <button className="btn ghost sm" onClick={() => setRecherche(true)}>Changer d'entreprise</button>
           </>
-        ) : f.company_id && !recherche ? (
+        ) : f.company_id ? (
           <>
             <div className="field"><label>Entreprise</label>
               <div style={{ padding: "7px 2px", fontWeight: 600 }}>{f.company || "—"}{f.company_town ? ` — ${f.company_town}` : ""}</div></div>
-            <p className="hint" style={{ margin: "0 0 8px" }}>Ses coordonnées sont tenues par votre école ou son référent.</p>
-            <button className="btn ghost sm" onClick={() => setRecherche(true)}>Changer d'entreprise</button>
+            <p className="hint" style={{ margin: "0 0 4px" }}>Renseignée par votre école. Une correction à faire ? Demandez-leur.</p>
           </>
         ) : (
-          <>
-            <div className="field"><label>Rechercher mon entreprise</label>
-              <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tapez au moins 3 lettres du nom…" /></div>
-            {qlen > 0 && qlen < 3 && <p className="hint" style={{ margin: "0 0 6px" }}>Encore {3 - qlen} caractère(s)…</p>}
-            {resultats && resultats.length > 0 && resultats.map((c) => (
-              <button key={c.id} className="btn ghost" style={{ width: "100%", justifyContent: "flex-start", marginBottom: 6 }} onClick={() => choisir(c)}>
-                <b>{c.name}</b>{(c.zip_code || c.town) ? ` — ${[c.zip_code, c.town].filter(Boolean).join(" ")}` : ""}
-              </button>
-            ))}
-            {resultats && resultats.length === 0 && qlen >= 3 && (
-              <p className="hint" style={{ margin: "0 0 8px" }}>Aucune entreprise trouvée. Demandez à votre école de l'ajouter.</p>
-            )}
-            {f.company_id && <button className="btn ghost sm" onClick={() => { setRecherche(false); setQ(""); setResultats(null); }}>Annuler</button>}
-          </>
+          <p className="hint" style={{ margin: "0 0 4px" }}>Votre entreprise est renseignée par votre école.</p>
         )}
       </>}
       {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "10px 0 10px" }}>{msg.text}</p>}
