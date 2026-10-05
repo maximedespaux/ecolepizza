@@ -3,7 +3,7 @@ import { Icon } from "../components/Icon.jsx";
 import ImportSessionsModal from "../components/ImportSessionsModal.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
-  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
+  getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, marquerDocumentFait, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -397,13 +397,57 @@ function StagiaireDetail() {
     if (fichierRef.current) fichierRef.current.accept = step.piece || step.remise ? ACCEPT_PIECE : ACCEPT_DOCUMENT;
     fichierRef.current?.click();
   }
-  // La fenêtre de choix a rendu les formations cochées : on retient leurs inscriptions, puis fichier.
+  // La fenêtre de choix a rendu les formations cochées : on retient leurs inscriptions, puis fichier —
+  // ou, pour un « marquer fait », on marque directement (il n'y a pas de fichier à choisir).
   function validerImportMulti(enrIds) {
-    const step = importMulti?.step;
+    const multi = importMulti;
+    const step = multi?.step;
     setImportMulti(null);
     if (!step) return;
+    if (multi.intent === "marquer") { doMarquerFait(step, enrIds && enrIds.length ? enrIds : null); return; }
     importEnrIds.current = enrIds && enrIds.length ? enrIds : null;
     ouvrirSelecteurFichier(step);
+  }
+
+  /* MARQUER UNE ÉTAPE FAITE SANS DOCUMENT (CGV, livret d'accueil… remis mais rien à stocker). Comme
+     l'import, mais sans fichier : si l'étape n'est pas générée et qu'il y a plusieurs formations, on
+     demande d'abord lesquelles (même fenêtre que l'import), pour la marquer une fois pour toutes. */
+  function marquerFait(step) {
+    if (!step.docId && enrollments.length > 1) {
+      setImportMulti({
+        step, intent: "marquer",
+        options: enrollments.map((e) => ({ id: e.id, label: `${e.program_code || "Formation"}${e.week ? ` · S${e.week}${e.year ? ` ${e.year}` : ""}` : ""}` })),
+        defaut: curEnrId ? [curEnrId] : [],
+      });
+      return;
+    }
+    doMarquerFait(step, null);
+  }
+  async function doMarquerFait(step, enrIds) {
+    if (!window.confirm(
+      `Marquer « ${step.label} » comme fait, sans joindre de document ?\n\nL'étape comptera faite ; le journal indiquera « marquée faite », jamais « signée ». À réserver aux documents remis que vous n'avez pas à stocker (CGV, livret d'accueil…).`
+    )) return;
+    const payload = {};
+    if (step.docId) {
+      payload.document_id = step.docId;
+    } else {
+      if (!curEnrId && !(enrIds && enrIds.length)) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
+      const tpl = templates.find((t) => t.slug === step.key);
+      if (!tpl) { setStatus({ type: "error", message: "Modèle introuvable pour cette étape." }); return; }
+      payload.learner_id = id;
+      payload.type = tpl.doc_type || tpl.slug.toUpperCase().replace(/-/g, "_");
+      payload.template_slug = tpl.slug;
+      payload.title = step.label || tpl.label || "";
+      payload.enrollment_ids = enrIds && enrIds.length ? enrIds : [curEnrId];
+    }
+    try {
+      await marquerDocumentFait(payload);
+      setStatus({ type: "success", message: `« ${step.label} » marqué comme fait.` });
+      loadDocs();
+      setParcoursRefresh((n) => n + 1);
+    } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
   }
 
   async function envoyerImport(e) {
@@ -585,13 +629,19 @@ function StagiaireDetail() {
     /* LA TRACE, sur une ligne : importé, signé ou envoyé, avec sa date — le détail complet au
        survol. « Importé » d'abord : c'est lui qui distingue un document reçu par courriel d'une
        signature faite dans l'application (cf. l'import d'un document reçu). */
+    /* « MARQUÉ FAIT » : SIGNE sans fichier NI signataire (ni QCM) — l'étape a été avancée à la main,
+       document remis mais rien à stocker. À distinguer d'une vraie signature et d'un import, sinon
+       on lui prêterait une signature qui n'a jamais eu lieu (même exigence que l'import). */
+    const marqueFait = d.status === "SIGNE" && !d.quiz_id && !d.signer_name && !d.importe_le && !d.fichier_nom;
     const trace = d.importe_le ? `importé le ${dateFr(d.importe_le)}`
+      : marqueFait ? `marqué fait le ${dateFr(d.signed_at)}`
       : d.signed_at ? `signé le ${dateFr(d.signed_at)}`
       : d.sent_at ? `envoyé le ${dateFr(d.sent_at)}`
       : "préparé, pas encore envoyé";
     const detail = [
       d.sent_at && `Envoyé le ${dateHeure(d.sent_at)}`,
-      d.signed_at && `signé le ${dateHeure(d.signed_at)}`,
+      marqueFait && `marqué fait le ${dateHeure(d.signed_at)}, sans document`,
+      !marqueFait && d.signed_at && `signé le ${dateHeure(d.signed_at)}`,
       d.importe_le && `reçu et importé le ${dateHeure(d.importe_le)}${d.fichier_nom ? ` (${d.fichier_nom})` : ""}`,
     ].filter(Boolean).join(" · ") || trace;
     return (
@@ -837,6 +887,7 @@ function StagiaireDetail() {
               onPrepare={prepareStep}
               onSendQuiz={handleSendQuiz}
               onImport={demanderImport}
+              onMarquerFait={marquerFait}
               renderGestes={gestesEtape}
               renderPreparation={formulairePreparation}
               /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout. */

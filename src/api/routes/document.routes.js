@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const {
     listDocuments, createDocument, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, signDocument, enregistrerSaisies, deleteDocument, createSignLink, checkDocumentConditions,
-    importDocumentFile, getDocumentFile,
+    importDocumentFile, marquerDocumentFait, getDocumentFile,
 } = require('../controllers/document.controller.js');
 const { signerMonDocument } = require('../controllers/intervenant.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
@@ -22,6 +22,8 @@ router.post('/check-conditions', authenticateToken, authorizeRoles(...ADMIN_ROLE
 /* DÉCLARÉ AVANT `/:id/...` génériques ? Non : « import » n'est pas un identifiant, il ne peut
    pas être confondu avec un `:id`. En revanche l'ordre compte face à `/:id` tout court, plus bas. */
 router.post('/import', authenticateToken, authorizeRoles(...ADMIN_ROLES), upload.single('file'), importDocumentFile);
+// Marquer une étape faite SANS document (CGV, livret d'accueil remis mais rien à stocker) — pas un :id.
+router.post('/marquer-fait', authenticateToken, authorizeRoles(...ADMIN_ROLES), marquerDocumentFait);
 // Relire le document importé : tout le personnel, comme l'aperçu d'un document généré.
 router.get('/:id/fichier', authenticateToken, authorizeRoles(...STAFF_ROLES), getDocumentFile);
 router.post('/:id/send', authenticateToken, authorizeRoles(...ADMIN_ROLES), sendDocument);

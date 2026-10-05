@@ -844,6 +844,62 @@ const importDocumentFile = async (req, res) => {
 };
 
 /**
+ * POST /api/documents/marquer-fait — fait AVANCER une étape SANS joindre de document.
+ *
+ * LE BESOIN (reprise des anciens stagiaires, 2026-10-05). Certains documents ont bien été remis —
+ * CGV, livret d'accueil… — mais l'école n'a aucun fichier à stocker, et il n'y a rien à importer.
+ * L'étape restait « à faire » alors que le document avait été donné.
+ *
+ * CE QUE ÇA FAIT, ET CE QUE ÇA NE FAIT PAS. On met le document à SIGNE (l'étape compte alors faite,
+ * pour un document à signer comme pour un autre) SANS RIEN FABRIQUER : ni fichier, ni nom de
+ * signataire, ni image de signature. La trace reste honnête — le journal dit « marquée faite »,
+ * jamais « signée » —, et l'écran distingue un « marqué fait » (SIGNE sans fichier NI signataire)
+ * d'une vraie signature ou d'un import. JAMAIS sur un QCM : son résultat s'importe (document.import),
+ * ou il se répond dans l'app ; le marquer fait sans réponses ni PDF ne prouverait rien.
+ */
+const marquerDocumentFait = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        let documentId = req.body.document_id || null;
+        if (documentId) {
+            const [[d]] = await conn.query(
+                'SELECT id, quiz_id FROM generated_document WHERE id = ? AND organization_id = ?', [documentId, orgId]);
+            if (!d) return res.status(404).json({ message: 'Document introuvable.' });
+            if (d.quiz_id) return res.status(422).json({ message: 'Un QCM ne se marque pas fait : importez son résultat, ou il se répond dans l\'app.' });
+        } else {
+            const { learner_id, type, template_slug, title } = req.body;
+            if (req.body.quiz_id) return res.status(422).json({ message: 'Un QCM ne se marque pas fait : importez son résultat, ou il se répond dans l\'app.' });
+            let enrIds = [];
+            try { enrIds = JSON.parse(req.body.enrollment_ids || '[]'); } catch { enrIds = []; }
+            if (!learner_id || !type || !enrIds.length) {
+                return res.status(422).json({ error: 'Stagiaire, type et inscription requis pour créer l\'étape.' });
+            }
+            const [[l]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
+            if (!l) return res.status(404).json({ message: 'Stagiaire introuvable.' });
+            const [enr] = await conn.query(
+                'SELECT id FROM enrollment WHERE id IN (?) AND organization_id = ? AND learner_id = ?',
+                [enrIds, orgId, learner_id]);
+            if (!enr.length) return res.status(422).json({ error: 'Inscription introuvable pour ce stagiaire.' });
+            documentId = await prepareLearnerDoc(conn, orgId, {
+                learnerId: learner_id, type, templateSlug: template_slug || null, title,
+                enrollmentIds: enr.map((x) => x.id),
+            });
+        }
+        /* SIGNE sans fichier NI signataire NI image : c'est ÇA, « marqué fait ». Le garde `quiz_id IS
+           NULL` est une ceinture en plus de la bretelle (les deux branches l'ont déjà vérifié). */
+        await conn.query(
+            "UPDATE generated_document SET status = 'SIGNE', signed_at = NOW() WHERE id = ? AND organization_id = ? AND quiz_id IS NULL",
+            [documentId, orgId]);
+        logAudit(req, 'document.marque_fait', 'GeneratedDocument', documentId);
+        res.status(201).json({ success: true, data: { id: documentId } });
+    } catch (err) {
+        console.error('Erreur « marquer fait » :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * GET /api/documents/:id/fichier — renvoie le document IMPORTÉ (déchiffré à la volée).
  * Jamais stocké ni renvoyé en clair ailleurs, comme les fichiers de pièces.
  */
@@ -2136,4 +2192,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };
+module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };
