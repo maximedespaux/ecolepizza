@@ -19,6 +19,7 @@ import CommissionJury from "../components/CommissionJury.jsx";
 import DocumentsExternes from "../components/DocumentsExternes.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import RetraitStagiaireModal from "../components/RetraitStagiaireModal.jsx";
+import SupprimerSessionModal from "../components/SupprimerSessionModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { lienDossier } from "../lib/lienDossier.js";
@@ -54,6 +55,7 @@ function SessionDetail() {
   const [status, setStatus] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
   const [retraitDe, setRetraitDe] = useState(null); // { id, name } : la fenêtre de retrait ouverte
+  const [suppression, setSuppression] = useState(false); // fenêtre de confirmation de suppression de la session
   // Inscription : « individuel » (recherche nominative) ou « entreprise » (on choisit
   // l'entreprise, puis les stagiaires parmi les SIENS). Deux façons de peupler la même session.
   const [mode, setMode] = useState("individuel");
@@ -235,16 +237,15 @@ function SessionDetail() {
     }
   }
 
-  async function removeSession() {
-    const n = session?.enrollments?.length || 0;
-    const msg = n > 0
-      ? `Supprimer cette session ? ${n} inscription(s) seront également retirées.`
-      : "Supprimer cette session ?";
-    if (!window.confirm(msg)) return;
+  /* La suppression passe par une fenêtre qui montre ce qui part et exige de recopier le nom de la
+     session ET le nombre de stagiaires (SupprimerSessionModal) : une session pleine ne se supprime
+     plus d'un clic. `confirmer` passe le garde-fou côté serveur. */
+  async function confirmerSuppression() {
     try {
-      await deleteSession(id);
+      await deleteSession(id, true);
       navigate("/sessions");
     } catch (err) {
+      setSuppression(false);
       setStatus({ type: "error", message: err.message });
     }
   }
@@ -283,7 +284,7 @@ function SessionDetail() {
                 <Icon name="download" size={15} /> Archive (ZIP)
               </button>
             )}
-            <button className="btn danger" onClick={removeSession}>Supprimer la session</button>
+            <button className="btn danger" onClick={() => setSuppression(true)}>Supprimer la session</button>
           </>
         }
       />
@@ -598,6 +599,15 @@ function SessionDetail() {
       {retraitDe && (
         <RetraitStagiaireModal enrollmentId={retraitDe.id} name={retraitDe.name}
           onClose={() => setRetraitDe(null)} onConfirm={(effacer) => removeStagiaire(retraitDe.id, effacer)} />
+      )}
+      {suppression && (
+        <SupprimerSessionModal
+          nomSession={`${session.program_code || session.program_title} — semaine ${session.week}`}
+          stagiaires={enrollments}
+          documentsLies={session.documents_lies || 0}
+          onClose={() => setSuppression(false)}
+          onConfirm={confirmerSuppression}
+        />
       )}
       {notesFor && (
         <NotesModal enrollmentId={notesFor.id} name={notesFor.name} onClose={() => setNotesFor(null)} />
