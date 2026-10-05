@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { getSession, getStagiaires, createEnrollment, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires , telechargerArchive } from "../api/apiClient.js";
+import { getSession, getStagiaires, createEnrollment, getDocumentsRecuperables, recupererDocuments, deleteEnrollment, deleteSession, getAssignableTrainers, setSessionTrainers, getLocations, updateSession, getCompanies, getCompany, registerCompanyStagiaires , telechargerArchive } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
 import PageHead from "../components/PageHead.jsx";
@@ -20,6 +20,7 @@ import DocumentsExternes from "../components/DocumentsExternes.jsx";
 import NotesModal from "../components/NotesModal.jsx";
 import RetraitStagiaireModal from "../components/RetraitStagiaireModal.jsx";
 import SupprimerSessionModal from "../components/SupprimerSessionModal.jsx";
+import RecuperationDocumentsModal from "../components/RecuperationDocumentsModal.jsx";
 import { colorOf, initials, dateHeure } from "../lib/format.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { lienDossier } from "../lib/lienDossier.js";
@@ -56,6 +57,7 @@ function SessionDetail() {
   const [notesFor, setNotesFor] = useState(null);
   const [retraitDe, setRetraitDe] = useState(null); // { id, name } : la fenêtre de retrait ouverte
   const [suppression, setSuppression] = useState(false); // fenêtre de confirmation de suppression de la session
+  const [recup, setRecup] = useState(null); // { enrollmentId, nom, docs } : documents orphelins à rattacher
   // Inscription : « individuel » (recherche nominative) ou « entreprise » (on choisit
   // l'entreprise, puis les stagiaires parmi les SIENS). Deux façons de peupler la même session.
   const [mode, setMode] = useState("individuel");
@@ -143,7 +145,34 @@ function SessionDetail() {
       const r = await createEnrollment({ learner_id: learnerId, session_id: id, crm_stage: "INSCRIT" });
       setStatus({ type: "success", message: `Stagiaire inscrit.${messageCompte(r?.compte)}` });
       load();
+      /* SESSION RECRÉÉE ? Si le stagiaire a des documents orphelins (détachés par une suppression)
+         qui appartiennent à ce parcours, on propose de les rattacher — détecter puis CONFIRMER,
+         jamais en douce. Hors du chemin critique : une erreur ici ne gâche pas l'inscription. */
+      if (r?.id) {
+        try {
+          const { data: recuperables } = await getDocumentsRecuperables(r.id);
+          if (recuperables && recuperables.length) {
+            const l = allLearners.find((x) => x.id === learnerId);
+            const nom = (l ? [l.first_name, l.last_name].filter(Boolean).join(" ") : "") || "ce stagiaire";
+            setRecup({ enrollmentId: r.id, nom, docs: recuperables });
+          }
+        } catch { /* la détection est un bonus : on n'alerte pas si elle échoue */ }
+      }
     } catch (err) {
+      setStatus({ type: "error", message: err.message });
+    }
+  }
+
+  // Rattache les documents orphelins choisis au dossier, puis rafraîchit le parcours.
+  async function confirmerRecuperation(documentIds) {
+    try {
+      const { data } = await recupererDocuments(recup.enrollmentId, documentIds);
+      setRecup(null);
+      load();
+      const n = data?.rattaches || 0;
+      if (n) setStatus({ type: "success", message: `${n} document${n > 1 ? "s" : ""} rattaché${n > 1 ? "s" : ""} au dossier.` });
+    } catch (err) {
+      setRecup(null);
       setStatus({ type: "error", message: err.message });
     }
   }
@@ -608,6 +637,11 @@ function SessionDetail() {
           onClose={() => setSuppression(false)}
           onConfirm={confirmerSuppression}
         />
+      )}
+      {recup && (
+        <RecuperationDocumentsModal
+          nom={recup.nom} docs={recup.docs}
+          onClose={() => setRecup(null)} onConfirm={confirmerRecuperation} />
       )}
       {notesFor && (
         <NotesModal enrollmentId={notesFor.id} name={notesFor.name} onClose={() => setNotesFor(null)} />

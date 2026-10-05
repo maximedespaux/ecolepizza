@@ -1103,6 +1103,14 @@ export function createEnrollment(payload) {
   return request("/enrollments", { method: "POST", body: JSON.stringify(payload) });
 }
 
+// Récupération de parcours : documents orphelins d'une session recréée, puis leur rattachement.
+export function getDocumentsRecuperables(enrollmentId) {
+  return request(`/enrollments/${enrollmentId}/documents-recuperables`);
+}
+export function recupererDocuments(enrollmentId, documentIds) {
+  return request(`/enrollments/${enrollmentId}/recuperer-documents`, { method: "POST", body: JSON.stringify({ documentIds }) });
+}
+
 /* Met à jour UN dossier : le type de devis (financing), l'étape CRM… Le type de devis se change
    d'ici, dossier par dossier, depuis le menu du parcours sur la fiche stagiaire. */
 export function updateEnrollment(id, payload) {
