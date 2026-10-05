@@ -1984,35 +1984,6 @@ const getMyInfos = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-
-/**
- * GET /api/mon-espace/entreprises?q=… — recherche d'une entreprise à rattacher, par son nom.
- *
- * Le stagiaire qui n'a pas (ou plus) la bonne entreprise la CHOISIT dans la base de l'organisme, il
- * ne la crée pas : ça évite les doublons (« Pizza Bella », « pizza bella », « SARL Bella »…). On ne
- * renvoie RIEN sous trois caractères, et jamais la liste entière — on ne répond qu'à une recherche
- * précise, et une frappe isolée ne déclenche pas de requête.
- */
-const searchMyCompanies = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const learner = await learnerForUser(conn, req.user.id);
-        if (!learner) return res.json({ data: [] }); // personnel : pas d'entreprise à rattacher ici
-        const q = String(req.query.q || '').trim();
-        if (q.length < 3) return res.json({ data: [] });
-        // Échappe %, _ et \ : un nom qui en contient reste cherché à la lettre, pas comme un motif.
-        const motif = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
-        const [rows] = await conn.query(
-            `SELECT id, name, zip_code, town FROM company
-              WHERE organization_id = ? AND name LIKE ? ORDER BY name LIMIT 10`,
-            [learner.organization_id, motif]);
-        res.json({ data: rows });
-    } catch (err) {
-        console.error('Erreur recherche entreprise :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
-
 /**
  * GET /api/mon-espace/consentements — l'état courant, finalité par finalité.
  *
@@ -2180,25 +2151,14 @@ const updateMyInfos = async (req, res) => {
         if (vals.last_name !== undefined) { uSets.push('last_name = ?'); uParams.push(vals.last_name); }
         if (vals.phone !== undefined) { uSets.push('phone = ?'); uParams.push(vals.phone); }
         if (uSets.length) await conn.query(`UPDATE user SET ${uSets.join(', ')} WHERE id = ?`, [...uParams, req.user.id]);
-        /* ENTREPRISE — deux gestes séparés, et une donnée partagée qu'on protège.
-           1) RATTACHEMENT : le stagiaire CHOISIT une entreprise existante de l'organisme (company_id
-              venu de la recherche). Il ne la crée plus depuis ici — l'ancien « un nom suffit à créer »
-              semait des doublons et laissait n'importe qui réécrire l'adresse d'une entreprise que
-              d'autres stagiaires partagent.
-           2) MODIFICATION des coordonnées : réservée au RÉFÉRENT (le « propriétaire », migration 174).
-              Un simple rattaché ne peut que la lire — le serveur le fait respecter même si l'écran
-              laissait passer les champs. */
+        /* ENTREPRISE — DU RESSORT DE L'ÉCOLE (tranché le 2026-10-05). Le stagiaire ne CHOISIT pas et ne
+           CRÉE pas d'entreprise depuis son espace : se rattacher soi-même à n'importe quelle entreprise
+           laisserait affirmer un lien faux, et « un nom suffit à créer » semait des doublons. Le
+           rattachement (learner.company_id) reste posé par l'école, à l'inscription. Le stagiaire ne
+           peut qu'une chose ici : s'il est le RÉFÉRENT (le « propriétaire », migration 174), corriger
+           les COORDONNÉES de son entreprise. Un simple rattaché n'y touche pas — c'est une donnée
+           partagée, et le serveur le fait respecter même si l'écran laissait passer les champs. */
         if (learner) {
-            if (b.company_id !== undefined) {
-                const cid = String(b.company_id || '').trim();
-                if (cid && cid !== learner.company_id) {
-                    const [[c]] = await conn.query(
-                        'SELECT id FROM company WHERE id = ? AND organization_id = ?', [cid, learner.organization_id]);
-                    if (!c) return res.status(422).json({ message: 'Entreprise introuvable.' });
-                    await conn.query('UPDATE learner SET company_id = ? WHERE id = ?', [cid, learner.id]);
-                    learner.company_id = cid;
-                }
-            }
             const cvals = {};
             if (b.company_name !== undefined) cvals.name = clean(b.company_name);
             if (b.company_address !== undefined) cvals.address = clean(b.company_address);
@@ -2219,6 +2179,6 @@ const updateMyInfos = async (req, res) => {
 // Union des deux branches : getMyAccess (branche « Mes accès ») + tout le bloc boutique/avatar.
 module.exports = {
     getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter,
-    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, searchMyCompanies, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+    saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
     completionOf, // exporté pour le test de complétion (compte à deux casquettes)
 };
