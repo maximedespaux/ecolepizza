@@ -6878,6 +6878,9 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .stat-recence-barres{display:flex;flex-direction:column;gap:3px}
 .stat-barre{display:flex;align-items:center;gap:7px;height:14px}
 .stat-barre-fill{height:100%;min-width:2px;border-radius:4px;transition:width .3s var(--ease)}
+/* Barre de récence colorée PAR FORMATION : les segments empilés en largeur, coupés aux coins ronds. */
+.stat-barre-form{display:flex;overflow:hidden;background:none}
+.stat-barre-form>span{display:block;height:100%}
 .stat-barre-n{font-size:11px;color:var(--muted);font-weight:600}
 @media (max-width:620px){
   .stat-synth-grille{grid-template-columns:minmax(0,1fr)}

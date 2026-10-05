@@ -154,3 +154,34 @@ test('la page : courbe AVANT la récence, survol par formation, résumé, assidu
     const api = lire(path.join(UI, 'api/apiClient.js'));
     assert.match(api, /\/statistiques\/connexions\$\{jours \? `\?jours=\$\{jours\}` : ""\}/);
 });
+
+test('la récence est colorée PAR FORMATION, comme la courbe (serveur + écran)', () => {
+    const c = lire(path.join(API, 'controllers/statistiques.controller.js'));
+    // Le serveur RÉUTILISE pondererFormations, la TRANCHE jouant le rôle du « jour ». Lu sur
+    // enrollment (pas connexion_jour) → disponible même sans la migration 200.
+    assert.match(c, /jour: stats\.trancheDe\(r\.last_login_at, maintenant\)/, 'la tranche joue le rôle du jour');
+    assert.match(c, /FROM user u[\s\S]*?JOIN enrollment e[\s\S]*?JOIN training_program p/, 'récence formations lue sur enrollment');
+    assert.match(c, /recence_formations: recenceFormations/);
+    // Une formation vue SEULEMENT en récence s'unifie à formations_cle (mêmes couleurs, même légende).
+    assert.match(c, /for \(const c of pr\.cles\)/);
+    // L'écran : la barre stagiaire de la récence est colorée par formation (segments empilés).
+    const p = lire(path.join(UI, 'pages/Statistiques.jsx'));
+    assert.match(p, /function Recence\(\{ d, couleur \}\)/, 'Recence reçoit le résolveur de couleurs');
+    assert.match(p, /d\.stagiaires\.recence_formations/);
+    assert.match(p, /<Recence d=\{d\} couleur=\{couleur\}/);
+    assert.match(p, /f\.key === "__autre" \? UNKNOWN_COLOR : couleur\(f\.key\)/, 'chaque segment à la couleur de sa formation');
+});
+
+test('récence par formation : pondererFormations marche avec la TRANCHE comme clé (50/50)', () => {
+    // Deux stagiaires « Aujourd'hui » : l'un en NIV1, l'autre en NIV1+NIV2 → NIV1 1,5 / NIV2 0,5.
+    const rows = [
+        { jour: 'j1', uid: 'a', key: 'niv1', label: 'NIV1' },
+        { jour: 'j1', uid: 'b', key: 'niv1', label: 'NIV1' },
+        { jour: 'j1', uid: 'b', key: 'niv2', label: 'NIV2' },
+    ];
+    const { parJour } = pondererFormations(rows, new Map([['j1', 2]]));
+    const seg = parJour.get('j1');
+    assert.equal(seg.find((s) => s.key === 'niv1').n, 1.5);
+    assert.equal(seg.find((s) => s.key === 'niv2').n, 0.5);
+    assert.ok(Math.abs(seg.reduce((a, s) => a + s.n, 0) - 2) < 1e-9, 'la somme des parts = les stagiaires distincts de la tranche');
+});
