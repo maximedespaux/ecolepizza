@@ -37,6 +37,8 @@ const ACTION_LABEL = {
        aucune signature électronique n'a eu lieu ici : « Document signé » au journal effacerait
        justement la distinction que l'import doit préserver. */
     'document.import': ['Document reçu et importé', B],
+    // Étape avancée SANS document ni signature (CGV, livret d'accueil remis) — jamais « signé ».
+    'document.marque_fait': ['Étape marquée faite', B],
     'document.sign_link': ['Lien de signature émis', B],
     /* Document de SESSION envoyé à un intervenant externe pour signature (contrat d'hygiène…).
        Journalisé des deux côtés : l'envoi engage l'organisme, la signature engage l'intervenant. */

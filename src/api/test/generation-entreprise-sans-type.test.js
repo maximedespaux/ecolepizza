@@ -37,7 +37,9 @@ test('la fiche stagiaire fabrique le même type : un modèle, un type, quel que 
        les documents du groupe à ceux de la fiche. */
     const fiche = fs.readFileSync(path.join(__dirname, '../../app/ui/pages/StagiaireDetail.jsx'), 'utf8');
     const derivations = fiche.match(/tpl\.doc_type \|\| tpl\.slug\.toUpperCase\(\)\.replace\(\/-\/g, "_"\)/g) || [];
-    assert.strictEqual(derivations.length, 2, 'création ET import d\'un document');
+    // Trois endroits dérivent le type, à l'IDENTIQUE : création, import d'un document reçu, et
+    // « marquer fait » sans document (2026-10-05). Même règle partout, sinon deux types pour un modèle.
+    assert.strictEqual(derivations.length, 3, 'création, import ET « marquer fait »');
 });
 
 /* ─────────────── Les deux routes, contre une base qui refuse le NULL ─────────────── */

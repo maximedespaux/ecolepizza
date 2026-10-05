@@ -1089,6 +1089,8 @@ export async function importDocumentFile(fd) {
     stopLoading();
   }
 }
+// Marquer une étape faite SANS joindre de document (CGV, livret d'accueil remis, rien à stocker).
+export function marquerDocumentFait(payload) { return request("/documents/marquer-fait", { method: "POST", body: JSON.stringify(payload) }); }
 export function archiveFileUrl(id) {
   return `${API_BASE_URL}/suivi/archives/${id}/file`;
 }

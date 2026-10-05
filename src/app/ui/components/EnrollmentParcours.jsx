@@ -117,6 +117,18 @@ function importPossible(s) {
   if (!isGroup(s) && s.company_level) return false;
   return !(isGroup(s) && !s.company_level);
 }
+/* MARQUER UNE ÉTAPE FAITE SANS DOCUMENT (`onMarquerFait`) — reprise des anciens stagiaires
+   (2026-10-05). Pour un document REMIS dont on n'a aucun fichier à stocker (CGV, livret d'accueil…) :
+   l'étape compte faite, le journal dit « marquée faite », jamais « signée ». Sur un DOCUMENT seulement
+   — une pièce ou une remise se DÉPOSENT, un QCM importe son RÉSULTAT —, avec les mêmes gardes de groupe
+   que l'import, et seulement si l'étape n'est pas DÉJÀ faite. */
+function marquerFaitPossible(s) {
+  if (s.piece || s.remise || estQcm(s)) return false;
+  if (!isGroup(s) && s.company_level) return false;
+  if (isGroup(s) && !s.company_level) return false;
+  const e = etatDe(s);
+  return e !== "VALIDE" && e !== "SANS_OBJET";
+}
 /* LE MOT CHANGE PARCE QUE LE GESTE CHANGE : une pièce reçue se dépose et se valide, un document remis se
    DÉPOSE (l'école le donne, le destinataire en accuse réception), un document reçu s'IMPORTE. */
 const libelleImport = (s) => (s.piece ? "Déposer la pièce reçue" : s.remise ? "Déposer le document" : estQcm(s) ? "Importer le résultat (PDF)" : "Importer un document reçu");
@@ -189,7 +201,7 @@ const AUTRE = "__autre__";
  *     page sache quels documents les étapes montrent déjà.
  * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing, companyValue, companies, onChangeCompany }) {
+function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, onMarquerFait, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing, companyValue, companies, onChangeCompany }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -492,6 +504,14 @@ function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, re
           {onImport && importPossible(step) && (
             <button className="btn" onClick={() => onImport(step)} title={titreImport(step)}>
               {libelleImport(step)}
+            </button>
+          )}
+          {/* MARQUER COMME FAIT, SANS DOCUMENT : pour un document remis dont on n'a rien à stocker
+              (CGV, livret d'accueil…). L'étape compte faite, le journal dit « marquée faite ». */}
+          {onMarquerFait && marquerFaitPossible(step) && (
+            <button className="btn" onClick={() => onMarquerFait(step)}
+              title="Marquer cette étape faite SANS joindre de document (CGV, livret d'accueil… remis mais rien à stocker). Le journal indiquera « marquée faite », jamais « signée ».">
+              Marquer comme fait
             </button>
           )}
           {/* RATTACHER UN DOCUMENT DÉTACHÉ (coffre) : seulement sur une étape ENCORE VIDE d'un dossier
