@@ -83,3 +83,23 @@ test('écran : rattacher un document détaché ÉTAPE PAR ÉTAPE, depuis le coff
     assert.match(c, /!step\.docId && etatDe\(step\) === "A_FAIRE" && \(detachesParEtape\.get\(step\.key\)\?\.length > 0\)/,
         'bouton seulement sur une étape vide ayant un détaché correspondant');
 });
+
+test('serveur : récupération de parcours ENTREPRISE (documents de groupe détachés)', () => {
+    const c = lire('src/api/controllers/company.controller.js');
+    // Détection : documents de GROUPE orphelins (company_id, scope COMPANY, détachés, sans lien).
+    assert.match(c, /gd\.company_id = \? AND gd\.scope = 'COMPANY'[\s\S]*?AND gd\.enrollment_id IS NULL/);
+    assert.match(c, /gd\.id NOT IN \(SELECT document_id FROM document_formation\)/);
+    // Rattachement : un lien document_formation vers CHAQUE dossier du groupe (comme createCompanyDocument).
+    assert.match(c, /for \(const eid of idsGroupe\)/);
+    assert.match(c, /INSERT IGNORE INTO document_formation \(document_id, enrollment_id\) VALUES \(\?, \?\)/);
+    // Garde dans le UPDATE : cette entreprise, scope COMPANY, ENCORE détaché.
+    assert.match(c, /company_id = \? AND scope = 'COMPANY' AND enrollment_id IS NULL/);
+});
+
+test('écran : le parcours ENTREPRISE propose aussi le rattachement par étape', () => {
+    const c = lire('src/app/ui/components/EnrollmentParcours.jsx');
+    assert.match(c, /getCompanyDocumentsRecuperables\(caCompany, caSession\)/, 'détection côté groupe');
+    assert.match(c, /recupererCompanyDocuments\(caCompany, caSession, \[\.\.\.attacheSel\]\)/, 'rattachement côté groupe');
+    const e = lire('src/app/ui/pages/EntrepriseDetail.jsx');
+    assert.match(e, /companyAttach=\{\{ companyId: id, sessionId: viewSessionId \}\}/, 'la fiche entreprise active le mode groupe');
+});

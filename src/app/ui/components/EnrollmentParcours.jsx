@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { getEnrollmentParcours, getDocumentsRecuperables, recupererDocuments } from "../api/apiClient.js";
+import { getEnrollmentParcours, getDocumentsRecuperables, recupererDocuments, getCompanyDocumentsRecuperables, recupererCompanyDocuments } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import Badge from "./Badge.jsx";
 
@@ -186,7 +186,7 @@ const AUTRE = "__autre__";
  *     page sache quels documents les étapes montrent déjà.
  * Sans eux (fiche entreprise), rien ne change : « Préparer » appelle `onPrepare`, comme avant.
  */
-function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing, companyValue, companies, onChangeCompany }) {
+function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, refresh, onOpenDoc, onPrepare, onSendQuiz, onSignLink, onImport, renderGestes, renderPreparation, onCharge, renderFin, financingValue, onChangeFinancing, companyValue, companies, onChangeCompany }) {
   const [data, setData] = useState(null);
   const [sel, setSel] = useState(null);
   const [error, setError] = useState(null);
@@ -230,16 +230,19 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
     return () => { active = false; };
   }, [key, refresh, localRefresh]);
 
-  // Les documents détachés rattachables (coffre), rafraîchis avec le parcours. Vide en mode groupe
-  // (fiche entreprise, sans enrollmentId) : le rattachement par étape ne vaut que pour un dossier.
+  // Les documents détachés rattachables (coffre), rafraîchis avec le parcours : un DOSSIER stagiaire
+  // (enrollmentId), ou le GROUPE d'une entreprise sur une session (companyAttach). Sinon rien.
+  const caCompany = companyAttach?.companyId;
+  const caSession = companyAttach?.sessionId;
   useEffect(() => {
-    if (!enrollmentId) { setDetaches([]); return undefined; }
+    const charge = enrollmentId
+      ? getDocumentsRecuperables(enrollmentId)
+      : (caCompany && caSession) ? getCompanyDocumentsRecuperables(caCompany, caSession) : null;
+    if (!charge) { setDetaches([]); return undefined; }
     let active = true;
-    getDocumentsRecuperables(enrollmentId)
-      .then((r) => { if (active) setDetaches(r.data || []); })
-      .catch(() => { if (active) setDetaches([]); });
+    charge.then((r) => { if (active) setDetaches(r.data || []); }).catch(() => { if (active) setDetaches([]); });
     return () => { active = false; };
-  }, [enrollmentId, refresh, localRefresh]);
+  }, [enrollmentId, caCompany, caSession, refresh, localRefresh]);
 
   /* SANS ÉTAPE — formation sans parcours, ou parcours illisible —, il n'y a aucune étape où ouvrir
      le formulaire. Il est alors proposé tel quel, modèle au choix : préparer un document ne dépend
@@ -316,12 +319,13 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
     setAttachePour(cle);
     setAttacheSel(new Set((detachesParEtape.get(cle) || []).map((d) => d.id)));
   }
-  // Rattache les documents détachés choisis au dossier, puis recharge parcours ET liste des détachés.
+  // Rattache les documents détachés choisis (dossier stagiaire OU groupe entreprise), puis recharge.
   async function rattacher() {
     if (attacheEnvoi || !attacheSel.size) return;
     setAttacheEnvoi(true);
     try {
-      await recupererDocuments(enrollmentId, [...attacheSel]);
+      if (enrollmentId) await recupererDocuments(enrollmentId, [...attacheSel]);
+      else if (caCompany && caSession) await recupererCompanyDocuments(caCompany, caSession, [...attacheSel]);
       setAttachePour(null);
       setAttacheSel(new Set());
       setLocalRefresh((v) => v + 1);
@@ -489,7 +493,7 @@ function EnrollmentParcours({ enrollmentId, fetcher, resetKey, refresh, onOpenDo
           )}
           {/* RATTACHER UN DOCUMENT DÉTACHÉ (coffre) : seulement sur une étape ENCORE VIDE d'un dossier
               stagiaire, et seulement si un document orphelin VA à cette étape (même modèle/QCM). */}
-          {enrollmentId && !step.docId && etatDe(step) === "A_FAIRE" && (detachesParEtape.get(step.key)?.length > 0) && (
+          {(enrollmentId || (caCompany && caSession)) && !step.docId && etatDe(step) === "A_FAIRE" && (detachesParEtape.get(step.key)?.length > 0) && (
             <button className="btn" onClick={() => ouvrirAttache(step.key)}
               title="Rattacher à cette étape un document détaché du coffre (laissé par une session recréée)">
               🔗 Rattacher un détaché ({detachesParEtape.get(step.key).length})
