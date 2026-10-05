@@ -88,7 +88,7 @@ const connexions = async (req, res) => {
 
             // Les plus assidus : le plus de JOURS de connexion sur la fenêtre (stagiaires et équipe).
             const [top] = await conn.query(
-                `SELECT cj.est_stagiaire AS stagiaire, COUNT(DISTINCT cj.jour) AS jours, ${NOM} AS nom
+                `SELECT cj.est_stagiaire AS stagiaire, cj.user_id AS uid, COUNT(DISTINCT cj.jour) AS jours, ${NOM} AS nom
                    FROM connexion_jour cj
                    JOIN user u ON u.id = cj.user_id
                    LEFT JOIN learner l ON l.user_id = cj.user_id AND l.organization_id = cj.organization_id
@@ -96,7 +96,7 @@ const connexions = async (req, res) => {
                   GROUP BY cj.user_id, cj.est_stagiaire, ${NOM}
                   ORDER BY jours DESC, nom ASC
                   LIMIT 8`, [orgId, borne]);
-            assidus = top.map((t) => ({ nom: t.nom, stagiaire: Number(t.stagiaire) === 1, jours: Number(t.jours) }));
+            assidus = top.map((t) => ({ nom: t.nom, stagiaire: Number(t.stagiaire) === 1, jours: Number(t.jours), uid: t.uid }));
         } catch (e) {
             if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e;
         }
@@ -127,6 +127,20 @@ const connexions = async (req, res) => {
             const vus = new Set(sansAutre.map((c) => c.key));
             for (const c of pr.cles) if (c.key !== '__autre' && !vus.has(c.key)) { sansAutre.push(c); vus.add(c.key); }
             formationsCle = avecAutre ? [...sansAutre, { key: '__autre', label: 'Sans formation' }] : sansAutre;
+            /* La pastille de chaque « plus assidu » stagiaire prendra la couleur de SA formation
+               (camembert si plusieurs). On rattache ses formations depuis les mêmes lignes, et on
+               retire l'`uid` (interne) au passage. L'équipe n'a pas de formation. */
+            if (assidus) {
+                const formParUser = new Map();
+                for (const r of frRec) {
+                    if (!formParUser.has(r.uid)) formParUser.set(r.uid, new Map());
+                    formParUser.get(r.uid).set(String(r.pkey), r.label);
+                }
+                assidus = assidus.map((a) => ({
+                    nom: a.nom, stagiaire: a.stagiaire, jours: a.jours,
+                    formations: a.stagiaire ? [...(formParUser.get(a.uid) || new Map())].map(([key, label]) => ({ key, label })) : [],
+                }));
+            }
         } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
 
         res.json({
