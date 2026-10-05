@@ -137,9 +137,12 @@ const geocodeLearners = (req, res) => {
             }
             if (!rows.length) return res.json({ data: { done: 0, remaining: 0 } });
 
-            // Adresse géocodée selon le financement :
-            //  · professionnel avec entreprise → adresse EXACTE de l'entreprise ;
-            //  · particulier → VILLE uniquement (confidentialité : jamais l'adresse perso).
+            /* CE QU'ON ENVOIE AU GÉOCODEUR, et la règle de confidentialité qui le commande :
+               · stagiaire AVEC entreprise (professionnel) → l'adresse EXACTE de l'entreprise (une
+                 adresse d'établissement, publique) ;
+               · stagiaire SANS entreprise (particulier) → SON code postal + SA ville, et JAMAIS son
+                 adresse personnelle. Celle-ci (`learner.address`) n'est d'ailleurs même PAS lue par
+                 cette requête, pour qu'aucune évolution ne puisse l'envoyer par mégarde. */
             const inputs = rows.map((r) => {
                 const pro = aAdresseEntreprise(r);
                 return pro
