@@ -654,6 +654,13 @@ export function detachCompanyLearner(id, learnerId) {
 export function getCompanyParcours(id, sessionId) {
   return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
 }
+// Récupération de parcours ENTREPRISE : documents de groupe détachés d'une session recréée.
+export function getCompanyDocumentsRecuperables(id, sessionId) {
+  return request(`/companies/${id}/documents-recuperables?session_id=${encodeURIComponent(sessionId)}`);
+}
+export function recupererCompanyDocuments(id, sessionId, documentIds) {
+  return request(`/companies/${id}/recuperer-documents`, { method: "POST", body: JSON.stringify({ session_id: sessionId, documentIds }) });
+}
 // `generateGroupDocuments` (POST /companies/:id/group-documents) a été RETIRÉ du client : la
 // préparation d'un document de GROUPE passe désormais par `createCompanyDocument`, étape par
 // étape (cf. EntrepriseDetail, « Préparer le document »). Son seul vestige était un import mort

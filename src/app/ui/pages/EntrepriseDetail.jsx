@@ -868,6 +868,7 @@ export default function EntrepriseDetail() {
           ) : (
             <EnrollmentParcours
               fetcher={() => getCompanyParcours(id, viewSessionId)}
+              companyAttach={{ companyId: id, sessionId: viewSessionId }}
               resetKey={`${id}:${viewSessionId}`}
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}

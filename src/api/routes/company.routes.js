@@ -1,5 +1,5 @@
 const express = require('express');
-const { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount } = require('../controllers/company.controller.js');
+const { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments } = require('../controllers/company.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -10,6 +10,9 @@ router.get('/:id', getCompany);
 router.get('/:id/doc-templates', companyDocTemplates);
 router.get('/:id/documents', listCompanyDocuments);
 router.get('/:id/parcours', getCompanyParcours);
+// Récupération de parcours ENTREPRISE : documents de groupe détachés d'une session recréée.
+router.get('/:id/documents-recuperables', getCompanyDocumentsRecuperables);
+router.post('/:id/recuperer-documents', authorizeRoles(...ADMIN_ROLES), recupererCompanyDocuments);
 router.get('/:id/learner-documents', getCompanyLearnerDocuments);
 router.post('/', authorizeRoles(...ADMIN_ROLES), createCompany);
 // L'import CSV : mêmes rôles que la création d'une fiche (lib/importFiches.js).

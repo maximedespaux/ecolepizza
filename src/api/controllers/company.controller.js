@@ -1188,4 +1188,76 @@ const importCompanies = async (req, res) => {
     }
 };
 
-module.exports = { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, normaliserEntreprise, RE_EMAIL_ENT };
+/**
+ * GET /api/companies/:id/documents-recuperables?session_id= — documents de GROUPE ORPHELINS de
+ * l'entreprise (company_id, scope COMPANY, DÉTACHÉS : plus aucun lien de parcours) dont le modèle
+ * appartient au parcours entreprise de la session. Ce sont ceux qu'une session supprimée a laissés
+ * dans « Sans session » du coffre. Rien n'est modifié ici.
+ */
+const getCompanyDocumentsRecuperables = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const sessionId = req.query.session_id;
+        if (!sessionId) return res.json({ data: [] });
+        const grp = await resolveGroupSteps(conn, orgId, req.params.id, sessionId);
+        if (!grp) return res.json({ data: [] });
+        const slugs = grp.allSteps.filter((s) => s.company_level && s.slug).map((s) => s.slug);
+        if (!slugs.length) return res.json({ data: [] });
+        const [orphelins] = await conn.query(
+            `SELECT gd.id, gd.type, gd.title, gd.status, gd.template_slug, gd.quiz_id,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d') AS signed_at
+               FROM generated_document gd
+              WHERE gd.organization_id = ? AND gd.company_id = ? AND gd.scope = 'COMPANY'
+                AND gd.enrollment_id IS NULL
+                AND gd.template_slug IN (?)
+                AND gd.id NOT IN (SELECT document_id FROM document_formation)
+              ORDER BY gd.created_at`,
+            [orgId, req.params.id, slugs]);
+        res.json({ data: orphelins });
+    } catch (err) {
+        console.error('Erreur documents récupérables (entreprise) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/companies/:id/recuperer-documents { session_id, documentIds } — rattache des documents
+ * de GROUPE orphelins au groupe de la session : enrollment_id (dossier d'ancrage) + un lien
+ * document_formation vers CHAQUE dossier du groupe (comme createCompanyDocument), pour que le
+ * parcours entreprise les retrouve et qu'ils quittent « Sans session ». Chaque document est
+ * REVÉRIFIÉ (même entreprise, scope COMPANY, encore détaché) : un id passé à la main ne détourne
+ * pas le document d'un autre groupe.
+ */
+const recupererCompanyDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const sessionId = req.body?.session_id;
+        const ids = Array.isArray(req.body?.documentIds) ? req.body.documentIds.filter(Boolean) : [];
+        if (!sessionId) return res.status(422).json({ error: 'Session requise.' });
+        const grp = await resolveGroupSteps(conn, orgId, req.params.id, sessionId);
+        if (!grp || !grp.enrollments.length || !ids.length) return res.json({ data: { rattaches: 0 } });
+        const idsGroupe = grp.enrollments.map((e) => e.id);
+        const ancre = idsGroupe[0];
+        let rattaches = 0;
+        for (const docId of ids) {
+            // Garde DANS le UPDATE : cette entreprise, un document de groupe, ENCORE détaché.
+            const [r] = await conn.query(
+                `UPDATE generated_document SET enrollment_id = ?
+                  WHERE id = ? AND organization_id = ? AND company_id = ? AND scope = 'COMPANY' AND enrollment_id IS NULL`,
+                [ancre, docId, orgId, req.params.id]);
+            if (!r.affectedRows) continue;
+            for (const eid of idsGroupe) {
+                await conn.query('INSERT IGNORE INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [docId, eid]);
+            }
+            rattaches += 1;
+        }
+        res.json({ data: { rattaches } });
+    } catch (err) {
+        console.error('Erreur récupération documents (entreprise) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments, normaliserEntreprise, RE_EMAIL_ENT };
