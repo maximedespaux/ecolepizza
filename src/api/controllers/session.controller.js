@@ -141,7 +141,22 @@ const getSession = async (req, res) => {
                 [req.params.id]);
             if (loc) { location_id = loc.location_id || null; location_name = loc.name || null; }
         } catch { /* migration des lieux non appliquée */ }
-        res.json({ data: { ...rows[0], location_id, location_name, enrollments, trainers } });
+        /* Combien de documents seraient DÉTACHÉS si la session partait (garde-fou de l'écran) : tout
+           document rattaché à un dossier de la session, par le lien de parcours (document_formation)
+           ou par son enrollment_id. Tolérant : une table absente ne doit pas casser la fiche. */
+        let documents_lies = 0;
+        try {
+            const [[dc]] = await conn.query(
+                `SELECT COUNT(DISTINCT gd.id) AS n FROM generated_document gd
+                  WHERE gd.organization_id = ?
+                    AND (gd.enrollment_id IN (SELECT id FROM enrollment WHERE session_id = ?)
+                      OR gd.id IN (SELECT df.document_id FROM document_formation df
+                                    JOIN enrollment e2 ON e2.id = df.enrollment_id
+                                   WHERE e2.session_id = ?))`,
+                [req.user.organization_id, req.params.id, req.params.id]);
+            documents_lies = dc ? Number(dc.n) : 0;
+        } catch { /* tolérant : ce compte n'est qu'indicatif pour l'avertissement */ }
+        res.json({ data: { ...rows[0], location_id, location_name, enrollments, trainers, documents_lies } });
     } catch (err) {
         console.error('Erreur récupération session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -208,18 +223,38 @@ const updateSession = async (req, res) => {
 /**
  * DELETE /api/sessions/:id
  */
-const deleteSession = (req, res) => {
-    db.query(
-        'DELETE FROM training_session WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression session :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
-            }
-            res.status(200).json({ success: true, message: 'Session supprimée' });
+/* DELETE /api/sessions/:id — supprimer une session.
+ *
+ * GARDE-FOU : une session qui a des inscriptions n'emporte pas ses dossiers sur un simple clic. Le
+ * serveur EXIGE `?confirmer=1` dès qu'il reste au moins un stagiaire — pour qu'un appel isolé, un
+ * double-clic ou un script ne vide pas une session peuplée sans geste délibéré. La fenêtre de
+ * l'écran (saisie du nom de la session + du nombre de stagiaires) ne passe ce drapeau qu'après
+ * confirmation à la main. La suppression DÉTACHE les documents (enrollment_id SET NULL) sans les
+ * effacer : ils restent récupérables en recréant la session (cf. récupération de parcours). */
+const deleteSession = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[s]] = await conn.query(
+            'SELECT id FROM training_session WHERE id = ? AND organization_id = ?',
+            [req.params.id, orgId]);
+        if (!s) return res.status(404).json({ message: 'Session introuvable' });
+        const [[{ n }]] = await conn.query(
+            'SELECT COUNT(*) AS n FROM enrollment WHERE session_id = ?', [req.params.id]);
+        if (n > 0 && req.query.confirmer !== '1') {
+            return res.status(409).json({
+                message: `Session non vide : ${n} inscription(s). Confirmation requise.`,
+                stagiaires: n,
+            });
         }
-    );
+        await conn.query(
+            'DELETE FROM training_session WHERE id = ? AND organization_id = ?',
+            [req.params.id, orgId]);
+        res.status(200).json({ success: true, message: 'Session supprimée' });
+    } catch (err) {
+        console.error('Erreur suppression session :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 /**

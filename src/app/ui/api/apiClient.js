@@ -1003,8 +1003,9 @@ export function createSession(payload) {
   return request("/sessions", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function deleteSession(id) {
-  return request(`/sessions/${id}`, { method: "DELETE" });
+// `confirmer` : passe le garde-fou côté serveur (session non vide → suppression refusée sans lui).
+export function deleteSession(id, confirmer = false) {
+  return request(`/sessions/${id}${confirmer ? "?confirmer=1" : ""}`, { method: "DELETE" });
 }
 
 // --- Dossiers (inscriptions) ---
