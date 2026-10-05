@@ -101,12 +101,14 @@ function lineFor(s) {
   if (s.docStatus === "A_FAIRE") return "Document préparé, à envoyer.";
   return "En cours.";
 }
-/* LE GESTE « DÉPOSER / IMPORTER » D'UNE ÉTAPE (`onImport`). Jamais sur un QCM : un questionnaire ne se
-   remplace pas par un fichier. Ni sur une étape « stagiaire » vue depuis l'entreprise — elle ne dit pas de
-   quel stagiaire il s'agit —, SAUF une REMISE : l'école la dépose de là pour chacun (2026-09-28, l'AGEFICE
-   de LA CUISINE DE JULIEN). Ni sur une remise sans objet : rien n'y est dû. */
+/* LE GESTE « DÉPOSER / IMPORTER » D'UNE ÉTAPE (`onImport`). Sur un QCM, c'est pour rattacher le RÉSULTAT
+   d'un questionnaire passé HORS de l'application (Google Form, papier scanné) — la reprise des anciens
+   stagiaires (2026-10-05) : l'étape passe à « fait », la preuve PDF est stockée, sans réponses ni score ;
+   un QCM reste répondu DANS l'app par ailleurs. Ni sur une étape « stagiaire » vue depuis l'entreprise —
+   elle ne dit pas de quel stagiaire il s'agit —, SAUF une REMISE : l'école la dépose de là pour chacun
+   (2026-09-28, l'AGEFICE de LA CUISINE DE JULIEN). Ni sur une remise sans objet : rien n'y est dû. */
+const estQcm = (s) => String(s.key || "").startsWith("quiz:");
 function importPossible(s) {
-  if (String(s.key || "").startsWith("quiz:")) return false;
   if (s.remise) return etatDe(s) !== "SANS_OBJET";
   /* Un document de GROUPE vu depuis la fiche STAGIAIRE (donc pas `isGroup` : la fiche stagiaire ne
      porte pas les compteurs du groupe) ne se gère pas ici — il se génère, s'envoie et s'importe sur
@@ -117,9 +119,10 @@ function importPossible(s) {
 }
 /* LE MOT CHANGE PARCE QUE LE GESTE CHANGE : une pièce reçue se dépose et se valide, un document remis se
    DÉPOSE (l'école le donne, le destinataire en accuse réception), un document reçu s'IMPORTE. */
-const libelleImport = (s) => (s.piece ? "Déposer la pièce reçue" : s.remise ? "Déposer le document" : "Importer un document reçu");
+const libelleImport = (s) => (s.piece ? "Déposer la pièce reçue" : s.remise ? "Déposer le document" : estQcm(s) ? "Importer le résultat (PDF)" : "Importer un document reçu");
 function titreImport(s) {
   if (s.piece) return "Déposer ici une pièce reçue par e-mail ou scannée : elle sera validée du même geste";
+  if (estQcm(s)) return "Rattacher le résultat d'un QCM passé hors de l'application (Google Form, papier scanné) : l'étape passe à « fait », sans réponses ni score";
   if (s.remise) {
     return `Déposer le document que l'école remet : ${s.remiseEntreprise ? "l'entreprise" : "le stagiaire"} le reçoit dans son espace, et en accuse réception`;
   }

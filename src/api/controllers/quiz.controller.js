@@ -1168,6 +1168,28 @@ const resultatsOverview = async (req, res) => {
               GROUP BY q.id, q.title, q.kind, q.pass_score, q.active, q.day, q.program_id, p.code, p.title
               ORDER BY (q.program_id IS NULL), p.code, q.active DESC, responses DESC, q.title`,
             [orgId, ...f.params, orgId]);
+        /* RÉSULTATS IMPORTÉS (hors application) — reprise des anciens stagiaires (2026-10-05). Un QCM
+           passé sur Google Form est rattaché en PDF à son document (quiz_id), SIGNE, SANS réponse : il
+           ne compte donc pas dans `responses` (qui lit quiz_response). On le compte À PART, pour que
+           l'écran montre « N répondus · M importés » et ne laisse pas un QCM fait hors de l'app paraître
+           jamais fait. Le filtre SESSION s'applique (par l'inscription liée) ; l'année/semaine non — un
+           import n'a pas de date de réponse. Table absente (migration 145) → 0, sans casser la page. */
+        try {
+            const [imp] = await conn.query(
+                `SELECT gd.quiz_id, COUNT(DISTINCT gd.id) AS n
+                   FROM generated_document gd
+                   JOIN document_fichier dfi ON dfi.document_id = gd.id
+                   ${sessionId ? 'JOIN document_formation dfo ON dfo.document_id = gd.id JOIN enrollment e ON e.id = dfo.enrollment_id' : ''}
+                  WHERE gd.organization_id = ? AND gd.quiz_id IS NOT NULL AND gd.status = 'SIGNE'
+                    ${sessionId ? 'AND e.session_id = ?' : ''}
+                  GROUP BY gd.quiz_id`,
+                sessionId ? [orgId, sessionId] : [orgId]);
+            const impMap = new Map(imp.map((x) => [x.quiz_id, x.n]));
+            for (const r of rows) r.importes = impMap.get(r.id) || 0;
+        } catch (e) {
+            if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e;
+            for (const r of rows) r.importes = 0;
+        }
         /* Sessions et années qui ONT des réponses (pour les menus de filtre).
 
            ANNÉE, SEMAINE ET INTITULÉ VOYAGENT MAINTENANT AVEC LA SESSION : l'écran les range par

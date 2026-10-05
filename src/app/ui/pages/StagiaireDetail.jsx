@@ -497,6 +497,16 @@ function StagiaireDetail() {
     fd.append("file", await reduireSiImage(file, PROFILS.piece), file.name);
     if (step.docId) {
       fd.append("document_id", step.docId);
+    } else if (String(step.key || "").startsWith("quiz:")) {
+      /* RÉSULTAT D'UN QCM PASSÉ HORS DE L'APP (Google Form, papier) — on cible le QCM par son id
+         (`quiz:<id>`), le serveur crée ou retrouve SON document et le passe SIGNE. Pas de modèle :
+         un QCM n'en a pas. Ce cas n'arrive que si le QCM n'a jamais été envoyé (sinon `step.docId`). */
+      if (!curEnrId) { setStatus({ type: "error", message: "Sélectionne d'abord une inscription." }); return; }
+      fd.append("learner_id", id);
+      fd.append("quiz_id", step.key.slice(5));
+      fd.append("type", "QCM");
+      fd.append("title", step.label || "QCM");
+      fd.append("enrollment_ids", JSON.stringify(enrIdsImport && enrIdsImport.length ? enrIdsImport : [curEnrId]));
     } else {
       /* Étape jamais générée : on fournit de quoi la CRÉER, exactement comme le formulaire
          « Générer » — même dérivation du type depuis le modèle, sinon les deux chemins

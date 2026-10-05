@@ -71,8 +71,9 @@ test('le bouton annonce la bonne destination', () => {
        justificatives : annoncer « importer un document » ferait chercher le fichier au
        mauvais endroit. */
     /* Et un document REMIS se DÉPOSE (2026-09-28) : l'école le donne, le destinataire en accuse
-       réception — ni une pièce à valider, ni un document reçu. */
-    assert.match(ETAPES, /s\.piece \? "Déposer la pièce reçue" : s\.remise \? "Déposer le document" : "Importer un document reçu"/);
+       réception — ni une pièce à valider, ni un document reçu. Un QCM passé hors de l'app, lui, voit
+       son RÉSULTAT importé (2026-10-05) — d'où un quatrième libellé. */
+    assert.match(ETAPES, /s\.piece \? "Déposer la pièce reçue" : s\.remise \? "Déposer le document" : estQcm\(s\) \? "Importer le résultat \(PDF\)" : "Importer un document reçu"/);
 });
 
 test('la revue des pièces se rafraîchit après un dépôt du personnel', () => {

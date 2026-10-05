@@ -269,6 +269,8 @@ function QcmRow({ q, on, onClick }) {
           {!note && "Enquête · "}
           {q.responses} rép.
           {note && q.responses > 0 && ` · ${q.avg_pct ?? "—"} % moy.`}
+          {/* QCM passés HORS de l'app (Google Form…), rattachés en PDF : comptés à part, pas de score. */}
+          {q.importes > 0 && ` · ${q.importes} importé${q.importes > 1 ? "s" : ""}`}
         </span>
       </span>
       {/* La pastille de réussite reste : c'est la seule donnée qu'on lit à la couleur, sans lire. */}

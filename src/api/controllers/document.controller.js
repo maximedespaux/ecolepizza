@@ -767,10 +767,11 @@ const importDocumentFile = async (req, res) => {
             if (!d) return res.status(404).json({ message: 'Document introuvable.' });
         } else {
             const { learner_id, type, template_slug, title } = req.body;
+            const quizId = req.body.quiz_id || null;
             let enrIds = [];
             try { enrIds = JSON.parse(req.body.enrollment_ids || '[]'); } catch { enrIds = []; }
-            if (!learner_id || !type || !enrIds.length) {
-                return res.status(422).json({ error: 'Stagiaire, type et inscription requis pour créer l\'étape.' });
+            if (!learner_id || !enrIds.length || (!quizId && !type)) {
+                return res.status(422).json({ error: 'Stagiaire, inscription et (type ou QCM) requis pour créer l\'étape.' });
             }
             const [[l]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [learner_id, orgId]);
             if (!l) return res.status(404).json({ message: 'Stagiaire introuvable.' });
@@ -780,10 +781,39 @@ const importDocumentFile = async (req, res) => {
                 'SELECT id FROM enrollment WHERE id IN (?) AND organization_id = ? AND learner_id = ?',
                 [enrIds, orgId, learner_id]);
             if (!enr.length) return res.status(422).json({ error: 'Inscription introuvable pour ce stagiaire.' });
-            documentId = await prepareLearnerDoc(conn, orgId, {
-                learnerId: learner_id, type, templateSlug: template_slug || null, title,
-                enrollmentIds: enr.map((x) => x.id),
-            });
+
+            if (quizId) {
+                /* RÉSULTAT D'UN QCM PASSÉ HORS DE L'APPLICATION (Google Form, papier scanné) — reprise
+                   des anciens stagiaires, demandée le 2026-10-05. Un QCM n'est PAS un document (cf.
+                   migration 182) : son étape se coche d'ordinaire quand le stagiaire répond DANS l'app,
+                   et l'étape est liée au document par son `quiz_id`, pas par un modèle. Un QCM fait
+                   AILLEURS n'a pas de réponses à saisir, seulement une preuve PDF : on la rattache au
+                   document DU QCM (quiz_id), qui passera SIGNE plus bas — l'étape est alors « faite », et
+                   Résultats QCM le compte comme un résultat IMPORTÉ (sans score ni réponses). On réutilise
+                   le document du QCM s'il existe déjà (comme sendQuizToEnrollment), sinon on le crée. */
+                const [[quiz]] = await conn.query('SELECT id, title FROM quiz WHERE id = ? AND organization_id = ?', [quizId, orgId]);
+                if (!quiz) return res.status(404).json({ message: 'QCM introuvable.' });
+                const [[ex]] = await conn.query(
+                    `SELECT gd.id FROM generated_document gd JOIN document_formation df ON df.document_id = gd.id
+                      WHERE gd.quiz_id = ? AND df.enrollment_id IN (?) LIMIT 1`, [quizId, enr.map((x) => x.id)]);
+                if (ex) {
+                    documentId = ex.id;
+                } else {
+                    documentId = crypto.randomUUID();
+                    await conn.query(
+                        `INSERT INTO generated_document (id, organization_id, learner_id, type, quiz_id, title, status, sent_at)
+                         VALUES (?, ?, ?, 'QCM', ?, ?, 'ENVOYE', NOW())`,
+                        [documentId, orgId, learner_id, quizId, title || quiz.title]);
+                    for (const e of enr) {
+                        await conn.query('INSERT IGNORE INTO document_formation (document_id, enrollment_id) VALUES (?, ?)', [documentId, e.id]);
+                    }
+                }
+            } else {
+                documentId = await prepareLearnerDoc(conn, orgId, {
+                    learnerId: learner_id, type, templateSlug: template_slug || null, title,
+                    enrollmentIds: enr.map((x) => x.id),
+                });
+            }
         }
 
         try {
