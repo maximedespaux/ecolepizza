@@ -74,22 +74,40 @@ function Legende() {
   );
 }
 
-/* Récence : une barre par tranche et par groupe, à l'échelle du plus grand compte (barres CSS). */
-function Recence({ d }) {
+/* Récence : une barre par tranche et par groupe, à l'échelle du plus grand compte (barres CSS). La
+   barre STAGIAIRE est colorée PAR FORMATION, comme la courbe du dessus (segments empilés en largeur),
+   quand le serveur rend `recence_formations` ; sinon elle retombe sur la couleur stagiaire unie. */
+function Recence({ d, couleur }) {
   const max = Math.max(1, ...d.tranches.flatMap((t) => [d.stagiaires.recence[t.cle], d.equipe.recence[t.cle]]));
-  const Barre = ({ n, couleur }) => (
+  const rf = d.stagiaires.recence_formations || {};
+  const Barre = ({ n, couleur: c }) => (
     <div className="stat-barre" title={`${n}`}>
-      <div className="stat-barre-fill" style={{ width: `${(n / max) * 100}%`, background: couleur }} />
+      <div className="stat-barre-fill" style={{ width: `${(n / max) * 100}%`, background: c }} />
       <span className="stat-barre-n">{n}</span>
     </div>
   );
+  const BarreStag = ({ cle, n }) => {
+    const segs = rf[cle];
+    if (!n || !segs || !segs.length) return <Barre n={n} couleur={COUL.stagiaires} />;
+    return (
+      <div className="stat-barre" title={`${n}`}>
+        <div className="stat-barre-fill stat-barre-form" style={{ width: `${(n / max) * 100}%` }}>
+          {segs.map((f) => (
+            <span key={f.key} title={`${f.label} : ${fmtN(f.n)}`}
+              style={{ width: `${(f.n / n) * 100}%`, background: f.key === "__autre" ? UNKNOWN_COLOR : couleur(f.key) }} />
+          ))}
+        </div>
+        <span className="stat-barre-n">{n}</span>
+      </div>
+    );
+  };
   return (
     <div className="stat-recence">
       {d.tranches.map((t) => (
         <div className="stat-recence-ligne" key={t.cle}>
           <div className="stat-recence-lbl">{t.libelle}</div>
           <div className="stat-recence-barres">
-            <Barre n={d.stagiaires.recence[t.cle]} couleur={COUL.stagiaires} />
+            <BarreStag cle={t.cle} n={d.stagiaires.recence[t.cle]} />
             <Barre n={d.equipe.recence[t.cle]} couleur={COUL.equipe} />
           </div>
         </div>
@@ -283,7 +301,7 @@ export default function Statistiques() {
 
           <Card title={<span className="card-ttl">Depuis la dernière connexion</span>} style={{ marginTop: 14 }}>
             <Legende />
-            <Recence d={d} />
+            <Recence d={d} couleur={couleur} />
             <Relancer r={d.stagiaires.relancer} />
           </Card>
         </>

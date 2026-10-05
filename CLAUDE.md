@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-05** : **2581 tests — 2574 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-05** : **2583 tests — 2576 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -338,6 +338,11 @@ k formations étant RÉPARTI 1/k dans chacune (« niv1 niv2 → 50/50 », `ponde
 (badges colorés « NIV2 : 4,5 »…) ; un résumé (personnes DISTINCTES + jour le plus actif) ; « les plus assidus » ; et les
 NOMS des stagiaires à relancer (jamais connectés, +30 j) sous la récence. `formations_cle` (ordre global) part à l'écran
 pour les couleurs + la légende. Règles pures : `pondererFormations`, `relancer` (statsConnexions.js).
+ENRICHIE à nouveau le 2026-10-05 (sans migration) : la RÉCENCE (« Depuis la dernière connexion ») est AUSSI colorée PAR
+FORMATION, comme la courbe — la TRANCHE de récence joue le rôle du « jour » et réutilise `pondererFormations` (même 1/k,
+même « Sans formation »). Lu sur `enrollment` (PAS `connexion_jour`), donc dispo MÊME sans la 200. `recence_formations`
+(tranche → parts colorées) part à l'écran ; une formation vue SEULEMENT en récence s'unifie à `formations_cle` (mêmes
+couleurs, même légende). Tests : `statistiques-connexions.test.js`.
 
 **199 est À JOUER** (`199_user_desactivation.sql`, la DÉSACTIVATION volontaire d'un profil stagiaire — demandée le
 2026-10-02). Une colonne `user.deactivated_at` (datetime). Un stagiaire désactive son profil depuis « Mon profil →

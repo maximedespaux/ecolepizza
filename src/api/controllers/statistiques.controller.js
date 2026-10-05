@@ -101,9 +101,37 @@ const connexions = async (req, res) => {
             if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e;
         }
 
+        /* RÉCENCE PAR FORMATION (stagiaires) — colorer « Depuis la dernière connexion » comme la
+           courbe. Lu sur enrollment (PAS connexion_jour), donc INDÉPENDANT de la 200 : dispo tout de
+           suite. La tranche de récence joue le rôle du « jour » : on réutilise `pondererFormations`
+           (un stagiaire inscrit à k formations compte 1/k dans chacune ; le reste en « Sans
+           formation »). On unifie avec la courbe : une formation vue SEULEMENT en récence s'ajoute à
+           `formations_cle` (mêmes couleurs, même légende), « Sans formation » reste en dernier. */
+        let recenceFormations = {};
+        try {
+            const [frRec] = await conn.query(
+                `SELECT u.id AS uid, u.last_login_at,
+                        p.id AS pkey, COALESCE(NULLIF(p.code, ''), p.title, 'Formation') AS label
+                   FROM user u
+                   JOIN learner l ON l.user_id = u.id AND l.organization_id = u.organization_id
+                   JOIN enrollment e ON e.learner_id = l.id
+                   JOIN training_session s ON s.id = e.session_id
+                   JOIN training_program p ON p.id = s.program_id
+                  WHERE u.organization_id = ? AND u.role = 'STAGIAIRE'`, [orgId]);
+            const stagRec = stats.repartition(stagiaires, maintenant);
+            const rowsRec = frRec.map((r) => ({ jour: stats.trancheDe(r.last_login_at, maintenant), uid: r.uid, key: r.pkey, label: r.label }));
+            const pr = stats.pondererFormations(rowsRec, new Map(Object.entries(stagRec)));
+            recenceFormations = Object.fromEntries(pr.parJour);
+            const avecAutre = formationsCle.some((c) => c.key === '__autre') || pr.cles.some((c) => c.key === '__autre');
+            const sansAutre = formationsCle.filter((c) => c.key !== '__autre');
+            const vus = new Set(sansAutre.map((c) => c.key));
+            for (const c of pr.cles) if (c.key !== '__autre' && !vus.has(c.key)) { sansAutre.push(c); vus.add(c.key); }
+            formationsCle = avecAutre ? [...sansAutre, { key: '__autre', label: 'Sans formation' }] : sansAutre;
+        } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+
         res.json({
             data: {
-                stagiaires: { ...vue(stagiaires), relancer: stats.relancer(stagiaires, maintenant) },
+                stagiaires: { ...vue(stagiaires), relancer: stats.relancer(stagiaires, maintenant), recence_formations: recenceFormations },
                 equipe: vue(equipe),
                 par_jour: parJour,
                 formations_cle: formationsCle,
