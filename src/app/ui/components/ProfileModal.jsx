@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile, deactivateMyProfile, reactivateMyProfile } from "../api/apiClient.js";
+import { getMyFormations, getMyInfos, updateMyInfos, updateMyVisibility, searchMyCompanies, changeMyEmail, changeMyPassword, getCurrentUser, getMyProfile, deactivateMyProfile, reactivateMyProfile } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import { initials, colorOf } from "../lib/format.js";
 import {AVATARS, getAvatar, setAvatar} from "../lib/gamification.js";
@@ -225,7 +225,10 @@ export default function ProfileModal({ onClose }) {
 
   return (
     <div className="overlay">
-      <div className="modal" style={{ maxWidth: 480 }}>
+      {/* Plus large sur PC (720 au lieu de 480) : « Mes infos » tient deux colonnes de champs et
+          respire. `.modal` est en width:100% + max-width, donc ce plafond ne joue QUE sur grand
+          écran — sur téléphone la fenêtre reste pleine largeur (bornée par le voile). */}
+      <div className="modal" style={{ maxWidth: 720 }}>
         <div className="mhead">
           <h3 style={{ fontSize: 16 }}>Mon profil</h3>
           <button className="x" onClick={onClose} aria-label="Fermer"><Icon name="x" size={16} /></button>
@@ -415,27 +418,68 @@ function ProfilTab({ avatar, choose, chooseColor, cadre, palier, suivant, pct, d
   );
 }
 
+/**
+ * « Mes infos » — coordonnées du stagiaire, puis SON entreprise.
+ *
+ * L'entreprise obéit à une règle simple (décidée le 2026-10-05) :
+ *  • RÉFÉRENT de l'entreprise (migration 174) → il en corrige les coordonnées ;
+ *  • rattaché mais pas référent → il la voit, sans la réécrire (donnée partagée) ;
+ *  • pas d'entreprise → il la CHOISIT par une recherche (≥ 3 lettres, jamais la liste entière),
+ *    il ne la crée pas (ça évitait les doublons). Le serveur fait respecter tout ça.
+ * Les champs « adresse perso / entreprise » n'ont de sens que pour un stagiaire (fiche learner) :
+ * le personnel (intervenant) ne voit que civilité / nom / téléphone, qui vivent sur son compte.
+ */
 function InfosTab({ onSaved }) {
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null); // { ok, text }
+  const [recherche, setRecherche] = useState(false); // panneau « choisir une entreprise » ouvert ?
+  const [q, setQ] = useState("");
+  const [resultats, setResultats] = useState(null); // null = rien cherché ; [] = aucun résultat
 
   useEffect(() => { getMyInfos().then((r) => setF(r.data || {})).catch(() => setF({})); }, []);
-  /* Le NOM DE FAMILLE, la VILLE DE L'ENTREPRISE et le LIEU DE NAISSANCE en capitales dès la frappe :
-     le serveur les y met de toute façon (src/api/lib/saisie.js), et sans ça ils changeraient de casse
-     sous les yeux du stagiaire au prochain chargement. */
+  /* Le NOM DE FAMILLE, la VILLE (perso et entreprise) et le LIEU DE NAISSANCE en capitales dès la
+     frappe : le serveur les y met de toute façon (src/api/lib/saisie.js), et sans ça ils
+     changeraient de casse sous les yeux du stagiaire au prochain chargement. */
   const set = (k) => (e) => setF((p) => ({
-    ...p, [k]: k === "last_name" || k === "company_town" || k === "birth_place" ? e.target.value.toLocaleUpperCase("fr") : e.target.value,
+    ...p, [k]: k === "last_name" || k === "company_town" || k === "town" || k === "birth_place" ? e.target.value.toLocaleUpperCase("fr") : e.target.value,
   }));
+
+  // Le panneau de recherche est actif si le stagiaire n'a PAS d'entreprise, ou s'il a cliqué « Changer ».
+  const panneauRecherche = !!(recherche || (f && !f.company_id));
+  /* On ne cherche qu'à partir de TROIS caractères, et temporisé : une frappe isolée ne déclenche
+     pas de requête, et la liste complète des entreprises n'est jamais exposée. */
+  useEffect(() => {
+    if (!panneauRecherche) return;
+    const t = q.trim();
+    if (t.length < 3) { setResultats(null); return; }
+    const timer = setTimeout(() => {
+      searchMyCompanies(t).then((r) => setResultats(r.data || [])).catch(() => setResultats([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [q, panneauRecherche]);
+
+  function choisir(c) {
+    setF((p) => ({ ...p, company_id: c.id, company: c.name, company_zip: c.zip_code || "", company_town: c.town || "", company_address: "", company_is_owner: false }));
+    setRecherche(false); setQ(""); setResultats(null);
+  }
 
   async function save() {
     setBusy(true); setMsg(null);
     try {
-      await updateMyInfos({
+      const payload = {
         civility: f.civility, first_name: f.first_name, last_name: f.last_name, phone: f.phone,
         birthday: f.birthday, birth_place: f.birth_place,
-        company_name: f.company, company_address: f.company_address, company_zip: f.company_zip, company_town: f.company_town,
-      });
+        address: f.address, zip_code: f.zip_code, town: f.town,
+        company_id: f.company_id || "",
+      };
+      // Les coordonnées de l'entreprise ne partent QUE si le stagiaire en est le référent (le
+      // serveur l'exige aussi) : un rattaché n'écrase pas une donnée que d'autres partagent.
+      if (f.company_is_owner) {
+        payload.company_name = f.company; payload.company_address = f.company_address;
+        payload.company_zip = f.company_zip; payload.company_town = f.company_town;
+      }
+      await updateMyInfos(payload);
       setMsg({ ok: true, text: "Infos enregistrées. Elles sont aussi mises à jour côté organisme." });
       onSaved && onSaved();
     } catch (e) { setMsg({ ok: false, text: e.message || "Échec de l'enregistrement." }); }
@@ -443,6 +487,7 @@ function InfosTab({ onSaved }) {
   }
 
   if (!f) return <p className="hint">Chargement…</p>;
+  const qlen = q.trim().length;
   return (
     <div>
       <p className="hint" style={{ margin: "0 0 12px" }}>Tes coordonnées. Toute modification est visible par ton organisme de formation.</p>
@@ -452,19 +497,58 @@ function InfosTab({ onSaved }) {
         <div className="field"><label>Téléphone</label><input className="inp" value={f.phone || ""} onChange={set("phone")} /></div>
         <div className="field"><label>Prénom</label><input className="inp" value={f.first_name || ""} onChange={set("first_name")} /></div>
         <div className="field"><label>Nom</label><input className="inp" value={f.last_name || ""} onChange={set("last_name")} /></div>
-        <div className="field"><label>Date de naissance</label><input className="inp" type="date" value={f.birthday || ""} onChange={set("birthday")} /></div>
-        <div className="field"><label>Lieu de naissance</label><input className="inp" value={f.birth_place || ""} onChange={set("birth_place")} /></div>
+        {f.is_learner && <>
+          <div className="field"><label>Date de naissance</label><input className="inp" type="date" value={f.birthday || ""} onChange={set("birthday")} /></div>
+          <div className="field"><label>Lieu de naissance</label><input className="inp" value={f.birth_place || ""} onChange={set("birth_place")} placeholder="LANNEMEZAN" /></div>
+        </>}
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 700, margin: "6px 0 8px" }}>Entreprise</div>
-      <div className="field"><label>Nom de l'entreprise</label><input className="inp" value={f.company || ""} onChange={set("company")} placeholder="Ex. Pizzeria Bella" /></div>
-      <div className="field"><label>Adresse de l'entreprise</label><input className="inp" value={f.company_address || ""} onChange={set("company_address")} /></div>
-      <div className="grid cols-2" style={{ gap: 12 }}>
-        <div className="field"><label>Code postal</label><input className="inp" value={f.company_zip || ""} onChange={set("company_zip")} /></div>
-        <div className="field"><label>Ville</label><input className="inp" value={f.company_town || ""} onChange={set("company_town")} /></div>
-      </div>
-      {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "2px 0 10px" }}>{msg.text}</p>}
-      <button className="btn primary" disabled={busy} onClick={save} style={{ width: "100%", justifyContent: "center" }}><Icon name="check" size={14} /> Enregistrer mes infos</button>
+      {f.is_learner && <>
+        <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>Mon adresse</div>
+        <div className="field"><label>Adresse</label><input className="inp" value={f.address || ""} onChange={set("address")} /></div>
+        <div className="grid cols-2" style={{ gap: 12 }}>
+          <div className="field"><label>Code postal</label><input className="inp" value={f.zip_code || ""} onChange={set("zip_code")} /></div>
+          <div className="field"><label>Ville</label><input className="inp" value={f.town || ""} onChange={set("town")} placeholder="LANNEMEZAN" /></div>
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 700, margin: "12px 0 8px" }}>Mon entreprise</div>
+        {f.company_id && f.company_is_owner && !recherche ? (
+          <>
+            <p className="hint" style={{ margin: "0 0 8px" }}><Icon name="check" size={12} /> Vous êtes le référent de cette entreprise : vous pouvez corriger ses coordonnées.</p>
+            <div className="field"><label>Nom de l'entreprise</label><input className="inp" value={f.company || ""} onChange={set("company")} /></div>
+            <div className="field"><label>Adresse de l'entreprise</label><input className="inp" value={f.company_address || ""} onChange={set("company_address")} /></div>
+            <div className="grid cols-2" style={{ gap: 12 }}>
+              <div className="field"><label>Code postal</label><input className="inp" value={f.company_zip || ""} onChange={set("company_zip")} /></div>
+              <div className="field"><label>Ville</label><input className="inp" value={f.company_town || ""} onChange={set("company_town")} placeholder="LANNEMEZAN" /></div>
+            </div>
+            <button className="btn ghost sm" onClick={() => setRecherche(true)}>Changer d'entreprise</button>
+          </>
+        ) : f.company_id && !recherche ? (
+          <>
+            <div className="field"><label>Entreprise</label>
+              <div style={{ padding: "7px 2px", fontWeight: 600 }}>{f.company || "—"}{f.company_town ? ` — ${f.company_town}` : ""}</div></div>
+            <p className="hint" style={{ margin: "0 0 8px" }}>Ses coordonnées sont tenues par votre école ou son référent.</p>
+            <button className="btn ghost sm" onClick={() => setRecherche(true)}>Changer d'entreprise</button>
+          </>
+        ) : (
+          <>
+            <div className="field"><label>Rechercher mon entreprise</label>
+              <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tapez au moins 3 lettres du nom…" /></div>
+            {qlen > 0 && qlen < 3 && <p className="hint" style={{ margin: "0 0 6px" }}>Encore {3 - qlen} caractère(s)…</p>}
+            {resultats && resultats.length > 0 && resultats.map((c) => (
+              <button key={c.id} className="btn ghost" style={{ width: "100%", justifyContent: "flex-start", marginBottom: 6 }} onClick={() => choisir(c)}>
+                <b>{c.name}</b>{(c.zip_code || c.town) ? ` — ${[c.zip_code, c.town].filter(Boolean).join(" ")}` : ""}
+              </button>
+            ))}
+            {resultats && resultats.length === 0 && qlen >= 3 && (
+              <p className="hint" style={{ margin: "0 0 8px" }}>Aucune entreprise trouvée. Demandez à votre école de l'ajouter.</p>
+            )}
+            {f.company_id && <button className="btn ghost sm" onClick={() => { setRecherche(false); setQ(""); setResultats(null); }}>Annuler</button>}
+          </>
+        )}
+      </>}
+      {msg && <p className="hint" style={{ color: msg.ok ? "var(--green, #2f9e6f)" : "var(--ember1)", margin: "10px 0 10px" }}>{msg.text}</p>}
+      <button className="btn primary" disabled={busy} onClick={save} style={{ width: "100%", justifyContent: "center", marginTop: 10 }}><Icon name="check" size={14} /> Enregistrer mes infos</button>
     </div>
   );
 }

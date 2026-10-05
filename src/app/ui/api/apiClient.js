@@ -525,6 +525,8 @@ export function reactivateMyProfile() {
 // Infos personnelles du stagiaire (modifiables, visibles de l'organisme).
 export function getMyInfos() { return request("/mon-espace/infos", { silent: true }); }
 export function updateMyInfos(payload) { return request("/mon-espace/infos", { method: "PUT", body: JSON.stringify(payload) }); }
+// Recherche d'une entreprise à rattacher, par son nom (le serveur ne répond qu'à partir de 3 caractères).
+export function searchMyCompanies(q) { return request(`/mon-espace/entreprises?q=${encodeURIComponent(q)}`, { silent: true }); }
 /* Consentements du stagiaire (migration 130). `data` vaut `null` quand la migration n'est pas
    jouée ou quand le compte n'a pas de fiche stagiaire : l'écran ne propose alors rien, plutôt que
    d'afficher une demande qu'il ne pourrait pas enregistrer. */
