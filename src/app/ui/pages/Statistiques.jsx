@@ -65,15 +65,6 @@ function Synthese({ titre, couleur, v }) {
   );
 }
 
-function Legende() {
-  return (
-    <div className="stat-legende">
-      <span><span className="stat-pastille" style={{ background: COUL.stagiaires }} /> Stagiaires</span>
-      <span><span className="stat-pastille" style={{ background: COUL.equipe }} /> Équipe</span>
-    </div>
-  );
-}
-
 /* Récence : une barre par tranche et par groupe, à l'échelle du plus grand compte (barres CSS). La
    barre STAGIAIRE est colorée PAR FORMATION, comme la courbe du dessus (segments empilés en largeur),
    quand le serveur rend `recence_formations` ; sinon elle retombe sur la couleur stagiaire unie. */
@@ -149,15 +140,27 @@ function Resume({ parJour, resume }) {
 }
 
 /* Les plus assidus : qui s'est connecté le plus de jours sur la fenêtre. */
-function Assidus({ assidus }) {
+function Assidus({ assidus, couleur }) {
   if (!assidus || !assidus.length) return null;
+  /* La pastille devant le nom prend la couleur de LA FORMATION du stagiaire (un camembert à parts
+     égales s'il en suit plusieurs) ; l'équipe reste bleue, et un stagiaire sans formation retombe
+     sur l'orange « stagiaire ». */
+  const pastille = (a) => {
+    if (!a.stagiaire) return COUL.equipe;
+    const cols = (a.formations || []).map((f) => (f.key === "__autre" ? UNKNOWN_COLOR : couleur(f.key)));
+    if (!cols.length) return COUL.stagiaires;
+    if (cols.length === 1) return cols[0];
+    const pas = 100 / cols.length;
+    return `conic-gradient(${cols.map((c, i) => `${c} ${i * pas}% ${(i + 1) * pas}%`).join(", ")})`;
+  };
   return (
     <div className="stat-assidus">
       <div className="stat-assidus-t">Les plus assidus</div>
       <ol className="stat-assidus-l">
         {assidus.map((a, i) => (
           <li key={i}>
-            <span className="stat-pastille" style={{ background: a.stagiaire ? COUL.stagiaires : COUL.equipe }} />
+            <span className="stat-pastille" style={{ background: pastille(a) }}
+              title={a.stagiaire && a.formations && a.formations.length ? a.formations.map((f) => f.label).join(", ") : undefined} />
             <span className="stat-assidus-nom">{a.nom}</span>
             <span className="stat-assidus-j">{a.jours} jour{a.jours > 1 ? "s" : ""}</span>
           </li>
@@ -296,11 +299,13 @@ export default function Statistiques() {
             </div>
             <Resume parJour={d.par_jour} resume={d.resume} />
             <CourbeJours parJour={d.par_jour} couleur={couleur} />
-            <Assidus assidus={d.assidus} />
+            <Assidus assidus={d.assidus} couleur={couleur} />
           </Card>
 
           <Card title={<span className="card-ttl">Depuis la dernière connexion</span>} style={{ marginTop: 14 }}>
-            <Legende />
+            {/* La récence colore les stagiaires PAR FORMATION : même légende que la courbe (formations
+                + Équipe), pas l'ancienne « Stagiaires / Équipe » qui ne correspondait plus aux barres. */}
+            <LegendeFormations cles={d.formations_cle} couleur={couleur} />
             <Recence d={d} couleur={couleur} />
             <Relancer r={d.stagiaires.relancer} />
           </Card>

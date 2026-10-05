@@ -185,3 +185,19 @@ test('récence par formation : pondererFormations marche avec la TRANCHE comme c
     assert.equal(seg.find((s) => s.key === 'niv2').n, 0.5);
     assert.ok(Math.abs(seg.reduce((a, s) => a + s.n, 0) - 2) < 1e-9, 'la somme des parts = les stagiaires distincts de la tranche');
 });
+
+test('la légende de la récence et les pastilles des assidus suivent la FORMATION (2026-10-05)', () => {
+    const c = lire(path.join(API, 'controllers/statistiques.controller.js'));
+    // Le serveur rattache à chaque assidu stagiaire SES formations (depuis les mêmes lignes récence).
+    assert.match(c, /cj\.user_id AS uid/, 'l\'assidu porte son uid pour rattacher ses formations');
+    assert.match(c, /formations: a\.stagiaire \?/, 'un assidu stagiaire reçoit ses formations ; l\'équipe non');
+    const p = lire(path.join(UI, 'pages/Statistiques.jsx'));
+    // La pastille d'un assidu stagiaire prend la couleur de sa formation (camembert si plusieurs).
+    assert.match(p, /function Assidus\(\{ assidus, couleur \}\)/);
+    assert.match(p, /conic-gradient/, 'multi-formations : camembert à parts égales');
+    assert.match(p, /<Assidus assidus=\{d\.assidus\} couleur=\{couleur\}/);
+    // L'ancienne légende « Stagiaires / Équipe » est retirée ; la récence porte celle des FORMATIONS.
+    assert.doesNotMatch(p, /function Legende\(\)/, 'plus de légende « Stagiaires / Équipe »');
+    const recCard = p.slice(p.indexOf('Depuis la dernière connexion'));
+    assert.match(recCard, /<LegendeFormations cles=\{d\.formations_cle\} couleur=\{couleur\}/, 'récence : légende des formations');
+});
