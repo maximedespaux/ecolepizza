@@ -130,13 +130,22 @@ function Carte() {
     return () => { alive = false; };
   }, []);
 
-  // Lance le géocodage (par lots) puis recharge.
+  // Géocode TOUT ce qui est localisable, par lots successifs jusqu'à épuisement — en un seul clic,
+  // sans avoir à répéter l'opération à la main. Chaque lot garde la pause de politesse de l'API ; on
+  // s'arrête quand il ne reste rien À FAIRE, ou qu'un lot ne place plus PERSONNE (adresses non
+  // géocodables : inutile d'y revenir en boucle). Le garde-fou de tours borne la boucle quoi qu'il arrive.
   async function runGeocode() {
     setGeo(true); setStatus(null);
+    let total = 0;
     try {
-      const { data: r } = await geocodeCarte(120);
+      for (let tour = 0; tour < 100; tour++) {
+        const { data: r } = await geocodeCarte(100);
+        total += r.done || 0;
+        setStatus({ type: "info", message: `Géolocalisation en cours… ${total} placé(s)${r.remaining ? `, ${r.remaining} restant(s)` : ""}.` });
+        if (!r.remaining || !r.done) break;
+      }
       await reload();
-      setStatus({ type: "success", message: `${r.done} stagiaire(s) géolocalisé(s).` + (r.remaining ? ` ${r.remaining} restant(s), relancez.` : "") });
+      setStatus({ type: "success", message: total ? `${total} stagiaire(s) géolocalisé(s).` : "Rien de nouveau à géolocaliser." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setGeo(false); }
   }
