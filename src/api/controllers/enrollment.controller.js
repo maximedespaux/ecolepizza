@@ -10,6 +10,8 @@ const { avancementDossiers } = require('../lib/avancement.js');
 const { logAudit } = require('../lib/audit.js');
 const { planRetrait, executerRetrait } = require('../lib/retraitDossier.js');
 const { libelleSession } = require('../lib/precisionsActivite.js');
+const { ciblesParcours, filtrerRecuperables } = require('../lib/recuperationDocuments.js');
+const crypto = require('crypto');
 
 const STAGE_ORDER = ['PROSPECT', 'CONTACTE', 'DEVIS_ENVOYE', 'DEVIS_SIGNE', 'ACOMPTE_PAYE', 'INSCRIT', 'EN_FORMATION', 'TERMINE', 'EVALUATION_ENVOYEE', 'ARCHIVE'];
 
@@ -289,11 +291,14 @@ const createEnrollment = async (req, res) => {
             financing = company_id ? 'PROFESSIONNEL' : 'PARTICULIER';
         }
 
+        /* L'id est tiré en JS (plutôt que UUID() en SQL) pour pouvoir le RENDRE : l'écran en a besoin
+           juste après, pour proposer la récupération des documents orphelins d'une session recréée. */
+        const enrollmentId = crypto.randomUUID();
         await conn.query(
             `INSERT INTO enrollment
                 (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-             VALUES (UUID(), ?, ?, ?, ?, ?, ?, 'ROUGE')`,
-            [orgId, learner_id, session_id, company_id || null, financing, crm_stage]
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'ROUGE')`,
+            [enrollmentId, orgId, learner_id, session_id, company_id || null, financing, crm_stage]
         );
         await recalcFinancementStagiaire(conn, learner_id, orgId);
 
@@ -326,7 +331,7 @@ const createEnrollment = async (req, res) => {
             }
         }
 
-        res.status(201).json({ message: 'Dossier créé', compte });
+        res.status(201).json({ id: enrollmentId, message: 'Dossier créé', compte });
     } catch (err) {
         console.error('Erreur création dossier :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -427,4 +432,95 @@ const updateEnrollment = async (req, res) => {
     }
 };
 
-module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment, getRetrait, recalcFinancementStagiaire };
+/**
+ * GET /api/enrollments/:id/documents-recuperables — après une session supprimée par erreur et
+ * recréée : les documents ORPHELINS du stagiaire (détachés, enrollment_id NULL, sans lien de
+ * parcours) dont le MODÈLE appartient au parcours de la formation. L'écran les propose à la
+ * réinscription ; le rattachement (ci-dessous) les restaure. Rien n'est modifié ici.
+ */
+const getDocumentsRecuperables = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[e]] = await conn.query(
+            `SELECT e.id, e.learner_id, s.program_id,
+                    p.code AS program_code, p.days AS program_days,
+                    p.hygiene AS program_hygiene, p.rs_code AS program_rs
+               FROM enrollment e
+               JOIN training_session s ON s.id = e.session_id
+               JOIN training_program p ON p.id = s.program_id
+              WHERE e.id = ? AND e.organization_id = ?`,
+            [req.params.id, orgId]);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+
+        const program = { id: e.program_id, code: e.program_code, days: e.program_days, hygiene: e.program_hygiene, rs_code: e.program_rs };
+        const cibles = ciblesParcours(await formationSteps(conn, orgId, program));
+        if (!cibles.slugs.size && !cibles.quizIds.size) return res.json({ data: [] });
+
+        // Orphelins du stagiaire : détachés (enrollment_id NULL) ET sans lien de parcours (sinon ils
+        // comptent déjà ailleurs). On ramène les documents de MODÈLE comme les QCM (quiz_id) ; le
+        // filtre par parcours (slug OU quiz) se fait en JS (règle partagée avec l'écran).
+        const [orphelins] = await conn.query(
+            `SELECT gd.id, gd.type, gd.title, gd.status, gd.template_slug, gd.quiz_id,
+                    DATE_FORMAT(gd.signed_at, '%Y-%m-%d') AS signed_at
+               FROM generated_document gd
+              WHERE gd.organization_id = ? AND gd.learner_id = ?
+                AND gd.enrollment_id IS NULL
+                AND (gd.template_slug IS NOT NULL OR gd.quiz_id IS NOT NULL)
+                AND gd.id NOT IN (SELECT document_id FROM document_formation)
+              ORDER BY gd.created_at`,
+            [orgId, e.learner_id]);
+        res.json({ data: filtrerRecuperables(orphelins, cibles) });
+    } catch (err) {
+        console.error('Erreur documents récupérables :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * POST /api/enrollments/:id/recuperer-documents { documentIds } — rattache des documents orphelins
+ * au dossier : on pose enrollment_id ET le lien document_formation (celui que LIT le parcours). Chaque
+ * document est REVÉRIFIÉ dans le UPDATE (même organisme, même stagiaire, ENCORE orphelin) : un
+ * identifiant passé à la main ne peut pas détourner le document d'un autre dossier.
+ */
+const recupererDocuments = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const ids = Array.isArray(req.body?.documentIds) ? req.body.documentIds.filter(Boolean) : [];
+        const [[e]] = await conn.query(
+            'SELECT id, learner_id FROM enrollment WHERE id = ? AND organization_id = ?',
+            [req.params.id, orgId]);
+        if (!e) return res.status(404).json({ message: 'Dossier introuvable' });
+        if (!ids.length) return res.json({ data: { rattaches: 0 } });
+
+        let rattaches = 0;
+        for (const docId of ids) {
+            // La garde est DANS le UPDATE : encore orphelin, à ce stagiaire, dans cet organisme.
+            const [r] = await conn.query(
+                `UPDATE generated_document SET enrollment_id = ?
+                  WHERE id = ? AND organization_id = ? AND learner_id = ? AND enrollment_id IS NULL`,
+                [e.id, docId, orgId, e.learner_id]);
+            if (!r.affectedRows) continue; // pas le sien, ou déjà rattaché : on saute
+            await conn.query(
+                'INSERT IGNORE INTO document_formation (document_id, enrollment_id) VALUES (?, ?)',
+                [docId, e.id]);
+            /* QCM : les réponses ont survécu à la suppression (quiz_response n'a pas de clé étrangère
+               sur enrollment_id), mais leur enrollment_id pointe vers le dossier disparu — l'écran
+               « Résultats QCM » les joint par là et ne les voit plus. On les repointe sur le nouveau
+               dossier, par le lien PRÉCIS du document (document_id) : un document non-QCM n'a aucune
+               réponse rattachée, la requête ne touche alors rien. */
+            await conn.query(
+                `UPDATE quiz_response SET enrollment_id = ?
+                  WHERE document_id = ? AND organization_id = ? AND learner_id = ?`,
+                [e.id, docId, orgId, e.learner_id]);
+            rattaches += 1;
+        }
+        res.json({ data: { rattaches } });
+    } catch (err) {
+        console.error('Erreur récupération documents :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { getEnrollments, getParcours, createEnrollment, updateEnrollment, deleteEnrollment, getRetrait, getDocumentsRecuperables, recupererDocuments, recalcFinancementStagiaire };
