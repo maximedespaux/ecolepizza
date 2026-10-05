@@ -82,16 +82,44 @@ test('la liste du dossier ne charge JAMAIS le fichier', () => {
     assert.match(liste, /colonneExiste\(conn, 'document_fichier', 'document_id'\)/);
 });
 
-test('l\'écran propose l\'import sur une étape, jamais sur un QCM', () => {
-    /* Un questionnaire ne se remplace pas par un fichier : sans réponses enregistrées il ne prouve
-       rien et ne se rejoue pas. */
-    // La règle vit dans `importPossible` depuis que les remises s'y déposent aussi (2026-09-28).
+test('l\'import est proposé sur une étape, ET sur un QCM pour un résultat EXTERNE', () => {
+    /* Un QCM se répond DANS l'app ; mais un QCM passé AILLEURS (Google Form, papier scanné) n'a pas
+       de réponses à saisir, seulement une preuve PDF — reprise des anciens stagiaires (2026-10-05).
+       L'import n'est donc PLUS bloqué sur une étape QCM ; il y rattache le résultat externe. */
     assert.match(PARCOURS, /\{onImport && importPossible\(step\) && \(/);
-    assert.match(PARCOURS, /function importPossible\(s\) \{\s+if \(String\(s\.key \|\| ""\)\.startsWith\("quiz:"\)\) return false;/);
+    assert.doesNotMatch(PARCOURS, /startsWith\("quiz:"\)\) return false/, 'le QCM n\'est plus bloqué à l\'import');
+    assert.match(PARCOURS, /estQcm\(s\) \? "Importer le résultat \(PDF\)"/, 'un libellé propre au QCM');
+    // L'écran cible le QCM par son id (`quiz:<id>`), et n'invente aucun modèle pour lui.
+    assert.match(PAGE, /fd\.append\("quiz_id", step\.key\.slice\(5\)\)/);
+    assert.match(PAGE, /fd\.append\("type", "QCM"\)/);
     // Le sélecteur se réarme, sinon réimporter le MÊME fichier ne déclencherait aucun `change`.
     assert.match(PAGE, /e\.target\.value = "";/);
     // Et la mention « reçu » s'affiche : c'est elle qui préserve la distinction à l'écran.
     assert.match(PAGE, /reçu et importé le \{dateHeure\(d\.importe_le\)\}/);
+});
+
+test('un résultat de QCM externe se rattache au document DU QCM (quiz_id), SIGNÉ sans réponses', () => {
+    /* Un QCM n'est pas un document : son étape se lie par quiz_id, pas par un modèle. Un résultat
+       passé hors de l'app se rattache donc au document du QCM — réutilisé s'il existe (comme
+       sendQuizToEnrollment), créé sinon — qui passe SIGNÉ. On ne fabrique AUCUNE réponse. */
+    assert.match(bloc, /const quizId = req\.body\.quiz_id \|\| null;/);
+    assert.match(bloc, /SELECT id, title FROM quiz WHERE id = \? AND organization_id = \?/, 'QCM borné à l\'organisme');
+    assert.match(bloc, /gd\.quiz_id = \? AND df\.enrollment_id IN \(\?\)/, 'on réutilise le document du QCM s\'il existe');
+    assert.match(bloc, /INSERT INTO generated_document \([^)]*quiz_id[^)]*\)\s*VALUES \(\?, \?, \?, 'QCM', \?, \?, 'ENVOYE', NOW\(\)\)/, 'sinon on le crée, type QCM');
+    assert.doesNotMatch(bloc, /quiz_response/, 'aucune réponse inventée : un QCM externe n\'en a pas');
+});
+
+test('Résultats QCM compte les résultats importés À PART des réponses saisies', () => {
+    /* Un QCM externe est SIGNÉ sans quiz_response : il ne compte pas dans `responses`. On le compte
+       séparément (document avec un fichier importé), pour que l'écran montre « N répondus · M
+       importés » et ne laisse pas un QCM fait hors de l'app paraître jamais fait. */
+    const QUIZ = fs.readFileSync(path.join(API, 'controllers/quiz.controller.js'), 'utf8');
+    const ov = QUIZ.slice(QUIZ.indexOf('const resultatsOverview'), QUIZ.indexOf('const resultatsDetail'));
+    assert.match(ov, /JOIN document_fichier dfi ON dfi\.document_id = gd\.id/, 'seuls les QCM avec un fichier importé');
+    assert.match(ov, /r\.importes = impMap\.get\(r\.id\) \|\| 0/);
+    assert.match(ov, /ER_NO_SUCH_TABLE/, 'table absente (migration 145) -> 0, sans casser la page');
+    const RES = fs.readFileSync(path.join(RACINE, 'src/app/ui/pages/ResultatsQCM.jsx'), 'utf8');
+    assert.match(RES, /q\.importes > 0 && ` · \$\{q\.importes\} importé/);
 });
 
 test('la route est gardée, et le fichier se relit', () => {
