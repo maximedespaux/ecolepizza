@@ -60,9 +60,26 @@ test('serveur : rattachement sans vol, + QCM (document re-lié ET réponses repo
     assert.match(c, /res\.status\(201\)\.json\(\{ id: enrollmentId/);
 });
 
-test('écran : détecter après l\'inscription, confirmer avant de rattacher', () => {
+test('écran : détecter après l\'inscription (individuelle ET groupe), confirmer avant de rattacher', () => {
     const s = lire('src/app/ui/pages/SessionDetail.jsx');
-    assert.match(s, /getDocumentsRecuperables\(r\.id\)/, 'on détecte avec l\'id du dossier créé');
+    // Ajout individuel : on détecte avec l'id du dossier créé.
+    assert.match(s, /getDocumentsRecuperables\(r\.id\)/, 'détection sur l\'ajout individuel');
+    // Inscription de groupe (entreprise) : un par stagiaire réinscrit.
+    assert.match(s, /getDocumentsRecuperables\(c\.enrollment_id\)/, 'détection aussi pour chaque dossier d\'une inscription de groupe');
     assert.match(s, /RecuperationDocumentsModal/, 'une fenêtre de confirmation s\'ouvre');
-    assert.match(s, /recupererDocuments\(recup\.enrollmentId, documentIds\)/, 'le rattachement part après confirmation');
+    // File : on rattache le dossier COURANT, puis on passe au suivant.
+    assert.match(s, /recupererDocuments\(courant\.enrollmentId, documentIds\)/, 'rattachement dossier par dossier, après confirmation');
+
+    // Serveur : l'inscription de groupe RENVOIE l'id de chaque dossier (l'écran en a besoin).
+    const c = lire('src/api/controllers/company.controller.js');
+    assert.match(c, /enrollment_id: enrollmentId/, 'registerCompanyStagiaires renvoie l\'id du dossier de chaque stagiaire');
+});
+
+test('écran : rattacher un document détaché ÉTAPE PAR ÉTAPE, depuis le coffre', () => {
+    const c = lire('src/app/ui/components/EnrollmentParcours.jsx');
+    assert.match(c, /getDocumentsRecuperables\(enrollmentId\)/, 'liste les détachés du coffre pour le dossier');
+    assert.match(c, /recupererDocuments\(enrollmentId, \[\.\.\.attacheSel\]\)/, 'rattache la sélection au dossier');
+    // Seulement sur une étape ENCORE VIDE, et seulement un détaché qui VA à l'étape (clé = slug / quiz).
+    assert.match(c, /!step\.docId && etatDe\(step\) === "A_FAIRE" && \(detachesParEtape\.get\(step\.key\)\?\.length > 0\)/,
+        'bouton seulement sur une étape vide ayant un détaché correspondant');
 });

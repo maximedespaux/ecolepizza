@@ -57,7 +57,7 @@ function SessionDetail() {
   const [notesFor, setNotesFor] = useState(null);
   const [retraitDe, setRetraitDe] = useState(null); // { id, name } : la fenêtre de retrait ouverte
   const [suppression, setSuppression] = useState(false); // fenêtre de confirmation de suppression de la session
-  const [recup, setRecup] = useState(null); // { enrollmentId, nom, docs } : documents orphelins à rattacher
+  const [recupQueue, setRecupQueue] = useState([]); // file de { enrollmentId, nom, docs } : récupération, un stagiaire après l'autre
   // Inscription : « individuel » (recherche nominative) ou « entreprise » (on choisit
   // l'entreprise, puis les stagiaires parmi les SIENS). Deux façons de peupler la même session.
   const [mode, setMode] = useState("individuel");
@@ -154,7 +154,7 @@ function SessionDetail() {
           if (recuperables && recuperables.length) {
             const l = allLearners.find((x) => x.id === learnerId);
             const nom = (l ? [l.first_name, l.last_name].filter(Boolean).join(" ") : "") || "ce stagiaire";
-            setRecup({ enrollmentId: r.id, nom, docs: recuperables });
+            setRecupQueue((q) => [...q, { enrollmentId: r.id, nom, docs: recuperables }]);
           }
         } catch { /* la détection est un bonus : on n'alerte pas si elle échoue */ }
       }
@@ -163,16 +163,22 @@ function SessionDetail() {
     }
   }
 
-  // Rattache les documents orphelins choisis au dossier, puis rafraîchit le parcours.
+  // La file se vide un stagiaire après l'autre (ajout individuel : un élément ; inscription de
+  // groupe : un par stagiaire ayant des orphelins). « Ignorer » passe au suivant sans rien rattacher.
+  const ignorerRecup = () => setRecupQueue((q) => q.slice(1));
+
+  // Rattache les documents orphelins choisis au dossier COURANT, puis rafraîchit le parcours.
   async function confirmerRecuperation(documentIds) {
+    const courant = recupQueue[0];
+    if (!courant) return;
     try {
-      const { data } = await recupererDocuments(recup.enrollmentId, documentIds);
-      setRecup(null);
+      const { data } = await recupererDocuments(courant.enrollmentId, documentIds);
+      setRecupQueue((q) => q.slice(1));
       load();
       const n = data?.rattaches || 0;
-      if (n) setStatus({ type: "success", message: `${n} document${n > 1 ? "s" : ""} rattaché${n > 1 ? "s" : ""} au dossier.` });
+      if (n) setStatus({ type: "success", message: `${n} document${n > 1 ? "s" : ""} rattaché${n > 1 ? "s" : ""} au dossier de ${courant.nom}.` });
     } catch (err) {
-      setRecup(null);
+      setRecupQueue((q) => q.slice(1));
       setStatus({ type: "error", message: err.message });
     }
   }
@@ -240,6 +246,17 @@ function SessionDetail() {
       });
       setPicked(new Set());
       load();
+      /* SESSION RECRÉÉE ? Comme sur l'ajout individuel, on propose de récupérer les documents
+         orphelins de CHAQUE stagiaire réinscrit — détecter puis CONFIRMER, un stagiaire après
+         l'autre (file). Hors du chemin critique : l'inscription a déjà réussi. */
+      const items = [];
+      for (const c of (r.data?.created || []).filter((x) => x.enrollment_id)) {
+        try {
+          const { data: rec } = await getDocumentsRecuperables(c.enrollment_id);
+          if (rec && rec.length) items.push({ enrollmentId: c.enrollment_id, nom: c.name || "ce stagiaire", docs: rec });
+        } catch { /* la détection est un bonus : on n'alerte pas si elle échoue */ }
+      }
+      if (items.length) setRecupQueue((q) => [...q, ...items]);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
     } finally {
@@ -638,10 +655,10 @@ function SessionDetail() {
           onConfirm={confirmerSuppression}
         />
       )}
-      {recup && (
+      {recupQueue.length > 0 && (
         <RecuperationDocumentsModal
-          nom={recup.nom} docs={recup.docs}
-          onClose={() => setRecup(null)} onConfirm={confirmerRecuperation} />
+          nom={recupQueue[0].nom} docs={recupQueue[0].docs}
+          onClose={ignorerRecup} onConfirm={confirmerRecuperation} />
       )}
       {notesFor && (
         <NotesModal enrollmentId={notesFor.id} name={notesFor.name} onClose={() => setNotesFor(null)} />

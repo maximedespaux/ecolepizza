@@ -426,16 +426,21 @@ const registerCompanyStagiaires = async (req, res) => {
         }
 
         // Inscrit un stagiaire (existant) à la session, sans doublon ; ajoute le badge.
+        // Rend l'id du dossier (créé ou déjà existant) — l'écran en a besoin pour proposer la
+        // récupération des documents orphelins d'une session recréée. Null si pas de session.
         async function enrollLearner(learnerId) {
-            if (!sessionId) return false;
+            if (!sessionId) return null;
             const [[ex]] = await conn.query('SELECT id FROM enrollment WHERE learner_id = ? AND session_id = ?', [learnerId, sessionId]);
+            let enrollmentId;
             if (ex) {
+                enrollmentId = ex.id;
                 await conn.query("UPDATE enrollment SET company_id = ?, financing = 'PROFESSIONNEL' WHERE id = ?", [company.id, ex.id]);
             } else {
+                enrollmentId = crypto.randomUUID();
                 await conn.query(
                     `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-                     VALUES (UUID(), ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
-                    [orgId, learnerId, sessionId, company.id]
+                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
+                    [enrollmentId, orgId, learnerId, sessionId, company.id]
                 );
             }
             if (badge) {
@@ -443,7 +448,7 @@ const registerCompanyStagiaires = async (req, res) => {
                 const set = new Set((l?.levels || '').split(',').map((x) => x.trim()).filter(Boolean));
                 if (!set.has(badge)) { set.add(badge); await conn.query('UPDATE learner SET levels = ? WHERE id = ?', [[...set].join(','), learnerId]); }
             }
-            return true;
+            return enrollmentId;
         }
 
         const created = [];
@@ -463,7 +468,7 @@ const registerCompanyStagiaires = async (req, res) => {
             );
             for (const l of rows) {
                 await conn.query("UPDATE learner SET company_id = ?, financing = 'PROFESSIONNEL' WHERE id = ? AND organization_id = ?", [company.id, l.id, orgId]);
-                const enrolled = await enrollLearner(l.id);
+                const enrollmentId = await enrollLearner(l.id);
                 /* Compte de connexion si absent — et SEULEMENT avec une session. Rattacher quelqu'un à
                    son entreprise ne lui ouvre rien : c'est l'inscription qui donne un espace à
                    remplir (cf. createLearner). Sans session, « rattacher un stagiaire existant »
@@ -473,7 +478,7 @@ const registerCompanyStagiaires = async (req, res) => {
                     account = await createStagiaireAccount(conn, orgId, { email: l.email, first_name: l.first_name, last_name: l.last_name, phone: l.phone });
                     if (account) await conn.query('UPDATE learner SET user_id = ? WHERE id = ?', [account.userId, l.id]);
                 }
-                created.push({ learner_id: l.id, name: [l.first_name, l.last_name].filter(Boolean).join(' '), email: l.email || null, ...identifiants(account), account: !!(l.user_id || account), enrolled, existing: true });
+                created.push({ learner_id: l.id, name: [l.first_name, l.last_name].filter(Boolean).join(' '), email: l.email || null, ...identifiants(account), account: !!(l.user_id || account), enrolled: !!enrollmentId, enrollment_id: enrollmentId, existing: true });
             }
         }
 
@@ -492,14 +497,14 @@ const registerCompanyStagiaires = async (req, res) => {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROFESSIONNEL', ?, ?)`,
                 [learnerId, orgId, company.id, account?.userId || null, clean(n.civility), first, last, email, clean(n.phone), company.opco || null, badge || null]
             );
-            let enrolled = false;
+            let enrollmentId = null;
             if (sessionId) {
+                enrollmentId = crypto.randomUUID();
                 await conn.query(
                     `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-                     VALUES (UUID(), ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
-                    [orgId, learnerId, sessionId, company.id]
+                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
+                    [enrollmentId, orgId, learnerId, sessionId, company.id]
                 );
-                enrolled = true;
             }
             /* UNE TRACE PAR STAGIAIRE, pas une pour le lot. L'inscription de groupe est le
                chemin le plus courant vers une fiche neuve dans cet organisme — la journaliser en
@@ -508,7 +513,7 @@ const registerCompanyStagiaires = async (req, res) => {
                les lignes identiques à l'affichage (cf. lib/activite.js) : la trace reste fine,
                la cloche reste lisible. */
             logAudit(req, 'learner.create', 'Learner', learnerId);
-            created.push({ learner_id: learnerId, name: [first, last].filter(Boolean).join(' '), email: email || null, ...identifiants(account), account: !!account, enrolled, existing: false });
+            created.push({ learner_id: learnerId, name: [first, last].filter(Boolean).join(' '), email: email || null, ...identifiants(account), account: !!account, enrolled: !!enrollmentId, enrollment_id: enrollmentId, existing: false });
         }
 
         res.status(201).json({ message: `${created.length} stagiaire(s) inscrit(s).`, data: { created } });
