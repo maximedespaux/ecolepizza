@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 // Union des deux branches : getMyAccess + le bloc boutique/avatar. `multer` reste (upload avatar).
-const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
+const { saveMyCadre, getMonEspace, getMyAccess, markCommunitySeen, getMyFormations, getMyFormation, getMyEmargement, signMyEmargement, getMyProfile, saveMyAvatar, saveMyAvatarImage, getAvatarImage, deleteMyAvatarImage, saveMyQuest, resetMyQuest, getMyInfos, updateMyInfos, updateMyVisibility, searchMyCompanies, getMyConsents, setMyConsent, getMyNewsletter, setMyNewsletter, getBoutique, getBoutiquePartenaires, createShopRequest, getMyShopRequests, cancelMyShopRequest, getPickupSlots,
 } = require('../controllers/espace.controller.js');
 const { getPlayableChapters } = require('../controllers/questContent.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
@@ -29,6 +29,8 @@ router.post('/emargement/:recordId/sign', authenticateToken, signMyEmargement);
 router.get('/profile', authenticateToken, getMyProfile);
 router.get('/infos', authenticateToken, getMyInfos);
 router.put('/infos', authenticateToken, updateMyInfos);
+// Recherche d'une entreprise à rattacher (≥ 3 caractères, jamais la liste entière).
+router.get('/entreprises', authenticateToken, searchMyCompanies);
 router.put('/visibility', authenticateToken, updateMyVisibility);
 
 /* Consentements du stagiaire (migration 130). Lecture et écriture par l'intéressé lui-même —
