@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
-  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl } from "../api/apiClient.js";
+  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl, supprimerRemiseFichier } from "../api/apiClient.js";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
@@ -72,6 +72,10 @@ const sessLabel = (s) => {
   return [titre, `S${s.week} ${s.year}`, dates].filter(Boolean).join(" · ");
 };
 const DOC_STATUS = { A_FAIRE: ["Préparé", "n"], ENVOYE: ["Envoyé", "b"], CONSULTE: ["Consulté", "a"], SIGNE: ["Signé", "g"], ARCHIVE: ["Archivé", "n"] };
+
+/* `taille` est la taille CLAIRE (octets du fichier d'origine) — les octets stockés sont chiffrés et
+   plus volumineux. Affichée pour distinguer deux documents de même nom. Même forme que RemisesReview. */
+const poids = (o) => (o >= 1024 * 1024 ? `${Math.round((o / 1024 / 1024) * 10) / 10} Mo` : `${Math.max(1, Math.round(o / 1024))} Ko`);
 
 export default function EntrepriseDetail() {
   const { id } = useParams();
@@ -629,24 +633,52 @@ export default function EntrepriseDetail() {
           const detail = [r.remis_le && `déposé le ${dateHeure(r.remis_le)}${r.remis_par ? ` par ${r.remis_par}` : ""}`,
             r.accuse_le && `réception confirmée le ${dateHeure(r.accuse_le)} par ${r.pour_entreprise ? "l'entreprise" : "le stagiaire"}`].filter(Boolean).join(" · ");
           return (
-            <div key={d.enrollment_id} className="parc-geste-ligne">
+            <div key={d.enrollment_id} className="parc-geste-ligne" style={versStagiaire ? undefined : { flexWrap: "wrap" }}>
               <span className="parc-trace" title={detail || undefined}>{nom} · {etat(r)}{Number(r.nb_documents) > 0 ? ` · ${resumeNb({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: fichiers.length })}` : ""}</span>
-              {dernier && (
-                <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`} aria-label={`Voir le document déposé pour ${nom}`}
-                  onClick={() => window.open(remiseFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
-              )}
-              {/* Remise au STAGIAIRE : on mène à sa fiche. Remise à l'ENTREPRISE : on dépose ici (plus de
-                  dépôt au-delà du plafond, migration 203 — le serveur refuserait de toute façon). */}
+              {/* Remise au STAGIAIRE : on mène à sa fiche (les fichiers s'y gèrent), avec un simple œil
+                  sur le dernier déposé pour vérifier d'un coup d'œil. Remise à l'ENTREPRISE : on dépose
+                  ici (plus de dépôt au-delà du plafond, migration 203 — le serveur refuserait). */}
               {versStagiaire ? (
-                <Link className="btn ghost sm" to={lienDossier(d.learner_id, d.enrollment_id)}
-                  state={{ info: `« ${s.label} » se remet sur la fiche du stagiaire.` }}
-                  title={`Ouvrir la fiche de ${nom}`} style={{ flex: "none" }}>
-                  <Icon name="user" size={14} /> Gérer sur la fiche stagiaire
-                </Link>
+                <>
+                  {dernier && (
+                    <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`} aria-label={`Voir le document déposé pour ${nom}`}
+                      onClick={() => window.open(remiseFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
+                  )}
+                  <Link className="btn ghost sm" to={lienDossier(d.learner_id, d.enrollment_id)}
+                    state={{ info: `« ${s.label} » se remet sur la fiche du stagiaire.` }}
+                    title={`Ouvrir la fiche de ${nom}`} style={{ flex: "none" }}>
+                    <Icon name="user" size={14} /> Gérer sur la fiche stagiaire
+                  </Link>
+                </>
               ) : (!r.sans_objet && !plafondAtteint(fichiers.length, r.nb_documents) && (
                 <button className="iconbtn" title={fichiers.length ? "Déposer un autre fichier" : "Déposer le document"}
                   aria-label={`Déposer ${r.label} pour ${nom}`} onClick={() => demanderDepotRemise(d, r)}><Icon name="upload" size={16} /></button>
               ))}
+              {/* REMISE À L'ENTREPRISE : on voit ET on retire CHAQUE fichier ici même — comme le panneau
+                  du stagiaire (RemisesReview) —, au lieu d'un œil sur le seul dernier déposé. C'est ici
+                  qu'on dépose, c'est donc ici qu'on relit et qu'on corrige. */}
+              {!versStagiaire && fichiers.length > 0 && (
+                <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 4, marginTop: 4, paddingLeft: 2 }}>
+                  {fichiers.map((f, i) => (
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, flexWrap: "wrap" }}>
+                      <span style={{ color: "var(--dim)", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" }}>{i + 1}.</span>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={f.nom || `Fichier ${i + 1}`}>{f.nom || `Fichier ${i + 1}`}</span>
+                      {f.taille != null && <span style={{ color: "var(--dim)", flex: "0 0 auto" }}>{poids(f.taille)}</span>}
+                      <button className="btn sm ghost" style={{ flex: "0 0 auto" }}
+                        aria-label={`Voir ${f.nom || `le fichier ${i + 1}`} de ${r.label} (${nom})`}
+                        onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                        <Icon name="eye" size={13} /> Voir
+                      </button>
+                      <button className="btn sm ghost danger" style={{ flex: "0 0 auto" }}
+                        aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${r.label} (${nom})`}
+                        onClick={() => retirerFichierRemise(f, r.label, !!r.accuse_le)}>
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -661,6 +693,16 @@ export default function EntrepriseDetail() {
     if (r.statut === "RECUE" && !window.confirm(`Déposer un nouveau fichier pour « ${r.label} » (${nom}) ?\n\n`
       + `L'accusé de réception déjà donné sera annulé : ${qui} devra confirmer à nouveau.`)) return;
     ouvrirSelecteur({ remise: true, enrollmentId: d.enrollment_id, remiseTypeId: r.remise_type_id, label: r.label, nom, qui });
+  }
+  /* RETIRER UN FICHIER d'une remise À L'ENTREPRISE, ici même — c'est ici qu'on l'a déposé (migration
+     188), donc ici qu'on le reprend, sans détour par la fiche du stagiaire. LE RETRAIT ANNULE
+     L'ACCUSÉ (un accusé ne vaut que pour les fichiers sur lesquels il porte) : on le dit avant. */
+  async function retirerFichierRemise(f, libelle, accuse) {
+    const perte = accuse ? "\n\nL'accusé de réception de l'entreprise sera ANNULÉ : elle devra confirmer à nouveau." : "";
+    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de la remise « ${libelle} » ?${perte}`)) return;
+    setStatus(null);
+    try { await supprimerRemiseFichier(f.id); setParcoursRefresh((n) => n + 1); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   /* « PRÉPARER UN DOCUMENT » DE GROUPE, DANS L'ÉTAPE (2026-09-21) : la carte « Préparer un
