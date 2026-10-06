@@ -7,6 +7,7 @@ import { getFormations } from "../api/apiClient.js";
 import { setBadgeColors } from "../lib/levels.js";
 import Sidebar from "../components/Sidebar.jsx";
 import Topbar from "../components/Topbar.jsx";
+import BottomNav from "../components/BottomNav.jsx";
 
 /**
  * Contrôles bloqués en LECTURE SEULE.
@@ -149,6 +150,9 @@ function AppLayout() {
             <Outlet />
           </div>
         </main>
+        {/* La barre du bas (téléphone seulement, masquée en CSS au-dessus de 640 px) : le même
+            geste d'ouverture du tiroir que le bouton « menu » de la barre du haut. */}
+        <BottomNav onMenu={() => setOpen(true)} />
       </div>
     </div>
   );
