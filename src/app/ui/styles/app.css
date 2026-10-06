@@ -1951,6 +1951,19 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
   .modal{max-height:calc(100dvh - 20px)}
   .mhead,.mbody,.mfoot{padding-left:14px;padding-right:14px}
 }
+/* SUR TÉLÉPHONE, LA FENÊTRE DEVIENT UNE FEUILLE QUI MONTE DU BAS (2026-10-06). Centrée, elle
+   laissait vingt pixels de marge de chaque côté et flottait au milieu ; bord à bord et ancrée en
+   bas, elle gagne ces pixels en largeur, la croix et les boutons du pied tombent sous le pouce, et
+   le glissé d'entrée est celui qu'on attend d'une feuille. Coins arrondis EN HAUT seulement, un
+   liseré du voile reste visible au-dessus. On garde `backwards` (jamais `both`/`forwards`) : sinon
+   la feuille resterait le bloc conteneur de toute popup `position:fixed` ouverte depuis elle (même
+   piège que `.modal` de base). Au-dessus de 640 px, la fenêtre centrée d'avant ne bouge pas. */
+@media (max-width:640px){
+  .overlay{padding:0;align-items:end}
+  .modal,.modal.wide{max-width:100%;width:100%;max-height:92dvh;border-radius:16px 16px 0 0;animation:feuille .28s var(--ease) backwards}
+  .mhead,.mbody,.mfoot{padding-left:16px;padding-right:16px}
+}
+@keyframes feuille{from{transform:translateY(100%)}to{transform:translateY(0)}}
 
 /* Partenaires : grille de fiches de suivi */
 /* DEUX colonnes plutôt que trois. À 280px de plancher une troisième entrait, et chaque fiche
