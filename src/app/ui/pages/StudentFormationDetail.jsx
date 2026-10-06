@@ -10,6 +10,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import SignatureModal from "../components/SignatureModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
+import { manquePourRequis } from "../lib/remiseNb.js";
 import { Icon } from "../components/Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { etatPourLeStagiaire } from "../lib/documentsDossier.js";
@@ -321,11 +322,17 @@ function StudentFormationDetail() {
                                 réception de ce qui n'existe pas encore n'a pas de sens, et le
                                 serveur refuserait (422) — un bouton qui répond par une erreur est
                                 pire qu'un bouton absent. */}
-                            {e.r.statut === "REMISE" && (
+                            {e.r.statut === "REMISE" && (manquePourRequis({ nb_mode: e.r.nb_mode, nb_documents: e.r.nb_documents, nb_fichiers: (e.r.fichiers || []).length }) > 0 ? (
+                              /* Type « requis » (migration 203) : tant qu'il manque des documents, on ne
+                                 peut pas confirmer — le serveur refuserait, un bouton actif tromperait. */
+                              <span className="hint" style={{ flex: "none" }}>
+                                En attente de {manquePourRequis({ nb_mode: e.r.nb_mode, nb_documents: e.r.nb_documents, nb_fichiers: (e.r.fichiers || []).length })} document(s) de plus avant de pouvoir confirmer.
+                              </span>
+                            ) : (
                               <button className="btn sm primary" onClick={() => confirmerRemise(e.r)}>
                                 <Icon name="check" size={14} /> J'ai bien reçu
                               </button>
-                            )}
+                            ))}
                           </div>
                           {e.r.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.r.consigne}</p>}
                           {e.r.statut === "ATTENDUE" && (

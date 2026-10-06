@@ -10,6 +10,7 @@ import SignatureModal from "../components/SignatureModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 import { dateHeure } from "../lib/format.js";
+import { manquePourRequis } from "../lib/remiseNb.js";
 
 const DOC_STATUS = { A_FAIRE: ["À signer", "n"], ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé", "g"] };
 
@@ -170,11 +171,14 @@ function RepresentantEspace() {
                       <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
                     </button>
                   ))}
-                  {r.statut === "REMISE" && (
+                  {r.statut === "REMISE" && (manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: (r.fichiers || []).length }) > 0 ? (
+                    /* Type « requis » (migration 203) : on ne confirme qu'une fois tous les documents là. */
+                    <span className="hint">En attente de {manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: (r.fichiers || []).length })} document(s) de plus.</span>
+                  ) : (
                     <button className="btn sm primary" onClick={() => confirmerRemise(r)}>
                       <Icon name="check" size={15} /> J'ai bien reçu
                     </button>
-                  )}
+                  ))}
                 </div>
                 {r.consigne && <p className="hint" style={{ margin: "4px 0 0" }}>{r.consigne}</p>}
                 {r.accuse_le && (

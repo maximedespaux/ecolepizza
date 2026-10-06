@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~7 s** (315 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-06** : **2631 tests — 2624 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-06** : **2638 tests — 2631 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,24 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**203 est À JOUER** (`203_remise_nb_documents.sql`, le NOMBRE DE DOCUMENTS par type de remise — demandé le
+2026-10-06). Deux colonnes sur `remise_type` : `nb_documents` (smallint, 0 = pas de limite) et `nb_mode`
+(varchar, 'PLAFOND' par défaut ou 'REQUIS'). Au lieu de créer quatre ou cinq types pour un même envoi (l'AGEFICE
+en plusieurs pièces), un seul type en porte plusieurs : **PLAFOND** « au plus N » (le dépôt plafonne, l'étape est
+faite dès l'accusé), **REQUIS** « il en faut N » (le dépôt plafonne ET l'accusé de réception est refusé tant qu'il
+manque des documents). L'ACCUSÉ RESTE UNIQUE pour toute la remise (choix de l'école, pas un par document). La
+**complétion ne change pas** (parcours, conformité, groupe INCHANGÉS) : elle reste « accusé de réception » — on ne
+la franchit qu'une fois les N déposés, parce que l'accusé lui-même est bloqué avant (`accuser` → 422 ;
+`manquePourRequis`, lib/remiseNb.js, partagé écran/serveur). Le plafond est vérifié au dépôt (`deposer` → 422) AVANT
+l'upsert, pour qu'un refus n'efface pas un accusé. Sans la migration, rien ne casse : tout type est « illimité »
+(le comportement d'avant), et fixer un nombre répond 503 « migration 203 non jouée » (comme le destinataire sans la
+188). **Elle se vérifie par l'API, sans SQL** : enregistrer un type avec « 3 requis » répond 200 (et non 503), puis
+`GET /api/remises` rend `nb_documents: 3` et `nb_mode: 'REQUIS'`. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='remise_type' AND column_name IN ('nb_documents','nb_mode');`
+⚠️ Son revert retire les deux colonnes : les types reviennent à « sans limite, sans requis » ; les fichiers déjà
+déposés et les accusés donnés restent. Tests : `remise-nb.test.js`.
 
 **202 est À JOUER** (`202_community_newsletter.sql`, la NEWSLETTER — une annonce de la Communauté envoyée aussi par
 e-mail aux stagiaires, demandée le 2026-10-04). Une colonne `community_post.newsletter_envoye_le` (datetime) : une

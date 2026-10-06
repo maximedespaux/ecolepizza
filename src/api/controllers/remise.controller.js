@@ -33,6 +33,7 @@ const { logAudit } = require('../lib/audit.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { companyStepSlugs } = require('../lib/parcours.js');
+const { nbModeValide, nbDocumentsValide, plafondAtteint, manquePourRequis } = require('../lib/remiseNb.js');
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -53,6 +54,11 @@ const entrepriseSansEspace = (r) => r.destinataire === 'ENTREPRISE' && !!r.compa
 // La colonne du destinataire, ou sa valeur d'avant la 188 : tout au stagiaire.
 const colDestinataire = async (conn, alias = 'rt') =>
     (await colonneExiste(conn, 'remise_type', 'destinataire') ? `${alias}.destinataire` : "'STAGIAIRE'");
+// Les colonnes « nombre de documents » (migration 203) : présentes → on les lit/écrit ; sinon « illimité ».
+const colNbExiste = (conn) => colonneExiste(conn, 'remise_type', 'nb_documents');
+const selNb = async (conn, alias = 'rt') => (await colNbExiste(conn)
+    ? `${alias}.nb_documents, ${alias}.nb_mode` : "0 AS nb_documents, 'PLAFOND' AS nb_mode");
+const MIGRATION_203 = { message: "Migration 203 non jouée : un nombre de documents ne peut pas encore être fixé sur un type de remise." };
 // Le compte du représentant de l'entreprise (migration 084) — sans lui, aucun.
 const colRepresentant = async (conn) => (await colonneExiste(conn, 'company', 'user_id') ? 'c.user_id' : 'NULL');
 
@@ -76,7 +82,8 @@ const listTypes = async (req, res) => {
     try {
         const conn = db.promise();
         const [rows] = await conn.query(
-            `SELECT id, code, label, consigne, active, ${await colDestinataire(conn, 'remise_type')} AS destinataire
+            `SELECT id, code, label, consigne, active, ${await colDestinataire(conn, 'remise_type')} AS destinataire,
+                    ${await selNb(conn, 'remise_type')}
                FROM remise_type WHERE organization_id = ? ORDER BY label`,
             [req.user.organization_id]);
         res.json({ data: rows });
@@ -93,6 +100,9 @@ const champsType = (b) => ({
     consigne: String(b.consigne || '').trim().slice(0, 400) || null,
     active: b.active === false || b.active === 0 ? 0 : 1,
     destinataire: DESTINATAIRES.includes(b.destinataire) ? b.destinataire : 'STAGIAIRE',
+    // Nombre de documents (migration 203) : 0 = illimité ; le mode dit s'il plafonne ou s'il est requis.
+    nb_documents: nbDocumentsValide(b.nb_documents),
+    nb_mode: nbModeValide(b.nb_mode),
 });
 
 /* LE DESTINATAIRE S'ÉCRIT QUAND LA COLONNE EXISTE (188). Sans elle, « stagiaire » est ce que tout le
@@ -111,11 +121,14 @@ const createType = async (req, res) => {
         const conn = db.promise();
         const d = await colonnesDestinataire(conn, c);
         if (!d.ok) return res.status(503).json(MIGRATION_188);
+        const avecNb = await colNbExiste(conn);
+        if (c.nb_documents > 0 && !avecNb) return res.status(503).json(MIGRATION_203);
         const id = crypto.randomUUID();
-        await conn.query(
-            `INSERT INTO remise_type (id, organization_id, code, label, consigne, active${d.avec ? ', destinataire' : ''})
-             VALUES (?, ?, ?, ?, ?, ?${d.avec ? ', ?' : ''})`,
-            [id, req.user.organization_id, c.code, c.label, c.consigne, c.active, ...(d.avec ? [c.destinataire] : [])]);
+        const cols = ['id', 'organization_id', 'code', 'label', 'consigne', 'active'];
+        const vals = [id, req.user.organization_id, c.code, c.label, c.consigne, c.active];
+        if (d.avec) { cols.push('destinataire'); vals.push(c.destinataire); }
+        if (avecNb) { cols.push('nb_documents', 'nb_mode'); vals.push(c.nb_documents, c.nb_mode); }
+        await conn.query(`INSERT INTO remise_type (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         logAudit(req, 'remise_type.create', 'RemiseType', id);
         res.status(201).json({ success: true, id });
     } catch (err) {
@@ -135,10 +148,14 @@ const updateType = async (req, res) => {
         const conn = db.promise();
         const d = await colonnesDestinataire(conn, c);
         if (!d.ok) return res.status(503).json(MIGRATION_188);
-        const [r] = await conn.query(
-            `UPDATE remise_type SET code = ?, label = ?, consigne = ?, active = ?${d.avec ? ', destinataire = ?' : ''}
-              WHERE id = ? AND organization_id = ?`,
-            [c.code, c.label, c.consigne, c.active, ...(d.avec ? [c.destinataire] : []), req.params.id, req.user.organization_id]);
+        const avecNb = await colNbExiste(conn);
+        if (c.nb_documents > 0 && !avecNb) return res.status(503).json(MIGRATION_203);
+        const sets = ['code = ?', 'label = ?', 'consigne = ?', 'active = ?'];
+        const vals = [c.code, c.label, c.consigne, c.active];
+        if (d.avec) { sets.push('destinataire = ?'); vals.push(c.destinataire); }
+        if (avecNb) { sets.push('nb_documents = ?', 'nb_mode = ?'); vals.push(c.nb_documents, c.nb_mode); }
+        vals.push(req.params.id, req.user.organization_id);
+        const [r] = await conn.query(`UPDATE remise_type SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
         if (!r.affectedRows) return res.status(404).json({ message: 'Type de remise introuvable.' });
         logAudit(req, 'remise_type.update', 'RemiseType', req.params.id);
         res.json({ success: true });
@@ -193,8 +210,9 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
        la colonne, et personne n'est exclu : le comportement d'avant la 161. */
     const dest = await colDestinataire(conn);
     const representant = await colRepresentant(conn);
+    const nbSel = await selNb(conn); // nombre de documents du type (migration 203) : pour l'écran
     const requete = (col) =>
-        `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne,
+        `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne, ${nbSel},
                 ${dest} AS destinataire, e.company_id, c.name AS entreprise, ${representant} AS representant,
                 ps.active AS actif_parcours, ps.slug AS slug_etape, s.program_id,
                 r.id AS remise_id, r.statut, ${col} AS sans_objet,
@@ -339,7 +357,7 @@ const remisesDeLEntreprise = async (req, res) => {
         if (!entreprises.length) return res.json({ data: [] });
         const sansObjet = await colonneExiste(conn, 'remise_document', 'sans_objet') ? ' AND COALESCE(r.sans_objet, 0) = 0' : '';
         const [rows] = await conn.query(
-            `SELECT r.id AS remise_id, r.statut, rt.label, rt.consigne,
+            `SELECT r.id AS remise_id, r.statut, rt.label, rt.consigne, ${await selNb(conn, 'rt')},
                     DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
                     DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
                     l.first_name, l.last_name, p.code AS formation, c.name AS entreprise
@@ -398,9 +416,24 @@ const deposer = async (req, res) => {
         const conn = db.promise();
         const e = await dossierDe(conn, req.params.enrollmentId, req.user.organization_id);
         if (!e) return res.status(404).json({ message: 'Dossier introuvable.' });
-        const [[rt]] = await conn.query('SELECT label FROM remise_type WHERE id = ? AND organization_id = ?',
+        const avecNb = await colNbExiste(conn);
+        const [[rt]] = await conn.query(
+            `SELECT label${avecNb ? ', nb_documents, nb_mode' : ''} FROM remise_type WHERE id = ? AND organization_id = ?`,
             [req.params.remiseTypeId, req.user.organization_id]);
         if (!rt) return res.status(404).json({ message: 'Type de remise introuvable.' });
+        /* LE PLAFOND (migration 203), VÉRIFIÉ AVANT TOUTE ÉCRITURE : l'upsert ci-dessous remet la remise
+           en « REMISE » et EFFACE l'accusé de réception — refuser APRÈS aurait donc annulé un accusé sans
+           rien ajouter. On compte les fichiers déjà là pour CE dossier et CE type. */
+        if (avecNb && Number(rt.nb_documents) > 0) {
+            const [[dejad]] = await conn.query(
+                `SELECT COUNT(rf.id) AS n FROM remise_document r
+                   LEFT JOIN remise_fichier rf ON rf.remise_id = r.id
+                  WHERE r.enrollment_id = ? AND r.remise_type_id = ?`,
+                [req.params.enrollmentId, req.params.remiseTypeId]);
+            if (plafondAtteint(dejad.n, rt.nb_documents)) {
+                return res.status(422).json({ message: `Ce type de remise accepte au plus ${rt.nb_documents} document(s) : il y en a déjà ${dejad.n}. Retirez-en un avant d'en déposer un autre.` });
+            }
+        }
 
         await conn.query(
             `INSERT INTO remise_document (id, organization_id, enrollment_id, remise_type_id, statut, remis_par, remis_le)
@@ -440,7 +473,7 @@ const accuser = async (req, res) => {
         const conn = db.promise();
         const [[r]] = await conn.query(
             `SELECT r.id, r.statut, l.user_id, e.company_id, ${await colRepresentant(conn)} AS representant,
-                    ${await colDestinataire(conn)} AS destinataire,
+                    ${await colDestinataire(conn)} AS destinataire, ${await selNb(conn, 'rt')},
                     (SELECT COUNT(*) FROM remise_fichier rf WHERE rf.remise_id = r.id) AS n
                FROM remise_document r
                JOIN enrollment e ON e.id = r.enrollment_id
@@ -459,6 +492,11 @@ const accuser = async (req, res) => {
                 : "L'accusé de réception ne peut être signé que par le stagiaire lui-même." });
         }
         if (!r.n) return res.status(422).json({ message: 'Aucun fichier remis : il n\'y a rien à recevoir.' });
+        /* TYPE « REQUIS » (migration 203) : l'accusé n'est possible que lorsque TOUS les documents
+           attendus sont là. Tant qu'il en manque, l'étape reste ouverte (c'est tout l'intérêt du mode). */
+        if (manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: r.n }) > 0) {
+            return res.status(422).json({ message: `Ce document attend ${r.nb_documents} pièce(s) ; ${r.n} déposée(s). L'accusé de réception sera possible quand elles seront toutes là.` });
+        }
         if (r.statut === 'RECUE') return res.json({ success: true }); // déjà fait : pas une erreur
         await conn.query("UPDATE remise_document SET statut = 'RECUE', accuse_le = NOW() WHERE id = ?", [r.id]);
         logAudit(req, 'remise.accusee', 'RemiseDocument', r.id);

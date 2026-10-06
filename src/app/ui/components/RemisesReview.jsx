@@ -6,6 +6,7 @@ import { Icon } from "./Icon.jsx";
 import { dateHeure } from "../lib/format.js";
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 import { ACCEPT_PIECE } from "../lib/formatsDepot.js";
+import { plafondAtteint, resumeNb } from "../lib/remiseNb.js";
 
 /**
  * DOCUMENTS REMIS AU STAGIAIRE — côté PERSONNEL, pour un dossier (enrollment) donné.
@@ -96,6 +97,10 @@ export default function RemisesReview({ enrollmentId, refresh, onChange }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <span style={{ flex: 1, minWidth: 140 }}>
                   <b>{r.label}</b>
+                  {/* Nombre de documents (migration 203) : « 2 / 5 documents » (requis) ou « au plus 5 ». */}
+                  {Number(r.nb_documents) > 0 && (
+                    <span className="badge n" style={{ marginLeft: 8 }}>{resumeNb({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: fichiers.length })}</span>
+                  )}
                   {r.consigne && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{r.consigne}</span>}
                   {/* À QUI (migration 188). Dit ici parce que c'est ici qu'on dépose : l'école doit
                       savoir, avant d'envoyer, qui verra le document et qui en accusera réception. */}
@@ -133,12 +138,15 @@ export default function RemisesReview({ enrollmentId, refresh, onChange }) {
                   accept={ACCEPT_PIECE}
                   onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; envoyer(r.remise_type_id, f); }} />
                 {/* Rien a deposer sur une remise ecartee : la commande disparait plutot que de
-                    rester vivante sur une etape qui ne concerne plus personne. */}
-                {!r.sans_objet && <button className="btn sm primary" disabled={occupe === r.remise_type_id}
-                  onClick={() => champs.current[r.remise_type_id]?.click()}
-                  aria-label={`Déposer un document pour « ${r.label} »`}>
-                  <Icon name="plus" size={14} /> {occupe === r.remise_type_id ? "Envoi…" : "Déposer"}
-                </button>}
+                    rester vivante sur une etape qui ne concerne plus personne.
+                    Et rien de plus quand le PLAFOND (migration 203) est atteint : le serveur refuserait. */}
+                {!r.sans_objet && (plafondAtteint(fichiers.length, r.nb_documents)
+                  ? <span className="hint" style={{ flex: "none" }}>Au plus {r.nb_documents} — déposés.</span>
+                  : <button className="btn sm primary" disabled={occupe === r.remise_type_id}
+                      onClick={() => champs.current[r.remise_type_id]?.click()}
+                      aria-label={`Déposer un document pour « ${r.label} »`}>
+                      <Icon name="plus" size={14} /> {occupe === r.remise_type_id ? "Envoi…" : "Déposer"}
+                    </button>)}
               </div>
 
               {fichiers.length > 0 && (

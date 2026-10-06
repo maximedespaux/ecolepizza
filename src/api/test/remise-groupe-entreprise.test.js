@@ -177,7 +177,8 @@ test('LA FICHE ENTREPRISE : une ligne par stagiaire, et l\'étape ne dépose d\'
        (2026-10-06, gestesStagiaire) ; sinon les documents de groupe. */
     assert.match(fonction(page, 'function gestesEtapeGroupe'), /if \(s\.remise\) return gestesRemise\(s\);\s+if \(!s\.company_level\) return gestesStagiaire\(s\);/);
     const lignes = fonction(page, 'function gestesRemise');
-    assert.match(lignes, /\{!r\.sans_objet && \(/, 'rien à déposer sur une remise écartée');
+    // Rien à déposer sur une remise écartée, ni au-delà du plafond (migration 203).
+    assert.match(lignes, /\{!r\.sans_objet && !plafondAtteint\(fichiers\.length, r\.nb_documents\) && \(/);
     assert.match(lignes, /onClick=\{\(\) => demanderDepotRemise\(d, r\)\}/);
 
     const demander = fonction(page, 'function demanderImportGroupe');
