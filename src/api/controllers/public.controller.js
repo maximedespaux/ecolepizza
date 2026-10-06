@@ -2,6 +2,8 @@
 // partageable (le représentant d'une entreprise signe sans compte).
 const db = require('../config/database.js');
 const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument } = require('./document.controller.js');
+const { notify } = require('./notification.controller.js');
+const { publish } = require('../lib/events.js');
 const { libellesEnClair } = require('../lib/zonesARemplir.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 const { verifierLienDesinscription } = require('../lib/newsletter.js');
@@ -156,6 +158,18 @@ const submitSign = async (req, res) => {
             });
         }
         await conn.query('UPDATE document_sign_link SET used_at = NOW() WHERE token = ?', [req.params.token]);
+        /* LE BUREAU EST PRÉVENU (2026-10-06). Une signature par LIEN PUBLIC ne passe pas par le flux
+           authentifié : ni la cloche ni l'« activité » ne bougeaient — on créait la preuve sur le
+           document sans que personne ne le sache (le stagiaire ou le représentant signe par e-mail).
+           On pose donc la notification d'organisme, comme la signature DANS l'app (cf. signDocument),
+           et on diffuse un « refresh » à la main — le middleware realtime ne le fait que pour une
+           requête authentifiée (`req.user`). Best-effort : une alerte manquée ne casse pas la signature. */
+        await notify(doc.organization_id, {
+            type: 'SIGNATURE', title: 'Document signé',
+            body: `Signé par ${signer_name}${link.slot === 'representant' ? ' (entreprise)' : ''}`,
+            link: doc.learner_id ? `/stagiaires/${doc.learner_id}` : '/suivi',
+        });
+        try { publish(doc.organization_id, 'refresh', {}); } catch { /* diffusion best-effort */ }
         res.json({ success: true, message: 'Document signé. Merci !' });
     } catch (err) {
         console.error('Erreur signature publique :', err);
