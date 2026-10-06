@@ -35,6 +35,26 @@ test('fiche stagiaire : la fenêtre s\'ouvre pour un document non généré à �
     assert.match(p, /<ImportSessionsModal /);
 });
 
+test('fiche stagiaire : une formation qui a DÉJÀ le document n\'est plus reproposée (2026-10-06)', () => {
+    const p = lire('pages/StagiaireDetail.jsx');
+    /* LAMBERT Sylvain, NIV1 en S6 déjà faite, NIV2 en S25 à faire : on ne demande plus « pour les
+       deux ? ». Les documents portent les inscriptions qu'ils couvrent (enrollment_ids) ; on exclut
+       celles qui tiennent déjà ce document (même modèle, ou même QCM), le dossier courant mis à part. */
+    assert.match(p, /function dossierADejaLEtape\(enrollmentId, step\)/);
+    assert.match(p, /\(d\.enrollment_ids \|\| \[\]\)\.includes\(enrollmentId\)/);
+    assert.match(p, /key\.startsWith\("quiz:"\) \? d\.quiz_id === key\.slice\(5\) : d\.template_slug === key/);
+    assert.match(p, /function dossiersAProposer\(step\)/);
+    assert.match(p, /enrollments\.filter\(\(e\) => e\.id === curEnrId \|\| !dossierADejaLEtape\(e\.id, step\)\)/);
+    // La fenêtre ne s'ouvre QUE s'il reste plus d'un dossier à servir ; sinon import / marquage direct.
+    assert.strictEqual((p.match(/const dispo = dossiersAProposer\(step\);/g) || []).length, 2, 'import ET marquer-fait');
+    assert.strictEqual((p.match(/if \(dispo\.length > 1\) \{/g) || []).length, 2);
+    // Les documents reçus portent la liste de leurs inscriptions, ramenée en tableau.
+    assert.match(p, /enrollment_ids: String\(d\.enrollment_ids \|\| ""\)\.split\(","\)\.filter\(Boolean\)/);
+    // Côté serveur, listDocuments rend bien cette liste.
+    const d = fs.readFileSync(path.join(__dirname, '..', 'controllers/document.controller.js'), 'utf8');
+    assert.match(d, /GROUP_CONCAT\(DISTINCT df\.enrollment_id\) AS enrollment_ids/);
+});
+
 test('fiche entreprise : la fenêtre s\'ouvre pour un document de groupe non préparé à ≥2 sessions', () => {
     const e = lire('pages/EntrepriseDetail.jsx');
     assert.match(e, /const eligibles = \(data\.sessions \|\| \[\]\)\.filter\(\(s\) => \(groupTplsBySession\[s\.id\] \|\| \[\]\)\.some\(\(t\) => t\.slug === step\.key\)\);/);

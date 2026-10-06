@@ -145,7 +145,9 @@ function StagiaireDetail() {
   async function loadDocs() {
     try {
       const r = await getLearnerDocuments(id);
-      setDocs(r.data.documents);
+      // `enrollment_ids` arrive en chaîne (GROUP_CONCAT) : on la ramène en tableau pour savoir
+      // quelles formations tiennent déjà un document (cf. dossierADejaLEtape).
+      setDocs((r.data.documents || []).map((d) => ({ ...d, enrollment_ids: String(d.enrollment_ids || "").split(",").filter(Boolean) })));
       setEnrollments(r.data.enrollments);
     } catch (err) {
       setStatus({ type: "error", message: err.message });
@@ -373,19 +375,36 @@ function StagiaireDetail() {
      `value = ""` après coup, sinon réimporter LE MÊME fichier ne déclencherait aucun `change`
      — et l'utilisateur croirait que le bouton ne marche plus. */
 
+  // L'étiquette d'un dossier dans la fenêtre « pour quelles formations ? » : formation, semaine, année.
+  const optionDossier = (e) => ({ id: e.id, label: `${e.program_code || "Formation"}${e.week ? ` · S${e.week}${e.year ? ` ${e.year}` : ""}` : ""}` });
+  /* UN DOSSIER TIENT-IL DÉJÀ LE DOCUMENT DE CETTE ÉTAPE ? (même modèle, ou même QCM). Les documents
+     portent la liste des inscriptions qu'ils couvrent (`enrollment_ids`, cf. listDocuments) : on ne
+     repropose pas une formation déjà servie quand on en ajoute un pour une AUTRE (2026-10-06 :
+     LAMBERT Sylvain, NIV1 en S6 déjà fait, NIV2 en S25 à faire — on ne demande plus « pour les deux ? »). */
+  function dossierADejaLEtape(enrollmentId, step) {
+    const key = step?.key || "";
+    return docs.some((d) => (d.enrollment_ids || []).includes(enrollmentId)
+      && (key.startsWith("quiz:") ? d.quiz_id === key.slice(5) : d.template_slug === key));
+  }
+  /* Les dossiers à PROPOSER pour un document d'étape : celui en cours (son étape n'est pas faite) et
+     ceux qui n'ont PAS déjà ce document. S'il ne reste que le dossier courant, inutile de demander. */
+  function dossiersAProposer(step) {
+    return enrollments.filter((e) => e.id === curEnrId || !dossierADejaLEtape(e.id, step));
+  }
+
   function demanderImport(step) {
     /* PLUSIEURS FORMATIONS, UN SEUL DOCUMENT (2026-10-03). Un document reçu (ni pièce ni remise)
-       jamais généré, quand le stagiaire a plus d'une inscription : on demande d'abord QUELLES
+       jamais généré, quand le stagiaire a plus d'une inscription À SERVIR : on demande d'abord QUELLES
        formations il couvre, pour le créer UNE fois lié à toutes — plutôt qu'un doublon par session.
        Une pièce / une remise se déposent par inscription (pas de fusion) ; un document déjà généré
        se rattache à l'existant : dans ces cas, le fichier s'ouvre directement, comme avant. */
     if (!step.piece && !step.remise && !step.docId && enrollments.length > 1) {
-      setImportMulti({
-        step,
-        options: enrollments.map((e) => ({ id: e.id, label: `${e.program_code || "Formation"}${e.week ? ` · S${e.week}${e.year ? ` ${e.year}` : ""}` : ""}` })),
-        defaut: curEnrId ? [curEnrId] : [],
-      });
-      return;
+      const dispo = dossiersAProposer(step);
+      if (dispo.length > 1) {
+        setImportMulti({ step, options: dispo.map(optionDossier), defaut: curEnrId ? [curEnrId] : [] });
+        return;
+      }
+      // Les autres formations ont déjà ce document : il ne reste que celle en cours → import direct.
     }
     importEnrIds.current = null;
     ouvrirSelecteurFichier(step);
@@ -423,12 +442,12 @@ function StagiaireDetail() {
      demande d'abord lesquelles (même fenêtre que l'import), pour la marquer une fois pour toutes. */
   function marquerFait(step) {
     if (!step.docId && enrollments.length > 1) {
-      setImportMulti({
-        step, intent: "marquer",
-        options: enrollments.map((e) => ({ id: e.id, label: `${e.program_code || "Formation"}${e.week ? ` · S${e.week}${e.year ? ` ${e.year}` : ""}` : ""}` })),
-        defaut: curEnrId ? [curEnrId] : [],
-      });
-      return;
+      const dispo = dossiersAProposer(step);
+      if (dispo.length > 1) {
+        setImportMulti({ step, intent: "marquer", options: dispo.map(optionDossier), defaut: curEnrId ? [curEnrId] : [] });
+        return;
+      }
+      // Les autres formations l'ont déjà : il ne reste que celle en cours → on marque directement.
     }
     doMarquerFait(step, null);
   }
