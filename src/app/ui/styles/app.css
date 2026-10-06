@@ -333,7 +333,12 @@ nav.menu{padding:6px 12px;flex:1;overflow-y:auto}
 }
 .pagehead h1{font-size:42px;line-height:1.05;letter-spacing:-.015em}
 .lead{color:var(--muted);margin:12px 0 0;max-width:720px;font-size:16.5px;line-height:1.5}
-@media(max-width:640px){.pagehead h1{font-size:32px}.lead{font-size:15px}}
+/* EN-TÊTE DE PAGE PLUS COMPACTE SUR TÉLÉPHONE (2026-10-06). Le titre en 32 px et la trentaine de
+   pixels de marge en dessous repoussaient le contenu d'un bon tiers d'écran : « Ventes de Matériels
+   et Inventaire », « M. DAL POS Fabien »… poussaient la caisse, les onglets, les cartes sous la
+   ligne de flottaison. Titre resserré, marges réduites — le contenu remonte, le titre reste
+   nettement en vue. Au-dessus de 640 px, rien ne change. */
+@media(max-width:640px){.pagehead{margin-bottom:16px;padding-bottom:14px;gap:12px}.pagehead h1{font-size:27px;line-height:1.1}.lead{font-size:14px}}
 
 /* Buttons ------------------------------------------------------------ */
 .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 15px;border-radius:11px;font-size:14px;font-weight:600;transition:.16s var(--ease);white-space:nowrap;position:relative;overflow:hidden}
