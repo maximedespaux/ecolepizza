@@ -1043,6 +1043,22 @@ tbody tr:last-child td{border-bottom:none}
   .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:.24s var(--ease)}.sidebar.open{transform:none}
   .topbar .menu-btn{display:block}.content{padding:18px 14px 70px}
 }
+/* ───────────── BARRE DE NAVIGATION DU BAS, SUR TÉLÉPHONE (2026-10-06) ─────────────
+   Masquée partout, elle n'apparaît qu'à ≤ 640 px : quelques rubriques fréquentes sous le pouce,
+   plus « Menu » qui ouvre le tiroir. SOUS la barre latérale et son voile (z-index 40 / 35) pour que
+   l'ouverture du menu la recouvre, et sous les fenêtres (100). Le contenu réserve sa hauteur en bas
+   (déjà 70 px à ≤ 980 px), avec la marge de sécurité des écrans à encoche. */
+.botnav{display:none}
+@media (max-width:640px){
+  .botnav{position:fixed;left:0;right:0;bottom:0;z-index:25;display:flex;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -6px 20px -14px rgba(10,12,30,.5);padding-bottom:env(safe-area-inset-bottom)}
+  .botnav-l{flex:1;min-width:0;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 2px 7px;border:none;background:none;color:var(--muted);font-size:10.5px;font-weight:600;text-decoration:none;cursor:pointer}
+  .botnav-l svg{opacity:.85}
+  .botnav-l.on{color:var(--ember1)}
+  .botnav-l.on svg{opacity:1}
+  .botnav-l span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* La page garde sa hauteur sous la barre (hauteur de barre + encoche). */
+  .content{padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+}
 @media(max-width:560px){.cols-4{grid-template-columns:minmax(0,1fr)}.cols-3{grid-template-columns:minmax(0,1fr)}.row3,.row2{grid-template-columns:minmax(0,1fr)}}
 /* LES TUILES DU TABLEAU DE BORD RESTENT À DEUX COLONNES SUR TÉLÉPHONE (2026-10-06). Une tuile est
    un NOMBRE : empilée sur une seule colonne, les quatre mangeaient tout le premier écran, et « À
