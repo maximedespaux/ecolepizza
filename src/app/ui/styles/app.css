@@ -6923,3 +6923,27 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .stat-relancer{margin:5px 0}
 .stat-relancer summary{cursor:pointer;font-size:12.5px;color:var(--text)}
 .stat-relancer-noms{font-size:12px;color:var(--muted);margin:7px 0 2px;line-height:1.7}
+
+/* ─────────────────── CONFORT TACTILE SUR TÉLÉPHONE (2026-10-06) ───────────────────
+   Au doigt, une cible confortable fait au moins ~40 px. Sur ≤ 640 px (le point de rupture
+   « téléphone » du reste de la feuille), les commandes trop petites grossissent, et les rangées
+   d'actions s'aèrent d'autant : les boutons-icônes des cartes étaient à 32 px (revue des pièces,
+   remises, documents du parcours…), ceux de la barre du haut à 38 px, les onglets de section à
+   26 px, et le lien de retour n'était qu'un texte de ~17 px. Rien ne change au-dessus de 640 px —
+   ce bloc vient APRÈS les définitions de base pour les emporter sans `!important`. */
+@media (max-width:640px){
+  /* Boutons-icônes des cartes (aperçu, télécharger, corbeille, déposer…) : 32 → 40 px. */
+  .iconbtn{width:40px;height:40px;flex-basis:40px;font-size:16px;border-radius:11px}
+  /* Le kanban du pipeline a ses propres icônes (26 px) : un peu plus grandes aussi. */
+  .pipe-moves .iconbtn{width:38px;height:38px;font-size:14px}
+  /* Barre du haut (son, mémos, cloche, thème, déconnexion) : 38 → 42 px. */
+  .icon-btn{width:42px;height:42px;font-size:17px}
+  /* Onglets de section (Coordonnées / Stagiaires / Documents…) : plus hauts et plus larges. */
+  .seg-btn{padding:10px 15px;font-size:13px}
+  /* Le lien de retour en tête de page (« ‹ ENTREPRISES ») : une vraie zone de clic. */
+  button.eyebrow{display:inline-flex;align-items:center;min-height:40px;padding:6px 2px;margin-bottom:4px}
+  /* Les petits boutons-texte gagnent un peu de hauteur sans changer leur libellé. */
+  .btn.sm{padding:9px 13px}
+  /* Les rangées d'actions (parcours, remises) respirent : 4 → 8 px entre les boutons. */
+  .parc-gestes-multi,.parc-geste-ligne{gap:8px}
+}
