@@ -1070,6 +1070,26 @@ export async function ajouterAuDossierArchives(enrollmentId, fichiers) {
   }
 }
 
+// Des fichiers ajoutés au dossier d'une ENTREPRISE (2026-10-06). L'année / la semaine / la formation
+// du nœud cliqué partent avec, pour ranger le fichier au même endroit que les documents de groupe.
+export async function ajouterAuDossierEntrepriseArchives(companyId, fichiers, meta = {}) {
+  const fd = new FormData();
+  for (const { fichier, nom } of fichiers) fd.append("files", fichier, nom);
+  if (meta.year != null) fd.append("year", String(meta.year));
+  if (meta.week != null) fd.append("week", String(meta.week));
+  if (meta.formation != null) fd.append("formation", String(meta.formation));
+  startLoading();
+  try {
+    marquerMutationLocale();
+    const res = await fetch(`${API_BASE_URL}/suivi/archives/dossier-entreprise/${companyId}`, { method: "POST", credentials: "include", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || "Ajout échoué");
+    return data;
+  } finally {
+    stopLoading();
+  }
+}
+
 /**
  * Rattache un document REÇU (courriel, scan) à une étape du dossier.
  *

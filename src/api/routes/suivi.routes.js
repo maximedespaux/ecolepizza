@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { getSuivi, getArchive, importArchive, ajouterAuDossier, getArchiveFile, deleteArchive, bulkDeleteArchive,
+const { getSuivi, getArchive, importArchive, ajouterAuDossier, ajouterAuDossierEntreprise, getArchiveFile, deleteArchive, bulkDeleteArchive,
     getArchiveStockage, exporterArchive } = require('../controllers/suivi.controller.js');
 const { authenticateToken, authorizeRoles, AUDIT_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -50,6 +50,9 @@ router.get('/archives/:id/file', getArchiveFile);
 router.post('/archives/import', authorizeRoles(...ADMIN_ROLES), limiteDuLot, upload.array('files', 3000), importArchive);
 // Des fichiers ajoutés AU DOSSIER d'un stagiaire (2026-09-28) : mêmes droits, même plafond par fichier.
 router.post('/archives/dossier/:enrollmentId', authorizeRoles(...ADMIN_ROLES), limiteDuLot, upload.array('files', 50), ajouterAuDossier);
+// … et AU DOSSIER d'une entreprise (2026-10-06) : mêmes droits, même plafond ; deux segments distincts,
+// aucun conflit avec `/archives/dossier/:enrollmentId`.
+router.post('/archives/dossier-entreprise/:companyId', authorizeRoles(...ADMIN_ROLES), limiteDuLot, upload.array('files', 50), ajouterAuDossierEntreprise);
 router.post('/archives/delete', authorizeRoles(...ADMIN_ROLES), bulkDeleteArchive); // suppression groupée
 router.delete('/archives/:id', authorizeRoles(...ADMIN_ROLES), deleteArchive);
 

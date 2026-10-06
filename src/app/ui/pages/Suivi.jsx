@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import {
   getSuivi, getArchives, downloadDocumentPdf,
   importArchives, archiveFileUrl, downloadArchiveFile, bulkDeleteArchives, getArchiveStockage, pieceFichierUrl, telechargerArchive,
-  ajouterAuDossierArchives, remiseFichierUrl } from "../api/apiClient.js";
+  ajouterAuDossierArchives, ajouterAuDossierEntrepriseArchives, remiseFichierUrl } from "../api/apiClient.js";
 import ProgressPct from "../components/ProgressPct.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire, canOpen, NAV } from "../lib/nav.js";
@@ -355,9 +355,13 @@ function buildTree(rows) {
        seul, ou un document de session, reste une feuille directe de la formation. */
     const coId = isSess ? null : (r.enr_company_id || (isCo ? (r.company_id || r.company_name) : null));
     if (coId) {
+      // L'IDENTIFIANT réel de l'entreprise (jamais le repli « nom ») : il faut un id pour lui
+      // attacher un fichier (« + »). Absent, le « + » ne s'affiche pas.
+      const realCoId = r.enr_company_id || (isCo ? r.company_id : null) || null;
       const C = F.learners[`co:${coId}`] || (F.learners[`co:${coId}`] = {
-        name: r.enr_company_name || r.company_name || "Entreprise", company: true, docs: [], learners: {},
+        name: r.enr_company_name || r.company_name || "Entreprise", company: true, company_id: realCoId, docs: [], learners: {},
       });
+      if (!C.company_id && realCoId) C.company_id = realCoId; // complété si la 1re ligne ne l'avait pas
       if (isCo) { C.docs.push(r); continue; }       // document de groupe → au dossier de l'entreprise
       const sKey = r.learner_id || `${r.last_name}${r.first_name}`;
       const S = C.learners[sKey] || (C.learners[sKey] = {
@@ -406,6 +410,9 @@ function ArchivesView({ onError, onInfo }) {
   // « Ajouter des fichiers » au dossier d'un stagiaire : le sélecteur, et la feuille visée (une ref, même raison).
   const dossierRef = useRef(null);
   const cibleDossier = useRef(null);
+  // … et au dossier d'une ENTREPRISE (2026-10-06) : son propre sélecteur, et l'entreprise + le nœud visés.
+  const entrepriseRef = useRef(null);
+  const cibleEntreprise = useRef(null);
 
   function load() {
     getArchives().then((r) => setRows(r.data)).catch((e) => { setRows([]); onError?.(e.message); });
@@ -480,6 +487,31 @@ function ArchivesView({ onError, onInfo }) {
     } catch (err) { onError?.(err.message); }
     finally { setBusy(false); }
   }
+  /* AJOUTER DES FICHIERS AU DOSSIER D'UNE ENTREPRISE (2026-10-06, « comme le stagiaire »). On passe
+     l'année / la semaine / la formation du NŒUD cliqué, pour que le fichier se range sous l'entreprise,
+     au même endroit que ses documents de groupe. PDF ou image (un scan photographié est réduit). */
+  function ajouterDansEntreprise(cible) {
+    cibleEntreprise.current = cible;
+    if (entrepriseRef.current) entrepriseRef.current.accept = ACCEPT_PIECE;
+    entrepriseRef.current?.click();
+  }
+  async function onPickEntreprise(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    const cible = cibleEntreprise.current;
+    cibleEntreprise.current = null;
+    if (!files.length || !cible) return;
+    setBusy(true);
+    try {
+      const prets = await Promise.all(files.map(async (f) => ({ fichier: await reduireSiImage(f, PROFILS.piece), nom: f.name })));
+      const { data } = await ajouterAuDossierEntrepriseArchives(cible.companyId, prets,
+        { year: cible.year, week: cible.week, formation: cible.formation });
+      onInfo?.(`${messageAjout(data)} Dossier de ${cible.nom}.`);
+      load();
+    } catch (err) { onError?.(err.message); }
+    finally { setBusy(false); }
+  }
+
   // Le compte rendu d'un ajout : ce qui est entré, et ce qui ne l'est pas — NOMMÉ.
   function messageAjout(data) {
     const parts = [`${data.imported} fichier(s) ajouté(s)`];
@@ -579,13 +611,22 @@ function ArchivesView({ onError, onInfo }) {
   );
 
   /* UN DOSSIER D'ENTREPRISE : ses documents de GROUPE d'abord, puis ses stagiaires (chacun sa feuille). */
-  const noeudEntreprise = (C, cheminBase) => {
+  const noeudEntreprise = (C, cheminBase, ctx) => {
     const sous = cheminBase ? `${cheminBase}/${C.name.replace(/\//g, "-")}` : null;
     return (
       <details key={`co:${C.name}`}>
         <summary className="arch-sum">
           <Icon name="building" size={13} style={{ marginRight: 5, verticalAlign: "-2px", color: "var(--ember1, #c0392b)" }} />
           {C.name} <span className="arch-count">{feuilleDocs(C).length}</span>
+          {/* « + » : des fichiers ajoutés au dossier de l'entreprise, rangés au niveau de CE nœud
+              (année / semaine / formation), comme pour un stagiaire. */}
+          {peutModifier && C.company_id && (
+            <button type="button" className="iconbtn" disabled={busy}
+              title="Ajouter des fichiers au dossier de cette entreprise (PDF ou image)"
+              aria-label={`Ajouter des fichiers au dossier de ${C.name}`}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); ajouterDansEntreprise({ companyId: C.company_id, nom: C.name, year: ctx?.year, week: ctx?.week, formation: ctx?.formation }); }}
+              style={{ marginLeft: 8 }}><Icon name="plus" size={15} /></button>
+          )}
           {peutModifier && <DelBtn title="Supprimer cette entreprise (ses documents de groupe et ses stagiaires)" onClick={() => deleteDocs(feuilleDocs(C), C.name)} />}
         </summary>
         <div className="arch-in">
@@ -642,7 +683,9 @@ function ArchivesView({ onError, onInfo }) {
           <button className="iconbtn" title="Télécharger" aria-label={`Télécharger ${d.title}`}
             onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}${extensionDuCoffre(d.mime)}`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
         )}
-        {peutModifier && !duDossier(d) && (
+        {/* Un QCM ne se supprime pas depuis le coffre (le serveur le protège, `quiz_id IS NULL`) : son
+            résultat se gère sur la fiche / dans Résultats QCM. On n'affiche donc pas de bouton mort. */}
+        {peutModifier && !duDossier(d) && !d.quiz_id && (
           <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
         )}
       </div>
@@ -741,6 +784,8 @@ function ArchivesView({ onError, onInfo }) {
       )}
       {/* Le sélecteur des dossiers de stagiaires : `accept` est posé par `ajouterDans`, selon la feuille. */}
       {peutModifier && <input ref={dossierRef} type="file" multiple style={{ display: "none" }} onChange={onPickDossier} />}
+      {/* … et celui du dossier d'une entreprise (« + » sur un nœud entreprise) : `accept` posé à l'ouverture. */}
+      {peutModifier && <input ref={entrepriseRef} type="file" multiple style={{ display: "none" }} onChange={onPickEntreprise} />}
 
       {/* CLASSEURS — ce qui n'appartient à aucune session. Placés AVANT l'arbre : ils sont peu
           nombreux et concernent l'organisme entier, quand l'arbre concerne les promotions. */}
@@ -822,7 +867,9 @@ function ArchivesView({ onError, onInfo }) {
                             {F.learnersArr.map((L) => {
                               // Dossier d'import : avec l'année et la semaine quand elles existent.
                               const cheminBase = /^\d{4}$/.test(Y.label) && W.week ? `${Y.label}/S${W.week}/${F.code}` : null;
-                              return L.company ? noeudEntreprise(L, cheminBase) : feuilleStagiaire(L, cheminBase);
+                              // Contexte du nœud pour le « + » entreprise : où ranger le fichier ajouté.
+                              const ctx = { year: /^\d{4}$/.test(Y.label) ? Y.label : null, week: W.week || null, formation: F.code };
+                              return L.company ? noeudEntreprise(L, cheminBase, ctx) : feuilleStagiaire(L, cheminBase);
                             })}
                           </div>
                         </details>

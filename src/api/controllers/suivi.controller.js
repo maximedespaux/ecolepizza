@@ -103,6 +103,15 @@ const getSuivi = async (req, res) => {
  * c'est elle qui fait avancer le parcours du dossier (lib/avancement.js), et rien ne l'efface.
  */
 async function lignesDuCoffre(conn, orgId) {
+    /* UN QCM RESTE HORS DU COFFRE (ce n'est pas un document, décision 2026-09-25) — SAUF s'il porte un
+       RÉSULTAT IMPORTÉ (le PDF d'un Google Form / un scan, demandé le 2026-10-06) : il a alors un vrai
+       fichier à montrer, et se range comme les autres documents importés. Un QCM répondu DANS l'app n'a
+       pas de `document_fichier` : il reste exclu, ses réponses vivent dans Résultats QCM. Sans la
+       migration 145, la table n'existe pas : on garde la règle d'avant (aucun QCM). */
+    const aFichiers = await colonneExiste(conn, 'document_fichier', 'document_id');
+    const condQcm = aFichiers
+        ? '(gd.quiz_id IS NULL OR EXISTS (SELECT 1 FROM document_fichier f WHERE f.document_id = gd.id))'
+        : 'gd.quiz_id IS NULL';
     // Documents générés par l'application (partagés / signés) — niveau STAGIAIRE.
     const [gen] = await conn.query(
         `SELECT gd.id AS doc_id, gd.title, gd.type, gd.status, gd.quiz_id, 'LEARNER' AS scope,
@@ -123,7 +132,7 @@ async function lignesDuCoffre(conn, orgId) {
          LEFT JOIN training_session s ON s.id = e.session_id
          LEFT JOIN training_program p ON p.id = s.program_id
          LEFT JOIN company dc ON dc.id = e.company_id
-         WHERE gd.organization_id = ? AND gd.status IN (?) AND gd.quiz_id IS NULL`,
+         WHERE gd.organization_id = ? AND gd.status IN (?) AND ${condQcm}`,
         [orgId, SHARED]
     );
     // Documents générés au niveau ENTREPRISE (un par groupe/session). learner_id NULL,
@@ -197,15 +206,16 @@ async function lignesDuCoffre(conn, orgId) {
        fonctionner exactement comme avant — sans classeur, pas avec une erreur SQL. */
     const colDossier = await colonneExiste(conn, 'archive_document', 'dossier');
     const [arch] = await conn.query(
-        `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id, 'LEARNER' AS scope, ad.mime,
-                NULL AS company_id, NULL AS company_name,
+        `SELECT ad.id AS doc_id, ad.title, 'PDF' AS type, ad.status, NULL AS quiz_id,
+                CASE WHEN ad.ref LIKE 'fichier-co:%' THEN 'COMPANY' ELSE 'LEARNER' END AS scope, ad.mime,
+                co.id AS company_id, co.name AS company_name,
                 NULL AS sent_at, DATE_FORMAT(ad.created_at, '%Y-%m-%d %H:%i') AS signed_at,
                 ad.year, ad.week,
                 COALESCE(p.code, ad.formation_label) AS program_code,
                 COALESCE(p.title, ad.formation_label) AS program_title,
                 l.id AS learner_id,
                 COALESCE(l.first_name, '') AS first_name,
-                COALESCE(l.last_name, ad.learner_name) AS last_name,
+                COALESCE(l.last_name, co.name, ad.learner_name) AS last_name,
                 'archive' AS source,
                 ${colDossier ? 'ad.dossier' : 'NULL AS dossier'},
                 ad.ref, e.id AS enrollment_id,
@@ -218,6 +228,8 @@ async function lignesDuCoffre(conn, orgId) {
          LEFT JOIN training_session s ON s.id = e.session_id
          LEFT JOIN training_program p ON p.id = s.program_id
          LEFT JOIN company dc ON dc.id = e.company_id
+         LEFT JOIN company co ON ad.ref LIKE 'fichier-co:%'
+              AND co.id = SUBSTRING_INDEX(SUBSTRING_INDEX(ad.ref, ':', 2), ':', -1)
          WHERE ad.organization_id = ?`,
         [orgId]
     );
@@ -591,6 +603,64 @@ const ajouterAuDossier = async (req, res) => {
         } });
     } catch (err) {
         console.error('Erreur ajout au dossier (archives) :', err);
+        if (err && /max_allowed_packet|packet/i.test(err.message || '')) {
+            return res.status(413).json({ error: 'Fichier trop volumineux pour la base.' });
+        }
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/* DES FICHIERS AJOUTÉS AU DOSSIER D'UNE ENTREPRISE (2026-10-06, « comme le stagiaire, avec un petit +
+   à côté »). Même mécanique qu'`ajouterAuDossier`, côté société : les fichiers se rangent SOUS le
+   dossier de l'entreprise, à côté de ses documents de groupe. Une entreprise n'a pas de session
+   propre — l'année / la semaine / la formation viennent du NŒUD du coffre où l'on a cliqué « + »,
+   pour que le fichier tombe dans le même regroupement que les documents de groupe qu'on y voit. Le
+   ref `fichier-co:<entreprise>:…` les relie à l'entreprise (cf. la requête du coffre, scope COMPANY). */
+const ajouterAuDossierEntreprise = async (req, res) => {
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ error: 'Aucun fichier reçu.' });
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[c]] = await conn.query('SELECT id, name FROM company WHERE id = ? AND organization_id = ?', [req.params.companyId, orgId]);
+        if (!c) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        // Année / semaine / formation du nœud cliqué : rangent le fichier avec les documents de groupe.
+        const an = /^\d{4}$/.test(String(req.body.year || '')) ? Number(req.body.year) : null;
+        const sem = Number.isInteger(Number(req.body.week)) && Number(req.body.week) > 0 ? Number(req.body.week) : null;
+        const formation = String(req.body.formation || '').trim().slice(0, 120) || null;
+        const mesure = await mesureDisponible(conn);
+        let imported = 0, skipped = 0, doublons = 0, vides = 0;
+        const nomsRefuses = [], nomsDoublons = [], nomsVides = [], ajoutes = [];
+        for (const f of files) {
+            const titre = nomSeul(f.originalname).slice(0, 255);
+            const mime = TYPES_DOSSIER[String(f.mimetype || '')];
+            if (!mime) { skipped++; nomsRefuses.push(String(f.originalname || titre)); continue; }
+            if (!f.buffer || !f.buffer.length) { vides++; nomsVides.push(titre); continue; }
+            const [[deja]] = await conn.query(
+                'SELECT 1 AS oui FROM archive_document WHERE organization_id = ? AND ref LIKE ? AND title = ? LIMIT 1',
+                [orgId, `fichier-co:${c.id}:%`, titre]);
+            if (deja) { doublons++; nomsDoublons.push(titre); continue; }
+            const range = aRanger(f.buffer); // chiffré, empreinte et taille du clair (cf. ajouterAuDossier)
+            await conn.query(
+                `INSERT INTO archive_document
+                    (id, organization_id, ref, year, week, formation_label, learner_name, title, status, mime, file${mesure ? ', empreinte, octets' : ''})
+                 VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 'ARCHIVE', ?, ?${mesure ? ', ?, ?' : ''})`,
+                [orgId, `fichier-co:${c.id}:${crypto.randomBytes(6).toString('hex')}`, an, sem,
+                    formation, c.name, titre, mime, range.file, ...(mesure ? [range.empreinte, range.octets] : [])]);
+            imported++;
+            ajoutes.push(titre);
+        }
+        // Sur l'ENTREPRISE (pas un dossier) : la cloche et le journal mènent à sa fiche.
+        if (imported) {
+            const noms = ajoutes.slice(0, 3).join(', ') + (ajoutes.length > 3 ? ` (+${ajoutes.length - 3})` : '');
+            logAudit(req, 'archive.dossier', 'Company', c.id, { libelle: noms });
+        }
+        res.status(201).json({ data: {
+            imported, skipped, noms_refuses: nomsRefuses.slice(0, 20),
+            doublons, noms_doublons: nomsDoublons.slice(0, 20), vides, noms_vides: nomsVides.slice(0, 20),
+        } });
+    } catch (err) {
+        console.error('Erreur ajout au dossier entreprise (archives) :', err);
         if (err && /max_allowed_packet|packet/i.test(err.message || '')) {
             return res.status(413).json({ error: 'Fichier trop volumineux pour la base.' });
         }
@@ -1088,5 +1158,5 @@ const exporterArchive = async (req, res) => {
     }
 };
 
-module.exports = { getSuivi, getArchive, importArchive, ajouterAuDossier, getArchiveFile, deleteArchive, bulkDeleteArchive,
+module.exports = { getSuivi, getArchive, importArchive, ajouterAuDossier, ajouterAuDossierEntreprise, getArchiveFile, deleteArchive, bulkDeleteArchive,
     getArchiveStockage, exporterArchive, lignesDuCoffre, porteeDeLArchive, sommaireDeLArchive };

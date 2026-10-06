@@ -262,8 +262,11 @@ test('l\'archive a UNE route, sous la garde du coffre, et la liste même de l\'�
     assert.match(SUIVI, /const zip = ecrivainZip\(res\);/);
     assert.match(SUIVI, /res\.destroy\(err\);/);
     assert.match(SUIVI, /logAudit\(req, 'archive\.export', 'Archive', null\);/);
-    // Les évaluations ne sont plus dans le coffre (2026-09-25) : ni à l'écran, ni dans l'archive, ni à la corbeille.
-    assert.match(SUIVI, /WHERE gd\.organization_id = \? AND gd\.status IN \(\?\) AND gd\.quiz_id IS NULL`/);
+    /* Un QCM reste hors du coffre (2026-09-25), SAUF s'il porte un RÉSULTAT IMPORTÉ — un `document_fichier`
+       (2026-10-06) : il a alors un vrai PDF, et se montre comme les autres documents importés. */
+    assert.match(SUIVI, /gd\.quiz_id IS NULL OR EXISTS \(SELECT 1 FROM document_fichier f WHERE f\.document_id = gd\.id\)/);
+    assert.match(SUIVI, /WHERE gd\.organization_id = \? AND gd\.status IN \(\?\) AND \$\{condQcm\}`/);
+    // La CORBEILLE, elle, protège toujours le QCM : son résultat se gère sur la fiche, pas depuis le coffre.
     assert.match(SUIVI, /'DELETE FROM generated_document WHERE organization_id = \? AND id IN \(\?\) AND quiz_id IS NULL'/);
     assert.doesNotMatch(SUIVI, /QCM envoyé, pas encore rempli|LEFT JOIN quiz qz/);
 });
