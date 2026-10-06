@@ -201,3 +201,26 @@ test('LA FICHE ENTREPRISE : une ligne par stagiaire, et l\'étape ne dépose d\'
     assert.match(envoi, /await deposerRemise\(cible\.enrollmentId, cible\.remiseTypeId, await reduireSiImage\(file, PROFILS\.piece\)\);/);
     assert.match(page, /getRemisesGroupe\(id, viewSessionId\)\.then\(\(r\) => setRemisesGroupe\(r\.data \|\| \[\]\)\)/);
 });
+
+test('LA FICHE ENTREPRISE : une remise à l\'entreprise liste TOUS ses fichiers, chacun à voir et à retirer', () => {
+    /* Demandé le 2026-10-06 : « voir/supprimer les docs sur la même page, au lieu d'un œil qui n'ouvre
+       que le dernier ». Une remise déposée ICI (côté entreprise) se relit et se corrige ICI, comme le
+       panneau du stagiaire (RemisesReview) — plus un seul œil sur le dernier fichier. */
+    const page = lireUi('pages/EntrepriseDetail.jsx');
+    const lignes = fonction(page, 'function gestesRemise');
+    // La liste des fichiers n'apparaît QUE pour une remise à l'entreprise (au stagiaire, on mène à sa fiche).
+    assert.match(lignes, /\{!versStagiaire && fichiers\.length > 0 && \(/);
+    // Chaque fichier : un « Voir » qui ouvre CE fichier (f.id), pas un œil sur le seul dernier.
+    assert.match(lignes, /fichiers\.map\(\(f, i\) =>/);
+    assert.match(lignes, /window\.open\(remiseFichierUrl\(f\.id\), "_blank", "noopener"\)/);
+    // … et un retrait par fichier.
+    assert.match(lignes, /onClick=\{\(\) => retirerFichierRemise\(f, r\.label, !!r\.accuse_le\)\}/);
+
+    /* RETIRER : le même appel que la fiche stagiaire (supprimerRemiseFichier), un rafraîchissement du
+       parcours, et l'avertissement que l'accusé de l'entreprise tombe quand il existait. */
+    const retirer = fonction(page, 'async function retirerFichierRemise');
+    assert.match(retirer, /await supprimerRemiseFichier\(f\.id\);/);
+    assert.match(retirer, /setParcoursRefresh\(\(n\) => n \+ 1\)/);
+    assert.match(retirer, /L'accusé de réception de l'entreprise sera ANNULÉ/);
+    assert.match(page, /supprimerRemiseFichier \} from "\.\.\/api\/apiClient\.js"|, supprimerRemiseFichier \}/);
+});
