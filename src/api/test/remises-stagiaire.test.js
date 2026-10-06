@@ -115,8 +115,9 @@ test('l\'écran de l\'école n\'offre AUCUN bouton « reçu »', () => {
 });
 
 test('le stagiaire ne peut confirmer que ce qui a été déposé', () => {
-    assert.match(ESPACE, /e\.r\.statut === "REMISE" && \([\s\S]{0,300}J'ai bien reçu/,
-        'le bouton n\'apparaît qu\'une fois le document là');
+    // Le bouton n'apparaît qu'une fois le document là ET, pour un type « requis » (203), tous déposés.
+    assert.match(ESPACE, /e\.r\.statut === "REMISE" && \(manquePourRequis\(/);
+    assert.match(ESPACE, /J'ai bien reçu/, 'le bouton de confirmation existe');
     assert.match(ESPACE, /accuserRemise\(r\.remise_id\)/);
     // Confirmer engage : on demande, et la phrase dit ce qu'on signe.
     assert.match(ESPACE, /window\.confirm\(`Confirmer que vous avez bien reçu/);

@@ -10,10 +10,11 @@ import { Icon } from "./Icon.jsx";
  * l'école DEMANDE ; ici, ce qu'elle REMET. Les deux se rattachent ensuite à un parcours dans
  * Formations, comme un document ou un QCM.
  *
- * SA FICHE EST PLUS COURTE QUE CELLE D'UNE PIÈCE, et c'est voulu : nombre de fichiers, taille
- * maximale et formats acceptés servent à CADRER un envoi qu'on ne maîtrise pas — un stagiaire
- * qui photographie sa carte d'identité. Ici c'est l'école qui dépose : elle sait ce qu'elle
- * envoie, et lui imposer des règles à elle-même n'éviterait aucun problème réel.
+ * SA FICHE EST PLUS COURTE QUE CELLE D'UNE PIÈCE : taille maximale et formats acceptés cadrent un
+ * envoi qu'on ne maîtrise pas (un stagiaire qui photographie sa carte d'identité) — ici c'est
+ * l'école qui dépose, elle sait ce qu'elle envoie. Un SEUL cadrage a du sens, ajouté le 2026-10-06 :
+ * le NOMBRE de documents (migration 203), pour qu'un même type en porte plusieurs — « au plus X » ou
+ * « il en faut X » — au lieu de multiplier les types pour un même envoi (l'AGEFICE en quatre pièces).
  *
  * COMPOSANT À PART plutôt qu'une branche de l'éditeur des pièces : celui-ci porte sept champs
  * dont cinq n'ont pas de sens ici. Les fondre obligerait à masquer la moitié d'un formulaire
@@ -31,7 +32,9 @@ export default function RemiseTypes({ onStatus }) {
   async function enregistrer(e) {
     e.preventDefault();
     const payload = { code: edite.code, label: edite.label, consigne: edite.consigne, active: edite.active !== false,
-      destinataire: edite.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE" };
+      destinataire: edite.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE",
+      nb_documents: Math.max(0, Math.min(99, Math.round(Number(edite.nb_documents) || 0))),
+      nb_mode: edite.nb_mode === "REQUIS" ? "REQUIS" : "PLAFOND" };
     try {
       if (edite._new) await createRemiseType(payload); else await updateRemiseType(edite.id, payload);
       setEdite(null); onStatus?.({ type: "success", message: "Remise enregistrée." }); load();
@@ -59,7 +62,7 @@ export default function RemiseTypes({ onStatus }) {
           modèle de document avec un PDF joint. Rattachez-les à un parcours dans <b>Formations → Parcours documentaire</b>.
         </p>
         <button type="button" className="btn sm primary" style={{ flex: "none" }}
-          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true, destinataire: "STAGIAIRE" })}>＋ Ajouter une remise</button>
+          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true, destinataire: "STAGIAIRE", nb_documents: 0, nb_mode: "PLAFOND" })}>＋ Ajouter une remise</button>
       </div>
 
       {items.length === 0 ? (
@@ -71,6 +74,11 @@ export default function RemiseTypes({ onStatus }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <b>{r.label}</b>{!r.active && <span className="hint"> · inactive</span>}
                 {r.destinataire === "ENTREPRISE" && <span className="badge b" style={{ marginLeft: 8 }}>pour l'entreprise</span>}
+                {Number(r.nb_documents) > 0 && (
+                  <span className="badge n" style={{ marginLeft: 8 }}>
+                    {r.nb_mode === "REQUIS" ? `${r.nb_documents} requis` : `au plus ${r.nb_documents}`}
+                  </span>
+                )}
                 <div className="hint" style={{ fontSize: 12 }}>{r.code}{r.consigne ? ` · ${r.consigne}` : ""}</div>
               </div>
               <button type="button" className="btn sm ghost" onClick={() => setEdite({ ...r })}><Icon name="settings" size={14} /> Réglages</button>
@@ -129,6 +137,32 @@ export default function RemiseTypes({ onStatus }) {
                     C'est le destinataire qui accuse réception. Un stagiaire inscrit sans entreprise, ou dont l'entreprise
                     n'a pas d'espace, le reçoit lui-même.
                   </p>
+                </div>
+                {/* NOMBRE DE DOCUMENTS (migration 203) : au lieu de créer 4-5 types pour un même envoi, un
+                    seul type peut en porter plusieurs — soit « au plus X » (plafond), soit « il en faut X »
+                    (requis : l'accusé de réception n'est possible qu'une fois tous déposés). 0 = sans limite. */}
+                <div className="field">
+                  <label>Nombre de documents</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input className="inp" type="number" min="0" max="99" style={{ maxWidth: 90 }}
+                      value={edite.nb_documents ?? 0}
+                      onChange={(e) => setEdite((p) => ({ ...p, nb_documents: Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0))) }))} />
+                    <span className="hint">0 = sans limite : un ou plusieurs, au choix.</span>
+                  </div>
+                  {Number(edite.nb_documents) > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 400 }}>
+                        <input type="radio" name="nb_mode" checked={edite.nb_mode !== "REQUIS"}
+                          onChange={() => setEdite((p) => ({ ...p, nb_mode: "PLAFOND" }))} />
+                        Au plus {edite.nb_documents} — on peut en déposer moins ; fait dès l'accusé de réception.
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 400 }}>
+                        <input type="radio" name="nb_mode" checked={edite.nb_mode === "REQUIS"}
+                          onChange={() => setEdite((p) => ({ ...p, nb_mode: "REQUIS" }))} />
+                        Il en faut {edite.nb_documents} — l'accusé de réception n'est possible qu'une fois tous déposés.
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
                   <input type="checkbox" checked={edite.active !== false}

@@ -7,6 +7,7 @@ import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
 import { lienDossier } from "../lib/lienDossier.js";
+import { plafondAtteint, resumeNb } from "../lib/remiseNb.js";
 import { compterMots, NOTE_ENTREPRISE_MOTS_MAX } from "../lib/mots.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -626,12 +627,13 @@ export default function EntrepriseDetail() {
             r.accuse_le && `réception confirmée le ${dateHeure(r.accuse_le)} par ${r.pour_entreprise ? "l'entreprise" : "le stagiaire"}`].filter(Boolean).join(" · ");
           return (
             <div key={d.enrollment_id} className="parc-geste-ligne">
-              <span className="parc-trace" title={detail || undefined}>{nom} · {etat(r)}</span>
+              <span className="parc-trace" title={detail || undefined}>{nom} · {etat(r)}{Number(r.nb_documents) > 0 ? ` · ${resumeNb({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: fichiers.length })}` : ""}</span>
               {dernier && (
                 <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`} aria-label={`Voir le document déposé pour ${nom}`}
                   onClick={() => window.open(remiseFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
               )}
-              {!r.sans_objet && (
+              {/* Plus de dépôt quand le plafond (migration 203) est atteint : le serveur refuserait. */}
+              {!r.sans_objet && !plafondAtteint(fichiers.length, r.nb_documents) && (
                 <button className="iconbtn" title={fichiers.length ? "Déposer un autre fichier" : "Déposer le document"}
                   aria-label={`Déposer ${r.label} pour ${nom}`} onClick={() => demanderDepotRemise(d, r)}><Icon name="upload" size={16} /></button>
               )}
