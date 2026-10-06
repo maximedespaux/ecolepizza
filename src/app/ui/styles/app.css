@@ -6353,6 +6353,10 @@ label .requis {
 /* Sous-titre du parcours (code · semaine · OPCO) + le menu « type de devis » de CE dossier, qui s'y
    change directement. Le menu reste discret, à la taille de la ligne. */
 .parc-sous{font-size:12px;color:var(--dim);margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* La session de la ligne de détail : un lien discret (hérite du gris de .parc-sous) mais clairement
+   cliquable — souligné léger, qui vire au bleu au survol. */
+.parc-sess-lien{color:inherit;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;transition:color .12s ease,text-decoration-color .12s ease}
+.parc-sess-lien:hover,.parc-sess-lien:focus-visible{color:var(--blue);text-decoration-color:currentColor}
 .parc-devis{width:auto;height:24px;padding:0 6px;font-size:12px;border:1px solid var(--border);border-radius:7px;
   background:var(--surface);color:var(--text);cursor:pointer;line-height:1;flex:0 0 auto}
 /* La bibliothèque d'images du mailing : des vignettes qu'on clique pour insérer. */
