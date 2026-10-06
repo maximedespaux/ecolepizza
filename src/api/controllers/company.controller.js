@@ -41,7 +41,7 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
     if (!sess) return null;
     const program = { id: sess.program_id, code: sess.program_code, days: sess.days, hygiene: sess.hygiene, rs_code: sess.rs_code };
     const [enr] = await conn.query(
-        `SELECT e.id, e.learner_id, e.financing, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
+        `SELECT e.id, e.learner_id, e.financing, l.opco, l.first_name, l.last_name FROM enrollment e JOIN learner l ON l.id = e.learner_id
          WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?`, [companyId, sessionId, orgId]);
     const condById = await loadConditionMap(conn, orgId);
     const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
@@ -54,7 +54,9 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
             agefice: (e.opco || '').toUpperCase() === 'AGEFICE', ...(factsMap.get(e.id) || {}),
         };
         const resolved = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
-        enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null, slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
+        enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null,
+            name: `${e.last_name || ''} ${e.first_name || ''}`.trim() || 'Stagiaire',
+            slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
     }
     return { sess, program, enrollments, allSteps: await formationSteps(conn, orgId, program) };
 }
@@ -916,6 +918,14 @@ const getCompanyParcours = async (req, res) => {
                 signers, company_level: !!s.company_level, doc_type: s.doc_type,
                 signable: s.quiz_id ? false : signers.some((r) => r !== 'ORG'), quiz: !!s.quiz_id,
                 gen, total, signed, docId,
+                /* LES STAGIAIRES qu'une étape « stagiaire » (ni groupe, ni QCM) concerne — pour que la
+                   fiche entreprise y MÈNE (« Gérer sur la fiche stagiaire », 2026-10-06, l'inverse du
+                   bouton « Gérer sur la fiche entreprise » des documents de groupe) : un seul y conduit
+                   directement, plusieurs se choisissent. Ces documents se préparent sur la fiche de
+                   chaque stagiaire, pas ici. */
+                stagiaires: (!s.company_level && !s.quiz_id)
+                    ? dossiersConcernes(s).map((e) => ({ enrollment_id: e.id, learner_id: e.learner_id, name: e.name }))
+                    : undefined,
                 remise: !!remise, remise_id: s.remise_id || null, remiseEntreprise,
                 facultatif: !!s.facultatif, // hors décompte (migration 188)
                 _done: done, _sansObjet: !!(remise && remise.sansObjet),

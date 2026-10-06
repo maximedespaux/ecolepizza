@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState, useRef } from "react";
 import { Icon } from "../components/Icon.jsx";
 import ImportSessionsModal from "../components/ImportSessionsModal.jsx";
-import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import {
   getStagiaire, getLearnerDocuments, createDocument, sendDocument, deleteDocument, getTemplates, getEmargementTemplates, deleteStagiaire, sendQuizToEnrollment, checkDocumentConditions, importDocumentFile, marquerDocumentFait, downloadDocumentImporte, downloadDocumentPdf, deposerPiece, deposerRemise, updateStagiaire, telechargerArchive, getReglements, updateEnrollment, getCompanies} from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
@@ -69,8 +69,12 @@ function StagiaireDetail() {
   const archiveOuvrable = !!ENTREE_SUIVI && canOpen(user, ENTREE_SUIVI);
   // Le dossier désigné par le lien qui a ouvert la fiche (`?dossier=`, depuis le tableau de bord).
   const [parametres] = useSearchParams();
+  const location = useLocation();
   const [l, setL] = useState(null);
   const [status, setStatus] = useState(null);
+  /* Un message venu d'un autre écran (la fiche entreprise : « ce document se prépare ici », 2026-10-06,
+     l'inverse du « Gérer sur la fiche entreprise ») : on l'affiche en bandeau, comme la fiche entreprise. */
+  useEffect(() => { if (location.state?.info) setStatus({ type: "info", message: location.state.info }); }, [location.state]);
   const [docs, setDocs] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [companies, setCompanies] = useState([]); // pour le menu « entreprise » du dossier (type pro)

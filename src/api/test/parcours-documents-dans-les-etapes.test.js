@@ -146,7 +146,7 @@ test('ENTREPRISE : les cartes portent les gestes, le formulaire s\'ouvre dans l\
     assert.match(appelParcours, /renderPreparation=\{formulaireGroupe\}/);
     assert.match(appelParcours, /onCharge=\{\(d\) => setSlugsEtapes\(new Set\(\(d\?\.steps \|\| \[\]\)\.filter\(\(x\) => x\.company_level\)\.map\(\(x\) => x\.key\)\)\)\}/);
     const gestes = fonction(ENTREPRISE, 'function gestesEtapeGroupe');
-    assert.match(gestes, /if \(!s\.company_level\) return null;/, 'une étape « stagiaire » se génère depuis chaque fiche');
+    assert.match(gestes, /if \(!s\.company_level\) return gestesStagiaire\(s\);/, 'une étape « stagiaire » mène à la fiche du stagiaire (2026-10-06)');
     assert.match(gestes, /documentsDeLEtape\(companyDocs, s\.key, viewSessionId\)/, 'par modèle et par session, pas par le seul docId');
     assert.match(fonction(ENTREPRISE, 'function boutonsDocumentEntreprise'), /deleteCompanyDoc\(d\.id, d\.title, d\.status === "SIGNE"\)/,
         'la corbeille garde la confirmation de la page, plus ferme pour un document signé');
