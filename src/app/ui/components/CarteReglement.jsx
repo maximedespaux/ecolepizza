@@ -3,7 +3,7 @@ import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
 import ChampMontant from "./ChampMontant.jsx";
 import { euro, dateFr } from "../lib/format.js";
-import { MOYENS, refDemandee } from "../lib/moyensPaiement.js";
+import { moyensConfigures, libelleMoyen, refDemandee } from "../lib/moyensPaiement.js";
 import { updateReglement } from "../api/apiClient.js";
 
 /**
@@ -21,11 +21,14 @@ import { updateReglement } from "../api/apiClient.js";
  * Écriture réservée au bureau (`canEdit`). Sans la migration 194, la coche « payé le… » est absente
  * et le dit ; le montant de l'acompte, lui, se saisit déjà (sa colonne préexiste).
  */
-export default function CarteReglement({ learnerId, reglements, canEdit, onSaved }) {
+export default function CarteReglement({ learnerId, reglements, moyens, canEdit, onSaved }) {
   const [erreur, setErreur] = useState("");
   const [enCours, setEnCours] = useState(false);
   // Texte du champ « acompte » en cours d'édition, par dossier (sinon on lit la valeur du serveur).
   const [saisieAcompte, setSaisieAcompte] = useState({});
+  // Les moyens proposés par le sélecteur « Réglé par » viennent de l'entité émettrice (transmis par
+  // l'API) ; à défaut (API ancienne, liste vide), on retombe sur les quatre libellés de repli.
+  const moyensProposes = moyens && moyens.length ? moyens : moyensConfigures("");
 
   if (!reglements) return <Card title={<Titre />}><p className="hint" style={{ margin: 0 }}>Chargement…</p></Card>;
   if (reglements.length === 0) {
@@ -54,7 +57,7 @@ export default function CarteReglement({ learnerId, reglements, canEdit, onSaved
               </div>
 
               <Ligne
-                titre="Acompte" ligne={d.acompte} canEdit={canEdit} enCours={enCours}
+                titre="Acompte" ligne={d.acompte} canEdit={canEdit} enCours={enCours} moyens={moyensProposes}
                 migration194={d.migration_194} migration195={d.migration_195}
                 champMontant={d.acompte.saisissable ? (
                   <ChampMontant className="inp regl-montant-inp" exemple="450,00"
@@ -73,7 +76,7 @@ export default function CarteReglement({ learnerId, reglements, canEdit, onSaved
               />
 
               <Ligne
-                titre="Solde (reste)" ligne={{ ...d.solde, montant: reste }} canEdit={canEdit} enCours={enCours}
+                titre="Solde (reste)" ligne={{ ...d.solde, montant: reste }} canEdit={canEdit} enCours={enCours} moyens={moyensProposes}
                 migration194={d.migration_194} migration195={d.migration_195}
                 onDate={(iso) => enregistrer(d.enrollment_id, { solde_paye_le: iso })}
                 onMoyen={(code) => enregistrer(d.enrollment_id, { solde_moyen: code, ...(refDemandee(code) ? {} : { solde_ref: null }) })}
@@ -108,9 +111,13 @@ function Titre() {
    porte — de quoi la saisir (montant de l'acompte, date « payé le… »). Le MOYEN de paiement (espèces,
    chèque, virement, carte) et sa référence se notent toujours (migration 195) : une facture peut les
    imprimer ({Moyen acompte}…), qu'ils viennent d'une coche à la main ou d'un règlement facturé. */
-function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, enCours, migration194, migration195 }) {
+function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, enCours, migration194, migration195, moyens }) {
   const { montant, paye, date, source, saisissable, montantPaye, moyen, ref } = ligne;
   const refLbl = refDemandee(moyen); // « N° de chèque », « Référence du virement », ou null
+  /* Les options du sélecteur : les moyens de l'entité, PLUS le moyen déjà noté s'il n'y est pas —
+     un ancien code (« CHEQUE ») ou un moyen retiré de l'entité depuis. Sans ce filet, une valeur
+     hors liste afficherait la première option sans un mot (cf. CLAUDE.md § 3, listes déroulantes). */
+  const options = (moyens || []).includes(moyen) || !moyen ? (moyens || []) : [...(moyens || []), moyen];
   return (
     <div className={"regl-ligne" + (paye ? " est-paye" : "")}>
       <span className="regl-ligne-t">{titre}</span>
@@ -123,7 +130,7 @@ function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, en
           : <span className="regl-chip attente">En attente{montant != null && montantPaye > 0 ? ` · ${euro(montantPaye)} versé` : ""}</span>}
         {source && <span className="regl-src">{source === "facture" ? "d'après la facture" : "saisi à la main"}</span>}
         {/* Le moyen déjà noté se lit même quand on ne peut pas l'éditer (lecture seule). */}
-        {!canEdit && moyen && <span className="regl-src">par {moyenLabel(moyen)}{ref ? ` (${ref})` : ""}</span>}
+        {!canEdit && moyen && <span className="regl-src">par {libelleMoyen(moyen)}{ref ? ` (${ref})` : ""}</span>}
       </span>
       {canEdit && (saisissable || migration195) && (
         <span className="regl-ligne-saisie">
@@ -143,7 +150,7 @@ function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, en
                 <select className="inp regl-moyen-sel" value={moyen || ""} disabled={enCours}
                   onChange={(e) => onMoyen(e.target.value || null)}>
                   <option value="">—</option>
-                  {MOYENS.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+                  {options.map((m) => <option key={m} value={m}>{libelleMoyen(m)}</option>)}
                 </select>
               </label>
               {refLbl && (
@@ -161,5 +168,3 @@ function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, en
     </div>
   );
 }
-
-const moyenLabel = (code) => (MOYENS.find((m) => m.code === code) || {}).label || code;

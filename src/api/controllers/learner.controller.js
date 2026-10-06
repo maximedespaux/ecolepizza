@@ -24,7 +24,7 @@ const { aDesDestinataires, champsOrganisme } = require('../lib/consentements.js'
 const { lireMontant } = require('../lib/montantSaisi.js');
 const { montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 const { calculerReglement } = require('../lib/reglementDossier.js');
-const { moyenValide } = require('../lib/moyensPaiement.js');
+const { moyenValide, moyensConfigures } = require('../lib/moyensPaiement.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -962,6 +962,25 @@ const importLearners = async (req, res) => {
 };
 
 /**
+ * Les moyens de paiement PROPOSÉS pour le règlement : ceux de l'entité émettrice de l'organisme
+ * (Paramètres → Facturation → « École Pizza »), la MÊME liste qu'à la caisse. On prend l'entité
+ * `is_organization` si la colonne existe (migration 117), sinon l'entité par défaut, sinon le repli
+ * des quatre libellés. Tolérant : toute lecture qui échoue retombe sur le repli (le règlement marche
+ * avant comme après, sans jamais planter sur une base ancienne).
+ */
+async function moyensPaiementOrg(conn, orgId) {
+    try {
+        let ordre = 'is_default DESC';
+        if (await colonneExiste(conn, 'billing_profile', 'is_organization')) ordre = 'is_organization DESC, is_default DESC';
+        const [[bp]] = await conn.query(
+            `SELECT payment_methods FROM billing_profile WHERE organization_id = ? ORDER BY ${ordre} LIMIT 1`, [orgId]);
+        return moyensConfigures(bp ? bp.payment_methods : '');
+    } catch {
+        return moyensConfigures('');
+    }
+}
+
+/**
  * GET /api/stagiaires/:id/reglements — le suivi du règlement, un bloc par DOSSIER : l'acompte et le
  * solde, payés ou dus, d'après les factures (table `payment`) OU la coche manuelle (migration 194).
  * La règle vit dans lib/reglementDossier.js (pure, éprouvée) ; ici on ne fait que rassembler.
@@ -1029,7 +1048,9 @@ const getReglements = async (req, res) => {
                 ...r,
             });
         }
-        res.json({ data });
+        // La liste PROPOSÉE par la carte (le sélecteur « Réglé par ») : les moyens de l'entité.
+        const moyens = await moyensPaiementOrg(conn, orgId);
+        res.json({ data, moyens });
     } catch (err) {
         console.error('getReglements:', err.message);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -1085,11 +1106,13 @@ const updateReglement = async (req, res) => {
         if (['acompte_moyen', 'solde_moyen', 'acompte_ref', 'solde_ref'].some((k) => k in b)) {
             const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
             if (!aMoyen) return res.status(503).json({ error: 'Le moyen de paiement arrive avec la migration 195 (non jouée).' });
+            // On accepte les moyens de l'entité (ceux que la carte propose) et les codes historiques.
+            const autorises = await moyensPaiementOrg(conn, orgId);
             for (const cle of ['acompte_moyen', 'solde_moyen']) {
                 if (!(cle in b)) continue;
                 const v = b[cle];
                 if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
-                else if (moyenValide(v)) { sets.push(`${cle} = ?`); vals.push(v); }
+                else if (moyenValide(v, autorises)) { sets.push(`${cle} = ?`); vals.push(v); }
                 else return res.status(422).json({ error: 'Moyen de paiement inconnu.' });
             }
             for (const cle of ['acompte_ref', 'solde_ref']) {

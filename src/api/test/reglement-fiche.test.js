@@ -109,11 +109,26 @@ test('AVEC LA 195 : le moyen et sa référence partent dans l\'UPDATE', async ()
     assert.strictEqual(upd.params[1], '12345', 'la référence est rognée');
 });
 
-test('UN MOYEN INCONNU : refusé (422)', async () => {
-    reponses = [REP_ENR_OK, [/information_schema.columns/, [[{ 1: 1 }]]]];
+test('UN MOYEN INCONNU (ni code, ni moyen de l\'entité) : refusé (422)', async () => {
+    reponses = [REP_ENR_OK, [/information_schema.columns/, [[{ 1: 1 }]]],
+        [/FROM billing_profile/, [[{ payment_methods: 'Espèces,CB,Virement,Chèque' }]]]];
     const res = await patch({ solde_moyen: 'PAYPAL' });
     assert.strictEqual(res.code, 422);
     assert.ok(!requetes.some((r) => /UPDATE enrollment/.test(r.q)), 'aucun UPDATE');
+});
+
+test('UN MOYEN CONFIGURÉ SUR L\'ENTITÉ : accepté, enregistré tel quel (« Prélèvement »)', async () => {
+    /* Le besoin du 2026-10-06 : la carte propose les moyens de l'entité (Paramètres → Facturation),
+       pas seulement les quatre d'origine. Un moyen coché là — ici « Prélèvement » — doit passer, et
+       s'écrire LITTÉRALEMENT (la colonne est un varchar, cf. migration 195). */
+    reponses = [REP_ENR_OK, [/information_schema.columns/, [[{ 1: 1 }]]],
+        [/FROM billing_profile/, [[{ payment_methods: 'Espèces,CB,Prélèvement' }]]],
+        [/UPDATE enrollment SET/, [[]]]];
+    const res = await patch({ acompte_moyen: 'Prélèvement' });
+    assert.strictEqual(res.code, 200, JSON.stringify(res.corps));
+    const upd = requetes.find((r) => /UPDATE enrollment SET/.test(r.q));
+    assert.match(upd.q, /acompte_moyen = \?/);
+    assert.strictEqual(upd.params[0], 'Prélèvement', 'le libellé choisi est enregistré tel quel');
 });
 
 test('GET : un dossier, son acompte payé d\'après la facture', async () => {
@@ -126,10 +141,14 @@ test('GET : un dossier, son acompte payé d\'après la facture', async () => {
             program_title: 'CAP Pizzaïolo', program_code: 'RS7404', tarif: '1500.00', year: 2026, week: 12,
         }]]],
         [/FROM invoice i/, [[{ numero: 'ACPT-1', type: 'ACOMPTE', statut: 'PAYEE', montant: '450.00', paye: '450.00', dernier_paiement: '2026-03-12' }]]],
+        // Les moyens que la carte proposera : ceux de l'entité émettrice (Paramètres → Facturation).
+        [/FROM billing_profile/, [[{ payment_methods: 'Espèces,CB,Virement,Chèque,Prélèvement' }]]],
     ];
     const res = faireRes();
     await getReglements({ user: { organization_id: ORG }, params: { id: 'l1' } }, res);
     assert.strictEqual(res.code, 200, JSON.stringify(res.corps));
+    // La réponse porte la liste PROPOSÉE, reprise de l'entité — c'est elle que le sélecteur affiche.
+    assert.deepStrictEqual(res.corps.moyens, ['Espèces', 'CB', 'Virement', 'Chèque', 'Prélèvement']);
     const d = res.corps.data[0];
     assert.strictEqual(d.acompte.paye, true);
     assert.strictEqual(d.acompte.source, 'facture');

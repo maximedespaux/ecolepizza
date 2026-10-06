@@ -75,6 +75,9 @@ function StagiaireDetail() {
   const [enrollments, setEnrollments] = useState([]);
   const [companies, setCompanies] = useState([]); // pour le menu « entreprise » du dossier (type pro)
   const [reglements, setReglements] = useState(null); // null = en cours de chargement
+  // Les moyens de paiement proposés par la carte « Règlement » : ceux de l'entité émettrice
+  // (Paramètres → Facturation), transmis par l'API — la même liste qu'à la caisse.
+  const [moyensReglement, setMoyensReglement] = useState([]);
   /* Le règlement se SAISIT par qui peut ÉCRIRE la rubrique Stagiaires — le bureau, ou un membre à
      qui l'organisme l'a déléguée. Exactement ce que le serveur exige (authorizeRoles honore la
      délégation sur le chemin /stagiaires), et pas une liste de rôles en dur (cf. peutEcrire). */
@@ -110,7 +113,9 @@ function StagiaireDetail() {
   }
   // Le règlement (acompte / solde) par dossier : chargé à part, et rechargé après chaque saisie.
   function loadReglements() {
-    return getReglements(id).then((r) => setReglements(r.data || [])).catch(() => setReglements([]));
+    return getReglements(id)
+      .then((r) => { setReglements(r.data || []); setMoyensReglement(r.moyens || []); })
+      .catch(() => setReglements([]));
   }
   useEffect(() => {
     loadLearner();
@@ -810,7 +815,7 @@ function StagiaireDetail() {
 
         {/* LE RÈGLEMENT (carte demandée le 2026-09-30) : acompte et solde, payés ou dus, par dossier
             — d'après les factures, ou coché à la main. Pleine largeur, sous le financement. */}
-        <CarteReglement learnerId={id} reglements={reglements} canEdit={peutEncaisser} onSaved={loadReglements} />
+        <CarteReglement learnerId={id} reglements={reglements} moyens={moyensReglement} canEdit={peutEncaisser} onSaved={loadReglements} />
 
         {/* Pleine largeur (cols-2) : le projet aligne beaucoup de cases (activité, équipement,
             avancement), à l'étroit sur une demi-carte. */}
