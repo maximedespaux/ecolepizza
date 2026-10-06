@@ -600,6 +600,10 @@ const listDocuments = async (req, res) => {
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at, d.signer_name,
                     GROUP_CONCAT(p.code ORDER BY p.code SEPARATOR ', ') AS formations,
+                    /* Les inscriptions que ce document couvre — pour que la fiche sache quelles
+                       formations l'ont DÉJÀ, et ne les repropose pas quand on en ajoute un pour une
+                       autre (fenêtre « pour quelles formations ? », 2026-10-06). */
+                    GROUP_CONCAT(DISTINCT df.enrollment_id) AS enrollment_ids,
                     /* Métadonnées du document IMPORTÉ — jamais la colonne bytes : quelques
                        mégaoctets par ligne transformeraient la liste du dossier en
                        téléchargement. L'écran a seulement besoin de savoir qu'il existe, et de
