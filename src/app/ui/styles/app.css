@@ -6870,7 +6870,11 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .stat-chiffres > div{display:flex;flex-direction:column}
 .stat-chiffres b{font-size:26px;line-height:1.1;color:var(--text)}
 .stat-chiffres span{font-size:12px;color:var(--muted)}
-.stat-legende{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
+/* La légende des formations passe À LA LIGNE sur écran étroit : sans `flex-wrap`, une dizaine de
+   formations alignées débordaient de la largeur du téléphone — toute la page se mettait alors à
+   défiler horizontalement (relevé le 2026-10-06 à 375 px : 154 px de trop). Le `row-gap` aère les
+   lignes qui s'empilent. */
+.stat-legende{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
 .stat-legende span{display:inline-flex;align-items:center}
 .stat-recence{display:flex;flex-direction:column;gap:10px}
 .stat-recence-ligne{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:center}
