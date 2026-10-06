@@ -43,10 +43,31 @@ const STRUCTURELLES = new Set([
     'filtres', 'carte-dette', 'hero', 'grid',
 ]);
 
-/** Les classes dont la feuille de style fixe elle-même la marge basse. */
+/* LE RYTHME SE LIT SUR LES RÈGLES DE BASE, PAS SUR LES REMPLACEMENTS RESPONSIVES. Une classe peut
+   resserrer sa marge sous 640 px (en-tête de page plus compacte sur téléphone, 2026-10-06) : c'est
+   une décision globale assumée, pas une contradiction de page à page. On retire donc les blocs
+   `@media{…}` avant de mesurer — sans quoi le détecteur prenait la valeur du dernier bloc (celui du
+   téléphone) à la place de la base. Retrait à accolades équilibrées : un bloc média contient
+   lui-même des règles entre accolades, qu'une simple expression ne saurait pas apparier. */
+function sansMedia(css) {
+    let out = '', i = 0;
+    for (;;) {
+        const at = css.indexOf('@media', i);
+        if (at < 0) { out += css.slice(i); return out; }
+        out += css.slice(i, at);
+        let j = css.indexOf('{', at);
+        if (j < 0) return out;
+        let profondeur = 1; j++;
+        while (j < css.length && profondeur > 0) { const c = css[j++]; if (c === '{') profondeur++; else if (c === '}') profondeur--; }
+        i = j;
+    }
+}
+const CSS_BASE = sansMedia(CSS);
+
+/** Les classes dont la feuille de style fixe elle-même la marge basse (règles de base seulement). */
 function classesAvecRythme() {
     const out = new Map();
-    for (const m of CSS.matchAll(/\.([a-z][a-z0-9-]*)\{([^}]*)\}/g)) {
+    for (const m of CSS_BASE.matchAll(/\.([a-z][a-z0-9-]*)\{([^}]*)\}/g)) {
         const mb = m[2].match(/margin-bottom:\s*(\d+)px/)
             || m[2].match(/margin:[^;]*?\s(\d+)px(?:\s*;|\s*$)/);   // raccourci `margin: 4px 0 18px`
         if (mb && STRUCTURELLES.has(m[1])) out.set(m[1], Number(mb[1]));

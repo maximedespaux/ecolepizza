@@ -35,7 +35,7 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
     const [[sess]] = await conn.query(
         `SELECT s.id, s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
-                p.id AS program_id, p.title AS program_title, p.code AS program_code, p.days, p.hygiene, p.rs_code
+                p.id AS program_id, p.title AS program_title, p.code AS program_code, p.color AS program_color, p.days, p.hygiene, p.rs_code
          FROM training_session s JOIN training_program p ON p.id = s.program_id
          WHERE s.id = ? AND s.organization_id = ?`, [sessionId, orgId]);
     if (!sess) return null;
@@ -955,7 +955,11 @@ const getCompanyParcours = async (req, res) => {
             data: {
                 header: {
                     title: grp.sess.program_title || '—', code: grp.sess.program_code || '',
+                    /* Couleur de la formation (badge) et identifiant de la session (lien cliquable) —
+                       comme la fiche stagiaire ; l'écran retombe sur `colorOf(code)` si la couleur est nulle. */
+                    color: grp.sess.program_color || null,
                     session: grp.sess.week ? `SEM ${grp.sess.week}/${grp.sess.year || ''}` : '',
+                    session_id: grp.sess.id || null,
                     financing: 'Groupe entreprise', opco: null,
                 },
                 total_stagiaires: grp.enrollments.length,
