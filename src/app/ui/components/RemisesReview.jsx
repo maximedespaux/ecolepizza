@@ -80,16 +80,20 @@ export default function RemisesReview({ enrollmentId, refresh, onChange }) {
     catch (e) { setErreur(e.message); }
   }
 
-  if (!remises || remises.length === 0) return null;
+  /* UNE REMISE DESTINÉE À L'ENTREPRISE (et qui lui parvient — `pour_entreprise`) se DÉPOSE sur la
+     fiche entreprise (2026-10-06) : on ne la liste pas ici. Celle destinée à l'entreprise mais SANS
+     espace revient au stagiaire (`pour_entreprise` faux) et reste donc dans cette liste. */
+  const visibles = (remises || []).filter((r) => !r.pour_entreprise);
+  if (!visibles.length) return null;
 
   return (
     <div style={{ marginTop: 16 }}>
       <h3 style={{ fontSize: 15, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 7 }}>
-        <Icon name="file-text" size={16} /> {remises.some((r) => r.pour_entreprise) ? "Documents remis" : "Documents remis au stagiaire"}
+        <Icon name="file-text" size={16} /> Documents remis au stagiaire
       </h3>
       {erreur && <p className="hint" style={{ color: "var(--red, #c0392b)", marginTop: 0 }}>{erreur}</p>}
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {remises.map((r) => {
+        {visibles.map((r) => {
           const [label, tone] = ETAT[r.statut] || [r.statut, "n"];
           const fichiers = r.fichiers || [];
           return (

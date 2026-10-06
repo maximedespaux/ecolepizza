@@ -829,6 +829,7 @@ const getCompanyParcours = async (req, res) => {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
             let remise = null; // l'état d'une REMISE pour le groupe (`compteRemiseGroupe`), sinon null
+            let nbFichiersGroupe = 0; // fichiers déposés, tous dossiers concernés confondus (migration 203)
             if (s.company_level) {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
                 // pas une par stagiaire. On le représente comme une seule étape signée /
@@ -876,7 +877,8 @@ const getCompanyParcours = async (req, res) => {
                 const ids = dossiersConcernes(s).map((e) => e.id);
                 let lignes = [];
                 if (ids.length) {
-                    const sel = (col) => `SELECT enrollment_id, statut, ${col} AS sans_objet FROM remise_document
+                    const nbF = '(SELECT COUNT(*) FROM remise_fichier rf WHERE rf.remise_id = remise_document.id) AS nb_fichiers';
+                    const sel = (col) => `SELECT enrollment_id, statut, ${nbF}, ${col} AS sans_objet FROM remise_document
                                          WHERE organization_id = ? AND enrollment_id IN (?) AND remise_type_id = ?`;
                     try { [lignes] = await conn.query(sel('COALESCE(sans_objet, 0)'), [orgId, ids, s.remise_id]); }
                     catch (e) {
@@ -887,6 +889,8 @@ const getCompanyParcours = async (req, res) => {
                 const c = compteRemiseGroupe(ids, lignes);
                 total = c.total; gen = c.gen; signed = c.signed; recu = c.signed;
                 remise = c;
+                // Fichiers déposés, dossiers « sans objet » exclus (ils sortent du compte, cf. compteRemiseGroupe).
+                nbFichiersGroupe = lignes.filter((l) => !Number(l.sans_objet)).reduce((n, l) => n + (Number(l.nb_fichiers) || 0), 0);
             } else {
                 const applicable = dossiersConcernes(s);
                 total = applicable.length;
@@ -927,6 +931,8 @@ const getCompanyParcours = async (req, res) => {
                     ? dossiersConcernes(s).map((e) => ({ enrollment_id: e.id, learner_id: e.learner_id, name: e.name }))
                     : undefined,
                 remise: !!remise, remise_id: s.remise_id || null, remiseEntreprise,
+                // Nombre de documents (migration 203) : max du type, mode, et somme des fichiers du groupe.
+                nb_documents: s.nb_documents || 0, nb_mode: s.nb_mode || 'PLAFOND', nb_fichiers: nbFichiersGroupe,
                 facultatif: !!s.facultatif, // hors décompte (migration 188)
                 _done: done, _sansObjet: !!(remise && remise.sansObjet),
             });

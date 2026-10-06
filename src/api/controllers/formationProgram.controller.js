@@ -122,8 +122,10 @@ async function formationSteps(conn, orgId, program) {
         /* À QUI la remise va (migration 188) : le stagiaire, ou son entreprise. Sans la colonne,
            au stagiaire — le comportement d'avant. */
         const dest = await colonneExiste(conn, 'remise_type', 'destinataire') ? 'destinataire' : "'STAGIAIRE' AS destinataire";
+        // Nombre de documents (migration 203) : porté par l'étape, pour afficher « fichiers / max ».
+        const nb = await colonneExiste(conn, 'remise_type', 'nb_documents') ? 'nb_documents, nb_mode' : "0 AS nb_documents, 'PLAFOND' AS nb_mode";
         const [remises] = await conn.query(
-            `SELECT id, label, consigne, ${dest} FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
+            `SELECT id, label, consigne, ${dest}, ${nb} FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
             [orgId]);
         remiseSteps = remises.map((rm) => {
             const slug = `remise:${rm.id}`;
@@ -142,6 +144,8 @@ async function formationSteps(conn, orgId, program) {
                 active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
                 facultatif: facultatif(slug),
                 destinataire: rm.destinataire === 'ENTREPRISE' ? 'ENTREPRISE' : 'STAGIAIRE',
+                nb_documents: Number(rm.nb_documents) || 0,
+                nb_mode: rm.nb_mode === 'REQUIS' ? 'REQUIS' : 'PLAFOND',
             };
         });
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }

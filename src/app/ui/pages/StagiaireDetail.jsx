@@ -652,6 +652,19 @@ function StagiaireDetail() {
         </>
       );
     }
+    /* UNE REMISE DESTINÉE À L'ENTREPRISE se gère sur la fiche ENTREPRISE (2026-10-06, comme un document
+       de groupe) : on n'y dépose pas ici, on y MÈNE. Une remise au stagiaire reste gérée ici (panneau
+       « Documents remis »). Sans entreprise au dossier, rien. */
+    if (s.remise && s.remiseEntreprise) {
+      if (!curEnr?.company_id) return null;
+      return (
+        <Link className="btn ghost" to={`/entreprises/${curEnr.company_id}`}
+          state={{ session: curEnr.session_id, info: `« ${s.label} » est remis à l'entreprise : déposez-le ici, depuis sa fiche.` }}
+          title="Les documents remis à l'entreprise se gèrent sur la fiche entreprise">
+          <Icon name="building" size={14} /> Gérer sur la fiche entreprise
+        </Link>
+      );
+    }
     const d = s.docId ? docs.find((x) => x.id === s.docId) : null;
     if (!d) return null;
     /* LA TRACE, sur une ligne : importé, signé ou envoyé, avec sa date — le détail complet au
