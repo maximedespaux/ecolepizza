@@ -34,6 +34,7 @@ const getEnrollments = async (req, res) => {
                        d'entreprise, et une jointure fermée les ferait tous disparaître. */
                     c.name AS company_name,
                     p.id AS program_id, p.code AS program_code, p.title AS program_title,
+                    p.color AS program_color,
                     /* Pour l'avancement réel, calculé plus bas : le parcours dépend du code RS
                        et du volet hygiène de la formation. */
                     p.days AS program_days, p.hygiene AS program_hygiene, p.rs_code AS program_rs,
@@ -204,7 +205,12 @@ const getParcours = async (req, res) => {
                 header: {
                     title: e.program_title || '—',
                     code: e.program_code || '',
+                    /* La couleur de la formation (migration 041) et l'identifiant de la session : de
+                       quoi afficher le code en BADGE de sa couleur et rendre la session CLIQUABLE vers
+                       sa fiche (l'écran retombe sur `colorOf(code)` si la couleur est nulle). */
+                    color: e.program_color || null,
                     session: e.week ? `SEM ${e.week}/${e.year || ''}` : '',
+                    session_id: e.session_id || null,
                     dates: e.start_date ? `${e.start_date}${e.end_date ? ` → ${e.end_date}` : ''}` : '',
                     financing: e.financing === 'PROFESSIONNEL' ? 'Entreprise' : 'Particulier',
                     opco: e.opco || null,
