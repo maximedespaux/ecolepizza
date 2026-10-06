@@ -324,7 +324,7 @@ function Dashboard() {
       {/* LES INDICATEURS EN TUILES (refonte 2026-10-04) : les anciens compteurs en une ligne
           situaient sans se voir ; ces tuiles donnent le chiffre au coup d'œil, et restent
           cliquables. Le CA ne paraît qu'au personnel qui y a accès (sinon un « 0 » inventé). */}
-      <div className="grid cols-4" style={{ marginBottom: 16 }}>
+      <div className="grid cols-4 dash-kpis" style={{ marginBottom: 16 }}>
         {loading ? [0, 1, 2, 3].map((i) => (
           <div className="kpi" key={i}><Skeleton w="55%" h={11} /><Skeleton w="50%" h={30} style={{ marginTop: 12 }} /><Skeleton w="42%" h={11} style={{ marginTop: 9 }} /></div>
         )) : (

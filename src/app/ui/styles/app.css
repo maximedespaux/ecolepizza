@@ -1039,6 +1039,12 @@ tbody tr:last-child td{border-bottom:none}
   .topbar .menu-btn{display:block}.content{padding:18px 14px 70px}
 }
 @media(max-width:560px){.cols-4{grid-template-columns:minmax(0,1fr)}.cols-3{grid-template-columns:minmax(0,1fr)}.row3,.row2{grid-template-columns:minmax(0,1fr)}}
+/* LES TUILES DU TABLEAU DE BORD RESTENT À DEUX COLONNES SUR TÉLÉPHONE (2026-10-06). Une tuile est
+   un NOMBRE : empilée sur une seule colonne, les quatre mangeaient tout le premier écran, et « À
+   traiter » — ce qui appelle une action — passait sous la ligne de flottaison. À deux colonnes, on
+   voit les quatre chiffres ET la zone d'action d'un coup d'œil. `.grid.dash-kpis` l'emporte sur le
+   `.cols-4` à une colonne ci-dessus (spécificité plus forte), quel que soit l'ordre. */
+@media(max-width:560px){.grid.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
 /* Un indicateur resserré quand la place manque : c'est un NOMBRE, il n'a pas besoin d'autant
    d'air qu'une carte de contenu. Sans cela, la ligne d'indicateurs mangeait l'écran avant
    qu'on ait vu la moindre donnée. */
