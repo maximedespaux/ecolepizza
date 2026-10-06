@@ -159,6 +159,46 @@ async function lignesDuCoffre(conn, orgId) {
             [orgId, SHARED]
         );
     } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+    /* UN DOCUMENT DE GROUPE QUI COUVRE PLUSIEURS SESSIONS apparaît sous CHACUNE (demandé le 2026-10-06 :
+       la convention de GERVAIS Raphaelle, prise pour NIV1PRO + NIV2, doit se voir en semaine 6 ET en
+       semaine 12). Il est pourtant UN SEUL document (même doc_id, aucune nouvelle génération) : la
+       requête ci-dessus l'ancre à `gd.session_id` (la 1re session). On remplace cet ancrage par les
+       sessions des INSCRIPTIONS LIÉES (`document_formation`) — la même règle qui, sur la fiche
+       entreprise, rattache un devis fusionné à chaque formation couverte. Une ligne par session
+       couverte, DÉDUPLIQUÉE par emplacement (année / semaine / formation), même doc_id. Sans lien
+       (document ancien, table absente), il reste à sa session d'ancrage, comme avant. */
+    if (comp.length) {
+        let couvs = [];
+        try {
+            [couvs] = await conn.query(
+                `SELECT df.document_id, e.session_id,
+                        s.year, s.week, p.code AS program_code, p.title AS program_title,
+                        DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+                   FROM document_formation df
+                   JOIN enrollment e ON e.id = df.enrollment_id
+                   JOIN training_session s ON s.id = e.session_id
+                   LEFT JOIN training_program p ON p.id = s.program_id
+                  WHERE df.document_id IN (?)
+                  GROUP BY df.document_id, e.session_id`,
+                [comp.map((d) => d.doc_id)]);
+        } catch (e) { if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e; }
+        const parDoc = new Map();
+        for (const c of couvs) { if (!parDoc.has(c.document_id)) parDoc.set(c.document_id, []); parDoc.get(c.document_id).push(c); }
+        comp = comp.flatMap((d) => {
+            const sessions = parDoc.get(d.doc_id);
+            if (!sessions || !sessions.length) return [d]; // aucune inscription liée : ancrage d'origine
+            // Dédoublonné par EMPLACEMENT (année / semaine / formation) : deux sessions au même endroit
+            // n'y montrent le document qu'une fois (sinon deux lignes de même doc_id dans un même nœud).
+            const vus = new Set();
+            const uniques = sessions.filter((sn) => {
+                const cle = `${sn.year}|${sn.week}|${sn.program_code}`;
+                if (vus.has(cle)) return false; vus.add(cle); return true;
+            });
+            return uniques.map((sn) => ({ ...d,
+                session_id: sn.session_id, year: sn.year, week: sn.week,
+                program_code: sn.program_code, program_title: sn.program_title, debut: sn.debut, fin: sn.fin }));
+        });
+    }
     /* DOCUMENTS DE LA SESSION (migration 157) — contrat d'hygiène signé par un intervenant
        externe, et ce qui suivra. Ils n'appartiennent NI à un stagiaire NI à une entreprise :
        c'est le troisième cas, et sans cette requête ils n'existaient nulle part dans le
