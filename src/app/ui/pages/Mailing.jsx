@@ -13,6 +13,7 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { Squelette } from "../components/Squelette.jsx";
 import { dateHeure } from "../lib/format.js";
+import { insererTabulation } from "../lib/tabulation.js";
 import { reduireSiImage, reduireEnPngDataUrl, PROFILS } from "../lib/image.js";
 
 /**
@@ -228,7 +229,7 @@ function Editeur({ modele, onFerme, onEnregistre, onStatus }) {
           onBlur={(e) => { dernier.current = e.target; }} />
       ) : (
         <textarea id={`mail-${modele.cle}-${champ}`} name={champ} className="inp" rows={lignes}
-          value={v[champ] || ""} onChange={maj(champ)}
+          value={v[champ] || ""} onChange={maj(champ)} onKeyDown={insererTabulation}
           onFocus={(e) => { dernier.current = e.target; }} onBlur={(e) => { dernier.current = e.target; }} />
       )}
     </div>
@@ -632,7 +633,7 @@ export function Groupe({ onStatus }) {
         </div>
         <div className="field">
           <label htmlFor="mail-corps">Message</label>
-          <textarea id="mail-corps" className="inp" rows={8} value={corps} onChange={(e) => setCorps(e.target.value)}
+          <textarea id="mail-corps" className="inp" rows={8} value={corps} onChange={(e) => setCorps(e.target.value)} onKeyDown={insererTabulation}
             placeholder={"Bonjour {Prénom},\n\nVotre session démarre lundi à 9 h au 12 rue des Pizzaiolos.\n\nÀ lundi !"} />
         </div>
         {/* CE QUE LES DESTINATAIRES VERRONT LES UNS DES AUTRES : la question se pose avant
@@ -988,7 +989,7 @@ function EditeurRegle({ regle, cat, formations, formationsMultiples, onFerme, on
           <label htmlFor="regle-corps">Contenu</label>
           <BarreInsertion jetons={cat.jetons} onStatus={onStatus}
             corps={v.corps} onChangeCorps={(c) => setV((p) => ({ ...p, corps: c }))} />
-          <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")}
+          <textarea id="regle-corps" className="inp" rows={7} value={v.corps} onChange={maj("corps")} onKeyDown={insererTabulation}
             placeholder={estDoc ? "Bonjour {Prénom},\n\nNous avons bien reçu votre {Document} signé. Merci !"
               : "Bonjour {Prénom},\n\nVous avez terminé {Formation} il y a trois mois. Où en êtes-vous de votre projet ?"} />
         </div>
