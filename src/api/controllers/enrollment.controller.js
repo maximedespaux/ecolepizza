@@ -173,7 +173,9 @@ const getParcours = async (req, res) => {
                elle et aucune remise n'est exclue. */
             let remises = {};
             try {
-                const sel = (col) => `SELECT id, remise_type_id, statut${col} FROM remise_document WHERE enrollment_id = ? AND organization_id = ?`;
+                // `nb_fichiers` (migration 203) : de quoi afficher « fichiers / max » sur la remise.
+                const nbF = '(SELECT COUNT(*) FROM remise_fichier rf WHERE rf.remise_id = remise_document.id) AS nb_fichiers';
+                const sel = (col) => `SELECT id, remise_type_id, statut, ${nbF}${col} FROM remise_document WHERE enrollment_id = ? AND organization_id = ?`;
                 let rd;
                 try { [rd] = await conn.query(sel(', sans_objet'), [e.id, orgId]); }
                 catch (err2) {
@@ -181,7 +183,7 @@ const getParcours = async (req, res) => {
                     [rd] = await conn.query(sel(''), [e.id, orgId]);
                 }
                 remises = Object.fromEntries(rd.map((r) => [r.remise_type_id,
-                    { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet }]));
+                    { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet, nb_fichiers: Number(r.nb_fichiers) || 0 }]));
             } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 160 non jouée
             const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
             /* L'entreprise du dossier a-t-elle un ESPACE (compte de représentant, migration 084) ? Une

@@ -147,15 +147,18 @@ test('LA FICHE ENTREPRISE compte la remise par ses dossiers, et une étape « en
     assert.match(fn, /remise: !!remise, remise_id: s\.remise_id \|\| null, remiseEntreprise,/);
 });
 
-test('LE PARCOURS propose « Déposer le document » sur une remise — fiche stagiaire comme fiche entreprise', () => {
+test('LE PARCOURS dépose une remise du côté de son DESTINATAIRE (entreprise ou stagiaire)', () => {
     const p = lireUi('components/EnrollmentParcours.jsx');
     const possible = fonction(p, 'function importPossible', '\n}\n');
-    assert.match(possible, /if \(s\.remise\) return etatDe\(s\) !== "SANS_OBJET";/,
-        'une remise, même vue depuis l\'entreprise ; jamais une remise sans objet');
+    assert.match(possible, /if \(etatDe\(s\) === "SANS_OBJET"\) return false;/, 'jamais une remise sans objet');
+    /* 2026-10-06 : entreprise (groupe) → fiche entreprise ; stagiaire → fiche stagiaire. L'autre côté y mène. */
+    assert.match(possible, /return isGroup\(s\) \? !!s\.remiseEntreprise : !s\.remiseEntreprise;/);
     assert.ok(possible.indexOf('if (s.remise)') < possible.indexOf('return !(isGroup(s) && !s.company_level);'),
         'la remise passe AVANT la règle des étapes « stagiaire » du groupe');
     assert.match(p, /if \(isGroup\(s\) && s\.remise\) return s\.total \? `\$\{s\.signed\}\/\$\{s\.total\} réception\(s\) confirmée\(s\)` : "Sans objet pour ce groupe";/);
-    assert.match(p, /return `\$\{s\.gen\}\/\$\{s\.total\} déposé\(s\) · \$\{s\.signed\}\/\$\{s\.total\} réception\(s\) confirmée\(s\) \$\{qui\}\.`;/);
+    /* Le dépôt se lit « fichiers / max » quand un nombre est fixé (migration 203), sinon par dossier. */
+    assert.match(p, /\$\{s\.nb_fichiers\}\/\$\{s\.nb_documents \* s\.total\} documents déposé\(s\)/);
+    assert.match(p, /return `\$\{depose\} · \$\{s\.signed\}\/\$\{s\.total\} réception\(s\) confirmée\(s\) \$\{qui\}\.`;/);
 });
 
 test('LA FICHE STAGIAIRE dépose la remise par sa route, AVANT de chercher un modèle', () => {
@@ -177,8 +180,11 @@ test('LA FICHE ENTREPRISE : une ligne par stagiaire, et l\'étape ne dépose d\'
        (2026-10-06, gestesStagiaire) ; sinon les documents de groupe. */
     assert.match(fonction(page, 'function gestesEtapeGroupe'), /if \(s\.remise\) return gestesRemise\(s\);\s+if \(!s\.company_level\) return gestesStagiaire\(s\);/);
     const lignes = fonction(page, 'function gestesRemise');
-    // Rien à déposer sur une remise écartée, ni au-delà du plafond (migration 203).
-    assert.match(lignes, /\{!r\.sans_objet && !plafondAtteint\(fichiers\.length, r\.nb_documents\) && \(/);
+    /* Remise à l'ENTREPRISE : on dépose ici (rien si écartée ou au-delà du plafond, migration 203).
+       Remise au STAGIAIRE : on mène à SA fiche (2026-10-06). */
+    assert.match(lignes, /const versStagiaire = !s\.remiseEntreprise;/);
+    assert.match(lignes, /to=\{lienDossier\(d\.learner_id, d\.enrollment_id\)\}/, 'remise au stagiaire → sa fiche');
+    assert.match(lignes, /!r\.sans_objet && !plafondAtteint\(fichiers\.length, r\.nb_documents\) && \(/);
     assert.match(lignes, /onClick=\{\(\) => demanderDepotRemise\(d, r\)\}/);
 
     const demander = fonction(page, 'function demanderImportGroupe');

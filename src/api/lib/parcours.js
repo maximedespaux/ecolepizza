@@ -107,6 +107,7 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
                 done: sansObjet || (r && r.statut === 'RECUE'),
                 remiseStatus: (r && r.statut) || 'ATTENDUE',
                 remiseId: (r && r.id) || null,
+                nbFichiers: (r && r.nb_fichiers) || 0, // fichiers déposés (migration 203), pour « fichiers / max »
                 sansObjet,
             };
         }
@@ -156,6 +157,8 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
            une, dotée d'un espace. C'est la même règle que `pourEntreprise` (remise.controller.js) —
            l'écran dit « Remis à l'entreprise » là où le serveur réserve l'accusé à son compte. */
         remiseEntreprise: !!(r.s.remise_id && r.s.destinataire === 'ENTREPRISE' && entreprise),
+        // Nombre de documents de la remise (migration 203) : max du type, mode, et fichiers déposés.
+        nb_documents: r.s.nb_documents || 0, nb_mode: r.s.nb_mode || 'PLAFOND', nb_fichiers: r.nbFichiers || 0,
         sansObjet: !!r.sansObjet,
         facultatif: !!r.s.facultatif, // hors décompte (migration 188) : l'écran le dit
         /* `status` garde son sens de RANG (faite / en cours / à venir) pour ceux qui s'en servent

@@ -58,7 +58,12 @@ function lineFor(s) {
     if (s.remise) {
       if (!s.total) return "Sans objet pour les stagiaires de ce groupe.";
       const qui = s.remiseEntreprise ? "par l'entreprise, dans son espace" : "par chaque stagiaire, dans son espace";
-      return `${s.gen}/${s.total} déposé(s) · ${s.signed}/${s.total} réception(s) confirmée(s) ${qui}.`;
+      /* Le dépôt se lit en FICHIERS / MAX quand un nombre est fixé (migration 203) : « 3/4 documents »
+         plutôt que « 1/1 déposé(s) » (par dossier). Le max du groupe = max du type × dossiers concernés. */
+      const depose = s.nb_documents > 0
+        ? `${s.nb_fichiers}/${s.nb_documents * s.total} documents déposé(s)`
+        : `${s.gen}/${s.total} déposé(s)`;
+      return `${depose} · ${s.signed}/${s.total} réception(s) confirmée(s) ${qui}.`;
     }
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;
@@ -87,7 +92,9 @@ function lineFor(s) {
     /* À QUI (migration 188) : l'entreprise du dossier quand le type de remise lui est destiné —
        c'est alors elle qui en accuse réception, depuis son espace —, sinon le stagiaire. */
     const a = s.remiseEntreprise ? "à l'entreprise" : "au stagiaire";
-    return { RECUE: `Remis ${a}, réception confirmée.`, REMISE: `Remis ${a}, en attente de son accusé de réception.` }[s.remiseStatus]
+    // « X/Y documents » quand un nombre est fixé (migration 203), accolé à l'état du dépôt.
+    const nb = s.nb_documents > 0 ? ` · ${s.nb_fichiers}/${s.nb_documents} documents` : "";
+    return { RECUE: `Remis ${a}, réception confirmée${nb}.`, REMISE: `Remis ${a}, en attente de son accusé${nb}.` }[s.remiseStatus]
       || `Document à remettre ${a}.`;
   }
   if (etat === "VALIDE") return s.signable || s.quiz ? "Complété / signé." : "Document produit et envoyé.";
@@ -109,7 +116,13 @@ function lineFor(s) {
    (2026-09-28, l'AGEFICE de LA CUISINE DE JULIEN). Ni sur une remise sans objet : rien n'y est dû. */
 const estQcm = (s) => String(s.key || "").startsWith("quiz:");
 function importPossible(s) {
-  if (s.remise) return etatDe(s) !== "SANS_OBJET";
+  if (s.remise) {
+    if (etatDe(s) === "SANS_OBJET") return false;
+    /* UNE REMISE SE DÉPOSE DU CÔTÉ DE SON DESTINATAIRE (2026-10-06) : la fiche ENTREPRISE pour une
+       remise à l'entreprise, la fiche STAGIAIRE sinon. L'autre côté n'offre pas le dépôt — il y MÈNE
+       par un bouton « Gérer sur la fiche… ». `isGroup` distingue la page (fiche entreprise = groupe). */
+    return isGroup(s) ? !!s.remiseEntreprise : !s.remiseEntreprise;
+  }
   /* Un document de GROUPE vu depuis la fiche STAGIAIRE (donc pas `isGroup` : la fiche stagiaire ne
      porte pas les compteurs du groupe) ne se gère pas ici — il se génère, s'envoie et s'importe sur
      la fiche ENTREPRISE (2026-10-03). On n'y propose donc pas « Importer un document reçu » : la

@@ -613,6 +613,9 @@ export default function EntrepriseDetail() {
   function gestesRemise(s) {
     const lignes = lignesRemise(s.remise_id);
     if (!lignes.length) return null;
+    /* UNE REMISE AU STAGIAIRE (pas à l'entreprise) se DÉPOSE sur SA fiche (2026-10-06) : ici on n'y
+       dépose pas, on y MÈNE — une ligne « Gérer sur la fiche stagiaire » par stagiaire. */
+    const versStagiaire = !s.remiseEntreprise;
     const etat = (r) => (r.sans_objet ? "sans objet"
       : r.statut === "RECUE" ? `reçu le ${dateFr(r.accuse_le)}`
       : r.statut === "REMISE" ? "déposé, en attente de l'accusé"
@@ -632,11 +635,18 @@ export default function EntrepriseDetail() {
                 <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`} aria-label={`Voir le document déposé pour ${nom}`}
                   onClick={() => window.open(remiseFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
               )}
-              {/* Plus de dépôt quand le plafond (migration 203) est atteint : le serveur refuserait. */}
-              {!r.sans_objet && !plafondAtteint(fichiers.length, r.nb_documents) && (
+              {/* Remise au STAGIAIRE : on mène à sa fiche. Remise à l'ENTREPRISE : on dépose ici (plus de
+                  dépôt au-delà du plafond, migration 203 — le serveur refuserait de toute façon). */}
+              {versStagiaire ? (
+                <Link className="btn ghost sm" to={lienDossier(d.learner_id, d.enrollment_id)}
+                  state={{ info: `« ${s.label} » se remet sur la fiche du stagiaire.` }}
+                  title={`Ouvrir la fiche de ${nom}`} style={{ flex: "none" }}>
+                  <Icon name="user" size={14} /> Gérer sur la fiche stagiaire
+                </Link>
+              ) : (!r.sans_objet && !plafondAtteint(fichiers.length, r.nb_documents) && (
                 <button className="iconbtn" title={fichiers.length ? "Déposer un autre fichier" : "Déposer le document"}
                   aria-label={`Déposer ${r.label} pour ${nom}`} onClick={() => demanderDepotRemise(d, r)}><Icon name="upload" size={16} /></button>
-              )}
+              ))}
             </div>
           );
         })}
