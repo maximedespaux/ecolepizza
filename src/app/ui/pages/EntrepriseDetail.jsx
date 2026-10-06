@@ -6,6 +6,7 @@ import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, ge
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
+import { lienDossier } from "../lib/lienDossier.js";
 import { compterMots, NOTE_ENTREPRISE_MOTS_MAX } from "../lib/mots.js";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import PageHead from "../components/PageHead.jsx";
@@ -553,7 +554,7 @@ export default function EntrepriseDetail() {
      chaque fiche stagiaire. */
   function gestesEtapeGroupe(s) {
     if (s.remise) return gestesRemise(s);
-    if (!s.company_level) return null;
+    if (!s.company_level) return gestesStagiaire(s);
     const liste = documentsDeLEtape(companyDocs, s.key, viewSessionId);
     if (!liste.length) return null;
     /* Plusieurs documents : chaque ligne porte le NOM de son OPCO et un état court — la date
@@ -573,6 +574,33 @@ export default function EntrepriseDetail() {
       <div className="parc-gestes-multi">
         {/* Le titre porte l'OPCO après le tiret (« Convention de formation — AKTO ») : c'est lui qui distingue les lignes. */}
         {liste.map((d) => <div key={d.id} className="parc-geste-ligne">{ligne(d, d.title.split(" — ").slice(1).join(" — ") || d.title)}</div>)}
+      </div>
+    );
+  }
+
+  /* UN DOCUMENT « STAGIAIRE » vu depuis la fiche entreprise (ni groupe, ni QCM) ne se prépare pas ici :
+     il se gère sur la fiche de CHAQUE stagiaire. On y MÈNE — l'inverse du « Gérer sur la fiche
+     entreprise » des documents de groupe (2026-10-06) : un seul stagiaire conduit directement à sa
+     fiche, plusieurs se choisissent dans la liste. Le lien ouvre l'onglet Formation sur CE dossier. */
+  function gestesStagiaire(s) {
+    const stagiaires = s.stagiaires || [];
+    if (!stagiaires.length) return null; // « Aucun stagiaire concerné » : la sous-ligne le dit déjà
+    const info = `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
+    const lien = (st, label) => (
+      <Link key={st.enrollment_id} className="btn ghost sm" to={lienDossier(st.learner_id, st.enrollment_id)} state={{ info }}
+        title={`Ouvrir le parcours de ${st.name} sur sa fiche`}>
+        <Icon name="user" size={14} /> {label}
+      </Link>
+    );
+    if (stagiaires.length === 1) return lien(stagiaires[0], "Gérer sur la fiche stagiaire");
+    return (
+      <div className="parc-gestes-multi">
+        {stagiaires.map((st) => (
+          <div key={st.enrollment_id} className="parc-geste-ligne">
+            <span className="parc-trace">{st.name}</span>
+            {lien(st, "Ouvrir sa fiche")}
+          </div>
+        ))}
       </div>
     );
   }
