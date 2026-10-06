@@ -6353,6 +6353,10 @@ label .requis {
 /* Sous-titre du parcours (code · semaine · OPCO) + le menu « type de devis » de CE dossier, qui s'y
    change directement. Le menu reste discret, à la taille de la ligne. */
 .parc-sous{font-size:12px;color:var(--dim);margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* La session de la ligne de détail : un lien discret (hérite du gris de .parc-sous) mais clairement
+   cliquable — souligné léger, qui vire au bleu au survol. */
+.parc-sess-lien{color:inherit;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;transition:color .12s ease,text-decoration-color .12s ease}
+.parc-sess-lien:hover,.parc-sess-lien:focus-visible{color:var(--blue);text-decoration-color:currentColor}
 .parc-devis{width:auto;height:24px;padding:0 6px;font-size:12px;border:1px solid var(--border);border-radius:7px;
   background:var(--surface);color:var(--text);cursor:pointer;line-height:1;flex:0 0 auto}
 /* La bibliothèque d'images du mailing : des vignettes qu'on clique pour insérer. */
@@ -6870,7 +6874,11 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .stat-chiffres > div{display:flex;flex-direction:column}
 .stat-chiffres b{font-size:26px;line-height:1.1;color:var(--text)}
 .stat-chiffres span{font-size:12px;color:var(--muted)}
-.stat-legende{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
+/* La légende des formations passe À LA LIGNE sur écran étroit : sans `flex-wrap`, une dizaine de
+   formations alignées débordaient de la largeur du téléphone — toute la page se mettait alors à
+   défiler horizontalement (relevé le 2026-10-06 à 375 px : 154 px de trop). Le `row-gap` aère les
+   lignes qui s'empilent. */
+.stat-legende{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
 .stat-legende span{display:inline-flex;align-items:center}
 .stat-recence{display:flex;flex-direction:column;gap:10px}
 .stat-recence-ligne{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:center}
