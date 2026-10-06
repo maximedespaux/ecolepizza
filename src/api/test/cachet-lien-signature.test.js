@@ -34,6 +34,21 @@ test('le lien accepte « use_saved » — mais seulement pour le cadre du repré
         'la validation stricte de la signature SUIT la résolution du cachet');
 });
 
+test('une signature par lien public PRÉVIENT le bureau (notification + refresh)', () => {
+    /* Une signature par LIEN ne passe pas par le flux authentifié : sans ça, ni la cloche ni
+       l'« activité » ne bougeaient (2026-10-06) — on créait la preuve sur le document sans que
+       personne ne le sache. On pose la notification d'organisme, comme la signature dans l'app
+       (signDocument), et on diffuse un « refresh » à la main (le middleware realtime ne le fait
+       que pour une requête authentifiée). */
+    assert.match(PUB, /const \{ notify \} = require\('\.\/notification\.controller\.js'\);/);
+    const sub = PUB.slice(PUB.indexOf('const submitSign'), PUB.indexOf('module.exports'));
+    assert.match(sub, /await notify\(doc\.organization_id, \{/);
+    assert.match(sub, /type: 'SIGNATURE', title: 'Document signé'/);
+    assert.match(sub, /publish\(doc\.organization_id, 'refresh', \{\}\)/);
+    // Prévenu SEULEMENT une fois le lien marqué utilisé (donc après une signature réussie).
+    assert.ok(sub.indexOf('used_at = NOW()') < sub.indexOf('await notify('), 'notifié après la signature');
+});
+
 test('l\'entreprise d\'une convention vient du DOSSIER, jamais de la fiche du stagiaire', () => {
     const debut = PUB.indexOf('async function cachetDuDocument');
     const fn = PUB.slice(debut, debut + 1000);
