@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { getEnrollmentParcours, getDocumentsRecuperables, recupererDocuments, getCompanyDocumentsRecuperables, recupererCompanyDocuments } from "../api/apiClient.js";
 import { Icon } from "./Icon.jsx";
 import Badge from "./Badge.jsx";
+import { colorOf } from "../lib/format.js";
 
 /* L'ÉTAT RÉEL D'UNE ÉTAPE, calculé par le serveur (lib/parcours.js, `etat`), et sa présentation.
    Demandé le 2026-09-21 : la coche orange marquait tout ce qui précédait l'étape en cours, et le
@@ -365,7 +367,22 @@ function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, re
   /* LE TYPE DE DEVIS est sorti de cette ligne de texte : il se CHANGE ici, dossier par dossier, par
      un petit menu (onChangeFinancing) — c'est la seule façon de le régler depuis le 2026-10-01. En
      lecture seule (fiche entreprise, pas de onChangeFinancing), on garde le texte d'avant. */
-  const headLine = [h.code, h.session, h.opco].filter(Boolean).join(" · ");
+  /* CETTE LIGNE EN PASTILLES, plus en texte (2026-10-06) : la formation en BADGE de sa couleur
+     (comme partout dans l'app ; `colorOf(code)` à défaut de couleur propre), et la session CLIQUABLE
+     vers sa fiche — on y arrive d'un clic, sans repasser par la liste des sessions. L'OPCO reste du
+     texte, et le financement garde son propre menu, juste après. */
+  const teteItems = [];
+  if (h.code) teteItems.push(
+    <span key="code" className="badge n mono" title={h.title || undefined}
+      style={{ background: h.color || colorOf(h.code), color: "#fff", borderColor: "transparent" }}>{h.code}</span>
+  );
+  if (h.session) teteItems.push(
+    h.session_id
+      ? <Link key="sess" to={`/sessions/${h.session_id}`} className="parc-sess-lien" title="Ouvrir la fiche de la session">{h.session}</Link>
+      : <span key="sess">{h.session}</span>
+  );
+  if (h.opco) teteItems.push(<span key="opco">{h.opco}</span>);
+  const suiteFinancement = onChangeFinancing || h.financing;
   /* LA BARRE ET LES COMPTEURS NE PORTENT QUE LE DÛ. Une étape facultative (migration 188) reste
      dans la grille, faisable, mais hors du pourcentage — le serveur l'écarte des deux côtés de la
      fraction, la barre fait de même, sans quoi elle ne finirait jamais verte sous un « 100 % ». */
@@ -385,10 +402,15 @@ function EnrollmentParcours({ enrollmentId, companyAttach, fetcher, resetKey, re
         <h3 style={{ margin: 0, fontSize: 18 }}>Parcours</h3>
         <b style={{ color: "var(--green)", fontSize: 18 }} title="Étapes faites, dans n'importe quel ordre">{data.percent}%</b>
       </div>
-      {(headLine || onChangeFinancing || h.financing) && (
+      {(teteItems.length > 0 || suiteFinancement) && (
         <div className="parc-sous">
-          {headLine && <span>{headLine}</span>}
-          {headLine && (onChangeFinancing || h.financing) && <span aria-hidden="true">·</span>}
+          {teteItems.map((el, i) => (
+            <Fragment key={el.key}>
+              {i > 0 && <span aria-hidden="true">·</span>}
+              {el}
+            </Fragment>
+          ))}
+          {teteItems.length > 0 && suiteFinancement && <span aria-hidden="true">·</span>}
           {onChangeFinancing ? (
             <select className="parc-devis" aria-label="Type de devis de ce dossier"
               value={financingValue === "PROFESSIONNEL" ? "PROFESSIONNEL" : "PARTICULIER"}
