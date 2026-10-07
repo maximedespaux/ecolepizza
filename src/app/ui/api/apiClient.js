@@ -598,6 +598,12 @@ export function getDistinctions() {
 export function getARecontacter() {
   return request("/stagiaires/a-recontacter", { silent: true });
 }
+/** Les identifiants des stagiaires « à clôturer » : parcours à 100 %, formation pas encore marquée
+    terminée. Silencieux et chargé À PART de la liste (calcul lourd, tous les dossiers) : la liste
+    s'affiche sans l'attendre, la pastille apparaît quand la réponse arrive. */
+export function getStagiairesACloturer() {
+  return request("/stagiaires/a-cloturer", { silent: true });
+}
 export function updateStagiaire(id, payload) {
   return request(`/stagiaires/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }

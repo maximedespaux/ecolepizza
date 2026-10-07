@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
-import { getStagiaires, resetStagiairePassword, deleteStagiaire, deleteStagiaireAccount, getOpcos, getFormations } from "../api/apiClient.js";
+import { getStagiaires, resetStagiairePassword, deleteStagiaire, deleteStagiaireAccount, getOpcos, getFormations, getStagiairesACloturer } from "../api/apiClient.js";
 import { OPCOS } from "../lib/opco.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -32,6 +32,13 @@ function Stagiaires() {
      sur leur ligne plus bas — la recherche peut les faire réapparaître au milieu des autres. */
   const [rappels, setRappels] = useState(() => new Set());
   const [rappelsRefresh, setRappelsRefresh] = useState(0);
+  /* Les stagiaires « à clôturer » : au moins un dossier à 100 % dont la formation n'est pas encore
+     marquée terminée. Chargés À PART (calcul lourd, tous les dossiers de l'organisme) pour ne pas
+     retarder la liste ; la pastille apparaît sur leur ligne quand la réponse arrive. */
+  const [aCloturer, setACloturer] = useState(() => new Set());
+  useEffect(() => {
+    getStagiairesACloturer().then((r) => setACloturer(new Set(r.data || []))).catch(() => {});
+  }, []);
   const badgeRef = useRef(null);
   useEffect(() => {
     if (!badgeOpen) return;
@@ -263,6 +270,13 @@ function Stagiaires() {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b>{l.last_name} {l.first_name}</b>
                     {rappels.has(l.id) && <Badge tone="a" className="rappel-chip" title="Cochée « à recontacter » : elle figure dans la liste en tête">À recontacter</Badge>}
+                    {/* « À CLÔTURER » : un dossier à 100 % dont la formation n'est pas encore marquée
+                        terminée. Vert — le parcours est complet —, c'est un rappel de clore sur la fiche. */}
+                    {aCloturer.has(l.id) && (
+                      <Badge tone="g" className="cloturer-chip" title="Parcours à 100 % : pensez à marquer la formation terminée sur la fiche">
+                        <Icon name="check-circle" size={11} aria-hidden="true" />À clôturer
+                      </Badge>
+                    )}
                     {/* FICHE INCOMPLÈTE : le repère seulement (règle du serveur, lib/ficheIncomplete.js) ;
                         le détail et le bouton pour compléter sont en tête de la fiche. Neutre, l'icône
                         seule en orange : sur une base importée, il peut revenir sur bien des lignes. */}

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
-const { avancementDossiers } = require('../lib/avancement.js');
+const { avancementDossiers, estACloturer } = require('../lib/avancement.js');
 const { loadEquivalences } = require('../lib/equivalence.js');
 const { logAudit } = require('../lib/audit.js');
 const { aRanger, aServir, mesureDisponible } = require('../lib/coffre.js'); // coffre chiffré AU REPOS
@@ -23,7 +23,7 @@ const getSuivi = async (req, res) => {
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.crm_stage, e.session_id,
                     e.company_id AS enr_company_id,
-                    l.first_name, l.last_name, l.opco,
+                    l.first_name, l.last_name, l.opco, l.completed_levels,
                     /* L'entreprise d'un dossier est celle du DOSSIER, jamais celle de la fiche
                        personne. Un COALESCE vers l.company_id trainait ici : il ressuscitait
                        l'entreprise sur les inscriptions ou le stagiaire s'est engage seul,
@@ -69,6 +69,9 @@ const getSuivi = async (req, res) => {
                 percent,
                 done,
                 total,
+                /* « À CLÔTURER » : parcours à 100 %, mais la formation pas encore déclarée terminée
+                   sur la fiche (`completed_levels`). La grille le signale pour qu'on pense à la clore. */
+                a_cloturer: estACloturer(percent, e.program_code, e.completed_levels),
                 documents,
             });
         }

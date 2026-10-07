@@ -6124,6 +6124,10 @@ label .requis {
 .case-rappel input{margin-top:3px}
 /* D'un seul tenant : sur un téléphone, la pastille passe sous le nom au lieu de se casser en deux. */
 .rappel-chip{margin-left:8px;vertical-align:1px;white-space:nowrap;display:inline-block}
+/* « À clôturer » : même place et même tenue que « À recontacter », mais inline-flex (comme
+   .fiche-chip) pour garder l'icône alignée sur le texte. */
+.cloturer-chip{margin-left:8px;vertical-align:1px;white-space:nowrap}
+.cloturer-chip svg{margin-right:3px;vertical-align:-1px}
 /* LISTE DES STAGIAIRES — une ligne par fiche : avatar et nom (le lien), puis les actions.
    SUR TÉLÉPHONE, CETTE LIGNE NE TENAIT PAS, le même défaut que les lignes du suivi : le lien vers
    l'entreprise, « + Compte » (ou les deux boutons du compte), modifier et supprimer prenaient
@@ -6221,6 +6225,10 @@ label .requis {
 .sg-table tbody tr:hover .sg-nom{background:var(--surface2)}
 .sg-nom a{color:inherit}
 .sg-nom a:hover{color:var(--ember1);text-decoration:underline}
+/* « À clôturer » sous le nom (parcours à 100 %, formation pas encore terminée). Vert, discret, et
+   SOUS le nom pour ne pas élargir la colonne figée. Le poids normal : c'est un rappel, pas le nom. */
+.sg-cloturer{display:inline-flex;align-items:center;gap:3px;margin-top:3px;font-size:10.5px;font-weight:600;
+  color:var(--green);background:var(--green-bg);border-radius:999px;padding:1px 7px;white-space:nowrap}
 /* L'EN-TÊTE PENCHÉ. Tourné, le libellé ne compte plus dans la mise en page : la hauteur de l'en-tête
    et la place à droite sont mesurées sur lui. Ces en-têtes n'ont PAS de fond : le libellé d'une
    colonne survole les suivantes, et un fond opaque — celui de tout `thead th` — le couperait. Ni
