@@ -162,7 +162,14 @@ test('AUCUNE CLÉ DE CONTEXTE LUE PAR LES JETONS N\'EST SANS FOURNISSEUR', () =>
        `signature` est posée sur le contexte par les appelants, APRÈS le chargement (c'est la
        signature apposée sur CE document) ; `invoice` appartient au chemin des factures
        (`invoice.controller`), qui ne passe pas par `loadContext`. */
-    const AILLEURS = { signature: /ctx\.signature = \{ data: decrypt\(doc\.signature_data\)/, invoice: null };
+    /* `nbStagiairesSemaine` est POSÉE PAR ASSIGNATION, hors du littéral de contexte, car elle se
+       calcule APRÈS le figeage (elle lit `ctx.formations` déjà figé) : un décompte VIVANT de la
+       semaine, pas une donnée gravée du document. Son fournisseur est donc l'appel à
+       `compterStagiairesSemaine`, pas une clé du littéral. */
+    const AILLEURS = {
+        signature: /ctx\.signature = \{ data: decrypt\(doc\.signature_data\)/, invoice: null,
+        nbStagiairesSemaine: /ctx\.nbStagiairesSemaine = await compterStagiairesSemaine/,
+    };
     const sansFournisseur = lues.filter((cle) => {
         if (cle in AILLEURS) return AILLEURS[cle] ? !AILLEURS[cle].test(CTRL) : false;
         return !new RegExp(`(^|[{,])\\s*${cle}\\s*[:,}]`).test(RETOUR);

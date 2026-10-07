@@ -138,6 +138,40 @@ async function advanceEnrollments(conn, orgId, documentId, targetStage) {
     }
 }
 
+/**
+ * {Stagiaires semaine} — le NOMBRE de stagiaires DISTINCTS de la (ou des) semaine(s) de ce document,
+ * TOUTES sessions et formations confondues (demandé le 2026-10-08) : « 3 en RS7404 + 2 en NIV1 = 5 ».
+ *
+ * La ou les semaines viennent des sessions du document (ctx.formations : `year` + `week`) ; on compte
+ * les stagiaires de TOUTES les sessions de l'organisme tombant cette (ces) semaine(s). Un retrait
+ * EFFACE l'inscription (lib/retraitDossier.js), donc un stagiaire retiré n'est pas compté — c'est bien
+ * le nombre de présents. DISTINCT : une même personne inscrite à deux formations la même semaine n'est
+ * comptée qu'une fois (le cas est rare — une formation par semaine — mais « total de stagiaires » veut
+ * dire des personnes, pas des inscriptions).
+ *
+ * Valeur LIVE, non figée à l'émission : c'est un décompte d'ORGANISATION (« combien cette semaine »),
+ * pas une donnée gravée du document — un même document rouvert reflète la semaine telle qu'elle est.
+ * Sans semaine connue (document hors session, facture libre) → null → le jeton sort vide.
+ */
+async function compterStagiairesSemaine(conn, orgId, formations) {
+    const semaines = [];
+    const vus = new Set();
+    for (const f of formations || []) {
+        if (f == null || f.year == null || f.week == null) continue;
+        const cle = `${f.year}-${f.week}`;
+        if (!vus.has(cle)) { vus.add(cle); semaines.push([Number(f.year), Number(f.week)]); }
+    }
+    if (!semaines.length) return null;
+    // Un OR par couple (année, semaine) — presque toujours un seul (le document d'une seule semaine).
+    const conditions = semaines.map(() => '(s.year = ? AND s.week = ?)').join(' OR ');
+    const [[row]] = await conn.query(
+        `SELECT COUNT(DISTINCT e.learner_id) AS n
+           FROM enrollment e JOIN training_session s ON s.id = e.session_id
+          WHERE s.organization_id = ? AND (${conditions})`,
+        [orgId, ...semaines.flat()]);
+    return row ? Number(row.n) : 0;
+}
+
 // Charge le contexte de fusion (organisme, stagiaire, entreprise, formations).
 async function loadContext(conn, organizationId, learnerId, documentId) {
     const [[org]] = await conn.query('SELECT * FROM organization WHERE id = ?', [organizationId]);
@@ -494,6 +528,16 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             // Colonne absente (201 non jouée) : rendu vivant, date figée. Autre erreur : on remonte.
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
         }
+    }
+
+    /* {Stagiaires semaine} : calculé APRÈS le figeage (ctx.formations est alors la version figée, donc
+       un document émis compte pour SA semaine), mais le décompte lui-même reste VIVANT — ce n'est pas
+       une donnée gravée. Tolérant : table/colonne absente → jeton vide, aucun rendu ne casse. */
+    try {
+        ctx.nbStagiairesSemaine = await compterStagiairesSemaine(conn, organizationId, ctx.formations);
+    } catch (e) {
+        if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        ctx.nbStagiairesSemaine = null;
     }
     return ctx;
 }
@@ -2213,4 +2257,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive };
+module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive, compterStagiairesSemaine };

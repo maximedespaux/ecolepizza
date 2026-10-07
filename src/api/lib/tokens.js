@@ -238,6 +238,13 @@ const TOKEN_CATALOG = [
             { key: 'Semaine', label: 'Semaine / année', sample: 'Semaine 23 — 2025',
               desc: '« Semaine 23 — 2025 » : la semaine de la session et son année. À défaut de '
                   + 'semaine, la date de début. Plusieurs formations : « Semaines 6 et 12 — 2026 ».' },
+            /* Le NOMBRE de stagiaires de la semaine, toutes sessions confondues (demandé le 2026-10-08) :
+               « 3 en RS7404 + 2 en NIV1 = 5 ». Stagiaires DISTINCTS ; un retrait n'y compte plus. Décompte
+               VIVANT (il suit la semaine), non figé à l'émission. Vide hors d'une session (facture libre). */
+            { key: 'Stagiaires semaine', label: 'Stagiaires de la semaine (total)', sample: '5',
+              desc: 'Le NOMBRE total de stagiaires de la semaine de ce document, TOUTES formations et '
+                  + 'sessions confondues : « 3 en RS7404 + 2 en NIV1 = 5 ». Des personnes distinctes '
+                  + '(un retrait n’est plus compté). Décompte vivant, qui suit la semaine.' },
             /* Les dates de CHAQUE formation, appariées — « du … au … et du … au … » — pour un devis
                qui couvre plusieurs formations. À poser à la place de « du {Date de début} au {Date
                de fin} », qui donnent, eux, une seule période globale (premier début, dernière fin). */
@@ -1365,6 +1372,9 @@ for (const g of TOKEN_CATALOG) for (const t of g.tokens) TOKEN_LABELS[t.key] = {
 const OPTIONAL_TOKENS = new Set([
     'Signature stagiaire', 'Signature organisme', 'Nom signataire', 'Date signature', 'Date signature entreprise',
     'Today', 'Date', 'Stagiaires', 'Nombre stagiaires',
+    /* {Stagiaires semaine} : vide hors d'une session (facture libre, document sans semaine) — ce
+       n'est pas une « information manquante », c'est une question qui ne se pose pas là. */
+    'Stagiaires semaine',
     'Nom financeur', 'SIRET financeur', 'Adresse financeur', 'Email financeur', 'Téléphone financeur',
     /* LES RÉPONSES DU STAGIAIRE : vides tant qu'il n'a pas répondu, et c'est la SIGNATURE qui
        l'exige, pas la génération. Les compter « manquantes » bloquerait l'aperçu du document —
@@ -1623,6 +1633,10 @@ function resolveTokens(ctx = {}) {
         Jour1: frDate(start), endDate: frDate(end), Semaine: semaine, 'Périodes': periodes,
         'Début en toutes lettres': frDateLong(start), 'Fin en toutes lettres': frDateLong(end),
         'Semaine de la formation': semaine, Formateur: f.trainer || '',
+        /* {Stagiaires semaine} : le nombre de stagiaires de la semaine, toutes sessions confondues
+           (calculé par loadContext, cf. compterStagiairesSemaine). Vide — et non « 0 » — quand la
+           semaine est inconnue (document hors session) : un « 0 » se lirait comme une erreur. */
+        'Stagiaires semaine': ctx.nbStagiairesSemaine != null ? String(ctx.nbStagiairesSemaine) : '',
         Lundi: businessDay(start, 0), Mardi: businessDay(start, 1), Mercredi: businessDay(start, 2),
         Jeudi: businessDay(start, 3), Vendredi: businessDay(start, 4),
         HorairesJours: horairesParJour(f.horaires, sumDays || f.days, start),
