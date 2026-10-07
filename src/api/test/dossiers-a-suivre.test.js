@@ -169,6 +169,8 @@ remplacer('../lib/equivalence.js', { loadEquivalences: async () => [], equivalen
 remplacer('../controllers/formationProgram.controller.js', {
     enrollmentSteps: async (c, org, program) => ETAPES[program.id],
     formationSteps: async (c, org, program) => ETAPES[program.id],
+    // Sans équivalence (eqMap vide ici), le collapse du volet entreprise est l'identité.
+    resoudreVariantesEntreprise: (steps) => steps,
 });
 remplacer('../controllers/template.controller.js', {
     loadOrgSteps: async () => ETAPES[3].map((s) => ({ ...s, active: 1 })),

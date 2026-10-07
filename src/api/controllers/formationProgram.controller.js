@@ -297,6 +297,52 @@ function resoudreVariantes(active, ctx, conds, eq) {
 }
 
 /**
+ * Collapse des choix « OU » pour le parcours ENTREPRISE (`company_steps`).
+ *
+ * DIFFÉRENCE AVEC `resoudreVariantes` : ici on NE FILTRE PAS les étapes isolées par leurs
+ * conditions. La section entreprise est une liste EXPLICITE, choisie à la main — chaque document
+ * qu'on y a mis doit y rester, quel que soit le financement du dossier. On ne touche qu'aux
+ * GROUPES d'équivalence : deux variantes interchangeables (devis professionnel / devis AGEFICE)
+ * ne doivent compter que pour UN jalon, et c'est la variante applicable au dossier (par son
+ * financeur / ses conditions) qui est retenue — sinon la première du groupe, marquée `repli`
+ * (visible mais jamais exigée), pour ne JAMAIS faire disparaître le jalon.
+ *
+ * POURQUOI C'EST NÉCESSAIRE. `companyParcours` renvoie les slugs de `company_steps` tels quels,
+ * sans collapser. Si l'on y met les deux devis (via le « + OU » du parcours entreprise), le
+ * Suivi et la feuille de route comptaient DEUX étapes « devis » et en affichaient deux, là où le
+ * stagiaire n'en remplit qu'une. La complétion, elle, suivait déjà (matchDoc retombe sur le même
+ * `doc_type`) ; c'est le DÉCOMPTE et l'AFFICHAGE qu'il faut corriger.
+ */
+function resoudreVariantesEntreprise(steps, ctx, conds, eq) {
+    if (!eq || !eq.size) return steps;
+    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
+    const specificity = (s) => {
+        const a = s.applies_when || {};
+        let n = 0;
+        for (const k of ['financing', 'rs', 'hygiene', 'jours', 'agefice']) if (a[k] != null) n++;
+        if (Array.isArray(a.conditions)) n += a.conditions.length;
+        return n;
+    };
+    const groupOf = (s) => { const e = eq.get(s.slug); return e ? e.group : null; };
+    const out = [];
+    const seen = new Set();
+    for (const s of steps) {
+        const g = groupOf(s);
+        if (!g) { out.push(s); continue; } // isolée : conservée telle quelle (aucun filtre par condition)
+        if (seen.has(g)) continue;
+        seen.add(g);
+        const membres = steps.filter((m) => groupOf(m) === g);
+        if (membres.length < 2) { out.push(s); continue; } // un seul membre présent : pas de « OU » réel
+        const passing = membres.filter(passes);
+        const chosen = passing.length
+            ? passing.reduce((best, m) => (specificity(m) > specificity(best) ? m : best), passing[0])
+            : { ...membres[0], repli: true };
+        out.push(chosen);
+    }
+    return out;
+}
+
+/**
  * Parcours documentaire d'un DOSSIER précis : parcours de la formation filtré par
  * les conditions du dossier (financement, AGEFICE…) pour ne garder que la bonne
  * variante (devis particulier/entreprise, attestation d'assiduité, etc.).
@@ -920,6 +966,6 @@ const saveFormationSteps = async (req, res) => {
 
 module.exports = {
     getPrograms, getProgram, createProgram, updateProgram, reorderPrograms,
-    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, resoudreVariantes, deleteProgram,
+    getFormationSteps, saveFormationSteps, formationSteps, enrollmentSteps, resoudreVariantes, resoudreVariantesEntreprise, deleteProgram,
     getArborescence, saveArborescence, paletteDeLOrganisme,
 };

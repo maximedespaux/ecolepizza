@@ -34,26 +34,33 @@ test('plus de menu flottant piégé dans un conteneur qui défile', () => {
         'le menu flottant etait rogne par `.parcours-flow` (overflow:auto) — mesure a 708px');
     // Et le conteneur en question défile toujours : c'est bien lui le piège, pas une régression.
     assert.match(srcCss, /\.parcours-flow\{[^}]*overflow-x:auto/, 'le flux defile horizontalement, par nature');
-    assert.match(srcPage, /\{adding && \(\(\) => \{/, 'le panneau d\'ajout d\'une étape, sous le flux');
+    // Le panneau sert les DEUX gestes (ajouter une étape, ou une variante « OU ») : un seul à la fois.
+    assert.match(srcPage, /\{\(adding \|\| ouFor\) && \(\(\) => \{/, 'le panneau d\'ajout, sous le flux');
 });
 
-test('le « + OU » a QUITTÉ le parcours : les équivalences se gèrent dans Modèles → Équivalences', () => {
-    /* 2026-10-08 : une équivalence est org-wide ; la créer/étendre depuis le parcours d'UNE formation
-       surprenait par sa portée. L'écriture a été retirée d'ici (addOuVariant/removeOuVariant, appels
-       create/update/deleteEquivalence) ; le parcours ne fait plus qu'AFFICHER les jalons groupés. */
-    assert.doesNotMatch(srcPage, /＋ OU|pf-or-add|onAddOu|addOuVariant|removeOuVariant|onRetirerOu/,
-        'plus aucun geste d\'écriture « OU » dans le parcours');
-    assert.doesNotMatch(srcPage, /createEquivalence|updateEquivalence|deleteEquivalence/,
-        'le parcours n\'écrit plus les équivalences (lecture seule via getEquivalences)');
-    // L'AFFICHAGE groupé reste : un jalon « OU » empile ses variantes (groupMilestones + eqMap).
-    assert.match(srcPage, /function groupMilestones\(steps, eqMap\)/, 'les jalons se groupent toujours pour l\'affichage');
+test('le « + OU » est LIMITÉ aux équivalences : il ajoute un membre, il n\'écrit aucune équivalence', () => {
+    /* 2026-10-08 : le « + OU » est revenu dans le parcours, mais BORNÉ. Il n'apparaît que sur un
+       document déjà déclaré interchangeable (Modèles → Équivalences) et ne propose QUE les autres
+       membres du groupe — jamais un document libre. Le clic se borne à ACTIVER/AJOUTER ce membre au
+       parcours ; il n'écrit, n'étend ni ne supprime aucune équivalence — c'était le reproche fait à
+       l'ancien « + OU », qui créait une règle org-wide d'un seul clic. */
+    assert.match(srcPage, /＋ OU/, 'le bouton « + OU » existe');
+    assert.match(srcPage, /"pf-or-add"/, 'avec sa classe');
+    // La LIMITE : les candidats « OU » viennent des membres de l'équivalence, jamais du référentiel.
+    assert.match(srcPage, /groupeMembres\(/, 'les candidats « OU » sont les membres de l\'équivalence');
+    // Aucune ÉCRITURE d'équivalence depuis le parcours : ça reste dans Modèles → Équivalences.
+    assert.doesNotMatch(srcPage, /createEquivalence|updateEquivalence|deleteEquivalence|addOuVariant|removeOuVariant/,
+        'le parcours n\'écrit toujours pas les équivalences (lecture seule via getEquivalences)');
+    // L'AFFICHAGE groupé : un jalon « OU » empile ses variantes (groupMilestones + eqMap).
+    assert.match(srcPage, /function groupMilestones\(steps, eqMap\)/, 'les jalons se groupent pour l\'affichage');
     assert.match(srcPage, /\{j > 0 && <div className="pf-or">OU<\/div>\}/, 'les variantes restent empilées « OU »');
 });
 
 test('une liste longue se cherche, une liste courte non', () => {
     /* Vingt-deux documents au référentiel : sans recherche on parcourt. Mais afficher un champ
-       au-dessus de trois entrées est du bruit — d'où le seuil. */
-    assert.match(srcPage, /\{pool\.length > 6 && \(/, 'la recherche n\'apparait que si elle sert');
+       au-dessus de trois entrées est du bruit — d'où le seuil. En mode « OU » (vivier court), pas
+       de recherche du tout : d'où le `!jalon`. */
+    assert.match(srcPage, /\{!jalon && pool\.length > 6 && \(/, 'la recherche n\'apparait que si elle sert');
     assert.match(srcPage, /<span className="gs-search"/, 'le meme champ que partout ailleurs');
     // Elle porte sur le libellé ET le type/slug : on cherche parfois « CONVENTION », pas le titre.
     assert.match(srcPage, /\[s\.label, s\.doc_type, s\.slug\]\.some/, 'libelle, type et slug');

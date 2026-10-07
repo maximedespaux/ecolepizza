@@ -1,7 +1,7 @@
 const { computeDocParcours, companyParcours } = require('./parcours.js');
 const { champsDesConditions, loadDossierFactsMap, loadConditionMap } = require('./conditions.js');
 const { loadEquivalences, equivalenceMap } = require('./equivalence.js');
-const { enrollmentSteps, formationSteps } = require('../controllers/formationProgram.controller.js');
+const { enrollmentSteps, formationSteps, resoudreVariantesEntreprise } = require('../controllers/formationProgram.controller.js');
 const { loadOrgSteps } = require('../controllers/template.controller.js');
 const PointDeRupture = require('./pointDeRupture.js');
 
@@ -146,7 +146,10 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
            comme l'émargement : on les distingue avant de les réunir pour le parcours. */
         const propres = PointDeRupture.statutsDocuments(docs);
         const groupe = PointDeRupture.statutsDocuments(ent.docs);
-        if (ent.steps) steps = ent.steps;
+        // Le parcours entreprise est une liste explicite : on n'y collapse QUE les groupes
+        // d'équivalence « OU » (devis pro / devis AGEFICE → un seul jalon, la variante applicable),
+        // sans jamais filtrer les étapes isolées par condition. Cf. resoudreVariantesEntreprise.
+        if (ent.steps) steps = resoudreVariantesEntreprise(ent.steps, ctx, condById, eqMap);
         if (ent.docs.length) docs.push(...ent.docs);
 
         const pt = points.get(program.id) || {};

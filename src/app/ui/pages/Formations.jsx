@@ -207,6 +207,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
   const [companySteps, setCompanySteps] = useState([]); // sous-parcours « arrivée via entreprise » (slugs ordonnés)
   const [companyBreakSlug, setCompanyBreakSlug] = useState(null); // point d'accès émargement du volet entreprise
   const [eqMap, setEqMap] = useState(new Map()); // slug -> { group } (équivalences « OU », pour l'AFFICHAGE groupé)
+  const [equivs, setEquivs] = useState([]); // la liste des équivalences (pour connaître les AUTRES membres d'un groupe)
   const [conditions, setConditions] = useState([]); // conditions perso (pour conditionner une pièce en « OU »)
   const [tab, setTab] = useState("infos"); // "infos" | "parcours" | "archives" | "evaluation"
   const [archKind, setArchKind] = useState("stagiaire"); // arborescence : "stagiaire" | "entreprise"
@@ -244,9 +245,20 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
     const list = r.data?.equivalences || [];
     const m = new Map();
     for (const e of list) for (const s of e.members) m.set(s, { group: e.key });
-    setEqMap(m);
+    setEqMap(m); setEquivs(list);
   }).catch(() => {});
   useEffect(() => { reloadEq(); }, []);
+  /* LES MEMBRES DE L'ÉQUIVALENCE d'un document, pour le « + OU » : on ne propose en variante QUE
+     des documents déjà déclarés interchangeables dans Modèles → Équivalences — jamais un document
+     quelconque (c'était le reproche fait à l'ancien « + OU », qui créait la règle org-wide d'un
+     clic). Ici, le « + OU » ne fait qu'AJOUTER au parcours un membre existant du groupe ; il
+     n'écrit aucune équivalence. */
+  const membresDuGroupe = (slug) => {
+    const g = eqMap.get(slug);
+    if (!g) return [];
+    const eq = equivs.find((e) => e.key === g.group);
+    return eq ? (eq.members || []) : [];
+  };
   useEffect(() => { getConditions().then((r) => setConditions(r.data || [])).catch(() => {}); }, []);
 
   /* L'ÉCRITURE DES ÉQUIVALENCES « OU » A QUITTÉ CE PARCOURS (2026-10-08). Une équivalence est
@@ -430,7 +442,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
               {steps.length === 0 ? (
                 <p className="hint">Aucun document candidat.</p>
               ) : (
-                <ParcoursFlow steps={steps} eqMap={eqMap} onToggle={toggleStep} onReorder={setSteps}
+                <ParcoursFlow steps={steps} eqMap={eqMap} groupeMembres={membresDuGroupe} onToggle={toggleStep} onReorder={setSteps}
                   breakSlug={breakSlug} onSetBreak={setBreakSlug}
                   onSetPieceCondition={setPieceCondition} conditions={conditions}
                   onToggleFacultatif={toggleFacultatif} />
@@ -438,6 +450,7 @@ function FormationModal({ program, onClose, onSaved, onError, onOuvrirArborescen
             </>
           ) : (
             <CompanySection steps={steps} value={companySteps} onChange={setCompanySteps} onToggleActive={toggleStep}
+              eqMap={eqMap} groupeMembres={membresDuGroupe}
               breakSlug={companyBreakSlug} onSetBreak={setCompanyBreakSlug} onToggleFacultatif={toggleFacultatif} />
           )}
           </div>
@@ -606,7 +619,7 @@ function CaseFacultatif({ etapes, onToggle }) {
    est org-wide, et la créer depuis le parcours d'UNE formation surprenait par sa portée. Son
    écriture (ajout/retrait de membres, création) vit désormais dans Modèles → Équivalences ; le
    parcours se contente d'AFFICHER les jalons groupés (groupMilestones + eqMap). */
-function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak, onSetPieceCondition, conditions, onToggleFacultatif }) {
+function ParcoursFlow({ steps, eqMap, groupeMembres, onToggle, onReorder, breakSlug, onSetBreak, onSetPieceCondition, conditions, onToggleFacultatif }) {
   // Les documents de GROUPE (🏢 company_level) ne font PAS partie du parcours du
   // dossier : ils se gèrent uniquement dans « À l'arrivée via une entreprise ».
   const included = steps.filter((s) => s.active && !s.company_level);
@@ -620,15 +633,16 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
     onReorder([...deplacerDans(groups, de, vers).flatMap((g) => g.steps), ...rest]);
   });
   const [adding, setAdding] = useState(false);
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont on ajoute une variante « OU »
   const [chercheDoc, setChercheDoc] = useState("");
   const addRef = useRef(null);
 
   useEffect(() => {
-    if (!adding) return;
-    const close = (e) => { if (addRef.current && !addRef.current.contains(e.target)) setAdding(false); };
+    if (!adding && !ouFor) return;
+    const close = (e) => { if (addRef.current && !addRef.current.contains(e.target)) { setAdding(false); setOuFor(null); } };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [adding]);
+  }, [adding, ouFor]);
 
   /* Les alertes de conditions, RÉUNIES EN TÊTE du parcours. Elles pourraient tenir dans une
      info-bulle sur chaque jalon, mais une info-bulle ne se lit que si on la cherche — et
@@ -697,8 +711,25 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
               ))}
               {/* Une case par JALON, pas par variante : le dossier n'en suivra qu'une. */}
               <CaseFacultatif etapes={g.steps} onToggle={onToggleFacultatif} />
-              {/* Plus de « + OU » ici : une variante « OU » s'ajoute dans Modèles → Équivalences
-                  (une équivalence est org-wide ; cf. en-tête de ParcoursFlow). */}
+              {/* « + OU » LIMITÉ AUX ÉQUIVALENCES (2026-10-08). Il n'apparaît QUE si le document du
+                  jalon est déclaré interchangeable (Modèles → Équivalences) avec d'autres membres
+                  pas encore dans ce parcours ; le menu ne propose QUE ces membres, et le clic se
+                  borne à les ACTIVER ici — il n'écrit aucune équivalence (c'était le reproche fait
+                  à l'ancien « + OU »). Ni sur un QCM, un émargement ou une pièce : pas d'équivalence. */}
+              {typeof groupeMembres === "function" && !g.steps[0].quiz_id
+                && g.steps[0].doc_type !== "EMARGEMENT" && g.steps[0].doc_type !== "PIECE"
+                && g.steps[0].doc_type !== "REMISE"
+                && (() => {
+                  const candidats = groupeMembres(g.steps[0].slug)
+                    .map((sl) => steps.find((x) => x.slug === sl))
+                    .filter((x) => x && !x.active && !x.company_level);
+                  if (!candidats.length) return null;
+                  return (
+                    <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
+                      onClick={() => { setAdding(false); setChercheDoc(""); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
+                      title="Ajouter une variante « OU » (un document déjà déclaré équivalent)">＋ OU</button>
+                  );
+                })()}
             </div>
             {canBreak ? (
               <button type="button" className={"pf-brk" + (brkHere ? " on" : "")}
@@ -714,15 +745,23 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
           );
         })}
         <button type="button" className={"pf-add" + (adding ? " on" : "")}
-          onClick={() => { setChercheDoc(""); setAdding((a) => !a); }}>
+          onClick={() => { setOuFor(null); setChercheDoc(""); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>
 
-      {/* LE PANNEAU D'AJOUT D'UNE ÉTAPE, posé sous le flux (toute la largeur, avec recherche). */}
-      {adding && (() => {
+      {/* UN SEUL PANNEAU pour les deux gestes — ajouter une étape, ou une variante « OU ». Même
+          liste, même endroit où regarder ; le titre dit lequel est en cours. En mode « OU », le
+          vivier se limite aux AUTRES membres de l'équivalence du jalon (jamais un document libre). */}
+      {(adding || ouFor) && (() => {
+        const jalon = ouFor ? groups.find((g) => g.steps[0].slug === ouFor) : null;
         // « Ajouter une étape » : le référentiel des étapes pas encore dans le parcours.
-        const pool = available;
+        // « + OU » : uniquement les membres de l'équivalence du jalon, pas encore actifs.
+        const pool = jalon
+          ? (typeof groupeMembres === "function" ? groupeMembres(jalon.steps[0].slug) : [])
+              .map((sl) => steps.find((x) => x.slug === sl))
+              .filter((x) => x && !x.active && !x.company_level)
+          : available;
         const t = chercheDoc.trim().toLowerCase();
         const filtre = (l) => (!t ? l : l.filter((s) =>
           [s.label, s.doc_type, s.slug].some((v) => String(v || "").toLowerCase().includes(t))));
@@ -744,7 +783,9 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
            qu'un refus faisait disparaître la surface où le motif devait s'afficher : on voyait
            le panneau se fermer et rien d'autre — d'où « je ne peux pas, sans savoir pourquoi ».
            Une activation d'étape, elle, ne peut pas échouer : on ferme aussitôt. */
-        const choisir = (s) => { onToggle(s.slug); setAdding(false); setChercheDoc(""); };
+        // Activer l'étape suffit : en « OU », le membre rejoint le jalon via l'équivalence
+        // (groupMilestones les regroupe) ; en « Ajouter », il entre comme étape à part entière.
+        const choisir = (s) => { onToggle(s.slug); setAdding(false); setOuFor(null); setChercheDoc(""); };
         const item = (s) => (
           <button type="button" key={s.slug} className="pf-add-item" onClick={() => choisir(s)}>
             <span className="pf-label">{s.label}</span>
@@ -754,13 +795,15 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
         return (
           <div className="pf-add-panel">
             <div className="pf-add-head">
-              <div className="pf-add-title" style={{ margin: 0 }}>Ajouter une étape</div>
+              <div className="pf-add-title" style={{ margin: 0 }}>
+                {jalon ? <>Variante « OU » de <b style={{ textTransform: "none" }}>{jalon.steps[0].label}</b></> : "Ajouter une étape"}
+              </div>
               <button type="button" className="iconbtn" aria-label="Fermer"
-                onClick={() => { setAdding(false); setChercheDoc(""); }}><Icon name="x" size={14} /></button>
+                onClick={() => { setAdding(false); setOuFor(null); setChercheDoc(""); }}><Icon name="x" size={14} /></button>
             </div>
-            {/* Le référentiel compte vingt-deux documents : sans recherche, on parcourt une
-                liste. Même champ que partout ailleurs dans l'application. */}
-            {pool.length > 6 && (
+            {/* La recherche n'a de sens que sur le long référentiel d'« Ajouter » ; en « OU », le
+                vivier tient en quelques documents équivalents, inutile d'y chercher. */}
+            {!jalon && pool.length > 6 && (
               <span className="gs-search" style={{ margin: "0 0 10px" }}>
                 <Icon name="search" size={14} />
                 <input value={chercheDoc} onChange={(e) => setChercheDoc(e.target.value)} autoFocus
@@ -768,7 +811,13 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
                 {chercheDoc && <button className="gs-clear" aria-label="Effacer" onClick={() => setChercheDoc("")}><Icon name="x" size={13} /></button>}
               </span>
             )}
-            {pool.length === 0 ? (
+            {jalon ? (
+              /* En « OU », on ne propose QUE les autres membres de l'équivalence — un seul groupe,
+                 sans découpage par nature : ce sont toujours des documents. */
+              pool.length === 0
+                ? <div className="pf-add-empty">Aucun autre document équivalent à proposer. Les équivalences se définissent dans Modèles → Équivalences.</div>
+                : <div className="pf-add-grid">{pool.map(item)}</div>
+            ) : pool.length === 0 ? (
               <div className="pf-add-empty">Toutes les étapes disponibles sont déjà dans le parcours.</div>
             ) : (docs.length === 0 && quizzes.length === 0 && pieces.length === 0 && remises.length === 0) ? (
               // Pas une impasse : on dit ce qui a été cherché, et comment en sortir.
@@ -809,8 +858,9 @@ function ParcoursFlow({ steps, eqMap, onToggle, onReorder, breakSlug, onSetBreak
 // Liste ORDONNÉE (glisser pour réordonner) de documents de GROUPE (🏢) et/ou
 // STAGIAIRE choisis parmi les étapes actives du parcours. Repère visuel côté fiche
 // entreprise ; n'altère pas le parcours principal.
-function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onSetBreak, onToggleFacultatif }) {
+function CompanySection({ steps, value, onChange, onToggleActive, eqMap, groupeMembres, breakSlug, onSetBreak, onToggleFacultatif }) {
   const [adding, setAdding] = useState(false);
+  const [ouFor, setOuFor] = useState(null); // slug de tête du jalon dont on ajoute une variante « OU »
   const ref = useRef(null);
   const bySlug = new Map(steps.map((s) => [s.slug, s]));
   /* AUCUN FILTRE SUR `active`, NI ICI NI DANS LES ÉLIGIBLES — et ce n'est pas un relâchement.
@@ -825,17 +875,28 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
      individuelles. L'exact contraire du besoin. Un document choisi ici SANS être actif est
      désormais « entreprise seulement », et c'est le seul moyen de l'exprimer. */
   const chosen = value.map((sl) => bySlug.get(sl)).filter(Boolean);
+  /* JALONS « OU » DANS LA SECTION ENTREPRISE (2026-10-08). Deux documents déclarés
+     interchangeables (devis professionnel / devis AGEFICE, Modèles → Équivalences) forment UN
+     seul jalon, leurs variantes empilées — exactement comme le parcours du dossier. Le serveur
+     n'en exige qu'une, celle qui s'applique au financeur (resoudreVariantesEntreprise). */
+  const groups = groupMilestones(chosen, eqMap);
   const eligible = steps.filter((s) => !value.includes(s.slug));
   const isGroup = (s) => !!s.company_level;
   const isQuiz = (s) => !!s.quiz_id || s.doc_type === "QCM";
   const isEmargement = (s) => s.doc_type === "EMARGEMENT";
+  // Candidats « + OU » d'un jalon : les AUTRES membres de son équivalence pas encore dans la
+  // section entreprise (jamais un document libre — c'est tout l'objet de la limite).
+  const candidatsOu = (lead) => (typeof groupeMembres === "function" ? groupeMembres(lead.slug) : [])
+    .filter((sl) => !value.includes(sl))
+    .map((sl) => bySlug.get(sl))
+    .filter(Boolean);
 
   useEffect(() => {
-    if (!adding) return;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setAdding(false); };
+    if (!adding && !ouFor) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) { setAdding(false); setOuFor(null); } };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [adding]);
+  }, [adding, ouFor]);
 
   const add = (slug) => {
     /* ON N'ACTIVE PLUS RIEN À L'AJOUT. Activer un document de groupe était sans effet utile —
@@ -845,16 +906,21 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
     onChange([...value.filter((x) => x !== slug), slug]);
     setAdding(false);
   };
+  // « + OU » : ajoute un membre de l'équivalence à la section entreprise (jamais un doc libre),
+  // et n'écrit aucune équivalence — elle se définit dans Modèles → Équivalences.
+  const addOu = (slug) => { onChange([...value.filter((x) => x !== slug), slug]); setOuFor(null); };
   const remove = (slug) => {
     const s = bySlug.get(slug);
     onChange(value.filter((x) => x !== slug));
     if (slug === breakSlug) onSetBreak?.(null); // l'étape portait le point d'accès → on le retire
     if (s && s.company_level && s.active) onToggleActive?.(slug); // doc de groupe : n'existe qu'ici → désactiver
   };
+  // Réordonnancement PAR JALON (comme le parcours du dossier) : un jalon « OU » se déplace d'un
+  // bloc, ses variantes restant ensemble. On aplatit ensuite en slugs pour `company_steps`.
   const glisser = useReordonner((de, vers) => {
-    const order = deplacerDans(chosen.map((s) => s.slug), de, vers);
-    const extra = value.filter((sl) => !order.includes(sl)); // slugs non résolus conservés
-    onChange([...order, ...extra]);
+    const flat = deplacerDans(groups, de, vers).flatMap((g) => g.steps.map((s) => s.slug));
+    const extra = value.filter((sl) => !flat.includes(sl)); // slugs non résolus conservés
+    onChange([...flat, ...extra]);
   });
   const badge = (s, short) => {
     const grp = isGroup(s), quiz = isQuiz(s);
@@ -873,47 +939,62 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
       <p className="hint" style={{ marginTop: 0 }}>
         Parcours quand une <b>entreprise</b> inscrit ses stagiaires : il <b>remplace</b> celui du dossier. Un document
         absent du parcours du dossier n'existera donc que par ce chemin — c'est ainsi qu'on réserve une convention
-        professionnelle aux arrivées par entreprise. Glissez pour réordonner ·{" "}
+        professionnelle aux arrivées par entreprise. Glissez pour réordonner · variantes empilées = choix « OU » ·{" "}
         <b style={{ color: "var(--ember1)" }}>🚧</b> = accès émargement (les documents à gauche doivent être signés).
       </p>
       <div className="parcours-flow">
-        {chosen.map((s, i) => (
-          <div className="pf-wrap" key={s.slug}>
+        {groups.map((g, i) => {
+          // Le point de rupture est porté par la DERNIÈRE variante du jalon (comme le dossier).
+          const gBreakSlug = g.steps[g.steps.length - 1].slug;
+          const cands = candidatsOu(g.steps[0]);
+          const peutOu = !g.steps[0].quiz_id && g.steps[0].doc_type !== "EMARGEMENT"
+            && g.steps[0].doc_type !== "PIECE" && g.steps[0].doc_type !== "REMISE" && cands.length > 0;
+          return (
+          <div className="pf-wrap" key={g.steps[0].slug}>
             <div className={"pf-node" + (glisser.saisi === i ? " drag" : "")
               + (glisser.saisi !== null && glisser.vise === i && glisser.saisi !== i ? " cible" : "")}
               {...glisser.proprietes(i)}>
               <span className="pf-grip" {...glisser.poignee(i)} title="Glisser pour réordonner">⠿</span>
-              <div className="pf-variante">
-                <span className="pf-label">{s.label}</span>
-                {/* MÊME BADGE DE CONTENU QU'EN « Dossier particulier » (stepBadge : J-7, à signer, à
-                    fournir…) : la même étape s'affiche pareil des deux côtés. On y AJOUTE le seul
-                    repère propre à cette section — « 🏢 Groupe » (signé collectivement, pas par
-                    stagiaire) ; un document stagiaire se reconnaît à l'absence de ce repère, comme
-                    en particulier. L'ancien badge de type (❓ QCM, Stagiaire) reste au sélecteur. */}
-                {s.company_level && (
-                  <span className="pf-badge" style={{ background: "var(--ember1,#c0392b)", color: "#fff" }}>🏢 Groupe</span>
-                )}
-                {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
-                {/* SANS CE REPÈRE, ON NE COMPRENDRAIT PAS pourquoi l'étape est absente de
-                    l'autre onglet. Un document choisi ici et inactif dans le parcours du
-                    dossier n'existe QUE pour les stagiaires inscrits par une entreprise —
-                    c'est une propriété qu'il faut lire, pas déduire. */}
-                {!s.active && !s.company_level && (
-                  <span className="pf-badge" title="Absent du parcours du dossier : ce document n'existe que pour une arrivée par entreprise"
-                    style={{ background: "var(--surface2)", color: "var(--muted)", fontStyle: "italic" }}>
-                    entreprise seulement
-                  </span>
-                )}
-                <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
-              </div>
-              <CaseFacultatif etapes={[s]} onToggle={onToggleFacultatif} />
+              {g.steps.map((s, j) => (
+                <div key={s.slug}>
+                  {j > 0 && <div className="pf-or">OU</div>}
+                  <div className="pf-variante">
+                    <span className="pf-label">{s.label}</span>
+                    {/* « 🏢 Groupe » : signé collectivement, pas par stagiaire ; un document stagiaire
+                        se reconnaît à son absence. stepBadge donne le reste (à signer, J-7…). */}
+                    {s.company_level && (
+                      <span className="pf-badge" style={{ background: "var(--ember1,#c0392b)", color: "#fff" }}>🏢 Groupe</span>
+                    )}
+                    {stepBadge(s) && <span className="pf-badge">{stepBadge(s)}</span>}
+                    {/* Document choisi ici et inactif dans le parcours du dossier : il n'existe QUE
+                        pour une arrivée par entreprise — une propriété qu'il faut lire, pas déduire. */}
+                    {!s.active && !s.company_level && (
+                      <span className="pf-badge" title="Absent du parcours du dossier : ce document n'existe que pour une arrivée par entreprise"
+                        style={{ background: "var(--surface2)", color: "var(--muted)", fontStyle: "italic" }}>
+                        entreprise seulement
+                      </span>
+                    )}
+                    <button type="button" className="pf-x" title="Retirer de la section entreprise" onClick={() => remove(s.slug)}><Icon name="x" size={13} /></button>
+                  </div>
+                </div>
+              ))}
+              {/* Une case par JALON, pas par variante : le dossier n'en suivra qu'une. */}
+              <CaseFacultatif etapes={g.steps} onToggle={onToggleFacultatif} />
+              {/* « + OU » LIMITÉ AUX ÉQUIVALENCES : n'apparaît que si le document du jalon a d'autres
+                  membres (Modèles → Équivalences) pas encore dans la section ; le menu ne propose
+                  qu'eux, et le clic se borne à les AJOUTER ici — il n'écrit aucune équivalence. */}
+              {peutOu && (
+                <button type="button" className={"pf-or-add" + (ouFor === g.steps[0].slug ? " on" : "")}
+                  onClick={() => { setAdding(false); setOuFor(ouFor === g.steps[0].slug ? null : g.steps[0].slug); }}
+                  title="Ajouter une variante « OU » (un document déjà déclaré équivalent)">＋ OU</button>
+              )}
             </div>
             {typeof onSetBreak === "function" ? (
-              <button type="button" className={"pf-brk" + (breakSlug === s.slug ? " on" : "")}
-                title={breakSlug === s.slug
+              <button type="button" className={"pf-brk" + (breakSlug === gBreakSlug ? " on" : "")}
+                title={breakSlug === gBreakSlug
                   ? "Retirer le point d'accès émargement (entreprise)"
                   : "Placer ici le point d'accès à l'émargement : les documents à gauche devront être signés"}
-                onClick={() => onSetBreak(breakSlug === s.slug ? null : s.slug)}>
+                onClick={() => onSetBreak(breakSlug === gBreakSlug ? null : gBreakSlug)}>
                 <span className="pf-brk-arrow" aria-hidden="true">→</span>
                 <span className="pf-brk-flag">🚧</span>
               </button>
@@ -921,22 +1002,40 @@ function CompanySection({ steps, value, onChange, onToggleActive, breakSlug, onS
               <span className="pf-arrow" aria-hidden="true">→</span>
             )}
           </div>
-        ))}
-        {/* `setOuFor` ET `setChercheDoc` ÉTAIENT APPELÉS ICI, et ils appartiennent à
-            `ParcoursFlow` — un AUTRE composant de premier niveau. Le gestionnaire levait donc
-            une `ReferenceError` avant d'atteindre `setAdding` : le panneau ne s'ouvrait jamais,
-            et l'onglet « À l'arrivée via une entreprise » paraissait n'avoir aucun document à
-            proposer. Deux cent trois erreurs dans la console d'un seul écran, et rien de visible.
-            `esbuild` ne détecte pas les références non définies (CLAUDE.md § 2.4) ; le script
-            `lint` du projet, lui, est mort — ESLint est installé SANS configuration.
-            Cette section n'a ni recherche ni « OU » : il n'y a rien à réinitialiser. */}
+          );
+        })}
+        {/* « Ajouter une étape » ferme un éventuel « + OU » en cours (un seul panneau à la fois). */}
         <button type="button" className={"pf-add" + (adding ? " on" : "")}
-          onClick={() => setAdding((a) => !a)}>
+          onClick={() => { setOuFor(null); setAdding((a) => !a); }}>
           ＋ Ajouter une étape
         </button>
       </div>
 
       {chosen.length === 0 && <p className="hint" style={{ marginTop: -6 }}>Aucun document dans la section entreprise.</p>}
+
+      {/* PANNEAU « + OU » : uniquement les autres membres de l'équivalence du jalon. Jamais un
+          document libre — c'est la limite demandée. L'ajout n'écrit aucune équivalence. */}
+      {ouFor && (() => {
+        const jalon = groups.find((g) => g.steps[0].slug === ouFor);
+        const cands = jalon ? candidatsOu(jalon.steps[0]) : [];
+        return (
+          <div className="pf-add-panel">
+            <div className="pf-add-head">
+              <div className="pf-add-title" style={{ margin: 0 }}>
+                {jalon ? <>Variante « OU » de <b style={{ textTransform: "none" }}>{jalon.steps[0].label}</b></> : "Variante « OU »"}
+              </div>
+              <button type="button" className="iconbtn" aria-label="Fermer" onClick={() => setOuFor(null)}><Icon name="x" size={14} /></button>
+            </div>
+            {cands.length === 0
+              ? <div className="pf-add-empty">Aucun autre document équivalent à proposer. Les équivalences se définissent dans Modèles → Équivalences.</div>
+              : <div className="pf-add-grid">{cands.map((s) => (
+                  <button key={s.slug} type="button" className="pf-add-item" onClick={() => addOu(s.slug)}>
+                    {badge(s, true)}<span>{s.label}</span>
+                  </button>
+                ))}</div>}
+          </div>
+        );
+      })()}
 
       {adding && (
         <div className="pf-add-panel">

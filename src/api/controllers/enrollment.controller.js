@@ -3,7 +3,8 @@ const { parcoursManquant } = require('../lib/parcoursRequis.js');
 const { computeDocParcours, companyParcours } = require('../lib/parcours.js');
 const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
 const { champsDesConditions, loadDossierFactsMap, loadConditionMap } = require('../lib/conditions.js');
-const { enrollmentSteps, formationSteps } = require('./formationProgram.controller.js');
+const { enrollmentSteps, formationSteps, resoudreVariantesEntreprise } = require('./formationProgram.controller.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { belongsToOrg } = require('../lib/tenancy.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { avancementDossiers } = require('../lib/avancement.js');
@@ -186,7 +187,13 @@ const getParcours = async (req, res) => {
                 remises = Object.fromEntries(rd.map((r) => [r.remise_type_id,
                     { id: r.id, statut: r.statut, sans_objet: !!r.sans_objet, nb_fichiers: Number(r.nb_fichiers) || 0 }]));
             } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 160 non jouée
-            const steps = ent.steps || await enrollmentSteps(conn, orgId, program, ctx, condById);
+            /* Parcours entreprise : liste explicite, on n'y collapse QUE les groupes « OU »
+               (devis pro / devis AGEFICE → un seul jalon, la variante applicable au dossier),
+               sans filtrer les étapes isolées par condition. Cf. resoudreVariantesEntreprise. */
+            const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
+            const steps = ent.steps
+                ? resoudreVariantesEntreprise(ent.steps, ctx, condById, eqMap)
+                : await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
             /* L'entreprise du dossier a-t-elle un ESPACE (compte de représentant, migration 084) ? Une
                remise qui lui est destinée n'y va que dans ce cas, sinon au stagiaire — la règle de
                `pourEntreprise` (remise.controller.js), que l'écran doit dire à l'identique. */
