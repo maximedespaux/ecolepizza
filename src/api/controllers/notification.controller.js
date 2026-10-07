@@ -6,6 +6,22 @@ const { sectionsVisibles, entitesVisibles, sectionDeLEntite, estLu, regrouperCon
 const { aLaCapaciteEnBase } = require('../lib/capacites.js');
 const { preciser } = require('../lib/precisionsActivite.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+const { STAFF_ROLES, AUDIT_ROLES } = require('../middlewares/auth.middleware.js');
+
+/* LA CLOCHE D'ORGANISME EST RÉSERVÉE À L'ÉQUIPE INTERNE (audit du 2026-10-07).
+   Une notification `user_id` nul est « visible par tout l'organisme » — mais « l'organisme », ici,
+   c'est l'ÉQUIPE : ces alertes nomment des commandes boutique (nom du stagiaire, montant, retrait)
+   et des signatures (« Signé par X »). Les lire n'a de sens que pour qui traite le dossier. Sans ce
+   filtre, un STAGIAIRE ou une ENTREPRISE ouvrant sa cloche voyait les commandes et les signatures de
+   TOUT LE MONDE, et pouvait d'un « tout marquer lu » éteindre la cloche de l'équipe.
+   Les non-équipe gardent leurs notifications NOMINATIVES (`user_id` = le leur) : un stagiaire reçoit
+   toujours son « Émargement à signer » (lib/relancesEmargement.js). LISTE POSITIVE, jamais une
+   exclusion « tout rôle sauf stagiaire » (le travers payé plusieurs fois, cf. CLAUDE.md). */
+const ROLES_CLOCHE_ORG = [...new Set([...STAFF_ROLES, ...AUDIT_ROLES])];
+const voitClocheOrg = (role) => ROLES_CLOCHE_ORG.includes(role);
+/* Le fragment WHERE de portée : l'équipe voit AUSSI l'organisme (user_id nul), les autres UNIQUEMENT
+   leurs lignes nominatives. Les paramètres liés (…, user_id) ne changent pas entre les deux formes. */
+const porteeNotif = (role) => (voitClocheOrg(role) ? '(user_id = ? OR user_id IS NULL)' : 'user_id = ?');
 
 /* SUPPRIMER UNE NOTIFICATION EST UN DROIT NOMINATIF, pas un attribut de rôle. La raison tient à
    une particularité de la table : une notification d'organisme (`user_id` nul) est UNE ligne
@@ -230,7 +246,7 @@ const getNotifications = async (req, res) => {
             `SELECT id, COALESCE(NULLIF(type, ''), 'INFO') AS type, title, body, link, is_read,
                     DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
              FROM notification
-             WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL)
+             WHERE organization_id = ? AND ${porteeNotif(role)}
              ORDER BY created_at DESC
              LIMIT 40`, [orgId, moi]);
 
@@ -264,7 +280,7 @@ const getNotifications = async (req, res) => {
            encore. */
         const [[compteur]] = await db.promise().query(
             `SELECT COUNT(*) AS n FROM notification
-              WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL) AND is_read = 0`,
+              WHERE organization_id = ? AND ${porteeNotif(role)} AND is_read = 0`,
             [orgId, moi]);
         const nonLuesNotif = Number((compteur && compteur.n) || 0);
         const comptes = await compteActiviteParRole({ orgId, moi, role, navAccess, vue, dormant });
@@ -290,7 +306,7 @@ const getNotifications = async (req, res) => {
 const markRead = (req, res) => {
     db.query(
         `UPDATE notification SET is_read = 1
-         WHERE id = ? AND organization_id = ? AND (user_id = ? OR user_id IS NULL)`,
+         WHERE id = ? AND organization_id = ? AND ${porteeNotif(req.user.role)}`,
         [req.params.id, req.user.organization_id, req.user.id],
         (err) => {
             if (err) return res.status(400).json({ message: 'Erreur' });
@@ -306,7 +322,7 @@ const markAllRead = async (req, res) => {
     try {
         await db.promise().query(
             `UPDATE notification SET is_read = 1
-             WHERE organization_id = ? AND (user_id = ? OR user_id IS NULL) AND is_read = 0`,
+             WHERE organization_id = ? AND ${porteeNotif(req.user.role)} AND is_read = 0`,
             [req.user.organization_id, req.user.id]);
         /* Et la marque « j'ai lu l'activité jusqu'ici ». Best-effort volontaire : tant que la
            migration 142 n'est pas jouée, la colonne n'existe pas et l'échec ne doit pas empêcher
@@ -358,4 +374,6 @@ const deleteNotification = async (req, res) => {
 module.exports = {
     getNotifications, markRead, markAllRead, notify, deleteNotification,
     CAP_SUPPRIMER_NOTIF, ROLES_SUPPRESSION_DOFFICE,
+    // Exposés pour le test de portée de la cloche (audit sécurité 2026-10-07).
+    voitClocheOrg, porteeNotif,
 };

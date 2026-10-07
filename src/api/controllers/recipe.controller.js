@@ -572,7 +572,13 @@ const authorProfile = async (req, res) => {
     try {
         const conn = db.promise();
         const uid = req.params.userId;
-        const [[u]] = await conn.query('SELECT first_name, last_name, email, phone FROM user WHERE id = ?', [uid]);
+        /* BORNÉ À L'ORGANISME (audit du 2026-10-07) : sans ce filtre, le nom d'un compte de N'IMPORTE
+           QUEL organisme fuyait sur simple identifiant. Un auteur de fiche partagée est forcément du
+           même organisme (la requête des fiches ci-dessous l'exige), donc le filtre ne ferme rien de
+           légitime et rend 404 un identifiant d'ailleurs. */
+        const [[u]] = await conn.query(
+            'SELECT first_name, last_name, email, phone FROM user WHERE id = ? AND organization_id = ?',
+            [uid, req.user.organization_id]);
         if (!u) return res.status(404).json({ message: 'Auteur introuvable.' });
         const [[sc]] = await conn.query(
             "SELECT COUNT(*) AS n FROM recipe WHERE author_user_id = ? AND visibility = 'SHARED' AND organization_id = ?",
