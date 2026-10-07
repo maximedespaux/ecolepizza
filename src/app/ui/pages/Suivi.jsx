@@ -223,6 +223,11 @@ function Suivi() {
   }, []);
 
   const count = (score) => dossiers.filter((d) => d.score === score).length;
+  /* Les complets RÉELLEMENT MASQUÉS par l'interrupteur : les VERT, SAUF ceux « à clôturer » — ceux-là
+     restent affichés (cf. `affiches`), donc il n'y a rien à « revoir » pour eux. Sans cette exclusion,
+     « 60 complets · voir » aurait compté deux dossiers déjà sous les yeux. Cohérent avec le « dont N
+     complets » par entreprise, que `sansLesComplets` calcule déjà hors « à clôturer ». */
+  const nbCompletsMasques = dossiers.filter((d) => estComplet(d) && !d.a_cloturer).length;
   /* LES DOSSIERS COMPLETS QUITTENT LA LISTE (demandé le 2026-09-21) : à 100 %, il n'y a plus rien à
      y faire, et ils noyaient ceux qui restent à finir. Ils ne disparaissent pas pour autant : le
      compteur « complets » les compte — chaque dossier terminé l'y fait monter d'un — et, d'un clic,
@@ -247,15 +252,18 @@ function Suivi() {
      liste ENTIÈRE, avant le masquage des complets : c'est ce qui permet de dire « dont 2 complets »
      d'une entreprise dont on ne montre plus que les stagiaires à finir. */
   const groups = useMemo(() => grouperParEntreprise(dossiersVus), [dossiersVus]);
-  // Ce que la liste affiche : sans les complets, sauf à la demande.
-  const affiches = useMemo(() => sansLesComplets(groups, voirComplets), [groups, voirComplets]);
+  /* Ce que la liste affiche : sans les complets, sauf à la demande — MAIS on garde toujours les
+     dossiers « à clôturer » (100 % non encore marqué terminé, demandé le 2026-10-07) : ils appellent
+     encore un geste, c'est tout l'objet de cette liste. Le 3ᵉ argument ne vaut que pour le Suivi ; le
+     tableau de bord, qui partage `sansLesComplets`, ne le passe pas et masque tout complet comme avant. */
+  const affiches = useMemo(() => sansLesComplets(groups, voirComplets, true), [groups, voirComplets]);
   const nbAffiches = affiches.reduce((n, g) => n + (g.type === "solo" ? 1 : g.membresVus.length), 0);
 
   /* LES COLONNES VIENNENT DE TOUS LES DOSSIERS AFFICHABLES, PAS DE CEUX QUE LE FILTRE LAISSE : cliquer
      une colonne ne doit pas en faire disparaître d'autres sous le curseur. Les complets masqués, eux,
      n'en apportent pas — une colonne sans aucune ligne pour la remplir ne dirait rien. */
   const pourColonnes = useMemo(
-    () => (voirComplets ? dossiers : dossiers.filter((d) => !estComplet(d))), [dossiers, voirComplets]);
+    () => (voirComplets ? dossiers : dossiers.filter((d) => !estComplet(d) || d.a_cloturer)), [dossiers, voirComplets]);
   const tableaux = useMemo(() => tableauxDuSuivi(affiches, pourColonnes, manques), [affiches, pourColonnes, manques]);
 
   return (
@@ -286,12 +294,13 @@ function Suivi() {
           <div className="compteurs">
             <span><b className="chiffres">{count("ROUGE")}</b> incomplet{count("ROUGE") > 1 ? "s" : ""}</span><i />
             <span><b className="chiffres">{count("ORANGE")}</b> en cours</span><i />
-            {/* Le compteur des complets est aussi l'interrupteur qui les réaffiche. */}
+            {/* Le compteur des complets est aussi l'interrupteur qui les réaffiche. Il ne compte que
+                les complets MASQUÉS : les « à clôturer », eux, restent affichés — rien à revoir. */}
             <button type="button" className="compteur-bascule" aria-pressed={voirComplets}
-              disabled={count("VERT") === 0} onClick={() => setVoirComplets((v) => !v)}
+              disabled={nbCompletsMasques === 0} onClick={() => setVoirComplets((v) => !v)}
               title={voirComplets ? "Masquer les dossiers complets" : "Afficher aussi les dossiers complets"}>
-              <b className="chiffres">{count("VERT")}</b> complet{count("VERT") > 1 ? "s" : ""}
-              {count("VERT") > 0 && <i>{voirComplets ? " · masquer" : " · voir"}</i>}
+              <b className="chiffres">{nbCompletsMasques}</b> complet{nbCompletsMasques > 1 ? "s" : ""}
+              {nbCompletsMasques > 0 && <i>{voirComplets ? " · masquer" : " · voir"}</i>}
             </button>
           </div>
 
