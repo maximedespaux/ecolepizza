@@ -105,9 +105,12 @@ test('{Périodes} tient une date à moitié connue, et vaut vide sans formation'
 /* ── Le câblage, lu au source ────────────────────────────────────────────────────────────────── */
 test('le contrôleur agrège TOUTES les inscriptions du document (plus de LIMIT 1)', () => {
     const c = fs.readFileSync(path.join(__dirname, '..', 'controllers/document.controller.js'), 'utf8');
-    assert.match(c, /const enrIdsDoc = formations\.map\(\(f\) => f\.__eid\)\.filter\(Boolean\);/);
-    assert.match(c, /agregerChamps\(listeFaits, catalog\)/);
-    assert.match(c, /df\.enrollment_id AS __eid/, 'les inscriptions sont chargées dans l\'ordre des formations');
+    assert.match(c, /const enrIdsDoc = avecInscription\.map\(\(f\) => f\.__eid\);/);
+    /* Depuis le 2026-10-07 : la SESSION de chaque inscription est passée à agregerChamps, pour
+       n'additionner les durées qu'une fois par session (sinon ×nombre de stagiaires). */
+    assert.match(c, /const sessionKeys = avecInscription\.map\(\(f\) => f\.__sid\);/);
+    assert.match(c, /agregerChamps\(listeFaits, catalog, sessionKeys\)/);
+    assert.match(c, /df\.enrollment_id AS __eid, e\.session_id AS __sid/, 'inscription ET session chargées');
     // Les Champs documents partent de TOUTES les inscriptions (enrIdsDoc), et décryptent chaque fait.
     assert.match(c, /loadDossierFactsMap\(conn, organizationId, enrIdsDoc, catalog\)/);
 });

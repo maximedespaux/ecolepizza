@@ -6,7 +6,7 @@
 // Union des deux branches : `paiementRowTokens` vient de la facturation (gui), `SIG_W`/`SIG_H`
 // du dimensionnement des cadres de signature. Les quatre servent dans ce fichier, et `tokens.js`
 // les exporte tous — n'en garder qu'un jeu casserait l'autre fonctionnalité en silence.
-const { resolveTokens, RAW_TOKENS, signatureBox, recadrerSignature, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, formationRowTokens, SIG_W, SIG_H } = require('./tokens.js');
+const { resolveTokens, RAW_TOKENS, signatureBox, recadrerSignature, expandGroupBlocks, expandListBlocks, articleRowTokens, paiementRowTokens, formationRowTokens, formationsParSession, SIG_W, SIG_H } = require('./tokens.js');
 const { resolveCustomTokens } = require('./customtokens.js');
 const { CASE_STAGIAIRE } = require('./documents.js');
 const { JETONS_A_FORME, aUneForme, texteEnLignes, texteEnBlocs } = require('./texteStructure.js');
@@ -85,8 +85,10 @@ function fillHtml(bodyHtml, ctx, valuesOverride) {
     // Formations du dossier : {#Formations}…{/Formations} — une ligne par formation (intitulé,
     // durée, prix). Rend un devis « détaillé » possible quand un dossier couvre NIV1 + NIV2 : la
     // palette donnait {Formation}/{Prix} AGRÉGÉS (intitulés joints, somme), jamais le détail.
+    // UNE LIGNE PAR SESSION, pas par stagiaire : sur un document de groupe, plusieurs inscriptions
+    // partagent une même session — le bloc répétait sinon la même formation autant de fois.
     if (ctx && Array.isArray(ctx.formations)) {
-        out = expandListBlocks(out, 'Formations', ctx.formations, formationRowTokens);
+        out = expandListBlocks(out, 'Formations', formationsParSession(ctx.formations), formationRowTokens);
     }
 
     /* Le texte d'une formation garde sa forme (lib/texteStructure.js) : dans une phrase, ses lignes et

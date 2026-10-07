@@ -101,9 +101,11 @@ const API = path.join(__dirname, '..');
 const UI = path.join(__dirname, '..', '..', 'app', 'ui');
 const lire = (f) => fs.readFileSync(f, 'utf8');
 
-test('htmlfill développe bien la liste « Formations » depuis ctx.formations', () => {
+test('htmlfill développe la liste « Formations » une ligne par SESSION (pas par stagiaire)', () => {
     const h = lire(path.join(API, 'lib/htmlfill.js'));
-    assert.match(h, /expandListBlocks\(out, 'Formations', ctx\.formations, formationRowTokens\)/);
+    /* Depuis le 2026-10-07 : `formationsParSession` dédoublonne par session, sinon un document de
+       groupe (N inscrits, une même session) répétait la même formation N fois dans le bloc. */
+    assert.match(h, /expandListBlocks\(out, 'Formations', formationsParSession\(ctx\.formations\), formationRowTokens\)/);
 });
 
 test('L\'ÉDITEUR propose le bloc et ses jetons par formation', () => {

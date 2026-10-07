@@ -195,8 +195,11 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 ${await colonneOuNull(conn, 'enrollment', 'solde_moyen', 'e.')},
                 ${await colonneOuNull(conn, 'enrollment', 'solde_ref', 'e.')},
                 /* L'inscription, pour agréger les « Champs documents » sur TOUTES les formations
-                   du document dans le MÊME ordre que les jetons nommés (cf. agregationChamps). */
-                df.enrollment_id AS __eid
+                   du document dans le MÊME ordre que les jetons nommés (cf. agregationChamps).
+                   La session (__sid) sert à n'agréger les champs de SESSION qu'une fois par session :
+                   sur un document de groupe, plusieurs inscriptions partagent une même session, et
+                   sommer leurs heures les multiplierait par le nombre de stagiaires. */
+                df.enrollment_id AS __eid, e.session_id AS __sid
          FROM document_formation df
          JOIN enrollment e ON e.id = df.enrollment_id
          LEFT JOIN training_session s ON s.id = e.session_id
@@ -313,7 +316,11 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // intitulé, objectifs, prix, dates, tout restait sur NIV1. On somme les montants et les durées,
     // on joint le reste « et », formation par formation (lib/agregationChamps.js).
     const fields = {};
-    const enrIdsDoc = formations.map((f) => f.__eid).filter(Boolean);
+    /* On garde l'ALIGNEMENT inscription ↔ session : `enrIdsDoc` et `sessionKeys` sont tirés de la
+       même liste filtrée, pour qu'agregerChamps sache quelles inscriptions partagent une session. */
+    const avecInscription = formations.filter((f) => f.__eid);
+    const enrIdsDoc = avecInscription.map((f) => f.__eid);
+    const sessionKeys = avecInscription.map((f) => f.__sid);
     if (enrIdsDoc.length) {
         try {
             const catalog = await getEnabledFields(conn, organizationId);
@@ -324,7 +331,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 for (const [k, v] of Object.entries(faits)) clair[k] = (typeof v === 'string') ? decrypt(v) : v;
                 return clair;
             });
-            Object.assign(fields, agregerChamps(listeFaits, catalog));
+            Object.assign(fields, agregerChamps(listeFaits, catalog, sessionKeys));
             // Lieu(x) de formation (jetons field:location.<colonne>) : les lieux DISTINCTS joints « et ».
             try {
                 const [locs] = await conn.query(

@@ -1010,6 +1010,23 @@ function articleRowTokens(l, i) {
 }
 
 /**
+ * LES FORMATIONS DISTINCTES d'un contexte. `ctx.formations` porte une entrée par INSCRIPTION ; sur
+ * un document de groupe, plusieurs inscriptions partagent une même session. Pour tout ce qui relève
+ * de la FORMATION (heures, jours, dates, intitulé, objectifs, bloc {#Formations}), on ne garde
+ * qu'une entrée par SESSION — sinon la valeur est multipliée, ou la ligne répétée, par le nombre de
+ * stagiaires (relevé le 2026-10-07). La clé de session est l'identifiant quand on l'a (`__sid`, posé
+ * par loadContext), sinon une signature des champs de session. Les TOTAUX {Prix}/{Acompte}, eux,
+ * s'additionnent par stagiaire (sur `ctx.formations` entier), pas ici.
+ */
+function formationsParSession(forms) {
+    const cle = (x) => (x && x.__sid != null ? 's:' + x.__sid
+        : 'k:' + [x && x.code, x && x.title, x && x.week, x && x.year, x && x.start_date, x && x.end_date].join('|'));
+    const vus = new Set(); const out = [];
+    for (const x of (forms || [])) { const k = cle(x); if (!vus.has(k)) { vus.add(k); out.push(x); } }
+    return out;
+}
+
+/**
  * Jetons disponibles À L'INTÉRIEUR d'un bloc {#Formations}…{/Formations}.
  *
  * Même principe que `articleRowTokens` / `stagiaireRowTokens` : le bloc est répété une fois par
@@ -1482,6 +1499,15 @@ function resolveTokens(ctx = {}) {
     const finAddress = [fin.address, [fin.zip_code, fin.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const f = (ctx.formations && ctx.formations[0]) || {};
     const forms = ctx.formations || [];
+    /* UNE SESSION, PLUSIEURS STAGIAIRES : `forms` porte une entrée PAR INSCRIPTION. Les durées
+       (heures, jours), l'intitulé, les dates, la semaine et les textes longs sont des propriétés de
+       la SESSION, pas du stagiaire — les agréger par inscription les multiplierait par le nombre
+       d'inscrits (relevé le 2026-10-07 : {Heures}/{Jours} comptés × stagiaires sur un document de
+       groupe, et objectifs répétés autant de fois). On passe donc par `formsSession`, les formations
+       DISTINCTES, pour tout ce qui relève de la formation ; seuls {Prix}/{Acompte}, qui sont des
+       TOTAUX, s'additionnent par stagiaire (sur `forms`). La clé de session est l'identifiant quand
+       on l'a (`__sid`, posé par loadContext), sinon une signature des champs de session. */
+    const formsSession = formationsParSession(forms);
 
     const fullName = [l.civility, l.first_name, l.last_name].filter(Boolean).join(' ').trim();
     const address = [l.address, [l.zip_code, l.town].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -1495,21 +1521,22 @@ function resolveTokens(ctx = {}) {
     const vatAmount = priceHT * vatRate / 100;
     const priceTTC = priceHT + vatAmount;
 
-    // Agrégations multi-formations (un document peut couvrir plusieurs formations).
-    const multi = forms.length > 1;
+    // Agrégations multi-formations (un document peut couvrir plusieurs formations), SESSION par
+    // session (`formsSession`) et non stagiaire par stagiaire — cf. la note au-dessus.
+    const multi = formsSession.length > 1;
     const uniq = (arr) => [...new Set(arr.filter(Boolean))];
     // « A et B » plutôt que « A, B » : un devis de deux formations se lit « niveau 1 et niveau 2 ».
-    const joinTitles = joindreFr(uniq(forms.map((x) => x.title))) || (f.title || '');
-    const sumHours = forms.reduce((s, x) => s + (Number(x.hours) || 0), 0);
-    const sumDays = forms.reduce((s, x) => s + (Number(x.days) || 0), 0);
+    const joinTitles = joindreFr(uniq(formsSession.map((x) => x.title))) || (f.title || '');
+    const sumHours = formsSession.reduce((s, x) => s + (Number(x.hours) || 0), 0);
+    const sumDays = formsSession.reduce((s, x) => s + (Number(x.days) || 0), 0);
     const block = (field) => (!multi
         ? (f[field] || '')
-        : forms.map((x) => (x[field] ? (x.title ? `${x.title} :\n${x[field]}` : x[field]) : '')).filter(Boolean).join('\n\n'));
+        : formsSession.map((x) => (x[field] ? (x.title ? `${x.title} :\n${x[field]}` : x[field]) : '')).filter(Boolean).join('\n\n'));
     const durationDetail = multi
-        ? forms.map((x) => [x.title, x.duration_detail].filter(Boolean).join(' : ')).filter(Boolean).join('\n')
+        ? formsSession.map((x) => [x.title, x.duration_detail].filter(Boolean).join(' : ')).filter(Boolean).join('\n')
         : (f.duration_detail || '');
-    const starts = uniq(forms.map((x) => x.start_date)).sort();
-    const ends = uniq(forms.map((x) => x.end_date)).sort();
+    const starts = uniq(formsSession.map((x) => x.start_date)).sort();
+    const ends = uniq(formsSession.map((x) => x.end_date)).sort();
     const start = starts[0] || f.start_date || '';
     const end = ends[ends.length - 1] || f.end_date || '';
     /* « Date du jour » FIGÉE À L'ÉMISSION (2026-10-04) : un document émis ne se redate pas. `ctx.figeLe`
@@ -1518,8 +1545,8 @@ function resolveTokens(ctx = {}) {
     const today = frDate(ctx.figeLe || new Date());
     /* LA SEMAINE DEVIENT LES SEMAINES quand le document couvre plusieurs formations : « Semaines 6
        et 12 — 2026 » plutôt que la seule première (demandé le 2026-10-03). Une seule : inchangé. */
-    const weeks = uniq(forms.map((x) => x.week));
-    const years = uniq(forms.map((x) => x.year));
+    const weeks = uniq(formsSession.map((x) => x.week));
+    const years = uniq(formsSession.map((x) => x.year));
     const semaine = weeks.length
         ? `${weeks.length > 1 ? 'Semaines' : 'Semaine'} ${joindreFr(weeks)}${years.length ? ` — ${joindreFr(years)}` : ''}`
         : (f.week ? `Semaine ${f.week} — ${f.year || ''}`.trim() : frDate(start));
@@ -1532,7 +1559,7 @@ function resolveTokens(ctx = {}) {
         if (d1) return `à partir du ${d1}`;
         return d2 ? `jusqu'au ${d2}` : '';
     };
-    const periodes = joindreFr((multi ? forms : [f]).map(periodeDe).filter(Boolean));
+    const periodes = joindreFr((multi ? formsSession : [f]).map(periodeDe).filter(Boolean));
     const sig = ctx.signature || {};
     // Le représentant de l'entreprise signe dans le cadre `representant` (document_signature) : sa
     // date de signature vient de LÀ, pas de la signature « principale » du document (sig, le stagiaire).
@@ -1578,11 +1605,11 @@ function resolveTokens(ctx = {}) {
         'France Travail': decrypt(l.france_travail_id) || '',
         // Formation (agrégées si plusieurs)
         Formation: joinTitles, 'Niveau suggérer': joinTitles,
-        Code: uniq(forms.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
-        Public: multi ? uniq(forms.map((x) => x.audience)).join(', ') : (f.audience || ''),
+        Code: uniq(formsSession.map((x) => x.code || x.rs_code)).join(', ') || (f.code || f.rs_code || ''),
+        Public: multi ? uniq(formsSession.map((x) => x.audience)).join(', ') : (f.audience || ''),
         Objectifs: block('objectives'),
         'Prérequis': block('prerequisites'),
-        ObjectifG: multi ? uniq(forms.map((x) => x.objective_general)).join('\n') : (f.objective_general || ''),
+        ObjectifG: multi ? uniq(formsSession.map((x) => x.objective_general)).join('\n') : (f.objective_general || ''),
         'DuréeDétail': durationDetail, 'Déroulé': block('program_detail'),
         /* LA VIRGULE DÉCIMALE : « 10,5 » heures, pas « 10.5 » — la forme que `String()` donne, et que
            le champ document « Durée (heures) » n'imprime plus (`nombreChamp`, lib/montants.js). */
@@ -1689,7 +1716,9 @@ function resolveTokens(ctx = {}) {
         'Date signature': sig.date ? frDate(sig.date) : '',
         'Date signature entreprise': repSig.date ? frDate(repSig.date) : '',
         // Boucle docxtemplater : {#formations}{Titre} — {PrixLigne}{/formations}
-        formations: forms.map((x) => ({
+        // UNE LIGNE PAR FORMATION (session distincte), pas par stagiaire : sur un document de groupe,
+        // le bloc listait la même formation autant de fois qu'il y avait d'inscrits.
+        formations: formsSession.map((x) => ({
             Titre: x.title || '', Code: x.code || '', Heures: x.hours != null ? String(x.hours) : '',
             Jours: x.days != null ? String(x.days) : '', PrixLigne: euro(x.enroll_price || x.price || 0),
             Objectifs: x.objectives || '', 'Déroulé': x.program_detail || '', 'DuréeDétail': x.duration_detail || '',
@@ -1702,4 +1731,4 @@ function resolveTokens(ctx = {}) {
     };
 }
 
-module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, formationRowTokens, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, frDateLong, euro, businessDay, horairesParJour};
+module.exports = { TOKEN_CATALOG, articlesTable, articleRowTokens, paiementRowTokens, paiementsTable, formationRowTokens, formationsParSession, expandListBlocks, invoiceTokens, ALIAS_KEYS, RAW_TOKENS, TOKEN_LABELS, OPTIONAL_TOKENS, SIG_W, SIG_H, catalogKeys, resolveTokens, findMissingTokens, usedTokenKeys, signatureBox, recadrerSignature, expandGroupBlocks, stagiaireRowTokens, frDate, frDateLong, euro, businessDay, horairesParJour};
