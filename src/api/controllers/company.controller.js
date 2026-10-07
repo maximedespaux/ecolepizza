@@ -882,6 +882,7 @@ const getCompanyParcours = async (req, res) => {
                 }
                 gen = new Set(rows.map((r) => r.enrollment_id)).size;
                 signed = new Set(rows.filter((r) => r.status === 'SIGNE').map((r) => r.enrollment_id)).size;
+                recu = new Set(rows.filter((r) => SENT.includes(r.status)).map((r) => r.enrollment_id)).size;
             } else if (s.remise_id) {
                 /* UNE REMISE NE SE GÉNÈRE PAS (migration 160) : l'école DÉPOSE un fichier, le destinataire
                    en ACCUSE réception. Son état vient de `remise_document`, dossier par dossier
@@ -946,6 +947,11 @@ const getCompanyParcours = async (req, res) => {
                 // Nombre de documents (migration 203) : max du type, mode, et somme des fichiers du groupe.
                 nb_documents: s.nb_documents || 0, nb_mode: s.nb_mode || 'PLAFOND', nb_fichiers: nbFichiersGroupe,
                 facultatif: !!s.facultatif, // hors décompte (migration 188)
+                /* « REMIS AU DESTINATAIRE » pour l'état : les statuts d'ENVOI (recu) pour un document
+                   ou un QCM ; le DÉPÔT (gen) pour une remise, qui est « remise » dès qu'elle est
+                   déposée. Jamais la simple existence : un document préparé n'est pas un document
+                   envoyé (cf. etatDeGroupe). */
+                _recu: remise ? gen : recu,
                 _done: done, _sansObjet: !!(remise && remise.sansObjet),
             });
         }
@@ -959,8 +965,8 @@ const getCompanyParcours = async (req, res) => {
         steps.forEach((s, i) => {
             s.status = i < currentIndex ? (s.facultatif && !s._done ? 'todo' : 'done') : i === currentIndex ? 'current' : 'todo';
             // Une remise écartée pour tout le groupe est FAITE (rien n'est dû), et se dit sans objet.
-            s.etat = s._sansObjet ? 'SANS_OBJET' : etatDeGroupe({ done: s._done, gen: s.gen, total: s.total });
-            delete s._done; delete s._sansObjet;
+            s.etat = s._sansObjet ? 'SANS_OBJET' : etatDeGroupe({ done: s._done, recu: s._recu, total: s.total });
+            delete s._done; delete s._sansObjet; delete s._recu;
         });
 
         res.json({

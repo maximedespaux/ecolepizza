@@ -78,13 +78,22 @@ test('HORS DE L\'ORDRE : une étape faite en avance est VALIDÉE, et elle COMPTE
 });
 
 test('LE PARCOURS D\'UNE ENTREPRISE suit la même règle, d\'après ses compteurs', () => {
-    assert.strictEqual(etatDeGroupe({ done: true, gen: 2, total: 2 }), 'VALIDE');
-    assert.strictEqual(etatDeGroupe({ done: false, gen: 1, total: 2 }), 'ENVOYE');
-    assert.strictEqual(etatDeGroupe({ done: false, gen: 0, total: 2 }), 'A_FAIRE');
-    assert.strictEqual(etatDeGroupe({ done: false, gen: 0, total: 0 }), 'SANS_OBJET', 'aucun stagiaire concerné');
+    assert.strictEqual(etatDeGroupe({ done: true, recu: 2, total: 2 }), 'VALIDE');
+    assert.strictEqual(etatDeGroupe({ done: false, recu: 1, total: 2 }), 'ENVOYE', 'au moins un envoyé/remis');
+    /* LE DÉFAUT GELÉ (2026-10-08). « ENVOYÉ » se compte sur l'ENVOI (recu), pas sur l'existence d'un
+       document : un document de groupe PRÉPARÉ mais pas encore envoyé (createCompanyDocument l'écrit
+       en statut A_FAIRE) reste « à faire » — comme côté stagiaire. La fiche entreprise annonçait
+       « Envoyé » un devis seulement préparé, et l'école croyait le client servi. */
+    assert.strictEqual(etatDeGroupe({ done: false, recu: 0, total: 2 }), 'A_FAIRE', 'préparé ≠ envoyé');
+    assert.strictEqual(etatDeGroupe({ done: false, recu: 0, total: 0 }), 'SANS_OBJET', 'aucun stagiaire concerné');
     const CO = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
-    // Une remise écartée pour tout le groupe se dit « sans objet » ; sinon, la règle des compteurs.
-    assert.match(CO, /s\.etat = s\._sansObjet \? 'SANS_OBJET' : etatDeGroupe\(\{ done: s\._done, gen: s\.gen, total: s\.total \}\);/);
+    // Une remise écartée pour tout le groupe se dit « sans objet » ; sinon, la règle des compteurs (sur l'ENVOI).
+    assert.match(CO, /s\.etat = s\._sansObjet \? 'SANS_OBJET' : etatDeGroupe\(\{ done: s\._done, recu: s\._recu, total: s\.total \}\);/);
+    /* Le « remis au destinataire » : les statuts d'ENVOI (recu) pour un document / un QCM ; le DÉPÔT
+       (gen) pour une remise, qui est « remise » dès qu'elle est déposée, même pas encore accusée. */
+    assert.match(CO, /_recu: remise \? gen : recu,/);
+    assert.match(CO, /recu = new Set\(rows\.filter\(\(r\) => SENT\.includes\(r\.status\)\)\.map\(\(r\) => r\.enrollment_id\)\)\.size;/,
+        'un QCM de groupe compte aussi ses envoyés, pour ne pas régresser en « à faire »');
     /* Les étapes FAITES, plus le rang — parmi les étapes DUES depuis la migration 188 : une étape
        facultative sort des deux côtés de la fraction, et un parcours tout facultatif est complet. */
     assert.match(CO, /percent: dues\.length \? pourcentFait\(faites, dues\.length\) : \(steps\.length \? 100 : 0\),/,
