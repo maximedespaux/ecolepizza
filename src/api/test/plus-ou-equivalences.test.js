@@ -85,15 +85,52 @@ test('l\'ordre du jalon suit sa PREMIÈRE variante rencontrée', () => {
     assert.deepStrictEqual(slugs(out), ['convention', 'devis-agefice'], 'un jalon, à la place du premier membre');
 });
 
+test('LA VRAIE RÉSOLUTION DE DBM : la variante est choisie par les CONDITIONS PERSO (financeur + OPCO entreprise)', () => {
+    /* Reproduit le cas de production : entreprise DBM, OPCO AGEFICE. Le devis professionnel porte
+       la condition `financeur-professionnel` ; le devis AGEFICE porte `financeur-professionnel` ET
+       `opco-entreprise` (= company.opco eq AGEFICE). Le fait `company.opco` est chargé par
+       loadDossierFactsMap (qui joint `company`), donc disponible même quand l'OPCO du STAGIAIRE est
+       nul — c'est bien l'OPCO de l'ENTREPRISE qui tranche. */
+    const conds = new Map([
+        ['financeur-professionnel', { field: 'enrollment.financing', op: 'eq', value: 'PROFESSIONNEL' }],
+        ['opco-entreprise', { field: 'company.opco', op: 'eq', value: 'AGEFICE' }],
+    ]);
+    const copie = { slug: 'devis-pro', doc_type: 'DEVIS', company_level: true, applies_when: { conditions: ['financeur-professionnel'] } };
+    const agefice = { slug: 'devis-agefice', doc_type: 'DEVIS', company_level: true, applies_when: { conditions: ['financeur-professionnel', 'opco-entreprise'] } };
+    const eq2 = new Map([['devis-pro', { group: 'g' }], ['devis-agefice', { group: 'g' }]]);
+
+    const dbm = resoudreVariantesEntreprise([copie, agefice],
+        { 'enrollment.financing': 'PROFESSIONNEL', 'company.opco': 'AGEFICE' }, conds, eq2);
+    assert.deepStrictEqual(dbm.map((s) => s.slug), ['devis-agefice'],
+        'entreprise AGEFICE + financement professionnel ⇒ UN seul devis, la variante AGEFICE');
+
+    const autre = resoudreVariantesEntreprise([copie, agefice],
+        { 'enrollment.financing': 'PROFESSIONNEL', 'company.opco': 'OPCOMMERCE' }, conds, eq2);
+    assert.deepStrictEqual(autre.map((s) => s.slug), ['devis-pro'],
+        'entreprise NON AGEFICE ⇒ le devis professionnel ordinaire, pas les deux');
+});
+
 /* ─── Serveur : les deux appelants passent bien par le collapse ──────────────────────────────── */
 
-test('le collapse du volet entreprise est appelé des DEUX côtés, avec le contexte du dossier', () => {
+test('le collapse du volet entreprise est appelé des TROIS côtés, avec le contexte du dossier', () => {
+    /* TROIS écrans construisent le parcours entreprise, par TROIS chemins distincts — c'est le piège
+       d'un traitement dupliqué (cf. l'en-tête de companyParcours) : en oublier un laisse DEUX devis
+       proposés sur cet écran-là. On gèle les trois.
+         · avancementDossiers (Suivi, tableau de bord, pipeline) ;
+         · enrollment.controller (fiche dossier stagiaire) ;
+         · company.controller / getCompanyParcours (fiche ENTREPRISE — le parcours de groupe). */
     const avanc = fs.readFileSync(path.join(__dirname, '..', 'lib/avancement.js'), 'utf8');
     assert.match(avanc, /steps = resoudreVariantesEntreprise\(ent\.steps, ctx, condById, eqMap\)/,
-        'avancementDossiers : collapse du volet entreprise (Suivi, tableau de bord, pipeline)');
+        'avancementDossiers : collapse du volet entreprise');
     const enr = fs.readFileSync(path.join(__dirname, '..', 'controllers/enrollment.controller.js'), 'utf8');
     assert.match(enr, /resoudreVariantesEntreprise\(ent\.steps, ctx, condById, eqMap\)/,
         'fiche dossier : même collapse, même contexte');
+    const co = fs.readFileSync(path.join(__dirname, '..', 'controllers/company.controller.js'), 'utf8');
+    assert.match(co, /resoudreVariantesEntreprise\(docSteps, grp\.ctxGroupe, grp\.condById, grp\.eqMap\)/,
+        'fiche entreprise (getCompanyParcours) : le parcours de groupe collapse aussi ses « OU »');
+    // resolveGroupSteps doit exposer de quoi collapser (contexte représentatif + équivalences).
+    assert.match(co, /return \{ sess, program, enrollments, eqMap, condById, ctxGroupe,/,
+        'resolveGroupSteps rend le contexte de groupe pour le collapse');
 });
 
 /* ─── Écran : le « + OU » revient, BORNÉ aux équivalences, dans les deux parcours ───────────────── */
