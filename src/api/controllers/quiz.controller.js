@@ -665,6 +665,19 @@ const submitQuiz = async (req, res) => {
         if (r.error) return res.status(r.error).json({ message: r.message });
         const graded = r.quiz.kind === 'GRADED';
 
+        /* TENTATIVE UNIQUE POUR UN QCM NOTÉ (audit du 2026-10-07, décidé avec l'école). submitQuiz
+           renvoie le corrigé (bonnes/mauvaises réponses) ; sans garde, un stagiaire soumettait une
+           fois, APPRENAIT la clé, puis renvoyait un sans-faute — un QCM d'évaluation devenait jouable
+           à 100 %. On refuse donc la RE-soumission d'un QCM noté dès qu'une réponse existe déjà pour ce
+           document. L'écriture étant transactionnelle (ci-dessous), une réponse présente = une
+           soumission COMPLÈTE : une tentative à moitié écrite est annulée, donc toujours re-jouable.
+           Un QCM NON noté (satisfaction, formatif) reste ré-ouvrable — la garde ne le concerne pas. */
+        if (graded) {
+            const [[dejaPasse]] = await conn.query(
+                'SELECT 1 AS x FROM quiz_response WHERE document_id = ? LIMIT 1', [req.params.documentId]);
+            if (dejaPasse) return res.status(409).json({ message: 'QCM noté déjà passé : une seule tentative.' });
+        }
+
         let questions;
         const motsMaxCol = await colonneOuNull(conn, 'quiz_question', 'max_words'); // migration 164
         try { [questions] = await conn.query(`SELECT id, text, type, scale_max, points, partial_scoring, image, ${motsMaxCol} FROM quiz_question WHERE quiz_id = ? ORDER BY position`, [r.quiz.id]); }

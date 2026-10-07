@@ -185,7 +185,9 @@ test('UNE IMAGE WebP part chez LibreOffice DANS UN SVG, à ses dimensions ; le r
 
 test('la porte unique vers LibreOffice (htmlToPdf) enveloppe le WebP — documents, feuilles, factures', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'docxpdf.js'), 'utf8');
-    assert.match(src, /function htmlToPdf\(html, pdfa\) \{[\s\S]*?convertToPdf\(Buffer\.from\(imagesLisiblesParLibreOffice\(html\), 'utf8'\), 'html', pdfa\)/);
+    /* La porte unique neutralise d'abord les ressources EXTERNES (anti-SSRF, audit 2026-10-07), PUIS
+       enveloppe le WebP de la chaîne assainie `sur`. */
+    assert.match(src, /function htmlToPdf\(html, pdfa\) \{[\s\S]*?neutraliserRessourcesExternes\(String\(html[\s\S]*?convertToPdf\(Buffer\.from\(imagesLisiblesParLibreOffice\(sur\), 'utf8'\), 'html', pdfa\)/);
     // La feuille d'émargement lit les mêmes proportions (un cachet WebP y garde sa forme).
     const E = require('../lib/emargement.js');
     assert.strictEqual(E.dimensionsImage, dimensionsImage, 'une seule lecture des dimensions');

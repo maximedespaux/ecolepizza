@@ -1932,13 +1932,19 @@ const signDocument = async (req, res) => {
         const conn = db.promise();
         // Vérifie l'accès : même organisme, et si stagiaire, propriétaire du document.
         const [rows] = await conn.query(
-            `SELECT d.id, d.type, d.learner_id, d.template_slug, d.title FROM generated_document d
+            `SELECT d.id, d.type, d.status, d.learner_id, d.template_slug, d.title FROM generated_document d
              LEFT JOIN learner l ON l.id = d.learner_id
              WHERE d.id = ? AND d.organization_id = ?
                AND (l.user_id = ? OR ? IN ('SUPER_ADMIN','ADMIN_ORGANISME','SECRETARIAT'))`,
             [req.params.id, req.user.organization_id, req.user.id, req.user.role]
         );
         if (rows.length === 0) return res.status(403).json({ message: 'Document non autorisé.' });
+        /* DÉJÀ SIGNÉ : on ne re-signe pas (audit du 2026-10-07, parité avec le lien public et
+           signerMonDocument qui renvoient déjà 409). Sans ce garde-fou, un renvoi de la requête
+           réécrivait signataire / horodatage / empreinte d'un document pourtant clos et relançait
+           l'avancement et les e-mails. Le document complet est à l'état SIGNE ; un document à
+           plusieurs cadres n'y passe qu'une fois TOUS les cadres signés. */
+        if (rows[0].status === 'SIGNE') return res.status(409).json({ message: 'Document déjà signé.' });
 
         // Le document doit être prévu pour signature stagiaire (Modeles : stagiaire_sign).
         // L'émargement est toujours signable électroniquement par le stagiaire.

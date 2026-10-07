@@ -69,7 +69,7 @@ function repondre(q, params) {
         const roles = ((/\? IN \(([^)]*)\)/.exec(q) || [])[1] || '').split(',').map((r) => r.trim().replace(/'/g, ''));
         return [userId === 'u1' || roles.includes(role) ? [ligneDoc()] : []];
     }
-    if (/^SELECT d\.id, d\.type, d\.learner_id, d\.template_slug, d\.title FROM generated_document d/.test(q)) return [[etat.doc]];
+    if (/^SELECT d\.id, d\.type, d\.status, d\.learner_id, d\.template_slug, d\.title FROM generated_document d/.test(q)) return [[etat.doc]];
     if (/^SELECT \* FROM generated_document WHERE id = \?/.test(q)) return [[ligneDoc()]];
     if (/^SELECT saisies FROM generated_document WHERE id = \?/.test(q)) {
         if (!etat.migration) throw sansColonne();

@@ -232,8 +232,8 @@ test('la désinscription publique : GET valide sans écrire, POST désinscrit', 
     // Le POST, lui, écrit le refus.
     assert.match(src, /const postNewsletterUnsub = async[\s\S]*?enregistrerNewsletter\(conn, \{[\s\S]*?accorde: false/);
     const routes = lire('src/api/routes/public.routes.js');
-    assert.match(routes, /router\.get\('\/newsletter\/:token', getNewsletterUnsub\)/);
-    assert.match(routes, /router\.post\('\/newsletter\/:token', postNewsletterUnsub\)/);
+    assert.match(routes, /router\.get\('\/newsletter\/:token', newsletterLimiter, getNewsletterUnsub\)/);
+    assert.match(routes, /router\.post\('\/newsletter\/:token', newsletterLimiter, postNewsletterUnsub\)/);
 });
 
 test('les routes publiques sont montées SANS authentification', () => {
