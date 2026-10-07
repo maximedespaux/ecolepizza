@@ -112,11 +112,20 @@ export const estComplet = (d) => !!d && d.score === "VERT";
  * membres, en amont. Le recalculer sur les seuls membres visibles ferait baisser le pourcentage
  * d'une entreprise à chaque dossier terminé — l'inverse de ce qui se passe.
  *
- * @param groupes       [{ type: "solo", d }] ou [{ type: "company", members, … }]
- * @param voirComplets  vrai quand on a demandé à les revoir
+ * UN DOSSIER « À CLÔTURER » RESTE VISIBLE (2026-10-07), quand `garderACloturer` est demandé : il est
+ * à 100 % (donc complet, VERT) MAIS sa formation n'est pas encore marquée terminée sur la fiche — il
+ * appelle donc encore un geste, exactement ce que cette liste sert à montrer. Sans cette exception,
+ * la pastille « À clôturer » du Suivi ne se voyait qu'en réaffichant les complets, là où personne ne
+ * regarde. L'option n'est levée QUE par le Suivi ; le tableau de bord garde l'ancien masquage.
+ * Son corollaire : un tel dossier n'est PAS compté dans les « complets » masqués (il n'est pas
+ * masqué) — le compteur du Suivi l'exclut de la même façon.
+ *
+ * @param groupes          [{ type: "solo", d }] ou [{ type: "company", members, … }]
+ * @param voirComplets     vrai quand on a demandé à les revoir
+ * @param garderACloturer  vrai pour garder les dossiers « à clôturer » visibles malgré leur 100 %
  */
-export function sansLesComplets(groupes, voirComplets) {
-    const garde = (d) => voirComplets || !estComplet(d);
+export function sansLesComplets(groupes, voirComplets, garderACloturer = false) {
+    const garde = (d) => voirComplets || !estComplet(d) || (garderACloturer && !!d.a_cloturer);
     const out = [];
     for (const g of groupes || []) {
         if (g.type === "solo") { if (garde(g.d)) out.push(g); continue; }

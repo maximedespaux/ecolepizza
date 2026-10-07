@@ -154,8 +154,9 @@ const CSS = lireUi('styles/app.css');
 test('la page tire tout de la grille : plus de feuille de route, plus de bandeau de cartes', () => {
     assert.match(SUIVI, /import \{ tableauxDuSuivi, etatCase \} from "\.\.\/lib\/grilleSuivi\.js";/);
     assert.match(SUIVI, /tableauxDuSuivi\(affiches, pourColonnes, manques\)/);
-    /* Les colonnes viennent de `dossiers`, JAMAIS de `dossiersVus` (le résultat du filtre). */
-    assert.match(SUIVI, /\(voirComplets \? dossiers : dossiers\.filter\(\(d\) => !estComplet\(d\)\)\)/);
+    /* Les colonnes viennent de `dossiers`, JAMAIS de `dossiersVus` (le résultat du filtre). Un
+       dossier « à clôturer » reste affiché (2026-10-07) : ses colonnes doivent donc y entrer aussi. */
+    assert.match(SUIVI, /\(voirComplets \? dossiers : dossiers\.filter\(\(d\) => !estComplet\(d\) \|\| d\.a_cloturer\)\)/);
     assert.doesNotMatch(SUIVI, /Roadmap|className="manque-i"|className="suivi-ligne"/);
     assert.ok(!fs.existsSync(path.join(UI, 'components/Roadmap.jsx')), 'la feuille de route n\'a plus d\'écran : elle part avec lui');
     assert.doesNotMatch(CSS, /\.rm-(step|dot|tag|rail|conn|body)\b|\.roadmap\{/, 'ni son CSS');

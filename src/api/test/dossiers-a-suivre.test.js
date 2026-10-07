@@ -283,16 +283,48 @@ test('suivi : les dossiers complets quittent la liste, et reviennent à la deman
     assert.strictEqual(sansLesComplets(groupes, true).length, 4, 'le compteur les réaffiche tous');
 });
 
-test('suivi : le compteur compte TOUS les complets et sert d\'interrupteur', () => {
+test('suivi : un dossier « à clôturer » reste visible malgré son 100 % (garderACloturer)', async () => {
+    /* 2026-10-07 : un dossier à 100 % est VERT, donc masqué — sauf s'il est « à clôturer » (sa
+       formation pas encore marquée terminée). Le Suivi lève l'option ; le tableau de bord ne la passe
+       pas, et masque tout complet comme avant. */
+    const { sansLesComplets } = await regleUi();
+    const d = (id, score, aCloturer = false) => ({ enrollment_id: id, score, a_cloturer: aCloturer });
+    const groupes = [
+        { type: 'solo', d: d(1, 'VERT') },               // complet ordinaire → masqué
+        { type: 'solo', d: d(2, 'VERT', true) },         // complet MAIS à clôturer → gardé
+        { type: 'solo', d: d(3, 'ORANGE') },             // en cours → gardé
+        { type: 'company', company_id: 9, members: [d(4, 'VERT', true), d(5, 'VERT')] },
+    ];
+    // Sans l'option (tableau de bord) : tout complet s'efface, à clôturer compris.
+    assert.deepStrictEqual(
+        sansLesComplets(groupes, false).map((g) => (g.type === 'solo' ? g.d.enrollment_id : `c${g.company_id}`)),
+        [3], 'sans garderACloturer, le 100 % « à clôturer » est masqué comme avant');
+    // Avec l'option (Suivi) : les « à clôturer » restent, les autres complets partent.
+    const vus = sansLesComplets(groupes, false, true);
+    assert.deepStrictEqual(vus.map((g) => (g.type === 'solo' ? g.d.enrollment_id : `c${g.company_id}`)), [2, 3, 'c9'],
+        'le dossier à clôturer reste, le complet ordinaire part');
+    const c9 = vus.find((g) => g.type === 'company');
+    assert.deepStrictEqual(c9.membresVus.map((m) => m.enrollment_id), [4], 'seul le membre à clôturer reste');
+    assert.strictEqual(c9.complets, 1, '« dont 1 complet » : le membre à clôturer n\'y est pas compté (il est affiché)');
+});
+
+test('suivi : le compteur des complets MASQUÉS sert d\'interrupteur, « à clôturer » exclus', () => {
     const SUIVI = lireUi('pages/Suivi.jsx');
     assert.match(SUIVI, /const count = \(score\) => dossiers\.filter\(/,
         'le compteur porte sur tous les dossiers, pas sur la liste affichée');
+    /* Le bouton ne compte que les complets RÉELLEMENT masqués : les « à clôturer » restent affichés,
+       donc rien à « revoir » pour eux (2026-10-07). */
+    assert.match(SUIVI, /const nbCompletsMasques = dossiers\.filter\(\(d\) => estComplet\(d\) && !d\.a_cloturer\)\.length/);
+    assert.match(SUIVI, /disabled=\{nbCompletsMasques === 0\}/);
+    assert.match(SUIVI, /<b className="chiffres">\{nbCompletsMasques\}<\/b>/);
     assert.match(SUIVI, /aria-pressed=\{voirComplets\}/);
     assert.match(SUIVI, /onClick=\{\(\) => setVoirComplets\(/);
     /* Les agrégats d'entreprise se calculent sur la liste ENTIÈRE, et le masquage vient après :
        masquer d'abord ferait baisser le pourcentage d'une entreprise à chaque dossier terminé. */
     assert.match(SUIVI, /grouperParEntreprise\(dossiersVus\)/);
-    assert.match(SUIVI, /useMemo\(\(\) => sansLesComplets\(groups, voirComplets\)/);
+    /* Le Suivi garde les « à clôturer » visibles (3ᵉ argument), les colonnes les incluent aussi. */
+    assert.match(SUIVI, /useMemo\(\(\) => sansLesComplets\(groups, voirComplets, true\)/);
+    assert.match(SUIVI, /dossiers\.filter\(\(d\) => !estComplet\(d\) \|\| d\.a_cloturer\)/);
     /* Et c'est cette liste-là, masquage fait, que la grille met en tables (2026-09-24). */
     assert.match(SUIVI, /tableauxDuSuivi\(affiches, pourColonnes, manques\)/);
 });
