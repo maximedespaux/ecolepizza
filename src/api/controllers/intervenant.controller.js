@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
+const { estSignatureValide } = require('../lib/signatures.js');
 const { getNotesSession, saveNote, saveVerdict, cloturerCandidat } = require('./evaluation.controller.js');
 const { lirePlage } = require('../lib/plageHoraire.js');
 
@@ -270,7 +271,11 @@ const getMyIntervenantProfile = async (req, res) => {
 const setMyIntervenantSignature = async (req, res) => {
     try {
         const data = req.body && req.body.signature_data;
-        if (data && !/^data:image\//.test(data)) return res.status(422).json({ message: 'Image de signature invalide.' });
+        /* VALIDATION STRICTE À L'ÉCRITURE (audit du 2026-10-07) : un `/^data:image\//` laissait passer
+           `data:image/png;base64,AA"><img onerror=…>` ou un SVG actif. On exige la MÊME forme ancrée
+           que toutes les autres signatures (lib/signatures.js) — la sûreté ne doit pas reposer sur le
+           seul échappement au rendu. data vide = on efface la signature. */
+        if (data && !estSignatureValide(data)) return res.status(422).json({ message: 'Image de signature invalide.' });
         await db.promise().query('UPDATE user SET signature_image = ? WHERE id = ?', [encrypt(data || null), req.user.id]);
         res.json({ success: true, message: 'Signature enregistrée.' });
     } catch (err) {
@@ -293,6 +298,9 @@ const signMyIntervenantSheet = async (req, res) => {
             if (!signature_data) return res.status(422).json({ message: 'Aucune signature enregistrée.' });
         }
         if (!signature_data) return res.status(422).json({ message: 'Signature requise.' });
+        // Même validation ancrée que partout ailleurs (cf. setMyIntervenantSignature) : ni breakout
+        // d'attribut, ni SVG actif — y compris sur une signature enregistrée relue (use_saved).
+        if (!estSignatureValide(signature_data)) return res.status(422).json({ message: 'Image de signature invalide.' });
         if (!SLOTS.includes(slot)) return res.status(422).json({ message: 'Demi-journée invalide.' });
 
         // L'intervenant doit être assigné à CETTE demi-journée.
@@ -513,7 +521,8 @@ const signerMonDocument = async (req, res) => {
         const ligne = aSigner[0];
 
         const fourni = (req.body || {}).signature_data;
-        if (fourni && !/^data:image\//.test(fourni)) {
+        // Même validation ancrée que les autres chemins de signature (audit du 2026-10-07).
+        if (fourni && !estSignatureValide(fourni)) {
             return res.status(422).json({ message: 'Image de signature invalide.' });
         }
         let signature = fourni || null;

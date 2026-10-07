@@ -47,7 +47,7 @@ function reinitialiser(o = {}) {
 }
 reinitialiser();
 function repondre(q) {
-    if (/^SELECT d\.id, d\.type, d\.learner_id, d\.template_slug, d\.title FROM generated_document d/.test(q)) return [[etat.doc]];
+    if (/^SELECT d\.id, d\.type, d\.status, d\.learner_id, d\.template_slug, d\.title FROM generated_document d/.test(q)) return [[etat.doc]];
     if (/^SELECT \* FROM generated_document WHERE id = \?/.test(q)) return [[etat.doc]];
     if (/FROM document_sign_link WHERE token = \?/.test(q)) return [[etat.lien]];
     if (/^SELECT kind, body_html, header_html, footer_html, layout, file, name, mime FROM document_template WHERE organization_id = \? AND slug = \?/.test(q)) {
