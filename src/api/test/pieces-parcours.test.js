@@ -29,10 +29,8 @@ const fs = require('fs');
 const path = require('path');
 
 const API = path.join(__dirname, '..');
-const APP = path.join(API, '..', 'app');
 const srcEq = fs.readFileSync(path.join(API, 'lib/equivalence.js'), 'utf8');
 const srcPiece = fs.readFileSync(path.join(API, 'controllers/piece.controller.js'), 'utf8');
-const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Formations.jsx'), 'utf8');
 
 /* Le test « renommer un slug suit AUSSI dans les équivalences » a été RETIRÉ avec la
    fonctionnalité elle-même (2026-09-09) : le renommage de slug n'existe plus, la cascade non
@@ -60,15 +58,6 @@ test('deux conditions identiques restent refusées, et on dit lesquelles', () =>
        « conditions = ["financeur-professionnel"] » au milieu d'une phrase française. */
     assert.match(srcEq, /if \(Array\.isArray\(a\.conditions\) && a\.conditions\.length\)/,
         'les conditions perso se lisent en clair');
-});
-
-test('le refus s\'affiche là où le clic a eu lieu', () => {
-    assert.match(srcPage, /\{refusOu && \(/, 'le motif doit vivre dans le panneau');
-    /* Le panneau se fermait d'office : un refus faisait donc disparaître la surface où le motif
-       devait s'afficher. On ne ferme que si l'ajout a abouti. */
-    assert.match(srcPage, /const ok = await onAddOu\(jalon\.steps\.map\(\(x\) => x\.slug\), s\.slug\);\s*\n\s*if \(ok\) \{/,
-        'fermeture conditionnee au succes');
-    assert.match(srcPage, /return true;/, 'addOuVariant doit dire si elle a reussi');
 });
 
 test('le nombre de fichiers d\'une pièce est un PLAFOND, et il est appliqué', () => {
