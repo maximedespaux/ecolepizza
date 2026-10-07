@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword, deleteStagiaireAccount, importLearners,
+    getLearners, getDistinctions, getARecontacter, getACloturer, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword, deleteStagiaireAccount, importLearners,
     getReglements, updateReglement,
 } = require('../controllers/learner.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
@@ -17,6 +17,10 @@ router.get('/distinctions', authorizeRoles(...ADMIN_ROLES), getDistinctions);
    personnes à rappeler n'a de sens que pour qui peut les rappeler — et la décocher. Un accès
    délégué sur la rubrique Stagiaires y donne droit, comme partout ailleurs. */
 router.get('/a-recontacter', authorizeRoles(...ADMIN_ROLES), getARecontacter);
+/* AVANT `/:id` aussi. Les identifiants des stagiaires à clôturer (parcours à 100 %, formation pas
+   encore marquée terminée) : lecture par tout le personnel, comme la liste qu'elle décore — ce
+   n'est qu'une pastille, pas un geste de clôture. */
+router.get('/a-cloturer', authorizeRoles(...STAFF_ROLES), getACloturer);
 router.get('/:id', authorizeRoles(...STAFF_ROLES), getLearner);
 /* Le suivi du règlement (acompte / solde) : lecture par tout le personnel comme la fiche ; la
    saisie (montant de l'acompte, coche « payé le… ») par le bureau, qui encaisse. */

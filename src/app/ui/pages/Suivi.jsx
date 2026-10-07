@@ -157,6 +157,14 @@ function GrilleFormation({ t, filtre, onFiltre, entrepriseOuvrable }) {
                     <Link to={lienDossier(d.learner_id, d.enrollment_id)} title="Ouvrir le dossier : gérer et envoyer ses documents">
                       {d.last_name} {d.first_name}
                     </Link>
+                    {/* « À CLÔTURER » : parcours à 100 % (vert, à droite), mais la formation pas encore
+                        marquée terminée sur la fiche. Un rappel de la clore — sous le nom, pour ne pas
+                        élargir la colonne figée. */}
+                    {d.a_cloturer && (
+                      <span className="sg-cloturer" title="Parcours à 100 % : pensez à marquer la formation terminée sur la fiche du stagiaire">
+                        <Icon name="check-circle" size={11} aria-hidden="true" />À clôturer
+                      </span>
+                    )}
                   </th>
                   {t.colonnes.map((c) => {
                     const { etat, doc } = etatCase(d, c.type);

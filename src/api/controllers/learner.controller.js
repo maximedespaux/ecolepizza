@@ -25,6 +25,7 @@ const { lireMontant } = require('../lib/montantSaisi.js');
 const { montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 const { calculerReglement } = require('../lib/reglementDossier.js');
 const { moyenValide, moyensConfigures } = require('../lib/moyensPaiement.js');
+const { dossiersACloturer } = require('../lib/avancement.js');
 
 // Crée un compte de connexion (rôle STAGIAIRE) pour un stagiaire, si l'email
 // n'est pas déjà utilisé. Renvoie { userId, password } ou null.
@@ -411,6 +412,29 @@ const getARecontacter = async (req, res) => {
     } catch (err) {
         if (err.code === 'ER_BAD_FIELD_ERROR') return res.json({ data: [] }); // migration 169 non jouée
         console.error('Erreur lecture des rappels :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * GET /api/stagiaires/a-cloturer — les IDENTIFIANTS des stagiaires qui ont au moins un dossier « à
+ * clôturer » : parcours à 100 %, mais la formation pas encore marquée terminée sur la fiche
+ * (`learner.completed_levels`). Sert la pastille de la liste des stagiaires.
+ *
+ * UNE ROUTE À ELLE, et chargée À PART par la liste : le calcul d'avancement est le même que celui
+ * du Suivi (tous les dossiers de l'organisme), trop lourd pour être fait dans la requête paginée de
+ * la liste — qui ne doit pas attendre après lui. On ne renvoie donc que des identifiants, que
+ * l'écran recoupe avec les lignes déjà affichées. Table/colonne absente = personne à clôturer, pas
+ * une panne (la liste s'affiche sans pastille).
+ */
+const getACloturer = async (req, res) => {
+    try {
+        const rows = await dossiersACloturer(db.promise(), req.user.organization_id);
+        const ids = [...new Set(rows.map((r) => r.learner_id).filter(Boolean))];
+        res.json({ data: ids });
+    } catch (err) {
+        if (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE') return res.json({ data: [] });
+        console.error('Erreur dossiers à clôturer :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -1137,6 +1161,6 @@ const updateReglement = async (req, res) => {
 };
 
 module.exports = {
-    getLearners, getDistinctions, getARecontacter, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
+    getLearners, getDistinctions, getARecontacter, getACloturer, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
     deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL, importLearners, getReglements, updateReglement,
 };

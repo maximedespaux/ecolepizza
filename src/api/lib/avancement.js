@@ -222,4 +222,46 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
     return out;
 }
 
-module.exports = { avancementDossiers };
+/**
+ * « À CLÔTURER » — un dossier dont le PARCOURS est à 100 %, mais dont la FORMATION n'est pas encore
+ * déclarée terminée (demandé le 2026-10-07). Le parcours est CALCULÉ (avancementDossiers), la
+ * formation terminée est DÉCLARÉE par l'école (`learner.completed_levels`, une liste de codes de
+ * formation acquise, ALIMENTÉE avec `program.code` par la fiche) : les deux peuvent diverger, et
+ * c'est précisément ce qu'on veut voir. Règle PURE, partagée par le suivi et la liste des stagiaires,
+ * SANS la condition « session passée » (on signale dès 100 %, choix de l'école). On compare les
+ * codes BRUTS, ceux qu'écrit la fiche — pas la forme traduite pour l'affichage.
+ */
+function estACloturer(percent, programCode, completedCsv) {
+    if (Number(percent) < 100 || !programCode) return false;
+    const faits = String(completedCsv || '').split(',').map((s) => s.trim()).filter(Boolean);
+    return !faits.includes(programCode);
+}
+
+/**
+ * Les dossiers « à clôturer » de l'organisme : [{ enrollment_id, learner_id, program_code }].
+ * Même pool que le suivi (TOUS les dossiers) ; le pourcentage vient d'`avancementDossiers` (sans la
+ * feuille de route : une pastille n'en a pas besoin).
+ */
+async function dossiersACloturer(conn, orgId) {
+    const [enr] = await conn.query(
+        `SELECT e.id AS enrollment_id, e.learner_id, e.financing, e.session_id,
+                e.company_id AS enr_company_id, l.opco, l.completed_levels,
+                p.id AS program_id, p.code AS program_code, p.days AS program_days,
+                p.hygiene AS program_hygiene, p.rs_code AS program_rs
+           FROM enrollment e
+           LEFT JOIN learner l ON l.id = e.learner_id
+           LEFT JOIN training_session s ON s.id = e.session_id
+           LEFT JOIN training_program p ON p.id = s.program_id
+          WHERE e.organization_id = ?`, [orgId]);
+    const av = await avancementDossiers(conn, orgId, enr);
+    const out = [];
+    for (const e of enr) {
+        const a = av.get(e.enrollment_id);
+        if (a && estACloturer(a.percent, e.program_code, e.completed_levels)) {
+            out.push({ enrollment_id: e.enrollment_id, learner_id: e.learner_id, program_code: e.program_code });
+        }
+    }
+    return out;
+}
+
+module.exports = { avancementDossiers, estACloturer, dossiersACloturer };
