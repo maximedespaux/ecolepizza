@@ -417,6 +417,10 @@ export function Groupe({ onStatus }) {
      recherche, et l'id du mode « entreprise » voyage dans `id`, comme pour une session. */
   const [picks, setPicks] = useState([]);
   const [entrepriseLabel, setEntrepriseLabel] = useState("");
+  /* « TOUS LES STAGIAIRES » (2026-10-07) : filtrés par COMPTE (avec / sans espace / les deux) et par
+     ANNÉE (toutes, ou une année d'inscription). Deux réglages à part, parce qu'ils se combinent. */
+  const [compte, setCompte] = useState("tous");
+  const [annee, setAnnee] = useState("");
   /* CEUX QU'ON RETIRE DE L'ENVOI. On part de « tout le monde » : décocher est un geste rare, et
      une liste qu'il faudrait cocher personne par personne ferait manquer quelqu'un. */
   const [ecartes, setEcartes] = useState(() => new Set());
@@ -442,10 +446,11 @@ export function Groupe({ onStatus }) {
     if (type === "semaine") quoi = semaine ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) } : null;
     else if (type === "stagiaires") quoi = picks.length ? { type: "stagiaires", ids: picks.map((p) => p.id) } : null;
     else if (type === "entreprise") quoi = id ? { type: "entreprise", id } : null;
+    else if (type === "tous") quoi = { type: "tous", compte, annee: annee ? Number(annee) : 0 };
     else quoi = id ? { type, id } : null;
     if (!quoi) return;
     destinatairesMail(quoi).then((r) => setCibles(r.data)).catch((e) => onStatus({ type: "error", message: e.message }));
-  }, [type, id, semaine, picks, onStatus]);
+  }, [type, id, semaine, picks, compte, annee, onStatus]);
 
   /* LES SEMAINES QUI ONT DES SESSIONS, tirées des sessions elles-mêmes : proposer les
      cinquante-deux semaines de l'année ferait chercher les trois qui comptent. */
@@ -459,6 +464,12 @@ export function Groupe({ onStatus }) {
     return [...m.entries()]
       .map(([cle, n]) => ({ cle, annee: Number(cle.split("-")[0]), sem: Number(cle.split("-")[1]), n }))
       .sort((a, b) => (b.annee - a.annee) || (b.sem - a.sem));
+  }, [sessions]);
+  /* LES ANNÉES QUI ONT DES SESSIONS, pour le filtre « Tous les stagiaires → une année ». */
+  const annees = useMemo(() => {
+    const s = new Set();
+    for (const x of sessions) if (x.year) s.add(Number(x.year));
+    return [...s].sort((a, b) => b - a);
   }, [sessions]);
 
   const retenus = (cibles?.destinataires || []).filter((d) => !ecartes.has(d.id));
@@ -488,6 +499,7 @@ export function Groupe({ onStatus }) {
         if (type === "semaine") cible = { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) };
         else if (type === "stagiaires") cible = { type: "stagiaires", ids: picks.map((p) => p.id) };
         else if (type === "entreprise") cible = { type: "entreprise", id };
+        else if (type === "tous") cible = { type: "tous", compte, annee: annee ? Number(annee) : 0 };
         else cible = { type, id };
       } else {
         const stagiaires = retenus.filter((d) => (d.kind || "stagiaire") === "stagiaire").map((d) => d.id);
@@ -511,7 +523,7 @@ export function Groupe({ onStatus }) {
   /* COMMENT CE MESSAGE PARTIRA, dit AVANT de l'envoyer — et c'est le message lui-même qui décide.
      La même règle qu'au serveur : un texte qui porte {Prénom} ou {Nom} ne peut pas partir en une
      seule fois, puisqu'un envoi en copie cachée n'a qu'un seul corps pour tout le monde. */
-  const personnalise = /\{(Prénom|Nom)\}/.test(`${objet} ${corps}`);
+  const personnalise = /\{(Civilité|Prénom|Nom)\}/.test(`${objet} ${corps}`);
   const nbDest = retenus.length;
   const enCci = !personnalise && nbDest > 1 && !!cibles?.copie_ecole;
   return (
@@ -539,14 +551,30 @@ export function Groupe({ onStatus }) {
                   l'entreprise et à ses stagiaires — sans passer par une session entière. */}
               <option value="stagiaires">Des stagiaires (choisis un à un)</option>
               <option value="entreprise">Une entreprise (stagiaires + représentant)</option>
+              {/* TOUS LES STAGIAIRES, filtrés par compte et/ou année (2026-10-07). */}
+              <option value="tous">Tous les stagiaires (par compte / année)</option>
             </select>
           </div>
           <div className="field">
             <label htmlFor="mail-cible">
               {type === "session" ? "Session" : type === "semaine" ? "Semaine"
-                : type === "formation" ? "Formation" : type === "entreprise" ? "Entreprise" : "Stagiaires"}
+                : type === "formation" ? "Formation" : type === "entreprise" ? "Entreprise"
+                : type === "tous" ? "Compte et année" : "Stagiaires"}
             </label>
-            {type === "semaine" ? (
+            {type === "tous" ? (
+              /* DEUX FILTRES qui se combinent : le compte (espace stagiaire) et l'année d'inscription. */
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <select className="inp" aria-label="Compte" value={compte} onChange={(e) => setCompte(e.target.value)} style={{ flex: "1 1 150px" }}>
+                  <option value="tous">Avec et sans compte</option>
+                  <option value="avec">Avec un compte</option>
+                  <option value="sans">Sans compte</option>
+                </select>
+                <select className="inp" aria-label="Année" value={annee} onChange={(e) => setAnnee(e.target.value)} style={{ flex: "1 1 120px" }}>
+                  <option value="">Toutes les années</option>
+                  {annees.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            ) : type === "semaine" ? (
               <select id="mail-cible" className="inp" value={semaine} onChange={(e) => setSemaine(e.target.value)}>
                 <option value="">Choisir…</option>
                 {semaines.map((w) => (
@@ -624,7 +652,7 @@ export function Groupe({ onStatus }) {
           </p>
         )}
 
-        <BarreInsertion jetons={["Prénom", "Nom", "Organisme"]} onStatus={onStatus}
+        <BarreInsertion jetons={["Civilité", "Prénom", "Nom", "Organisme"]} onStatus={onStatus}
           corps={corps} onChangeCorps={setCorps} />
         <div className="field">
           <label htmlFor="mail-objet">Objet</label>
@@ -645,7 +673,7 @@ export function Groupe({ onStatus }) {
               <><Icon name="eye-off" size={12} /> Un <b>seul envoi</b>, tous les destinataires en
                 <b> copie cachée</b>&nbsp;: personne ne voit l'adresse des autres.</>
             ) : personnalise ? (
-              <><Icon name="info" size={12} /> Votre message contient <b>{"{Prénom}"}</b> ou <b>{"{Nom}"}</b>&nbsp;:
+              <><Icon name="info" size={12} /> Votre message contient <b>{"{Civilité}"}</b>, <b>{"{Prénom}"}</b> ou <b>{"{Nom}"}</b>&nbsp;:
                 il partira <b>une fois par personne</b>, chacune avec ses propres informations. Retirez ces
                 jetons pour un envoi unique en copie cachée.</>
             ) : (
