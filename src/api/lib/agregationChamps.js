@@ -44,22 +44,41 @@ function premierPresent(valeurs) {
     return valeurs.length ? valeurs[0] : undefined;
 }
 
+/* PREMIER INDICE PAR SESSION DISTINCTE. Sans clés (ou mal alignées), tous les indices — le
+   comportement d'avant. Sert à n'agréger les champs de SESSION/FORMATION qu'une fois par session :
+   sinon, sur un document de groupe (N inscrits, une même session), une durée serait multipliée par N. */
+function indicesParSession(n, sessionKeys) {
+    if (!Array.isArray(sessionKeys) || sessionKeys.length !== n) return Array.from({ length: n }, (_, i) => i);
+    const vus = new Set(); const idx = [];
+    for (let i = 0; i < n; i++) { const k = sessionKeys[i] == null ? `#${i}` : String(sessionKeys[i]); if (!vus.has(k)) { vus.add(k); idx.push(i); } }
+    return idx;
+}
+
 /**
- * `listeFaits` : un objet de faits PAR inscription, DÉJÀ déchiffré, dans l'ordre des formations.
- * `catalog`   : les champs activés (getEnabledFields), avec { key, table, column, type }.
+ * `listeFaits`  : un objet de faits PAR inscription, DÉJÀ déchiffré, dans l'ordre des formations.
+ * `catalog`     : les champs activés (getEnabledFields), avec { key, table, column, type }.
+ * `sessionKeys` : l'identifiant de SESSION de chaque inscription, aligné sur `listeFaits` (facultatif).
  * Renvoie { 'table.column': valeur agrégée } — prête à devenir un jeton field:<table.column>.
  */
-function agregerChamps(listeFaits, catalog) {
+function agregerChamps(listeFaits, catalog, sessionKeys) {
     const out = {};
     const liste = (listeFaits || []).filter(Boolean);
     if (!liste.length) return out;
+    const idxSession = indicesParSession(liste.length, sessionKeys);
     for (const f of catalog || []) {
         const cle = f.key;
         const brut = liste.map((faits) => faits[cle]);
         if (brut.every((v) => v === undefined)) continue; // champ absent des faits : on n'invente rien
         // Les tables qui ne varient pas d'une formation à l'autre : première valeur, comme avant.
         if (!TABLES_AGREGEES.has(f.table)) { out[cle] = premierPresent(brut); continue; }
-        const presents = brut.filter((v) => v != null && String(v).trim() !== '');
+        /* UN CHAMP DE SESSION/FORMATION (training_program / training_session) ne varie pas d'un
+           stagiaire à l'autre : on l'agrège sur les SESSIONS DISTINCTES. Sinon, sur un document de
+           groupe (N inscrits, une même session), une durée (heures, jours) serait multipliée par N,
+           et un texte long répété N fois. Un champ d'INSCRIPTION (prix, acompte), lui, s'additionne
+           bien par stagiaire : on le garde sur TOUTES les inscriptions. */
+        const indices = (f.table === 'enrollment') ? liste.map((_, i) => i) : idxSession;
+        const sousListe = indices.map((i) => liste[i]);
+        const presents = indices.map((i) => brut[i]).filter((v) => v != null && String(v).trim() !== '');
         if (!presents.length) { out[cle] = premierPresent(brut); continue; }
         const colonne = String(f.column || cle.split('.').pop() || '').toLowerCase();
         if (f.type === 'bool') {
@@ -73,7 +92,7 @@ function agregerChamps(listeFaits, catalog) {
         } else if (COLONNE_LONGUE.has(colonne)) {
             const distincts = uniq(presents.map(String));
             out[cle] = distincts.length <= 1 ? distincts[0]
-                : liste.map((faits) => {
+                : sousListe.map((faits) => {
                     const t = faits[cle];
                     if (t == null || String(t).trim() === '') return '';
                     const titre = faits['training_program.title'];
@@ -86,4 +105,4 @@ function agregerChamps(listeFaits, catalog) {
     return out;
 }
 
-module.exports = { joindreFr, agregerChamps, uniq, COLONNE_SOMME, COLONNE_LONGUE, TABLES_AGREGEES };
+module.exports = { joindreFr, agregerChamps, indicesParSession, uniq, COLONNE_SOMME, COLONNE_LONGUE, TABLES_AGREGEES };
