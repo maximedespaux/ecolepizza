@@ -54,18 +54,37 @@ test('TOUS LES STAGIAIRES — filtré par compte et par année (serveur)', () =>
     // Compte : avec un espace (user_id non nul), sans (nul), ou les deux.
     assert.match(src, /l\.user_id IS NOT NULL/, 'avec compte');
     assert.match(src, /l\.user_id IS NULL/, 'sans compte');
-    // Année : restreint aux inscrits d'une session de cette année.
+    // Année(S) : restreint aux inscrits d'une session de L'UNE des années cochées (plusieurs possibles).
     assert.match(src, /JOIN enrollment e ON e\.learner_id = l\.id JOIN training_session s ON s\.id = e\.session_id/);
-    assert.match(src, /where\.push\('s\.year = \?'\)/);
+    assert.match(src, /where\.push\('s\.year IN \(\?\)'\)/, 'plusieurs années : s.year IN (?)');
+    assert.match(src, /b\.annees\) \? b\.annees\.map\(Number\)/, 'une LISTE d\'années');
+    assert.match(src, /if \(!annees\.length && Number\(b\.annee\)\)/, 'le champ unique annee reste accepté (repli)');
     assert.match(src, /cible: `Tous les stagiaires \(/, 'le journal nomme la cible');
 });
 
-test("l'écran « Écrire à un groupe » offre « Tous les stagiaires » avec compte et année", () => {
+test('TOUS — plusieurs années filtrent par s.year IN (serveur, fausse base)', async () => {
+    /* Preuve d'exécution : avec deux années cochées, la requête part avec `s.year IN (?)` et la
+       liste des années. On capture le SQL sur une fausse connexion. */
+    let vueSql = '', vueParams = null;
+    const faux = { query: async (sql, params) => {
+        if (/s\.year IN/.test(sql)) { vueSql = sql; vueParams = params; }
+        return [[]]; // aucun destinataire, peu importe pour la preuve de requête
+    } };
+    const { resoudreCibles } = require('../controllers/mailing.controller.js');
+    await resoudreCibles(faux, 'org1', { type: 'tous', compte: 'avec', annees: [2025, 2026, 2025] });
+    assert.match(vueSql, /s\.year IN \(\?\)/);
+    assert.match(vueSql, /l\.user_id IS NOT NULL/, 'le filtre « avec compte » est combiné');
+    // Dédoublonnées et triées : [2025, 2026].
+    assert.deepStrictEqual(vueParams[vueParams.length - 1], [2025, 2026]);
+});
+
+test("l'écran « Écrire à un groupe » offre « Tous les stagiaires » : compte + plusieurs années", () => {
     const page = sansCommentaires(lire(path.join(UI, 'pages/Mailing.jsx')));
     assert.match(page, /<option value="tous">Tous les stagiaires/);
-    // Les deux filtres existent et partent au serveur.
     assert.match(page, /value=\{compte\} onChange=\{\(e\) => setCompte\(e\.target\.value\)\}/);
-    assert.match(page, /value=\{annee\} onChange=\{\(e\) => setAnnee\(e\.target\.value\)\}/);
-    assert.match(page, /quoi = \{ type: "tous", compte, annee: annee \? Number\(annee\) : 0 \}/);
-    assert.match(page, /cible = \{ type: "tous", compte, annee: annee \? Number\(annee\) : 0 \}/);
+    // Les années sont des pastilles à cocher (ensemble), plus un menu déroulant unique.
+    assert.match(page, /const toggleAnnee = \(y\) =>/);
+    assert.match(page, /onClick=\{\(\) => toggleAnnee\(y\)\}/);
+    assert.match(page, /quoi = \{ type: "tous", compte, annees: anneesSelListe \}/);
+    assert.match(page, /cible = \{ type: "tous", compte, annees: anneesSelListe \}/);
 });
