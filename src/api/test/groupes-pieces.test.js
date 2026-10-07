@@ -73,13 +73,15 @@ test('la boucle d\'écriture lit la version normalisée, pas l\'entrée brute', 
     assert.doesNotMatch(boucle, /steps\[i\]/, 'aucune lecture résiduelle du tableau d\'origine');
 });
 
-test('L\'ÉCRAN n\'offre plus de « OU » sur une pièce (ni sur rien : le « + OU » a été retiré)', () => {
-    /* Le serveur seul ne suffisait pas : l'écran continuait de proposer « ＋ OU » sur une carte
-       « pièce ». Depuis le 2026-10-08, le « ＋ OU » a été retiré du parcours ENTIÈREMENT (les
-       équivalences se gèrent dans Modèles → Équivalences) : il n'y a donc plus aucun « OU » à
-       empiler, sur une pièce comme sur un document. */
+test('L\'ÉCRAN n\'offre JAMAIS de « OU » sur une pièce (le « + OU » exclut les pièces)', () => {
+    /* Le « + OU » est revenu, limité aux équivalences (2026-10-08), mais les PIÈCES en restent
+       exclues : elles n'ont pas d'équivalence, les deux sont toujours exigées. La condition du
+       bouton écarte explicitement doc_type === "PIECE", des DEUX côtés (parcours du dossier ET
+       section entreprise). L'ancien « OU » par pièce (grouperPiece…) reste mort. */
     const PAGE = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/Formations.jsx'), 'utf8');
-    assert.doesNotMatch(PAGE, /＋ OU|pf-or-add|onAddOu/, 'plus aucun « ＋ OU » dans le parcours');
+    assert.match(PAGE, /＋ OU/, 'le « + OU » existe (pour les documents déclarés équivalents)');
+    assert.match(PAGE, /g\.steps\[0\]\.doc_type !== "PIECE"/, 'et il écarte les pièces');
+    assert.doesNotMatch(PAGE, /onAddOu|addOuVariant/, 'pas d\'ancien geste d\'écriture « OU »');
     for (const mort of ['grouperPiece(', 'degrouperPiece(', 'onGrouperPiece', 'jalonPiece']) {
         assert.ok(!PAGE.includes(mort), `${mort} ne doit plus exister`);
     }

@@ -413,8 +413,10 @@ test('Formations : une case « Facultatif » par jalon, envoyée pour toutes les
     assert.match(src, /\{ slug: s\.slug, active: s\.active, applies_when: s\.applies_when \|\| null, facultatif: !!s\.facultatif \}/, 'pièces');
     assert.match(src, /: \{ slug: s\.slug, active: s\.active, facultatif: !!s\.facultatif \}\)\)/, 'et tout le reste');
     // Une case par JALON : le dossier n'en suivra qu'une variante, cocher l'une sans l'autre n'aurait pas de sens.
+    // Depuis le « + OU » dans la section entreprise (2026-10-08), elle GROUPE aussi ses variantes :
+    // la case y porte sur `g.steps` comme dans le parcours du dossier, plus sur une seule étape `[s]`.
     assert.match(src, /<CaseFacultatif etapes=\{g\.steps\} onToggle=\{onToggleFacultatif\} \/>/);
-    assert.match(src, /<CaseFacultatif etapes=\{\[s\]\} onToggle=\{onToggleFacultatif\} \/>/, 'et dans la section entreprise');
+    assert.doesNotMatch(src, /<CaseFacultatif etapes=\{\[s\]\}/, 'la section entreprise groupe désormais ses jalons « OU »');
     assert.match(src, /el\.indeterminate = mixte/, 'un jalon à moitié coché le montre');
 });
 

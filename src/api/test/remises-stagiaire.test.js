@@ -201,10 +201,11 @@ test('l\'éditeur de parcours range les QUATRE natures à part', () => {
     assert.match(F, /const docs = filtre\(pool\.filter\(\(s\) => !isQuiz\(s\) && !isPiece\(s\) && !isRemise\(s\)\)\);/,
         'les remises sortent du groupe « Documents »');
     assert.match(F, /Documents remis au stagiaire\{remises\.length/, 'et ont leur propre groupe');
-    /* Pas de « OU » sur une remise : une étape à part entière. Le « + OU » du parcours a d'ailleurs
-       été RETIRÉ (2026-10-08, les équivalences se gèrent dans Modèles → Équivalences) — plus aucune
-       variante ne s'ajoute ici, remise comprise. */
-    assert.doesNotMatch(F, /onAddOu|pf-or-add/, 'plus d\'ajout de variante « OU » dans le parcours');
+    /* Pas de « OU » sur une remise : une étape à part entière. Le « + OU » du parcours (revenu le
+       2026-10-08, limité aux équivalences) écarte explicitement les remises, comme les pièces —
+       elles n'ont pas d'équivalence. Des DEUX côtés (parcours du dossier ET section entreprise). */
+    const nbExclutRemise = (F.match(/doc_type !== "REMISE"/g) || []).length;
+    assert.ok(nbExclutRemise >= 2, 'le « + OU » écarte les remises, dans les deux parcours');
     // Son badge dit le geste attendu, qui n'est ni signer ni fournir.
     assert.match(F, /if \(s\.doc_type === "REMISE"\) return "à remettre";/);
 });
