@@ -418,9 +418,13 @@ export function Groupe({ onStatus }) {
   const [picks, setPicks] = useState([]);
   const [entrepriseLabel, setEntrepriseLabel] = useState("");
   /* « TOUS LES STAGIAIRES » (2026-10-07) : filtrés par COMPTE (avec / sans espace / les deux) et par
-     ANNÉE (toutes, ou une année d'inscription). Deux réglages à part, parce qu'ils se combinent. */
+     ANNÉE(S) (toutes, ou PLUSIEURS années d'inscription). Deux réglages à part, parce qu'ils se
+     combinent. Les années sont un ENSEMBLE — on en coche autant qu'on veut, aucune = toutes. */
   const [compte, setCompte] = useState("tous");
-  const [annee, setAnnee] = useState("");
+  const [anneesSel, setAnneesSel] = useState(() => new Set());
+  const toggleAnnee = (y) => setAnneesSel((s) => { const n = new Set(s); n.has(y) ? n.delete(y) : n.add(y); return n; });
+  const anneesSelListe = [...anneesSel];
+  const anneesKey = anneesSelListe.slice().sort((a, b) => a - b).join(","); // clé stable pour l'effet
   /* CEUX QU'ON RETIRE DE L'ENVOI. On part de « tout le monde » : décocher est un geste rare, et
      une liste qu'il faudrait cocher personne par personne ferait manquer quelqu'un. */
   const [ecartes, setEcartes] = useState(() => new Set());
@@ -446,11 +450,12 @@ export function Groupe({ onStatus }) {
     if (type === "semaine") quoi = semaine ? { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) } : null;
     else if (type === "stagiaires") quoi = picks.length ? { type: "stagiaires", ids: picks.map((p) => p.id) } : null;
     else if (type === "entreprise") quoi = id ? { type: "entreprise", id } : null;
-    else if (type === "tous") quoi = { type: "tous", compte, annee: annee ? Number(annee) : 0 };
+    else if (type === "tous") quoi = { type: "tous", compte, annees: anneesSelListe };
     else quoi = id ? { type, id } : null;
     if (!quoi) return;
     destinatairesMail(quoi).then((r) => setCibles(r.data)).catch((e) => onStatus({ type: "error", message: e.message }));
-  }, [type, id, semaine, picks, compte, annee, onStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, id, semaine, picks, compte, anneesKey, onStatus]);
 
   /* LES SEMAINES QUI ONT DES SESSIONS, tirées des sessions elles-mêmes : proposer les
      cinquante-deux semaines de l'année ferait chercher les trois qui comptent. */
@@ -499,7 +504,7 @@ export function Groupe({ onStatus }) {
         if (type === "semaine") cible = { type, annee: Number(semaine.split("-")[0]), semaine: Number(semaine.split("-")[1]) };
         else if (type === "stagiaires") cible = { type: "stagiaires", ids: picks.map((p) => p.id) };
         else if (type === "entreprise") cible = { type: "entreprise", id };
-        else if (type === "tous") cible = { type: "tous", compte, annee: annee ? Number(annee) : 0 };
+        else if (type === "tous") cible = { type: "tous", compte, annees: anneesSelListe };
         else cible = { type, id };
       } else {
         const stagiaires = retenus.filter((d) => (d.kind || "stagiaire") === "stagiaire").map((d) => d.id);
@@ -562,17 +567,23 @@ export function Groupe({ onStatus }) {
                 : type === "tous" ? "Compte et année" : "Stagiaires"}
             </label>
             {type === "tous" ? (
-              /* DEUX FILTRES qui se combinent : le compte (espace stagiaire) et l'année d'inscription. */
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <select className="inp" aria-label="Compte" value={compte} onChange={(e) => setCompte(e.target.value)} style={{ flex: "1 1 150px" }}>
+              /* DEUX FILTRES qui se combinent : le compte (espace stagiaire) et la ou les années
+                 d'inscription. Les années sont des pastilles à cocher — plusieurs possibles, aucune = toutes. */
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <select className="inp" aria-label="Compte" value={compte} onChange={(e) => setCompte(e.target.value)}>
                   <option value="tous">Avec et sans compte</option>
                   <option value="avec">Avec un compte</option>
                   <option value="sans">Sans compte</option>
                 </select>
-                <select className="inp" aria-label="Année" value={annee} onChange={(e) => setAnnee(e.target.value)} style={{ flex: "1 1 120px" }}>
-                  <option value="">Toutes les années</option>
-                  {annees.map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <span className="hint" style={{ margin: 0 }}>Années{anneesSel.size === 0 ? " : toutes" : ""}</span>
+                  {annees.map((y) => (
+                    <button type="button" key={y} aria-pressed={anneesSel.has(y)}
+                      className={"btn sm " + (anneesSel.has(y) ? "primary" : "ghost")}
+                      onClick={() => toggleAnnee(y)}>{y}</button>
+                  ))}
+                  {annees.length === 0 && <span className="hint" style={{ margin: 0 }}>aucune session datée</span>}
+                </div>
               </div>
             ) : type === "semaine" ? (
               <select id="mail-cible" className="inp" value={semaine} onChange={(e) => setSemaine(e.target.value)}>

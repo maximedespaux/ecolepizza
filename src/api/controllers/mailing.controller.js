@@ -324,19 +324,22 @@ async function resoudreCibles(conn, orgId, b) {
         const n = liste.length;
         return { liste, cible: `${n} destinataire${n > 1 ? 's' : ''} choisi${n > 1 ? 's' : ''}` };
     }
-    /* TOUS LES STAGIAIRES (demandé le 2026-10-07), filtrés par COMPTE et par ANNÉE :
+    /* TOUS LES STAGIAIRES (demandé le 2026-10-07), filtrés par COMPTE et par ANNÉE(S) :
        · compte = 'avec' (a un espace, `learner.user_id` rempli) / 'sans' (aucun) / 'tous' ;
-       · annee = 0 (toutes) ou une année précise — on restreint alors à ceux INSCRITS à une session
-         de cette année-là (jointure enrollment + session). Le plafond d'envoi (MAX_DESTINATAIRES)
-         s'applique comme à toute cible : au-delà, c'est la newsletter (migration 202) qui étale. */
+       · annees = [] (toutes) ou PLUSIEURS années (2026-10-07) — on restreint alors à ceux INSCRITS à
+         une session de l'une de ces années (jointure enrollment + session, `s.year IN (?)`). Le
+         singulier `annee` reste accepté par repli. Le plafond d'envoi (MAX_DESTINATAIRES) s'applique
+         comme à toute cible : au-delà, c'est la newsletter (migration 202) qui étale. */
     if (type === 'tous') {
         const compte = b.compte === 'avec' ? 'avec' : b.compte === 'sans' ? 'sans' : 'tous';
-        const annee = Number(b.annee) || 0;
+        let annees = Array.isArray(b.annees) ? b.annees.map(Number).filter(Number.isFinite) : [];
+        if (!annees.length && Number(b.annee)) annees = [Number(b.annee)]; // repli : ancien champ unique
+        annees = [...new Set(annees)].sort((a, x) => a - x);
         const where = ['l.organization_id = ?']; const params = [orgId];
         let from = 'learner l';
-        if (annee) {
+        if (annees.length) {
             from += ' JOIN enrollment e ON e.learner_id = l.id JOIN training_session s ON s.id = e.session_id';
-            where.push('s.year = ?'); params.push(annee);
+            where.push('s.year IN (?)'); params.push(annees);
         }
         if (compte === 'avec') where.push('l.user_id IS NOT NULL');
         else if (compte === 'sans') where.push('l.user_id IS NULL');
@@ -344,7 +347,8 @@ async function resoudreCibles(conn, orgId, b) {
             `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email
                FROM ${from} WHERE ${where.join(' AND ')} ORDER BY l.last_name, l.first_name`, params);
         const libCompte = compte === 'avec' ? 'avec compte' : compte === 'sans' ? 'sans compte' : 'avec et sans compte';
-        return { liste: rows, cible: `Tous les stagiaires (${libCompte}${annee ? `, ${annee}` : ''})` };
+        const libAnnees = annees.length ? `, ${annees.join(', ')}` : '';
+        return { liste: rows, cible: `Tous les stagiaires (${libCompte}${libAnnees})` };
     }
     return { liste: [], cible: '' };
 }
