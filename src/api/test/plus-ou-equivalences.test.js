@@ -85,6 +85,31 @@ test('l\'ordre du jalon suit sa PREMIÈRE variante rencontrée', () => {
     assert.deepStrictEqual(slugs(out), ['convention', 'devis-agefice'], 'un jalon, à la place du premier membre');
 });
 
+test('LA VRAIE RÉSOLUTION DE DBM : la variante est choisie par les CONDITIONS PERSO (financeur + OPCO entreprise)', () => {
+    /* Reproduit le cas de production : entreprise DBM, OPCO AGEFICE. Le devis professionnel porte
+       la condition `financeur-professionnel` ; le devis AGEFICE porte `financeur-professionnel` ET
+       `opco-entreprise` (= company.opco eq AGEFICE). Le fait `company.opco` est chargé par
+       loadDossierFactsMap (qui joint `company`), donc disponible même quand l'OPCO du STAGIAIRE est
+       nul — c'est bien l'OPCO de l'ENTREPRISE qui tranche. */
+    const conds = new Map([
+        ['financeur-professionnel', { field: 'enrollment.financing', op: 'eq', value: 'PROFESSIONNEL' }],
+        ['opco-entreprise', { field: 'company.opco', op: 'eq', value: 'AGEFICE' }],
+    ]);
+    const copie = { slug: 'devis-pro', doc_type: 'DEVIS', company_level: true, applies_when: { conditions: ['financeur-professionnel'] } };
+    const agefice = { slug: 'devis-agefice', doc_type: 'DEVIS', company_level: true, applies_when: { conditions: ['financeur-professionnel', 'opco-entreprise'] } };
+    const eq2 = new Map([['devis-pro', { group: 'g' }], ['devis-agefice', { group: 'g' }]]);
+
+    const dbm = resoudreVariantesEntreprise([copie, agefice],
+        { 'enrollment.financing': 'PROFESSIONNEL', 'company.opco': 'AGEFICE' }, conds, eq2);
+    assert.deepStrictEqual(dbm.map((s) => s.slug), ['devis-agefice'],
+        'entreprise AGEFICE + financement professionnel ⇒ UN seul devis, la variante AGEFICE');
+
+    const autre = resoudreVariantesEntreprise([copie, agefice],
+        { 'enrollment.financing': 'PROFESSIONNEL', 'company.opco': 'OPCOMMERCE' }, conds, eq2);
+    assert.deepStrictEqual(autre.map((s) => s.slug), ['devis-pro'],
+        'entreprise NON AGEFICE ⇒ le devis professionnel ordinaire, pas les deux');
+});
+
 /* ─── Serveur : les deux appelants passent bien par le collapse ──────────────────────────────── */
 
 test('le collapse du volet entreprise est appelé des TROIS côtés, avec le contexte du dossier', () => {
