@@ -23,7 +23,7 @@ const { sendMail, appUrl } = require('../lib/mailer.js');
 const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
-const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
+const { formationSteps, enrollmentSteps, resoudreVariantesEntreprise } = require('./formationProgram.controller.js');
 const { companySignsDoc, stepSigners, typeDuModele, groupesParOpco, cleOpco } = require('../lib/documents.js');
 const { loadConditionMap, champsDesConditions, loadDossierFactsMap } = require('../lib/conditions.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
@@ -48,17 +48,23 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
     const catalog = await champsDesConditions(conn, orgId, condById);
     const factsMap = await loadDossierFactsMap(conn, orgId, enr.map((e) => e.id), catalog);
     const enrollments = [];
+    /* UN CONTEXTE REPRÉSENTATIF DU GROUPE, pour résoudre le « OU » d'un document de GROUPE : le devis
+       d'une entreprise est UN document pour toute la société, et sa variante (professionnel / AGEFICE)
+       dépend du financement et de l'OPCO de l'entreprise — identiques d'un stagiaire à l'autre d'un
+       même groupe. On prend donc le contexte du PREMIER dossier (company.opco vient des faits). */
+    let ctxGroupe = { financing: null, rsCode: sess.rs_code, hygiene: !!sess.hygiene, jours: sess.days, agefice: false };
     for (const e of enr) {
         const ctx = {
             financing: e.financing, rsCode: sess.rs_code, hygiene: !!sess.hygiene, jours: sess.days,
             agefice: (e.opco || '').toUpperCase() === 'AGEFICE', ...(factsMap.get(e.id) || {}),
         };
+        if (enrollments.length === 0) ctxGroupe = ctx;
         const resolved = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
         enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null,
             name: `${e.last_name || ''} ${e.first_name || ''}`.trim() || 'Stagiaire',
             slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
     }
-    return { sess, program, enrollments, allSteps: await formationSteps(conn, orgId, program) };
+    return { sess, program, enrollments, eqMap, condById, ctxGroupe, allSteps: await formationSteps(conn, orgId, program) };
 }
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
@@ -814,6 +820,12 @@ const getCompanyParcours = async (req, res) => {
         const docSteps = intakeSet.size
             ? intakeOrder.map((sl) => bySlug.get(sl)).filter((s) => s && s.doc_type !== 'EMARGEMENT')
             : grp.allSteps.filter((s) => s.active && !s.quiz_id && s.doc_type !== 'EMARGEMENT');
+        /* COLLAPSE DES CHOIX « OU » (2026-10-08). Deux documents déclarés équivalents (devis
+           professionnel / devis AGEFICE) ne doivent former qu'UN jalon de groupe — la variante
+           applicable à l'entreprise (son OPCO) —, sinon on proposait DEUX devis à générer sur la
+           fiche entreprise. On ne collapse QUE les groupes d'équivalence ; les étapes isolées de la
+           liste explicite restent intactes (cf. resoudreVariantesEntreprise). */
+        const docStepsOu = resoudreVariantesEntreprise(docSteps, grp.ctxGroupe, grp.condById, grp.eqMap);
 
         /* LES DOSSIERS QU'UNE ÉTAPE « STAGIAIRE » CONCERNE — la règle de `generateGroupDocuments` : une
            étape « entreprise seulement » (inactive au parcours du dossier, présente dans la section) vise
@@ -825,7 +837,7 @@ const getCompanyParcours = async (req, res) => {
             ? grp.enrollments : grp.enrollments.filter((e) => e.slugs.has(s.slug)));
 
         let steps = [];
-        for (const s of docSteps) {
+        for (const s of docStepsOu) {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
             let remise = null; // l'état d'une REMISE pour le groupe (`compteRemiseGroupe`), sinon null
