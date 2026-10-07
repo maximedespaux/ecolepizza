@@ -81,8 +81,9 @@ const MODELES_MAIL = {
     },
 };
 
-/** Les jetons d'un envoi à un groupe : ce que l'école peut écrire dans son message. */
-const JETONS_GROUPE = ['Prénom', 'Nom', 'Organisme'];
+/** Les jetons d'un envoi à un groupe : ce que l'école peut écrire dans son message.
+    {Civilité} (« Monsieur », « Madame »…) en tête, comme on l'écrit : « Bonjour {Civilité} {Nom}, ». */
+const JETONS_GROUPE = ['Civilité', 'Prénom', 'Nom', 'Organisme'];
 
 const CLES_MAIL = Object.keys(MODELES_MAIL);
 const MAX_OBJET = 200;

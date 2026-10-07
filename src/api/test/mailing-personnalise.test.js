@@ -321,7 +321,7 @@ test('on écrit à une SEMAINE, et on peut en retirer quelqu\'un', () => {
     assert.match(src, /WHERE s\.year = \? AND s\.week = \? AND e\.organization_id = \?/);
     /* LE DÉDOUBLONNAGE EST INDISPENSABLE : quelqu'un d'inscrit aux DEUX sessions de la semaine
        ne doit recevoir qu'un message. */
-    assert.match(src, /SELECT DISTINCT l\.id, l\.first_name, l\.last_name, l\.email\s*\n\s*FROM enrollment e\s*\n\s*JOIN training_session s/);
+    assert.match(src, /SELECT DISTINCT l\.id, l\.civility, l\.first_name, l\.last_name, l\.email\s*\n\s*FROM enrollment e\s*\n\s*JOIN training_session s/);
     /* LE JOURNAL DIT LA SEMAINE, pas une liste d'identifiants : « Semaine 38 — 2026 (2 sessions) ». */
     assert.match(src, /cible: `Semaine \$\{sem\} — \$\{annee\} \(\$\{nb\} session/);
 

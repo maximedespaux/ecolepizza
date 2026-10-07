@@ -167,10 +167,10 @@ const apercu = async (req, res) => {
     const lu = lireEnvoiGroupe(b, estRegle ? JETONS_REGLE : JETONS_GROUPE);
     if (lu.erreur) return res.status(422).json({ message: lu.erreur });
     const valeurs = estRegle
-        ? { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza',
+        ? { 'Civilité': 'Madame', 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza',
             Formation: 'Pizzaïolo Niveau I', Session: 'RS7404 du 18/05/2026',
             'Date de début': '18/05/2026', 'Date de fin': '22/05/2026', Document: 'Convention de formation' }
-        : { 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza' };
+        : { 'Civilité': 'Madame', 'Prénom': 'Camille', Nom: 'BERGER', Organisme: orgName || 'École Pizza' };
     /* `pourApercu` : les images entrent dans le HTML en `data:`. L'aperçu vit dans une iframe en
        bac à sable — sans origine ni cookie, elle ne peut rien aller chercher à l'API. */
     const images = await chargerImages(db.promise(), req.user.organization_id, lu.valeurs.corps);
@@ -221,7 +221,7 @@ async function resoudreCibles(conn, orgId, b) {
     const ids = Array.isArray(b.ids) ? b.ids.filter((x) => typeof x === 'string') : [];
     if (type === 'session' && b.id) {
         const [rows] = await conn.query(
-            `SELECT DISTINCT l.id, l.first_name, l.last_name, l.email
+            `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email
                FROM enrollment e JOIN learner l ON l.id = e.learner_id
               WHERE e.session_id = ? AND e.organization_id = ?
               ORDER BY l.last_name, l.first_name`, [b.id, orgId]);
@@ -241,7 +241,7 @@ async function resoudreCibles(conn, orgId, b) {
         const annee = Number(b.annee) || new Date().getFullYear();
         const sem = Number(b.semaine) || 0;
         const [rows] = await conn.query(
-            `SELECT DISTINCT l.id, l.first_name, l.last_name, l.email
+            `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email
                FROM enrollment e
                JOIN training_session s ON s.id = e.session_id
                JOIN learner l ON l.id = e.learner_id
@@ -255,7 +255,7 @@ async function resoudreCibles(conn, orgId, b) {
     }
     if (type === 'formation' && b.id) {
         const [rows] = await conn.query(
-            `SELECT DISTINCT l.id, l.first_name, l.last_name, l.email
+            `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email
                FROM enrollment e
                JOIN training_session s ON s.id = e.session_id
                JOIN learner l ON l.id = e.learner_id
@@ -267,7 +267,7 @@ async function resoudreCibles(conn, orgId, b) {
     }
     if (type === 'stagiaires' && ids.length) {
         const [rows] = await conn.query(
-            `SELECT id, first_name, last_name, email FROM learner
+            `SELECT id, civility, first_name, last_name, email FROM learner
               WHERE organization_id = ? AND id IN (?) ORDER BY last_name, first_name`, [orgId, ids]);
         return { liste: rows.map((l) => ({ ...l, kind: 'stagiaire' })),
             cible: `${rows.length} stagiaire${rows.length > 1 ? 's' : ''} choisi${rows.length > 1 ? 's' : ''}` };
@@ -280,7 +280,7 @@ async function resoudreCibles(conn, orgId, b) {
        le crochet des règles (196). Sans adresse, il n'apparaît pas — on ne coche pas un vide. */
     if (type === 'entreprise' && b.id) {
         const [stagiaires] = await conn.query(
-            `SELECT id, first_name, last_name, email FROM learner
+            `SELECT id, civility, first_name, last_name, email FROM learner
               WHERE company_id = ? AND organization_id = ? ORDER BY last_name, first_name`, [b.id, orgId]);
         const [[c]] = await conn.query(
             `SELECT c.name, c.email AS cemail, u.email AS uemail,
@@ -305,7 +305,7 @@ async function resoudreCibles(conn, orgId, b) {
         const liste = [];
         if (sIds.length) {
             const [rows] = await conn.query(
-                `SELECT id, first_name, last_name, email FROM learner
+                `SELECT id, civility, first_name, last_name, email FROM learner
                   WHERE organization_id = ? AND id IN (?) ORDER BY last_name, first_name`, [orgId, sIds]);
             for (const l of rows) liste.push({ ...l, kind: 'stagiaire' });
         }
@@ -323,6 +323,28 @@ async function resoudreCibles(conn, orgId, b) {
         }
         const n = liste.length;
         return { liste, cible: `${n} destinataire${n > 1 ? 's' : ''} choisi${n > 1 ? 's' : ''}` };
+    }
+    /* TOUS LES STAGIAIRES (demandé le 2026-10-07), filtrés par COMPTE et par ANNÉE :
+       · compte = 'avec' (a un espace, `learner.user_id` rempli) / 'sans' (aucun) / 'tous' ;
+       · annee = 0 (toutes) ou une année précise — on restreint alors à ceux INSCRITS à une session
+         de cette année-là (jointure enrollment + session). Le plafond d'envoi (MAX_DESTINATAIRES)
+         s'applique comme à toute cible : au-delà, c'est la newsletter (migration 202) qui étale. */
+    if (type === 'tous') {
+        const compte = b.compte === 'avec' ? 'avec' : b.compte === 'sans' ? 'sans' : 'tous';
+        const annee = Number(b.annee) || 0;
+        const where = ['l.organization_id = ?']; const params = [orgId];
+        let from = 'learner l';
+        if (annee) {
+            from += ' JOIN enrollment e ON e.learner_id = l.id JOIN training_session s ON s.id = e.session_id';
+            where.push('s.year = ?'); params.push(annee);
+        }
+        if (compte === 'avec') where.push('l.user_id IS NOT NULL');
+        else if (compte === 'sans') where.push('l.user_id IS NULL');
+        const [rows] = await conn.query(
+            `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email
+               FROM ${from} WHERE ${where.join(' AND ')} ORDER BY l.last_name, l.first_name`, params);
+        const libCompte = compte === 'avec' ? 'avec compte' : compte === 'sans' ? 'sans compte' : 'avec et sans compte';
+        return { liste: rows, cible: `Tous les stagiaires (${libCompte}${annee ? `, ${annee}` : ''})` };
     }
     return { liste: [], cible: '' };
 }
@@ -391,7 +413,7 @@ const envoyerGroupe = async (req, res) => {
            personne ne partage d'enveloppe. */
         for (const l of avec) {
             const valeurs = {
-                'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
+                'Civilité': l.civility || '', 'Prénom': l.first_name || '', Nom: l.last_name || '', Organisme: orgName || 'École Pizza',
             };
             const { subject, html } = modeles.messageGroupeEmail({
                 objet: rendre(lu.valeurs.objet, valeurs),
@@ -412,7 +434,7 @@ const envoyerGroupe = async (req, res) => {
            exemplaire, annoncé pour ce qu'il est — sans quoi il se lirait comme un message qui lui
            est adressé. */
         if (adresseEcole && envoyes > 0) {
-            const valeurs = { 'Prénom': avec[0].first_name || '', Nom: avec[0].last_name || '', Organisme: orgName || 'École Pizza' };
+            const valeurs = { 'Civilité': avec[0].civility || '', 'Prénom': avec[0].first_name || '', Nom: avec[0].last_name || '', Organisme: orgName || 'École Pizza' };
             const entete = '<p style="margin:0 0 14px;padding:10px 12px;background:#f7f8fb;border:1px solid #e6e8ee;'
                 + `border-radius:8px;font-size:13px;color:#5e5e68">Copie de l’envoi à ${envoyes} destinataire`
                 + `${envoyes > 1 ? 's' : ''} — ${cible || 'groupe'}. Chacun a reçu ce message avec ses propres informations.</p>`;
