@@ -78,3 +78,16 @@ test('L4 : le limiteur countAll bloque réellement au-delà du plafond', () => {
     assert.strictEqual(tir(), 200, '3e passe (plafond = 3)');
     assert.strictEqual(tir(), 429, '4e bloqué');
 });
+
+// ── L2 — QCM noté à TENTATIVE UNIQUE ──────────────────────────────────────────────────────────
+test('L2 : submitQuiz refuse (409) une RE-soumission d\'un QCM NOTÉ', () => {
+    const src = fs.readFileSync(path.join(API, 'controllers/quiz.controller.js'), 'utf8');
+    const i = src.indexOf('const submitQuiz = async');
+    const bloc = src.slice(i, i + 1800);
+    // Garde posée pour les QCM notés seulement, AVANT l'écriture.
+    assert.match(bloc, /if \(graded\) \{[\s\S]*?SELECT 1 AS x FROM quiz_response WHERE document_id = \? LIMIT 1/);
+    assert.match(bloc, /if \(dejaPasse\) return res\.status\(409\)/);
+    // La garde vient AVANT l'INSERT de la réponse (sinon elle ne servirait à rien).
+    assert.ok(src.indexOf("SELECT 1 AS x FROM quiz_response") < src.indexOf('INSERT INTO quiz_response'),
+        'le refus précède l\'écriture');
+});

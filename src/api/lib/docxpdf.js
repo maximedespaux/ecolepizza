@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { imagesLisiblesParLibreOffice } = require('./imagesPdf.js');
+const { neutraliserRessourcesExternes } = require('./ressourcesExternes.js');
 
 let cachedBin;
 function findSoffice() {
@@ -89,9 +90,13 @@ function docxToPdf(docxBuffer) {
  * @param {boolean} [pdfa] exporter en PDF/A-3 — réservé aux factures, cf. FILTRE_PDFA3
  */
 function htmlToPdf(html, pdfa) {
+    /* ANTI-SSRF (audit 2026-10-07) : on retire tout chargement de ressource EXTERNE (non-data) AVANT
+       de donner le HTML à LibreOffice, qui sinon irait le chercher côté serveur (lib/ressourcesExternes).
+       D'abord la neutralisation, PUIS l'enveloppe WebP (qui ne crée que des data: URL, donc épargnées). */
+    const sur = neutraliserRessourcesExternes(String(html == null ? '' : html));
     /* LibreOffice n'ouvre pas une image WebP en `data:` — il imprime une icône cassée — mais l'ouvre
        dans un SVG : on l'y enveloppe ici, porte unique de tous les PDF (lib/imagesPdf.js). */
-    return convertToPdf(Buffer.from(imagesLisiblesParLibreOffice(html), 'utf8'), 'html', pdfa);
+    return convertToPdf(Buffer.from(imagesLisiblesParLibreOffice(sur), 'utf8'), 'html', pdfa);
 }
 
 module.exports = { docxToPdf, htmlToPdf, convertToPdf, findSoffice };

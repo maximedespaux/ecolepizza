@@ -40,6 +40,8 @@ function repondre(sql, params) {
     if (/SELECT id FROM training_program WHERE organization_id/.test(q)) return [[]];
     if (/^SELECT id FROM quiz_question WHERE quiz_id = \?/.test(q)) return [[]];
     if (/^SELECT (id FROM quiz_option|id FROM quiz_row|image FROM|points FROM)/.test(q)) return [[]];
+    // Garde « tentative unique » d'un QCM noté (audit 2026-10-07) : aucune réponse antérieure ici.
+    if (/FROM quiz_response WHERE document_id/.test(q)) return [[]];
     return [{ affectedRows: 1 }];
 }
 const faux = {
