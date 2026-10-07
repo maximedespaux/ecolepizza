@@ -33,6 +33,13 @@ const uniq = (arr) => [...new Set(arr)];
 /* Colonnes dont les valeurs s'ADDITIONNENT (montants, durées). `year` / `week` n'en sont PAS : on
    ne « somme » pas des numéros de semaine — ils se joignent « et » comme le reste. */
 const COLONNE_SOMME = /(^|_)(price|prix|amount|montant|acompte|hours|heures|days|jours|duree|duration|capital|total)(_|$)/;
+/* Parmi les sommes, les MONTANTS (le tarif, l'acompte…) sont PAR STAGIAIRE : le total d'un groupe
+   est la somme des inscriptions — même quand le tarif est porté par training_program. On les
+   additionne donc sur TOUTES les inscriptions. Le reste des sommes (hours, days, duree…) sont des
+   DURÉES, propriétés de la SESSION : on les agrège une fois par session distincte, sinon elles
+   seraient multipliées par le nombre de stagiaires (défaut relevé le 2026-10-07, puis sa régression
+   sur le prix). */
+const COLONNE_MONTANT = /(^|_)(price|prix|amount|montant|acompte|capital|total)(_|$)/;
 /* Colonnes de TEXTE LONG (une forme, ligne par ligne) : un bloc par formation quand elles diffèrent.
    `audience` (Public) en est volontairement absente : resolveTokens la joint, elle aussi, en liste. */
 const COLONNE_LONGUE = new Set(['objectives', 'prerequisites', 'program_detail', 'objective_general', 'duration_detail']);
@@ -71,16 +78,17 @@ function agregerChamps(listeFaits, catalog, sessionKeys) {
         if (brut.every((v) => v === undefined)) continue; // champ absent des faits : on n'invente rien
         // Les tables qui ne varient pas d'une formation à l'autre : première valeur, comme avant.
         if (!TABLES_AGREGEES.has(f.table)) { out[cle] = premierPresent(brut); continue; }
-        /* UN CHAMP DE SESSION/FORMATION (training_program / training_session) ne varie pas d'un
-           stagiaire à l'autre : on l'agrège sur les SESSIONS DISTINCTES. Sinon, sur un document de
-           groupe (N inscrits, une même session), une durée (heures, jours) serait multipliée par N,
-           et un texte long répété N fois. Un champ d'INSCRIPTION (prix, acompte), lui, s'additionne
-           bien par stagiaire : on le garde sur TOUTES les inscriptions. */
-        const indices = (f.table === 'enrollment') ? liste.map((_, i) => i) : idxSession;
+        const colonne = String(f.column || cle.split('.').pop() || '').toLowerCase();
+        /* SUR QUOI AGRÉGER. Un MONTANT (prix, acompte…) est PAR STAGIAIRE — le total d'un groupe est
+           la somme des inscriptions, même quand le tarif est porté par training_program : on le
+           somme sur TOUTES les inscriptions. Une DURÉE, un intitulé, des dates… sont des propriétés
+           de la SESSION : on les agrège sur les SESSIONS DISTINCTES, sinon une durée serait
+           multipliée par le nombre de stagiaires, et un texte long répété autant de fois. */
+        const parInscription = (f.table === 'enrollment') || COLONNE_MONTANT.test(colonne);
+        const indices = parInscription ? liste.map((_, i) => i) : idxSession;
         const sousListe = indices.map((i) => liste[i]);
         const presents = indices.map((i) => brut[i]).filter((v) => v != null && String(v).trim() !== '');
         if (!presents.length) { out[cle] = premierPresent(brut); continue; }
-        const colonne = String(f.column || cle.split('.').pop() || '').toLowerCase();
         if (f.type === 'bool') {
             const b = presents.map((v) => v === true || v === 1 || v === '1' || v === 'true');
             out[cle] = b.every(Boolean) ? true : b.every((x) => !x) ? false : 'Oui et Non';
@@ -105,4 +113,4 @@ function agregerChamps(listeFaits, catalog, sessionKeys) {
     return out;
 }
 
-module.exports = { joindreFr, agregerChamps, indicesParSession, uniq, COLONNE_SOMME, COLONNE_LONGUE, TABLES_AGREGEES };
+module.exports = { joindreFr, agregerChamps, indicesParSession, uniq, COLONNE_SOMME, COLONNE_MONTANT, COLONNE_LONGUE, TABLES_AGREGEES };

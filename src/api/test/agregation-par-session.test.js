@@ -63,22 +63,28 @@ test('formationsParSession : dédoublonne par __sid, et par signature à défaut
     assert.strictEqual(formationsParSession([a, a, b]).length, 2);
 });
 
-test('CHAMPS DOCUMENTS — agregerChamps : la durée par SESSION, le prix par STAGIAIRE', () => {
+test('CHAMPS DOCUMENTS — agregerChamps : la durée par SESSION, le MONTANT par STAGIAIRE', () => {
     const catalog = [
         { key: 'training_program.hours', table: 'training_program', column: 'hours', type: 'number' },
+        // LE PRIX est porté par training_program (le tarif) mais reste PAR STAGIAIRE : le total de
+        // groupe est la somme des inscriptions. Il ne doit PAS être dédoublonné par session.
+        { key: 'training_program.price', table: 'training_program', column: 'price', type: 'number' },
         { key: 'enrollment.acompte', table: 'enrollment', column: 'acompte', type: 'number' },
     ];
     const faits = [
-        { 'training_program.hours': 35, 'enrollment.acompte': 450 },
-        { 'training_program.hours': 35, 'enrollment.acompte': 450 },
-        { 'training_program.hours': 35, 'enrollment.acompte': 300 },
+        { 'training_program.hours': 35, 'training_program.price': 1780, 'enrollment.acompte': 450 },
+        { 'training_program.hours': 35, 'training_program.price': 1780, 'enrollment.acompte': 450 },
+        { 'training_program.hours': 35, 'training_program.price': 1780, 'enrollment.acompte': 300 },
     ];
     const out = agreger(faits, catalog, ['S1', 'S1', 'S1']);
     assert.strictEqual(out['training_program.hours'], 35, 'une session : 35, pas 105');
+    assert.strictEqual(out['training_program.price'], 5340, 'le PRIX reste par stagiaire : 3 × 1780 = 5340');
     assert.strictEqual(out['enrollment.acompte'], 1200, 'trois stagiaires : 450 + 450 + 300');
 
-    // Deux sessions distinctes : les heures s'additionnent (56).
-    const out2 = agreger([{ 'training_program.hours': 35 }, { 'training_program.hours': 21 }],
-        [catalog[0]], ['S1', 'S2']);
+    // Deux sessions distinctes : les heures s'additionnent (56), le prix aussi (tout par inscription).
+    const out2 = agreger([{ 'training_program.hours': 35, 'training_program.price': 850 },
+        { 'training_program.hours': 21, 'training_program.price': 1180 }],
+        [catalog[0], catalog[1]], ['S1', 'S2']);
     assert.strictEqual(out2['training_program.hours'], 56);
+    assert.strictEqual(out2['training_program.price'], 2030, '850 + 1180');
 });
