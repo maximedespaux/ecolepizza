@@ -112,26 +112,18 @@ test('la pastille dit qu\'il y en a, le texte dit lequel', () => {
     assert.match(srcCss, /\.pastille-alerte\{[^}]*color:var\(--ember2\)/, 'ambre, pas rouge');
 });
 
-test('la composition réelle d\'un choix « OU » est visible, et modifiable', () => {
-    /* LE CŒUR DU MALENTENDU, et il aura fallu lire la base pour le voir. On voulait grouper
-     * « Devis particulier » et « Devis professionnel » — deux conditions bien distinctes — et le
-     * refus parlait d'un troisième document. Ce troisième, « Devis entreprise », est un document
-     * de GROUPE : membre à part entière du choix, mais filtré du flux du parcours, donc affiché
-     * NULLE PART depuis cet écran. Et un quatrième membre, mort après un renommage, s'y cachait
-     * aussi.
-     *
-     * On ne pouvait qu'AJOUTER à un groupe, jamais en retirer : la composition n'était ni visible
-     * ni modifiable. Le panneau la montre désormais — chaque membre situé (document de groupe,
-     * membre disparu) et retirable. */
+test('la composition d\'un choix « OU » se gère dans Modèles → Équivalences, plus dans le parcours', () => {
+    /* 2026-10-08 : l'écriture d'une équivalence (org-wide) a quitté le parcours d'une formation —
+       créer une règle org-wide depuis UNE formation surprenait par sa portée. La composition d'un
+       groupe « OU » (voir ses membres, en ajouter, en retirer) se gère désormais dans l'écran dédié
+       Modèles → Équivalences ; le parcours ne fait plus qu'AFFICHER les jalons groupés. */
     const srcPageNow = fs.readFileSync(path.join(APP, 'ui/pages/Formations.jsx'), 'utf8');
-    assert.match(srcPageNow, /Déjà dans ce choix :/, 'la composition doit etre affichee');
-    assert.match(srcPageNow, /\{m\.company_level && <span className="hint"> · document de groupe<\/span>\}/,
-        'un document de groupe doit etre SITUE : il ne s\'affiche pas dans le flux');
-    assert.match(srcPageNow, /\{m\._absent && <span className="hint"> · n'existe plus<\/span>\}/,
-        'un membre mort doit se voir, c\'est lui qui bloque');
-    assert.match(srcPageNow, /onClick=\{\(\) => onRetirerOu\?\.\(m\.slug\)\}/, 'et chacun doit pouvoir sortir');
-    /* Un « OU » à moins de deux membres n'a plus d'objet : on dissout le groupe plutôt que de
-       laisser un choix qui n'en est pas un. */
-    assert.match(srcPageNow, /if \(restants\.length < 2\) await deleteEquivalence\(eq\.id\);/,
-        'un groupe reduit a un membre doit etre dissous');
+    // Le parcours n'édite plus les membres d'un « OU ».
+    assert.doesNotMatch(srcPageNow, /Déjà dans ce choix :|onRetirerOu|deleteEquivalence|updateEquivalence|createEquivalence/,
+        'plus d\'édition d\'équivalence dans le parcours');
+    // L'édition vit dans Modèles → Équivalences (EquivalencesPanel), avec la liste des membres.
+    const modeles = fs.readFileSync(path.join(APP, 'ui/pages/Modeles.jsx'), 'utf8');
+    assert.match(modeles, /function EquivalencesPanel/, 'l\'écran dédié existe');
+    assert.match(modeles, /updateEquivalence\(editId, \{[^}]*members: picked \}\)/, 'on y modifie les membres');
+    assert.match(modeles, /deleteEquivalence\(/, 'et on y supprime un groupe');
 });

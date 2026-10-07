@@ -73,13 +73,13 @@ test('la boucle d\'écriture lit la version normalisée, pas l\'entrée brute', 
     assert.doesNotMatch(boucle, /steps\[i\]/, 'aucune lecture résiduelle du tableau d\'origine');
 });
 
-test('L\'ÉCRAN n\'offre plus de « OU » sur une pièce', () => {
+test('L\'ÉCRAN n\'offre plus de « OU » sur une pièce (ni sur rien : le « + OU » a été retiré)', () => {
     /* Le serveur seul ne suffisait pas : l'écran continuait de proposer « ＋ OU » sur une carte
-       « pièce », et l'ajout venait s'empiler DANS cette carte au lieu de créer une étape. C'est
-       ce qui rendait impossible de poser « Justificatif » APRÈS « Pièce d'identité » — il n'y
-       avait aucune position où le glisser. */
+       « pièce ». Depuis le 2026-10-08, le « ＋ OU » a été retiré du parcours ENTIÈREMENT (les
+       équivalences se gèrent dans Modèles → Équivalences) : il n'y a donc plus aucun « OU » à
+       empiler, sur une pièce comme sur un document. */
     const PAGE = fs.readFileSync(path.join(__dirname, '..', '..', 'app/ui/pages/Formations.jsx'), 'utf8');
-    assert.match(PAGE, /&& g\.steps\[0\]\.doc_type !== "PIECE" && \(/, 'pas de « ＋ OU » sur une pièce');
+    assert.doesNotMatch(PAGE, /＋ OU|pf-or-add|onAddOu/, 'plus aucun « ＋ OU » dans le parcours');
     for (const mort of ['grouperPiece(', 'degrouperPiece(', 'onGrouperPiece', 'jalonPiece']) {
         assert.ok(!PAGE.includes(mort), `${mort} ne doit plus exister`);
     }

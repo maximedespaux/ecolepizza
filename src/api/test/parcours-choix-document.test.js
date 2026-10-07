@@ -34,21 +34,20 @@ test('plus de menu flottant piégé dans un conteneur qui défile', () => {
         'le menu flottant etait rogne par `.parcours-flow` (overflow:auto) — mesure a 708px');
     // Et le conteneur en question défile toujours : c'est bien lui le piège, pas une régression.
     assert.match(srcCss, /\.parcours-flow\{[^}]*overflow-x:auto/, 'le flux defile horizontalement, par nature');
-    assert.match(srcPage, /\{\(adding \|\| ouFor\) && \(\(\) => \{/, 'un seul panneau, pour les deux gestes');
+    assert.match(srcPage, /\{adding && \(\(\) => \{/, 'le panneau d\'ajout d\'une étape, sous le flux');
 });
 
-test('ouvrir un panneau referme l\'autre', () => {
-    // Deux panneaux ouverts en même temps donneraient deux listes concurrentes sous le flux.
-    /* On vérifie les EFFETS, pas leur ordre exact : la liste s'est allongée d'un
-       `onEffacerRefus()` sans que la règle change. Un contrat trop littéral se casse à chaque
-       ajout et finit par être « corrigé » en le supprimant. */
-    const ou = /onClick=\{\(\) => \{([^}]*)setOuFor\(ouFor === g\.steps\[0\]\.slug/.exec(srcPage);
-    assert.ok(ou && /setAdding\(false\)/.test(ou[1]), '« OU » doit fermer « Ajouter une etape »');
-    const ajout = /onClick=\{\(\) => \{([^}]*)setAdding\(\(a\) => !a\)/.exec(srcPage);
-    assert.ok(ajout && /setOuFor\(null\)/.test(ajout[1]), 'et reciproquement');
-    // Le titre dit lequel des deux est en cours, sinon le panneau est ambigu.
-    assert.match(srcPage, /jalon \? <>Variante « OU » de <b[^>]*>\{jalon\.steps\[0\]\.label\}<\/b><\/> : "Ajouter une étape"/,
-        'le titre doit nommer le geste, et le jalon concerne');
+test('le « + OU » a QUITTÉ le parcours : les équivalences se gèrent dans Modèles → Équivalences', () => {
+    /* 2026-10-08 : une équivalence est org-wide ; la créer/étendre depuis le parcours d'UNE formation
+       surprenait par sa portée. L'écriture a été retirée d'ici (addOuVariant/removeOuVariant, appels
+       create/update/deleteEquivalence) ; le parcours ne fait plus qu'AFFICHER les jalons groupés. */
+    assert.doesNotMatch(srcPage, /＋ OU|pf-or-add|onAddOu|addOuVariant|removeOuVariant|onRetirerOu/,
+        'plus aucun geste d\'écriture « OU » dans le parcours');
+    assert.doesNotMatch(srcPage, /createEquivalence|updateEquivalence|deleteEquivalence/,
+        'le parcours n\'écrit plus les équivalences (lecture seule via getEquivalences)');
+    // L'AFFICHAGE groupé reste : un jalon « OU » empile ses variantes (groupMilestones + eqMap).
+    assert.match(srcPage, /function groupMilestones\(steps, eqMap\)/, 'les jalons se groupent toujours pour l\'affichage');
+    assert.match(srcPage, /\{j > 0 && <div className="pf-or">OU<\/div>\}/, 'les variantes restent empilées « OU »');
 });
 
 test('une liste longue se cherche, une liste courte non', () => {
@@ -68,19 +67,15 @@ test('« aucun résultat » n\'est jamais une impasse', () => {
     assert.match(srcCss, /\.lien-nu\{border:0;background:none/, 'ecrite comme un lien, pas comme une action principale');
 });
 
-test('les variantes « OU » respectent la nature de l\'étape', () => {
-    /* Un jalon ne se voit proposer que des DOCUMENTS en variante — jamais QCM, émargement ni
-       pièce. Pour les pièces, ce n'est plus une question de mécanique différente : le « OU »
-       leur a été RETIRÉ (2026-09-09). Une pièce est une étape exigée, point ; deux pièces sont
-       demandées toutes les deux. Cf. `groupes-pieces.test.js`. */
-    assert.match(srcPage, /!s\.quiz_id && !s\.company_level && s\.doc_type !== "EMARGEMENT"\s*\n\s*&& s\.doc_type !== "PIECE"/,
-        'un jalon exclut QCM / émargement / pièce de ses variantes');
-    // Et la section « Pièces » ne s'affiche plus QU'EN AJOUT LIBRE : elle ne peut plus être
-    // la variante de quoi que ce soit.
-    assert.match(srcPage, /\{!jalon && \(\n\s*<>\n\s*<div className="pf-add-title" style=\{\{ marginTop: 12 \}\}>/,
-        'les pièces ne sont proposées qu\'en ajout libre');
-    /* TROIS natures d'étape dans le sélecteur : ranger une pièce parmi les « Documents »
-       tromperait — ceux-là, l'école les produit ; celle-ci, le stagiaire l'envoie. */
-    assert.match(srcPage, /const isPiece = \(s\) => s\.doc_type === "PIECE";/, 'la troisieme nature');
-    assert.match(srcPage, /Pièces à fournir par le stagiaire\{pieces\.length/, 'son propre groupe, nomme sans ambiguite');
+test('le panneau d\'ajout sépare les natures d\'étape en groupes nommés', () => {
+    /* QUATRE natures, quatre groupes : ranger une pièce parmi les « Documents » tromperait — ceux-là,
+       l'école les produit ; la pièce, le stagiaire l'envoie ; la remise, l'école la transmet et le
+       stagiaire en accuse réception. Chacune a son titre. (Le « OU » des pièces a été retiré le
+       2026-09-09 : une pièce est une étape exigée ; cf. `groupes-pieces.test.js`.) */
+    assert.match(srcPage, /const isPiece = \(s\) => s\.doc_type === "PIECE";/, 'la nature « pièce »');
+    assert.match(srcPage, /const isRemise = \(s\) => s\.doc_type === "REMISE";/, 'la nature « remise »');
+    assert.match(srcPage, /Documents\{docs\.length/, 'groupe Documents');
+    assert.match(srcPage, /Pièces à fournir par le stagiaire\{pieces\.length/, 'groupe Pièces');
+    assert.match(srcPage, /Documents remis au stagiaire\{remises\.length/, 'groupe Remises');
+    assert.match(srcPage, /QCM\{quizzes\.length/, 'groupe QCM');
 });
