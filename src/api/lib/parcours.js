@@ -65,10 +65,16 @@ function etatEtape(r) {
     return r.doc && SENT.includes(r.doc.status) ? 'ENVOYE' : 'A_FAIRE';
 }
 /** L'état d'une étape de GROUPE (parcours entreprise), d'après ses compteurs. */
-function etatDeGroupe({ done, gen = 0, total = 0 }) {
+function etatDeGroupe({ done, recu = 0, total = 0 }) {
     if (done) return 'VALIDE';
     if (!total) return 'SANS_OBJET';   // aucun stagiaire concerné
-    return gen > 0 ? 'ENVOYE' : 'A_FAIRE';
+    /* « ENVOYÉ » VEUT DIRE REMIS AU DESTINATAIRE, PAS « UN DOCUMENT EXISTE ». Un document de GROUPE
+       PRÉPARÉ mais pas encore envoyé est écrit en statut A_FAIRE par createCompanyDocument : il reste
+       donc « à faire », exactement comme côté stagiaire (etatEtape, qui teste SENT, pas la simple
+       présence d'un document). On se base ici sur `recu` — compté sur les statuts d'ENVOI (SENT),
+       ou, pour une remise, sur le dépôt —, jamais sur l'existence (`gen`). Sans ça, la fiche
+       entreprise annonçait « Envoyé » un devis seulement préparé : l'école croyait le client servi. */
+    return recu > 0 ? 'ENVOYE' : 'A_FAIRE';
 }
 /** Pourcentage d'étapes FAITES — toutes, pas seulement celles qui précèdent la première manquante. */
 const pourcentFait = (faites, total) => (total ? Math.round((faites / total) * 100) : 0);
