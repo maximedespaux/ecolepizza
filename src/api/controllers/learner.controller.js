@@ -459,6 +459,12 @@ const getLearner = async (req, res) => {
             // Chiffré depuis la 170 ; `decrypt` rend tel quel un identifiant resté en clair.
             france_travail_id: decrypt(rows[0].france_travail_id),
         };
+        /* LA CLÉ PRIVÉE DE SIGNATURE NE QUITTE JAMAIS LE SERVEUR (audit du 2026-10-07). `sign_cert`
+           est le certificat PKCS#12 du stagiaire (chiffré au repos), lu uniquement côté serveur pour
+           sceller un PDF (document.controller.js). Le `...rows[0]` l'embarquait dans la réponse de la
+           fiche — jamais utile au client. On le retire, comme le font déjà la fiche organisme
+           (organization.controller.js) et le contexte de facture (invoiceCtx, qui saute `sign_cert`). */
+        delete learner.sign_cert;
 
         /* BADGES TRADUITS À LA LECTURE, exactement comme la liste (getLearners) : un stagiaire
            RS7404 porte « RS » en base (le NIVEAU, pas le CODE ; lib/badges.js dit le pourquoi, et
