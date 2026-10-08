@@ -140,8 +140,13 @@ function Ligne({ titre, ligne, champMontant, onDate, onMoyen, onRef, canEdit, en
           {saisissable && (migration194 ? (
             <label className="regl-datelbl" title="Coche « payé le… » : laisser vide tant que ce n'est pas réglé">
               Payé le
-              <input type="date" className="inp regl-date" value={date || ""} disabled={enCours}
-                onChange={(e) => onDate(e.target.value || null)} />
+              {/* NON CONTRÔLÉ + enregistrement au BLUR, comme le champ « référence » plus bas. Un
+                  <input type="date"> émet un onChange à CHAQUE chiffre de l'année (0002, 0020,
+                  0202, 2027) ; enregistrer sur chacun désactivait le champ (enCours) et rechargeait,
+                  si bien que la saisie de l'année « se bloquait à deux chiffres ». La `key` force un
+                  remontage quand la valeur serveur change (après enregistrement), pas pendant la frappe. */}
+              <input key={date || ""} type="date" className="inp regl-date" defaultValue={date || ""} disabled={enCours}
+                onBlur={(e) => { const v = e.target.value || null; if (v !== (date || null)) onDate(v); }} />
             </label>
           ) : (
             <span className="hint regl-nomig">Coche « payé » : migration 194 non jouée</span>

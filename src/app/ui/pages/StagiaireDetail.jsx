@@ -795,13 +795,15 @@ function StagiaireDetail() {
           ci-dessous, et une adresse absente ne s'y remarquait pas (src/api/lib/ficheIncomplete.js). */}
       <FicheIncomplete manquants={l.champs_manquants} onCompleter={() => setEditOpen(true)} />
 
-      {/* TROIS ONGLETS (demandé le 2026-10-05) : Personnel (identité, parcours, règlement, projet),
-          Entreprise (l'aperçu de sa société), Formation (parcours & documents). La fiche était un
-          seul long défilé ; on la range sans rien retirer. */}
+      {/* QUATRE ONGLETS (Personnel le 2026-10-05, Règlement détaché le 2026-10-08) : Personnel
+          (identité, parcours, projet), Entreprise (l'aperçu de sa société), Formation (parcours &
+          documents), Règlement (acompte / solde par dossier — sorti de Personnel, comme sur la fiche
+          entreprise). La fiche était un seul long défilé ; on la range sans rien retirer. */}
       <span className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
         <button className={"seg-btn" + (tab === "personnel" ? " on" : "")} onClick={() => setTab("personnel")}>Personnel</button>
         <button className={"seg-btn" + (tab === "entreprise" ? " on" : "")} onClick={() => setTab("entreprise")}>Entreprise</button>
         <button className={"seg-btn" + (tab === "formation" ? " on" : "")} onClick={() => setTab("formation")}>Formation</button>
+        <button className={"seg-btn" + (tab === "reglement" ? " on" : "")} onClick={() => setTab("reglement")}>Règlement</button>
       </span>
 
       {tab === "personnel" && (
@@ -849,10 +851,6 @@ function StagiaireDetail() {
           <Row label="N° de sécurité sociale" value={l.social_security} />
         </Card>
 
-        {/* LE RÈGLEMENT (carte demandée le 2026-09-30) : acompte et solde, payés ou dus, par dossier
-            — d'après les factures, ou coché à la main. Pleine largeur, sous le financement. */}
-        <CarteReglement learnerId={id} reglements={reglements} moyens={moyensReglement} canEdit={peutEncaisser} onSaved={loadReglements} />
-
         {/* Pleine largeur (cols-2) : le projet aligne beaucoup de cases (activité, équipement,
             avancement), à l'étroit sur une demi-carte. */}
         <Card title={T("target", "Projet")} className="cols-2">
@@ -869,6 +867,13 @@ function StagiaireDetail() {
         </Card>
 
       </div>
+      )}
+
+      {/* LE RÈGLEMENT (carte demandée le 2026-09-30) dans SON onglet (détaché de « Personnel » le
+          2026-10-08) : acompte et solde, payés ou dus, par dossier — d'après les factures, ou coché
+          à la main. Même carte que la fiche entreprise. */}
+      {tab === "reglement" && (
+        <CarteReglement learnerId={id} reglements={reglements} moyens={moyensReglement} canEdit={peutEncaisser} onSaved={loadReglements} />
       )}
 
       {tab === "entreprise" && (c ? (
