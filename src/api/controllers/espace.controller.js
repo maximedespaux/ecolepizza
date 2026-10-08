@@ -874,8 +874,12 @@ const getMyFormation = async (req, res) => {
                        session (sans company_id), oui. Un document de GROUPE de l'entreprise
                        (company_id renseigné), NON : il en voit le statut, pas le contenu — même
                        règle que lecteurDuDocument, pour que le bouton « Consulter » ne mène pas
-                       à un « Accès refusé ». */
-                    (gd.learner_id = ? OR gd.company_id IS NULL) AS consultable
+                       à un « Accès refusé ».
+                       Égalité SÛRE vis-à-vis de NULL (opérateur IS NOT DISTINCT FROM, écrit avec
+                       la flèche) et NON l'égalité simple : un document de groupe a learner_id NULL,
+                       et comparer NULL par égalité simple donne NULL (pas 0) ; l'expression entière
+                       serait alors NULL, que l'écran ne reconnaît pas comme « non consultable ». */
+                    (gd.company_id IS NULL OR gd.learner_id <=> ?) AS consultable
              FROM generated_document gd
              JOIN document_formation df ON df.document_id = gd.id
              WHERE df.enrollment_id = ? AND gd.status IN ('ENVOYE','CONSULTE','SIGNE')

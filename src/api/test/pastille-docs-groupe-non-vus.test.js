@@ -43,8 +43,12 @@ test('pendingDocsCount ne compte que les documents propres du stagiaire (pas ceu
 test('getMyFormation marque chaque document « consultable » (groupe de l\'entreprise = non)', () => {
     const z = ESPACE.slice(ESPACE.indexOf('const getMyFormation = async'), ESPACE.indexOf('const getMyFormation = async') + 4500);
     // Consultable = son document nominatif OU un document sans company_id (session) ; un document
-    // de GROUPE (company_id renseigné) ne l'est pas.
-    assert.match(z, /\(gd\.learner_id = \? OR gd\.company_id IS NULL\) AS consultable/);
+    // de GROUPE (company_id renseigné) ne l'est pas. Égalité SÛRE vis-à-vis de NULL (`<=>`) : un
+    // document de groupe a learner_id NULL, et `learner_id = ?` vaudrait NULL (pas 0) — consultable
+    // serait NULL, que l'écran ne reconnaît pas comme « non consultable » (défaut relevé en prod).
+    assert.match(z, /\(gd\.company_id IS NULL OR gd\.learner_id <=> \?\) AS consultable/);
+    assert.doesNotMatch(z, /gd\.learner_id = \? OR gd\.company_id IS NULL\) AS consultable/,
+        'surtout pas `= ?` : renverrait NULL pour un document de groupe');
 });
 
 test('le stagiaire ne CONSULTE pas un document de groupe, et « vu » n\'est plus tracé', () => {
@@ -61,8 +65,8 @@ test('le stagiaire ne CONSULTE pas un document de groupe, et « vu » n\'est plu
 test('StudentFormationDetail : un document de groupe n\'a pas de bouton « Consulter »', () => {
     const p = lire(UI, 'pages/StudentFormationDetail.jsx');
     // Une branche dédiée aux documents non consultables, AVANT la branche à bouton.
-    assert.match(p, /e\.d\.consultable === 0 \|\| e\.d\.consultable === false \?/,
-        'un document non consultable est traité à part');
+    assert.match(p, /e\.d\.consultable === 0 \|\| e\.d\.consultable === false \|\| e\.d\.consultable === null \?/,
+        'un document non consultable (0 / false / null) est traité à part');
     assert.match(p, /Document de votre entreprise/, 'il porte une mention claire, pas un bouton');
     // Le bouton « Consulter » ouvre toujours les AUTRES documents (branche consultable).
     assert.match(p, /onClick=\{\(\) => setViewId\(e\.d\.id\)\}/);
