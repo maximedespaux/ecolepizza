@@ -202,14 +202,20 @@ const ESPACE = sansCommentaires(
     fs.readFileSync(path.join(API, '..', 'app', 'ui/pages/IntervenantEspace.jsx'), 'utf8'));
 
 test('LE SIGNATAIRE ATTRIBUÉ PEUT OUVRIR CE QU\'ON LUI DEMANDE DE SIGNER', () => {
-    const zone = DOC_CTRL.slice(DOC_CTRL.indexOf("const STAFF = ['SUPER_ADMIN'"));
+    /* La règle de LECTURE est partagée (lecteurDuDocument) : personnel, stagiaire propriétaire,
+       document de GROUPE rattaché à son dossier, puis — porte la plus étroite, en DERNIER — le
+       signataire explicitement attribué, pour CE document et CE compte. Un document de session
+       (migration 157) n'a pas de stagiaire : sans cette porte, l'intervenant à qui on le fait
+       signer ne pourrait pas l'ouvrir. */
+    const zone = DOC_CTRL.slice(DOC_CTRL.indexOf('async function lecteurDuDocument'), DOC_CTRL.indexOf('const getDocument = async'));
     assert.match(zone, /SELECT id FROM document_signature WHERE document_id = \? AND user_id = \?/);
-    assert.match(zone, /\[sdoc\.id, req\.user\.id\]/,
-        'la garde porte sur CE document et CE compte : ni le document d\'un collègue, ni un autre');
-    /* ET ELLE VIENT APRÈS LES DEUX AUTRES : on n'élargit pas, on ajoute une troisième porte
-       étroite. Le personnel et le stagiaire propriétaire passent toujours par les leurs. */
+    assert.match(zone, /\[doc\.id, user\.id\]/,
+        'la porte porte sur CE document et CE compte : ni le document d\'un collègue, ni un autre');
+    // Elle vient APRÈS le stagiaire propriétaire : on ajoute une porte étroite, on n'élargit pas les autres.
     assert.ok(zone.indexOf('FROM learner WHERE id = ? AND user_id = ?')
         < zone.indexOf('FROM document_signature WHERE document_id = ?'));
+    // Le téléchargement du PDF emploie bien cette règle partagée (plus de garde recopiée sur place).
+    assert.match(DOC_CTRL, /const allowed = await lecteurDuDocument\(conn, req\.user, sdoc\);/);
 });
 
 test('LES DEUX ÉCRANS EMPLOIENT LE MÊME COMPOSANT', () => {
