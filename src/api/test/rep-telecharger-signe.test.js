@@ -32,7 +32,9 @@ test('le représentant télécharge le PDF SIGNÉ, gardé par les données de so
 
 test('l\'écran du représentant n\'offre « Télécharger » qu\'une fois le document signé', () => {
     const ui = lireUi('pages/RepresentantEspace.jsx');
-    assert.match(ui, /\{d\.status === "SIGNE" && <button/);
+    // `signed` = `d.status === "SIGNE"` (const en tête de map) : le bouton « Télécharger » en dépend.
+    assert.match(ui, /const signed = d\.status === "SIGNE";/);
+    assert.match(ui, /\{signed && <button/);
     assert.match(ui, /window\.open\(repDocumentPdfUrl\(d\.id\), "_blank", "noopener"\)/);
     /* URL directe, authentifiée par le cookie (comme les autres fichiers servis). */
     assert.match(lireUi('api/apiClient.js'), /repDocumentPdfUrl\(id\) \{ return `\$\{API_BASE_URL\}\/rep\/documents\/\$\{id\}\/pdf`; \}/);

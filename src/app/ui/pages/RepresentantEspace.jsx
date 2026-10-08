@@ -15,8 +15,25 @@ import { manquePourRequis } from "../lib/remiseNb.js";
 
 const DOC_STATUS = { A_FAIRE: ["À signer", "n"], ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé", "g"] };
 
+/* Les pastilles d'en-tête — tiennent DANS le hero (page autonome) ET hors de lui (onglet
+   « Entreprise » de /mon-espace), d'où `.rep-pill` plutôt que `.pill` (qui n'existe que sous
+   `.hero`). « Tout est à jour » seulement une fois les données chargées, sinon ça clignote. */
+function Pastilles({ toSign, aConfirmer, ready }) {
+  if (toSign > 0 || aConfirmer > 0) {
+    return (
+      <div className="rep-pills">
+        {toSign > 0 && <span className="rep-pill"><Icon name="pencil" size={13} /> {toSign} à signer</span>}
+        {aConfirmer > 0 && <span className="rep-pill"><Icon name="check" size={13} /> {aConfirmer} à confirmer</span>}
+      </div>
+    );
+  }
+  if (!ready) return null;
+  return <div className="rep-pills"><span className="rep-pill ok"><Icon name="check" size={13} /> Tout est à jour</span></div>;
+}
+
 /* Sert la page autonome ET l'onglet « Entreprise » de /mon-espace (EMBEDDED) : dans l'onglet, pas
-   de grand bandeau « Bonjour » (MonEspace le porte déjà), juste la phrase et les pastilles. */
+   de grand bandeau « Bonjour » (MonEspace le porte déjà), juste la phrase, l'entreprise et les
+   pastilles. */
 function RepresentantEspace({ embedded = false } = {}) {
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
@@ -94,32 +111,24 @@ function RepresentantEspace({ embedded = false } = {}) {
   const docs = data?.documents || [];
   const toSign = docs.filter((d) => d.status !== "SIGNE").length;
   const aConfirmer = remises.filter((r) => r.statut === "REMISE").length;
+  const phrase = `${remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise.`;
 
   return (
     <>
       {embedded ? (
-        <div style={{ marginBottom: 10 }}>
-          <p className="hint" style={{ margin: "0 0 8px" }}>
-            {remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.
-          </p>
-          {(toSign > 0 || aConfirmer > 0) && (
-            <div className="badge-row">
-              {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
-              {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
-            </div>
-          )}
+        <div style={{ marginBottom: 14 }}>
+          <p className="hint" style={{ margin: 0 }}>{phrase}</p>
+          {data?.company && <div className="rep-co"><Icon name="building" size={15} /> {data.company}</div>}
+          <Pastilles toSign={toSign} aConfirmer={aConfirmer} ready={!!data} />
         </div>
       ) : (
         <div className="hero">
+          <Icon name="building" size={150} className="hero-motif" />
           <div className="eyebrow">Espace entreprise</div>
           <h1>Bonjour {user?.first_name}</h1>
-          <p>{remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
-          {(toSign > 0 || aConfirmer > 0) && (
-            <div className="badge-row">
-              {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
-              {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
-            </div>
-          )}
+          {data?.company && <div className="rep-co"><Icon name="building" size={15} /> {data.company}</div>}
+          <p>{phrase}</p>
+          <Pastilles toSign={toSign} aConfirmer={aConfirmer} ready={!!data} />
         </div>
       )}
 
@@ -130,33 +139,43 @@ function RepresentantEspace({ embedded = false } = {}) {
           Importez le cachet / la signature de l'entreprise (ou dessinez-le) : vous pourrez ensuite signer vos documents en un clic.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ width: 200, height: 64, border: "1px dashed var(--border-soft)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", overflow: "hidden" }}>
-            {stamp ? <img src={stamp} alt="Cachet" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <span className="hint">Aucun</span>}
+          <div style={{ width: 208, height: 70, border: `1px ${stamp ? "solid" : "dashed"} var(--border-soft)`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", overflow: "hidden" }}>
+            {stamp ? <img src={stamp} alt="Cachet" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <span className="hint" style={{ margin: 0 }}>Aucun cachet</span>}
           </div>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onUpload} />
-          <button className="btn sm ghost" onClick={() => fileRef.current?.click()}>Importer une image</button>
-          <button className="btn sm ghost" onClick={() => setSettingStamp(true)}>Dessiner</button>
+          <button className="btn sm ghost" onClick={() => fileRef.current?.click()}><Icon name="download" size={15} /> Importer une image</button>
+          <button className="btn sm ghost" onClick={() => setSettingStamp(true)}><Icon name="pencil" size={15} /> Dessiner</button>
           {stamp && <button className="btn sm ghost danger" onClick={() => saveStamp(null)}>Supprimer</button>}
         </div>
+        {stamp && (
+          <p className="hint" style={{ margin: "12px 0 0", color: "var(--green)", display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="check" size={14} /> Prêt : vos documents se signent en un clic.
+          </p>
+        )}
       </Card>
 
       <Card title="Documents à signer">
         {!data ? null : docs.length === 0 ? (
           <EmptyState icon="file-text">Aucun document à signer pour le moment.</EmptyState>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {docs.map((d) => {
               const [lbl, tone] = DOC_STATUS[d.status] || [d.status, "n"];
+              const signed = d.status === "SIGNE";
               return (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                  <span style={{ flex: 1, minWidth: 0 }}><b>{d.title}</b></span>
+                <div key={d.id} className="stu-row">
+                  <span className={"rep-ico" + (signed ? " ok" : "")}><Icon name={signed ? "check" : "file-text"} size={18} /></span>
+                  <span className="stu-row-t">
+                    <b>{d.title}</b>
+                    {signed && d.signed_at && <span className="rep-sub">Signé le {dateHeure(d.signed_at)}{d.signer_name ? ` · ${d.signer_name}` : ""}</span>}
+                  </span>
                   <Badge tone={tone}>{lbl}</Badge>
                   <button className="btn sm ghost" onClick={() => openPreview(d)}><Icon name="eye" size={15} /> Aperçu</button>
                   {/* UNE FOIS SIGNÉ, l'entreprise récupère SON exemplaire (PDF signé, scellé + contre-
                       signé par l'organisme) — le document qui fait foi. */}
-                  {d.status === "SIGNE" && <button className="btn sm ghost" onClick={() => window.open(repDocumentPdfUrl(d.id), "_blank", "noopener")} title="Télécharger le PDF signé"><Icon name="download" size={15} /> Télécharger</button>}
-                  {d.status !== "SIGNE" && stamp && <button className="btn sm primary" onClick={() => signWithStamp(d)} title="Signer avec le cachet enregistré"><Icon name="check" size={15} /> Signer</button>}
-                  {d.status !== "SIGNE" && <button className="btn sm ghost" onClick={() => setSigning(d)}><Icon name="pencil" size={15} /> {stamp ? "Dessiner" : "Signer"}</button>}
+                  {signed && <button className="btn sm ghost" onClick={() => window.open(repDocumentPdfUrl(d.id), "_blank", "noopener")} title="Télécharger le PDF signé"><Icon name="download" size={15} /> Télécharger</button>}
+                  {!signed && stamp && <button className="btn sm primary" onClick={() => signWithStamp(d)} title="Signer avec le cachet enregistré"><Icon name="check" size={15} /> Signer</button>}
+                  {!signed && <button className="btn sm ghost" onClick={() => setSigning(d)}><Icon name="pencil" size={15} /> {stamp ? "Dessiner" : "Signer"}</button>}
                 </div>
               );
             })}
@@ -170,17 +189,21 @@ function RepresentantEspace({ embedded = false } = {}) {
           entreprise dont l'école ne remet aucun document. */}
       {remises.length > 0 && (
         <Card title="Documents remis à votre entreprise">
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {remises.map((r) => (
-              <div key={r.remise_id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border-soft)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ flex: "1 1 200px", minWidth: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {remises.map((r) => {
+              const recue = r.statut === "RECUE";
+              const nom = `${r.first_name || ""} ${r.last_name || ""}`.trim();
+              const manque = manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: (r.fichiers || []).length });
+              return (
+                <div key={r.remise_id} className="stu-row" style={{ alignItems: "flex-start" }}>
+                  <span className={"rep-ico" + (recue ? " ok" : "")}><Icon name={recue ? "check" : "package"} size={18} /></span>
+                  <span className="stu-row-t">
                     <b>{r.label}</b>
-                    <span className="hint" style={{ display: "block", margin: 0 }}>
-                      {[`${r.first_name || ""} ${r.last_name || ""}`.trim(), r.formation].filter(Boolean).join(" · ")}
-                    </span>
+                    {(nom || r.formation) && <span className="rep-sub">{[nom, r.formation].filter(Boolean).join(" · ")}</span>}
+                    {r.consigne && <span className="rep-sub">{r.consigne}</span>}
+                    {r.accuse_le && <span className="rep-sub" style={{ color: "var(--green)" }}>Réception confirmée le {dateHeure(r.accuse_le)}.</span>}
                   </span>
-                  <Badge tone={r.statut === "RECUE" ? "g" : "b"}>{r.statut === "RECUE" ? "Reçu" : "À confirmer"}</Badge>
+                  <Badge tone={recue ? "g" : "b"}>{recue ? "Reçu" : "À confirmer"}</Badge>
                   {(r.fichiers || []).map((f, k) => (
                     <button key={f.id} className="btn sm ghost"
                       aria-label={`Voir ${f.nom || `le document ${k + 1}`}, ${r.label}`}
@@ -188,23 +211,17 @@ function RepresentantEspace({ embedded = false } = {}) {
                       <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
                     </button>
                   ))}
-                  {r.statut === "REMISE" && (manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: (r.fichiers || []).length }) > 0 ? (
+                  {r.statut === "REMISE" && (manque > 0 ? (
                     /* Type « requis » (migration 203) : on ne confirme qu'une fois tous les documents là. */
-                    <span className="hint">En attente de {manquePourRequis({ nb_mode: r.nb_mode, nb_documents: r.nb_documents, nb_fichiers: (r.fichiers || []).length })} document(s) de plus.</span>
+                    <span className="hint">En attente de {manque} document(s) de plus.</span>
                   ) : (
                     <button className="btn sm primary" onClick={() => confirmerRemise(r)}>
                       <Icon name="check" size={15} /> J'ai bien reçu
                     </button>
                   ))}
                 </div>
-                {r.consigne && <p className="hint" style={{ margin: "4px 0 0" }}>{r.consigne}</p>}
-                {r.accuse_le && (
-                  <p className="hint" style={{ margin: "4px 0 0", color: "var(--green, #2e9e5b)" }}>
-                    Réception confirmée le {dateHeure(r.accuse_le)}.
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}

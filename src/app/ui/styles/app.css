@@ -803,6 +803,21 @@ tbody tr:last-child td{border-bottom:none}
 .hero .badge-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .hero .pill{border-radius:99px;background:rgba(255,255,255,.15);padding:4px 12px;font-size:12px;font-weight:600}
 
+/* ---- Espace entreprise (représentant) : pastilles qui tiennent HORS d'un hero (l'onglet
+   « Entreprise » de /mon-espace n'en a pas), chip d'icône en tête de ligne, nom de l'entreprise,
+   sous-ligne discrète. ---- */
+.rep-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.rep-pill{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 12px;font-size:12.5px;font-weight:700;
+  background:color-mix(in srgb,var(--ember1) 12%,var(--surface));color:var(--ember1);border:1px solid color-mix(in srgb,var(--ember1) 22%,transparent)}
+.rep-pill.ok{background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green);border-color:color-mix(in srgb,var(--green) 26%,transparent)}
+.hero .rep-pill{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.28);color:#fff}
+.rep-co{display:inline-flex;align-items:center;gap:7px;margin-top:6px;font-weight:700;font-size:15px;color:var(--text)}
+.hero .rep-co{color:rgba(255,255,255,.92)}
+.rep-ico{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--blue) 12%,var(--surface));color:var(--blue)}
+.rep-ico.ok{background:color-mix(in srgb,var(--green) 14%,var(--surface));color:var(--green)}
+.rep-sub{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+
 /* Progress bar ------------------------------------------------------- */
 .progress{height:9px;border-radius:99px;background:var(--surface3);overflow:hidden}
 .progress span{display:block;height:100%;border-radius:99px;background:var(--grad-ember);transition:width .5s var(--ease)}
