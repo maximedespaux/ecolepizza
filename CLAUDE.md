@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (317 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-08** : **2718 tests — 2711 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-08** : **2724 tests — 2717 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,26 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 204 et la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**204 est À JOUER** (`204_document_vu.sql`, « reçus mais jamais vus » — demandé le 2026-10-08). Une table
+`document_vu` (document_id, user_id, vu_le ; clé primaire (document_id, user_id) ; FK ON DELETE CASCADE vers
+`generated_document` ET `user`). Un stagiaire inscrit PAR UNE ENTREPRISE reçoit des documents de GROUPE (devis,
+convention, CGV) qu'il peut consulter mais pas signer (cf. PR « lecteurDuDocument », 2026-10-08) : la pastille
+« Mes documents » de son espace ne les comptait JAMAIS (`pendingDocsCount` ne regardait que `d.learner_id = moi`,
+or un document de groupe n'a pas de `learner_id`). Elle compte désormais, EN PLUS de ses propres documents à faire,
+les documents de groupe reçus (`scope='COMPANY'`, statut ENVOYE/CONSULTE) rattachés à son dossier et **jamais
+ouverts par CE compte** — et RETOMBE dès qu'il les ouvre. Le statut d'un document de groupe étant PARTAGÉ, c'est
+l'OUVERTURE qu'on trace, par compte : marquée à l'ouverture (`getDocument` → INSERT IGNORE, hors personnel,
+tolérant), lue au comptage (`groupeNonVusCount`, à part et tolérant), signalée à l'écran (`pingAcces` depuis
+DocumentViewModal, comme après une signature). Sans la migration, rien ne casse : la pastille garde son décompte
+d'avant (documents de groupe non comptés) et l'enregistrement d'une ouverture est avalé (table absente). **Elle se
+vérifie par l'API, sans SQL** : en tant que stagiaire d'entreprise avec un document de groupe non ouvert,
+`GET /api/mon-espace/access` rend `pending_docs` incluant ce document ; l'ouvrir (`GET /api/documents/:id`) puis
+redemander l'accès le fait retomber. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='document_vu';`
+⚠️ Son revert supprime la table : la pastille cesse de compter les documents de groupe (comportement d'avant) ;
+aucune preuve ni aucun document n'est touché. Tests : `pastille-docs-groupe-non-vus.test.js`.
 
 **203 est À JOUER** (`203_remise_nb_documents.sql`, le NOMBRE DE DOCUMENTS par type de remise — demandé le
 2026-10-06). Deux colonnes sur `remise_type` : `nb_documents` (smallint, 0 = pas de limite) et `nb_mode`

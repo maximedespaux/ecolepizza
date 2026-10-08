@@ -1161,6 +1161,15 @@ const getDocument = async (req, res) => {
         // rattachés à son dossier (cf. lecteurDuDocument).
         if (!(await lecteurDuDocument(conn, req.user, doc))) return res.status(403).json({ message: 'Accès refusé' });
 
+        /* OUVERT PAR CE COMPTE : on le trace (migration 204) pour la pastille « reçus mais jamais
+           vus » de l'espace stagiaire — un document de groupe qu'il ouvre doit en sortir. Réservé
+           aux non-membres du personnel (un aperçu du bureau n'est pas une lecture du stagiaire), et
+           TOLÉRANT : table absente ⇒ on n'enregistre rien, la pastille ne compte pas ces documents. */
+        if (!['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'].includes(req.user.role)) {
+            try { await conn.query('INSERT IGNORE INTO document_vu (document_id, user_id) VALUES (?, ?)', [doc.id, req.user.id]); }
+            catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+        }
+
         // Le corps vient du MODÈLE, et de lui seul. Il existait ici un rendu de secours codé
         // en dur (lib/render.js) qui fabriquait un document plausible pour n'importe quel type
         // quand aucun modèle n'était défini. Résultat observé : une convention de formation

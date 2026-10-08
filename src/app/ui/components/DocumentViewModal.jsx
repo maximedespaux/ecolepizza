@@ -32,7 +32,10 @@ function DocumentViewModal({ id, canSign = false, defaultName = "", onClose, onC
 
   /* RELIRE LE DOCUMENT après une réponse : la question répondue sort de la liste, et le nouvel
      objet relance l'aperçu (cf. l'effet suivant), qui montre alors la case cochée. */
-  const recharger = () => getDocument(id).then((r) => setDoc(r.data)).catch((e) => setStatus({ type: "error", message: e.message }));
+  /* OUVRIR LE DOCUMENT LE MARQUE « VU » CÔTÉ SERVEUR (getDocument). On prévient alors la coquille
+     du stagiaire (StudentLayout, via ACCES_EVENT) pour que la pastille « reçus mais jamais vus »
+     retombe AUSSITÔT, sans attendre une navigation — comme après une signature. */
+  const recharger = () => getDocument(id).then((r) => { setDoc(r.data); pingAcces(); }).catch((e) => setStatus({ type: "error", message: e.message }));
   useEffect(() => {
     recharger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
