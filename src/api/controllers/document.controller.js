@@ -1120,12 +1120,16 @@ const checkDocumentConditions = async (req, res) => {
  */
 /* QUI PEUT LIRE UN DOCUMENT (LECTURE SEULE). Le personnel, oui. Un stagiaire, seulement :
    - le document qui lui est NOMMÉMENT rattaché (`doc.learner_id`) ;
-   - un document (de GROUPE, sans `learner_id`) RATTACHÉ À SON DOSSIER par `document_formation` —
-     c'est ainsi qu'un stagiaire inscrit par une entreprise ouvre EN LECTURE le devis / la
-     convention / les CGV de sa formation (décidé avec l'école le 2026-10-08). Il ne les SIGNE pas
-     pour autant : `signDocument` garde son propre contrôle, inchangé ;
+   - un document rattaché à son dossier par `document_formation` MAIS qui N'EST PAS un document
+     d'ENTREPRISE (`gd.company_id IS NULL`) — typiquement un document de SESSION. Un document de
+     GROUPE (devis / convention / CGV de l'entreprise, `company_id` renseigné) regarde l'entreprise,
+     pas lui : il en voit le STATUT dans son parcours (fait ou non), mais pas le CONTENU (tranché
+     avec l'école le 2026-10-08, en retour du 2026-10-08 matin qui l'ouvrait en lecture). Le
+     représentant de l'entreprise, lui, le lit et le signe par un autre chemin (`/api/rep/...`) ;
    - un document dont une CASE de signature lui est attribuée (`document_signature`) — un
      intervenant à qui l'on fait signer un document de session (migration 157), sans `learner_id`.
+   Le filtre `company_id IS NULL` vit DANS la requête de lien (et non sur l'objet `doc` passé) :
+   certaines routes ne chargent pas cette colonne, la lire en base ici est donc le seul moyen sûr.
    Tout reste borné à l'organisme : le document a déjà été chargé sous `organization_id`, et le
    rattachement est vérifié dans le même organisme. */
 async function lecteurDuDocument(conn, user, doc) {
@@ -1139,7 +1143,9 @@ async function lecteurDuDocument(conn, user, doc) {
         `SELECT 1 FROM document_formation df
            JOIN enrollment e ON e.id = df.enrollment_id
            JOIN learner l ON l.id = e.learner_id
+           JOIN generated_document gd ON gd.id = df.document_id
           WHERE df.document_id = ? AND l.user_id = ? AND e.organization_id = ?
+            AND gd.company_id IS NULL
           LIMIT 1`,
         [doc.id, user.id, doc.organization_id]);
     if (lie.length) return true;
@@ -1157,18 +1163,10 @@ const getDocument = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ message: 'Document introuvable' });
         const doc = rows[0];
 
-        // Anti-IDOR : hors personnel, on ne lit que ses propres documents — ou ceux (de GROUPE)
-        // rattachés à son dossier (cf. lecteurDuDocument).
+        // Anti-IDOR : hors personnel, on ne lit que ses propres documents — ou ceux (de SESSION,
+        // non « entreprise ») rattachés à son dossier (cf. lecteurDuDocument). Un document de GROUPE
+        // de l'entreprise n'est PAS consultable par le stagiaire (il en voit le statut, pas le contenu).
         if (!(await lecteurDuDocument(conn, req.user, doc))) return res.status(403).json({ message: 'Accès refusé' });
-
-        /* OUVERT PAR CE COMPTE : on le trace (migration 204) pour la pastille « reçus mais jamais
-           vus » de l'espace stagiaire — un document de groupe qu'il ouvre doit en sortir. Réservé
-           aux non-membres du personnel (un aperçu du bureau n'est pas une lecture du stagiaire), et
-           TOLÉRANT : table absente ⇒ on n'enregistre rien, la pastille ne compte pas ces documents. */
-        if (!['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'].includes(req.user.role)) {
-            try { await conn.query('INSERT IGNORE INTO document_vu (document_id, user_id) VALUES (?, ?)', [doc.id, req.user.id]); }
-            catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
-        }
 
         // Le corps vient du MODÈLE, et de lui seul. Il existait ici un rendu de secours codé
         // en dur (lib/render.js) qui fabriquait un document plausible pour n'importe quel type
