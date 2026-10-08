@@ -40,8 +40,13 @@ const REMISE_ETAT = { RECUE: "done", REMISE: "todo", ATTENDUE: "wait" };
    La pastille garde son dessin, seul le mot change. */
 const REMISE_LABEL = { done: "Reçue", wait: "Pas encore remis", current: "À confirmer", todo: "À confirmer", refused: "À confirmer" };
 
-function StudentFormationDetail() {
-  const { id } = useParams(); // = enrollment_id (le dossier)
+/* Sert À LA FOIS la page autonome (/formations/:id) ET l'onglet « Mon Parcours » de /mon-espace.
+   EMBEDDED : l'inscription vient alors d'une PROP (`enrollmentId`), pas de l'URL ; pas de bandeau
+   navy ni de « retour » (MonEspace a son en-tête), mais un SÉLECTEUR pour changer de formation
+   suivie (`formations` + `onPick`). Le reste — parcours, émargement, modales — est identique. */
+function StudentFormationDetail({ enrollmentId, embedded = false, formations, onPick } = {}) {
+  const { id: paramId } = useParams(); // = enrollment_id (le dossier), depuis l'URL
+  const id = enrollmentId || paramId;
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
@@ -167,17 +172,43 @@ function StudentFormationDetail() {
 
   return (
     <>
-      <div className="hero" style={{ background: "var(--grad-navy)" }}>
-        {/* 16 px de haut : le seul chemin de retour de la page était une cible de moins d'un
-            demi-doigt. La marge négative rend la hauteur gagnée par le rembourrage — rien ne bouge. */}
-        <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: "12px 0", margin: "-12px 0", color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
-          <Icon name="chevron-left" size={14} /> Mes documents
-        </button>
-        <h1>{data ? data.program_title : "Formation"}</h1>
-        {data && (
-          <p>{data.start_date && data.end_date ? `Du ${dateHeure(data.start_date)} au ${dateHeure(data.end_date)} · ` : ""}Semaine {data?.week} · {data?.year} · {data?.program_hours} h</p>
-        )}
-      </div>
+      {embedded ? (
+        /* Onglet « Mon Parcours » : un SÉLECTEUR pour choisir la formation suivie (caché s'il n'y
+           en a qu'une), et la ligne d'infos — pas de bandeau ni de « retour », MonEspace les porte.
+           Le sélecteur suit la formation même quand une AUTRE SESSION est ouverte (par les onglets
+           ci-dessous) : on retrouve sa formation par son code. */
+        <div className="parc-head">
+          {Array.isArray(formations) && formations.length > 1 ? (
+            <select className="inp"
+              value={(formations.find((f) => f.enrollment_id === id)
+                || formations.find((f) => data && f.program_code === data.program_code) || {}).enrollment_id || id}
+              onChange={(e) => onPick && onPick(e.target.value)} aria-label="Choisir la formation">
+              {formations.map((f) => (
+                <option key={f.enrollment_id} value={f.enrollment_id}>{f.program_code} — {f.program_title}</option>
+              ))}
+            </select>
+          ) : (
+            <h2 style={{ margin: 0, fontSize: 17 }}>{data ? data.program_title : "Formation"}</h2>
+          )}
+          {data && (
+            <p className="hint" style={{ margin: "6px 0 0" }}>
+              {data.start_date && data.end_date ? `Du ${dateHeure(data.start_date)} au ${dateHeure(data.end_date)} · ` : ""}Semaine {data?.week} · {data?.year} · {data?.program_hours} h
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="hero" style={{ background: "var(--grad-navy)" }}>
+          {/* 16 px de haut : le seul chemin de retour de la page était une cible de moins d'un
+              demi-doigt. La marge négative rend la hauteur gagnée par le rembourrage — rien ne bouge. */}
+          <button className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", padding: "12px 0", margin: "-12px 0", color: "rgba(255,255,255,.8)" }} onClick={() => navigate("/mon-espace")}>
+            <Icon name="chevron-left" size={14} /> Mes documents
+          </button>
+          <h1>{data ? data.program_title : "Formation"}</h1>
+          {data && (
+            <p>{data.start_date && data.end_date ? `Du ${dateHeure(data.start_date)} au ${dateHeure(data.end_date)} · ` : ""}Semaine {data?.week} · {data?.year} · {data?.program_hours} h</p>
+          )}
+        </div>
+      )}
 
       {/* Onglets : autres sessions du même programme */}
       {data && data.sessions && data.sessions.length > 1 && (
@@ -185,7 +216,7 @@ function StudentFormationDetail() {
           {data.sessions.map((s) => (
             <button key={s.enrollment_id}
               className={"sess-tab" + (s.enrollment_id === data.enrollment_id ? " on" : "")}
-              onClick={() => { if (s.enrollment_id !== data.enrollment_id) navigate(`/formations/${s.enrollment_id}`); }}
+              onClick={() => { if (s.enrollment_id === data.enrollment_id) return; if (embedded && onPick) onPick(s.enrollment_id); else navigate(`/formations/${s.enrollment_id}`); }}
               title={s.start_date && s.end_date ? `Du ${dateHeure(s.start_date)} au ${dateHeure(s.end_date)}` : ""}>
               <Icon name="calendar" size={13} /> Semaine {s.week} · {s.year}
             </button>
