@@ -1,20 +1,20 @@
 /**
- * LA PASTILLE « MES DOCUMENTS » COMPTE LES DOCUMENTS DE GROUPE REÇUS MAIS JAMAIS VUS.
+ * LA PASTILLE « MES DOCUMENTS » NE COMPTE PAS LES DOCUMENTS DE GROUPE — ET ON NE LES CONSULTE PAS.
  *
- * LE DÉFAUT GELÉ ICI, constaté le 2026-10-08. Un stagiaire inscrit PAR UNE ENTREPRISE reçoit des
- * documents de GROUPE (devis, convention, CGV) qu'il peut consulter mais pas signer. La pastille
- * de son espace ne les comptait JAMAIS : `pendingDocsCount` ne regardait que ses documents
- * NOMINATIFS (`d.learner_id = moi`), et un document de groupe n'a pas de `learner_id`. Il recevait
- * donc des documents sans le moindre signal.
+ * L'HISTOIRE. Le 2026-10-08 au matin, on avait fait compter à la pastille les documents de GROUPE
+ * (devis, convention, CGV de l'entreprise) « reçus mais jamais vus », la pastille retombant dès que
+ * le stagiaire les OUVRAIT (table `document_vu`, migration 204). L'école a TRANCHÉ l'inverse le même
+ * jour : ces pièces regardent l'entreprise, le stagiaire n'en voit que le STATUT (fait ou non) dans
+ * son parcours, jamais le contenu. Un document qu'on ne peut pas ouvrir ne peut jamais devenir
+ * « vu » : la pastille serait restée allumée pour toujours. On l'a donc REVERSÉE.
  *
- * LA RÈGLE RETENUE (décidée avec l'école) : « reçus mais jamais vus », et la pastille RETOMBE dès
- * qu'il les ouvre. Le statut d'un document de groupe étant PARTAGÉ (une ligne pour toute
- * l'entreprise), on trace l'OUVERTURE par compte (table `document_vu`, migration 204) — marquée à
- * l'ouverture (getDocument), lue au comptage, signalée à l'écran (pingAcces).
- *
- * TOUT EST TOLÉRANT : sans la 204, la pastille garde son décompte d'avant (les documents de groupe
- * ne sont pas comptés) et l'enregistrement d'une ouverture est avalé — le code marche avant ET
- * après la migration.
+ * CE QUI EST GELÉ ICI MAINTENANT :
+ *   · `pendingDocsCount` ne compte QUE les documents propres du stagiaire (QCM, émargement, à
+ *     signer) — plus aucun document de groupe, et `groupeNonVusCount` a disparu ;
+ *   · le parcours (`getMyFormation`) marque chaque document « consultable » ou non, et l'écran
+ *     affiche un document de groupe en STATUT SEUL, sans bouton « Consulter » ;
+ *   · `document_vu` n'est plus ni écrit (getDocument) ni lu : la migration 204 est désormais
+ *     INUTILISÉE (son revert, qui supprime la table, est sans risque).
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -27,70 +27,65 @@ const lire = (p, f) => fs.readFileSync(path.join(p, f), 'utf8');
 const ESPACE = lire(API, 'controllers/espace.controller.js');
 const DOC = lire(API, 'controllers/document.controller.js');
 
-/* ─── Serveur : le comptage ──────────────────────────────────────────────────────────────────── */
+/* ─── Serveur : la pastille ne compte QUE ses propres documents ──────────────────────────────── */
 
-test('pendingDocsCount ajoute les documents de GROUPE non vus, par compte', () => {
-    assert.match(ESPACE, /async function pendingDocsCount\(conn, learner, orgId, userId\)/,
-        'le comptage reçoit le compte (userId) pour savoir ce qu\'IL a vu');
-    assert.match(ESPACE, /return aFaire \+ await groupeNonVusCount\(conn, learner\.id, orgId, userId\);/,
-        'à faire (ses propres docs) + documents de groupe non vus');
-    // getMyAccess transmet bien le compte connecté.
-    assert.match(ESPACE, /pendingDocsCount\(conn, learner, learner\.organization_id, req\.user\.id\)/);
+test('pendingDocsCount ne compte que les documents propres du stagiaire (pas ceux de groupe)', () => {
+    assert.match(ESPACE, /async function pendingDocsCount\(conn, learner, orgId\)/,
+        'plus de paramètre userId : on ne regarde plus « ce qu\'il a vu »');
+    const z = ESPACE.slice(ESPACE.indexOf('async function pendingDocsCount'), ESPACE.indexOf('async function pendingDocsCount') + 2000);
+    assert.match(z, /return aFaire;/, 'à faire SEULEMENT (ses QCM, émargements, documents à signer)');
+    assert.doesNotMatch(ESPACE, /groupeNonVusCount/, 'la fonction « documents de groupe non vus » a disparu');
+    assert.match(ESPACE, /pendingDocsCount\(conn, learner, learner\.organization_id\)/, 'appelée sans req.user.id');
 });
 
-test('les documents de groupe comptés : reçus, scope COMPANY, rattachés au dossier, JAMAIS ouverts', () => {
-    const z = ESPACE.slice(ESPACE.indexOf('async function groupeNonVusCount'), ESPACE.indexOf('async function groupeNonVusCount') + 1200);
-    assert.match(z, /gd\.scope = 'COMPANY'/, 'uniquement les documents de GROUPE');
-    assert.match(z, /gd\.status IN \('ENVOYE','CONSULTE'\)/, 'reçus (pas encore signés/finalisés)');
-    assert.match(z, /JOIN enrollment e ON e\.id = df\.enrollment_id/);
-    assert.match(z, /WHERE e\.learner_id = \?/, 'rattachés à un dossier DE CE stagiaire');
-    assert.match(z, /LEFT JOIN document_vu v ON v\.document_id = gd\.id AND v\.user_id = \?/);
-    assert.match(z, /v\.document_id IS NULL/, 'jamais ouverts par ce compte');
-    // Tolérant : sans la migration 204, on rend 0 (pas d'échec du comptage entier).
-    assert.match(z, /if \(isMissingSchema\(e\)\) return 0;/);
+/* ─── Serveur : le parcours marque le consultable, et ne consulte pas les documents de groupe ─── */
+
+test('getMyFormation marque chaque document « consultable » (groupe de l\'entreprise = non)', () => {
+    const z = ESPACE.slice(ESPACE.indexOf('const getMyFormation = async'), ESPACE.indexOf('const getMyFormation = async') + 4500);
+    // Consultable = son document nominatif OU un document sans company_id (session) ; un document
+    // de GROUPE (company_id renseigné) ne l'est pas.
+    assert.match(z, /\(gd\.learner_id = \? OR gd\.company_id IS NULL\) AS consultable/);
 });
 
-/* ─── Serveur : marquer « vu » à l'ouverture ─────────────────────────────────────────────────── */
-
-test('ouvrir un document le marque « vu » (getDocument), hors personnel et tolérant', () => {
-    const g = DOC.slice(DOC.indexOf('const getDocument = async'), DOC.indexOf('const getDocument = async') + 1600);
-    // Réservé aux NON-membres du personnel : un aperçu du bureau n'est pas une lecture du stagiaire.
-    assert.match(g, /if \(!\['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'\]\.includes\(req\.user\.role\)\)/);
-    assert.match(g, /INSERT IGNORE INTO document_vu \(document_id, user_id\) VALUES \(\?, \?\)/);
-    assert.match(g, /\[doc\.id, req\.user\.id\]/, 'CE document, CE compte');
-    // Tolérant : table absente (204 non jouée) ⇒ on avale, on ne casse pas l'ouverture.
-    assert.match(g, /e\.code === 'ER_NO_SUCH_TABLE' \|\| e\.code === 'ER_BAD_FIELD_ERROR'/);
-    // Le marquage vient APRÈS le contrôle d'accès : on ne note « vu » que ce qu'on avait le droit d'ouvrir.
-    assert.ok(g.indexOf('lecteurDuDocument(conn, req.user, doc)') < g.indexOf('INSERT IGNORE INTO document_vu'));
+test('le stagiaire ne CONSULTE pas un document de groupe, et « vu » n\'est plus tracé', () => {
+    // La règle de lecture écarte les documents d'entreprise (cf. document-groupe-lecture-stagiaire).
+    const fn = DOC.slice(DOC.indexOf('async function lecteurDuDocument'), DOC.indexOf('async function lecteurDuDocument') + 1100);
+    assert.match(fn, /AND gd\.company_id IS NULL/, 'un document d\'entreprise n\'est pas lisible par le stagiaire');
+    // Plus aucune trace « vu » : ni écriture (getDocument), ni lecture (comptage).
+    assert.doesNotMatch(DOC, /document_vu/, 'getDocument n\'écrit plus dans document_vu');
+    assert.doesNotMatch(ESPACE, /document_vu/, 'le comptage ne lit plus document_vu');
 });
 
-/* ─── Écran : la pastille retombe dès l'ouverture ────────────────────────────────────────────── */
+/* ─── Écran : un document de groupe s'affiche en statut seul ─────────────────────────────────── */
 
-test('DocumentViewModal signale l\'ouverture (pingAcces) pour faire retomber la pastille', () => {
-    const m = lire(UI, 'components/DocumentViewModal.jsx');
-    // À l'ouverture, le chargement du document émet pingAcces (StudentLayout relit alors la pastille).
-    assert.match(m, /getDocument\(id\)\.then\(\(r\) => \{ setDoc\(r\.data\); pingAcces\(\); \}\)/);
+test('StudentFormationDetail : un document de groupe n\'a pas de bouton « Consulter »', () => {
+    const p = lire(UI, 'pages/StudentFormationDetail.jsx');
+    // Une branche dédiée aux documents non consultables, AVANT la branche à bouton.
+    assert.match(p, /e\.d\.consultable === 0 \|\| e\.d\.consultable === false \?/,
+        'un document non consultable est traité à part');
+    assert.match(p, /Document de votre entreprise/, 'il porte une mention claire, pas un bouton');
+    // Le bouton « Consulter » ouvre toujours les AUTRES documents (branche consultable).
+    assert.match(p, /onClick=\{\(\) => setViewId\(e\.d\.id\)\}/);
 });
+
+/* ─── Écran : la pastille « Mes documents » ──────────────────────────────────────────────────── */
 
 test('la pastille « Mes documents » existe et dit ce qu\'elle compte', () => {
     const l = lire(UI, 'layouts/StudentLayout.jsx');
     assert.match(l, /to="\/mon-espace"/, 'la pastille est sur « Mes documents »');
-    // Depuis le 2026-10-08, la pastille somme ses propres pièces et les documents d'entreprise
-    // à signer (`docsBadge = pending + repPending`) : « Entreprise » est devenu un onglet de la page.
+    // Elle somme ses propres pièces et les documents d'entreprise à SIGNER par le représentant
+    // (`docsBadge = pending + repPending`) — repPending est le compte du représentant, pas le
+    // stagiaire ordinaire ; « Entreprise » est un onglet de la page.
     assert.match(l, /docsBadge > 0 && <span className="stu-count">\{docsBadge\}<\/span>/, 'elle montre le nombre');
     assert.match(l, /document.*en attente/, 'et dit « en attente »');
 });
 
-/* ─── Migration 204 ──────────────────────────────────────────────────────────────────────────── */
+/* ─── Migration 204 : désormais INUTILISÉE, son revert reste propre ──────────────────────────── */
 
-test('la migration 204 crée document_vu proprement, et son revert la retire', () => {
+test('la migration 204 (document_vu) est inutilisée ; son revert supprime la table proprement', () => {
     const dir = path.join(__dirname, '../../../database/migrations');
-    const aller = fs.readFileSync(path.join(dir, '204_document_vu.sql'), 'utf8');
     const retour = fs.readFileSync(path.join(dir, '204_revert_document_vu.sql'), 'utf8');
-    assert.match(aller, /CREATE TABLE IF NOT EXISTS document_vu/, 'rejouable sans risque');
-    assert.match(aller, /REFERENCES generated_document \(id\) ON DELETE CASCADE/, 'les traces partent avec le document');
-    assert.match(aller, /REFERENCES user \(id\) ON DELETE CASCADE/, 'et avec le compte');
-    assert.match(retour, /DROP TABLE IF EXISTS document_vu/);
+    assert.match(retour, /DROP TABLE IF EXISTS document_vu/, 'le revert supprime la table (sans risque : plus personne ne la lit)');
     // Commentaires en BLOCS seulement (CLAUDE.md §2.1), jamais « -- » en tête de ligne.
-    for (const f of [aller, retour]) assert.doesNotMatch(f, /^\s*--/m, 'commentaires /* */ seulement');
+    assert.doesNotMatch(retour, /^\s*--/m, 'commentaires /* */ seulement');
 });

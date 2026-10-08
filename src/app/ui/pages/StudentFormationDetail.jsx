@@ -384,6 +384,17 @@ function StudentFormationDetail({ enrollmentId, embedded = false, formations, on
                               <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>
                               <button className="btn sm primary" onClick={() => setQuizDoc(e.d.id)}>{e.d.status === "SIGNE" ? "Voir" : "Répondre"}</button>
                             </>
+                          ) : e.d.consultable === 0 || e.d.consultable === false ? (
+                            /* Document de GROUPE de l'ENTREPRISE (devis, convention, CGV) : le
+                               stagiaire en voit le STATUT (fait ou non), pas le contenu — pas de
+                               bouton « Consulter ». Son entreprise le reçoit et le signe de son
+                               côté (espace représentant). Le serveur refuse d'ailleurs la lecture. */
+                            <>
+                              {e.d.status === "SIGNE" ? <Badge tone="g">Signé</Badge>
+                                : e.etat === "wait" ? <Badge tone="a">À signer par l'entreprise</Badge>
+                                : <Badge tone="n">Reçu par l'entreprise</Badge>}
+                              <span className="hint" style={{ flex: "none" }}>Document de votre entreprise</span>
+                            </>
                           ) : (
                             <>
                               {/* Mêmes mots que « Mes documents » : « À signer » seulement quand
