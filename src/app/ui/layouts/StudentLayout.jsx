@@ -180,14 +180,19 @@ function StudentLayout() {
 
   // Destinations hors « Outils », dans l'ordre de la barre. `gated` = fermé tant que le
   // point d'accès n'est pas franchi.
+  //
+  // L'ENTREPRISE N'EST PLUS UNE ENTRÉE DE BARRE : elle est devenue un onglet de « Mes documents »
+  // (cf. MonEspace), ramenée près des documents du stagiaire. Sa pastille de documents à signer
+  // (`repPending`) rejoint celle de « Mes documents » ci-dessous, pour que le représentant reste
+  // alerté depuis n'importe quelle page.
   const extras = [
     { to: "/communaute", ic: "users", label: "Communauté", gated: true, badge: news,
       titre: (n) => `${n} nouveau${n > 1 ? "x" : ""} commentaire${n > 1 ? "s" : ""}` },
     ...(user?.role === "INTERVENANT" ? [{ to: "/intervention", ic: "clipboard-check", label: "Intervention" }] : []),
-    // L'entreprise a-t-elle des documents à signer ? Même pastille que « Mes documents », côté représentant.
-    ...(user?.has_company ? [{ to: "/entreprise-documents", ic: "building", label: "Entreprise", badge: repPending,
-      titre: (n) => `${n} document${n > 1 ? "s" : ""} à signer` }] : []),
   ];
+  // Pastille de « Mes documents » : ses propres pièces à signer/consulter ET, s'il représente
+  // son entreprise, les documents de celle-ci à signer (l'onglet « Entreprise » les porte).
+  const docsBadge = pending + repPending;
 
   return (
     // `stu-app` porte toute la couche ludique (police ronde, coins doux, retour tactile,
@@ -209,12 +214,13 @@ function StudentLayout() {
         </div>
 
         <nav className="stu-nav">
-          {/* Une seule entrée : documents reçus et formations vivent sur la même page.
-              La pastille compte ce qui attend une action — signature ou QCM. */}
+          {/* Une seule entrée : documents reçus, formations et entreprise vivent sur la même
+              page (onglets). La pastille compte ce qui attend une action — signature ou QCM —,
+              documents d'entreprise compris pour un représentant. */}
           <NavLink to="/mon-espace" className={navClass}
-            title={pending > 0 ? `${pending} document${pending > 1 ? "s" : ""} à consulter ou signer` : undefined}>
+            title={docsBadge > 0 ? `${docsBadge} document${docsBadge > 1 ? "s" : ""} en attente${repPending > 0 ? " (dont votre entreprise)" : ""}` : undefined}>
             Mes documents
-            {pending > 0 && <span className="stu-count">{pending}</span>}
+            {docsBadge > 0 && <span className="stu-count">{docsBadge}</span>}
           </NavLink>
           {/* Pizza Quest verrouillé tant que les documents ne sont pas signés (feature « accès »).
               La Boutique reste accessible — elle n'est PAS dans GATED_PATHS : c'est un service,
@@ -264,7 +270,7 @@ function StudentLayout() {
           coûte rien et ne peut pas capter le focus au clavier. */}
       {menuOpen && (
           <div className="stu-drawer" role="navigation">
-            <DrawerLink to="/mon-espace" ic="file-text" label="Mes documents" badge={pending} />
+            <DrawerLink to="/mon-espace" ic="file-text" label="Mes documents" badge={docsBadge} />
             <DrawerLink to="/pizza-quest" ic="pizza" label="Pizza Quest" locked={!unlocked} />
             <DrawerLink to="/boutique" ic="cart" label="Boutique" />
             <div className="stu-drawer-lbl">Outils</div>

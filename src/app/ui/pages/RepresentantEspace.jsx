@@ -15,7 +15,9 @@ import { manquePourRequis } from "../lib/remiseNb.js";
 
 const DOC_STATUS = { A_FAIRE: ["À signer", "n"], ENVOYE: ["À signer", "a"], CONSULTE: ["À signer", "a"], SIGNE: ["Signé", "g"] };
 
-function RepresentantEspace() {
+/* Sert la page autonome ET l'onglet « Entreprise » de /mon-espace (EMBEDDED) : dans l'onglet, pas
+   de grand bandeau « Bonjour » (MonEspace le porte déjà), juste la phrase et les pastilles. */
+function RepresentantEspace({ embedded = false } = {}) {
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
@@ -95,17 +97,31 @@ function RepresentantEspace() {
 
   return (
     <>
-      <div className="hero">
-        <div className="eyebrow">Espace entreprise</div>
-        <h1>Bonjour {user?.first_name}</h1>
-        <p>{remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
-        {(toSign > 0 || aConfirmer > 0) && (
-          <div className="badge-row">
-            {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
-            {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
-          </div>
-        )}
-      </div>
+      {embedded ? (
+        <div style={{ marginBottom: 10 }}>
+          <p className="hint" style={{ margin: "0 0 8px" }}>
+            {remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.
+          </p>
+          {(toSign > 0 || aConfirmer > 0) && (
+            <div className="badge-row">
+              {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
+              {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="hero">
+          <div className="eyebrow">Espace entreprise</div>
+          <h1>Bonjour {user?.first_name}</h1>
+          <p>{remises.length ? "Signez et recevez" : "Signez"} les documents de votre entreprise{data?.company ? `, ${data.company}` : ""}.</p>
+          {(toSign > 0 || aConfirmer > 0) && (
+            <div className="badge-row">
+              {toSign > 0 && <span className="pill">{toSign} document(s) à signer</span>}
+              {aConfirmer > 0 && <span className="pill">{aConfirmer} réception(s) à confirmer</span>}
+            </div>
+          )}
+        </div>
+      )}
 
       <StatusMessage status={status} />
 

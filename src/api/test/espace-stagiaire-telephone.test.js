@@ -11,7 +11,8 @@
  *     entre 156 et 188 px — l'encre ne suivait pas le doigt, et une signature s'entassait dans les
  *     deux tiers gauches du cadre. Invisible sur ordinateur, où les deux largeurs coïncident.
  *   · « Mes demandes » : six étapes à 64 px minimum chacune, « Facturé » coupé et « Remis » caché.
- *   · Les onglets « Mes formations / Mes documents » empilés sur deux lignes dans une gélule.
+ *   · Les onglets du stagiaire (depuis le 2026-10-08 : « Mon parcours / Mes formations / Entreprise »)
+ *     empilés sur deux lignes dans une gélule — la règle de rognage ci-dessous les resserre.
  *   · Pizza Quest : « 3/2 chapitres » et une jauge à 150 % — les étoiles d'un chapitre retiré.
  *   · Le parcours d'une formation : un titre de pièce tassé à un mot par ligne.
  *   · Des cibles sous le doigt : la croix des fenêtres (26 × 32), les cases de 13 px, le retour

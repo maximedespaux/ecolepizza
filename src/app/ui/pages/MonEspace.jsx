@@ -1,5 +1,4 @@
 import { useContext, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import { getMonEspace, getMyFormations, getMyAccess } from "../api/apiClient.js";
 import { useAutoRefresh } from "../lib/useAutoRefresh.js";
@@ -9,6 +8,8 @@ import StatusMessage from "../components/StatusMessage.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 import DocumentViewModal from "../components/DocumentViewModal.jsx";
 import QuizModal from "../components/QuizModal.jsx";
+import StudentFormationDetail from "./StudentFormationDetail.jsx";
+import RepresentantEspace from "./RepresentantEspace.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { colorOf, euro, dateHeure } from "../lib/format.js";
 import { getAvatar, AVATAR_EVENT } from "../lib/gamification.js";
@@ -26,9 +27,14 @@ import { RankBar, NextStep, prochaineEtape } from "../components/StuJourney.jsx"
  *   · À FAIRE, AU-DESSUS DES ONGLETS — signatures et QCM en attente. Hors des onglets à
  *     dessein : c'est daté, et le ranger derrière un onglet reviendrait à le cacher à
  *     celui qui ouvre l'autre.
- *   · Deux onglets pour le reste : MES FORMATIONS (entrer dans un dossier) et
- *     MES DOCUMENTS (retrouver une pièce, signés compris). Deux façons de chercher la
- *     même matière — l'une par dossier, l'autre par pièce.
+ *   · Trois onglets pour le reste : MON PARCOURS (le dossier de la formation en cours —
+ *     documents ET émargement, exactement le panneau /formations/:id embarqué —, avec un
+ *     sélecteur pour passer d'une formation suivie à l'autre), MES FORMATIONS (la grille,
+ *     pour entrer dans n'importe quel dossier) et ENTREPRISE (les documents de l'entreprise
+ *     à signer, pour le stagiaire qui représente la sienne — l'ancienne entrée de la barre,
+ *     ramenée ici près de ses propres documents). L'ancienne liste à plat « Mes documents »
+ *     disparaît : « Mon Parcours » la remplace en montrant la même matière par dossier,
+ *     émargement compris.
  */
 
 // Libellé d'état : « À signer » seulement si le document est réellement à signer
@@ -43,14 +49,15 @@ const aFaire = (d) => d.status !== "SIGNE" && (d.signable || !!d.quiz_id);
 
 function MonEspace() {
   const { user } = useContext(UserContext);
-  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [formations, setFormations] = useState(null);
   const [status, setStatus] = useState(null);
   const [viewId, setViewId] = useState(null);
   const [quizDoc, setQuizDoc] = useState(null);
   const [info, setInfo] = useState(null);      // formation non suivie, en lecture seule
-  const [tab, setTab] = useState("formations"); // "formations" | "documents"
+  const [tab, setTab] = useState("parcours"); // "parcours" | "formations" | "entreprise"
+  const [parcoursEnr, setParcoursEnr] = useState(null); // inscription affichée dans « Mon Parcours »
+  const [repPending, setRepPending] = useState(0);      // documents d'entreprise à signer (représentant)
   const [avatar, setAvatar] = useState(() => getAvatar(user?.id));
   const [questUnlocked, setQuestUnlocked] = useState(false);
   // L'avatar est modifiable depuis la modale de profil, hors de cette page : sans cette
@@ -71,8 +78,9 @@ function MonEspace() {
     }
   }
   useEffect(() => { load(); }, []);
-  // Sert à savoir si l'entraînement peut être proposé comme prochaine étape.
-  useEffect(() => { getMyAccess().then((r) => setQuestUnlocked(r?.data?.quest_unlocked !== false)).catch(() => {}); }, []);
+  // Sert à savoir si l'entraînement peut être proposé comme prochaine étape, et combien de
+  // documents d'entreprise attendent une signature (pastille de l'onglet « Entreprise »).
+  useEffect(() => { getMyAccess().then((r) => { setQuestUnlocked(r?.data?.quest_unlocked !== false); setRepPending(Number(r?.data?.rep_pending_docs) || 0); }).catch(() => {}); }, []);
   useEffect(() => {
     getMyFormations().then((r) => setFormations(r.data || []))
       .catch((err) => setStatus((s) => s || { type: "error", message: err.message }));
@@ -85,6 +93,15 @@ function MonEspace() {
   const documents = data?.documents || [];
   const enAttente = documents.filter(aFaire);
 
+  // Formations SUIVIES (ouvrables : une inscription, en cours OU terminée) — pour « Mon Parcours »
+  // et son sélecteur. La « courante » (en cours d'abord) est celle qu'on montre par défaut.
+  const suivies = (formations || []).filter((f) => f.enrollment_id && (f.finished || (f.enrolled && !f.revoked)));
+  const courante = suivies.find((f) => !f.finished) || suivies[0] || null;
+  // Tant qu'il n'a rien choisi, « Mon Parcours » ouvre sur sa formation courante.
+  useEffect(() => {
+    if (!parcoursEnr && courante) setParcoursEnr(courante.enrollment_id);
+  }, [courante?.enrollment_id, parcoursEnr]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Formations suivies d'abord ; l'ordre du catalogue (défini par l'organisme) est conservé
   // à l'intérieur de chaque groupe.
   const triees = formations
@@ -93,6 +110,10 @@ function MonEspace() {
   // Une formation terminée vaut 100 points de progression (cf. scoreOf).
   const formationsDone = (formations || []).filter((f) => f.finished || f.complete).length;
   const etape = prochaineEtape({ enAttente, questUnlocked, formations: formations || [] });
+
+  // Ouvrir une formation depuis la grille, c'est l'afficher dans « Mon Parcours » — le panneau
+  // /formations/:id embarqué —, sans quitter la page.
+  const ouvrirParcours = (enrId) => { setParcoursEnr(enrId); setTab("parcours"); };
 
   return (
     <>
@@ -129,15 +150,46 @@ function MonEspace() {
       )}
 
       <div className="seg" style={{ marginBottom: 14 }}>
+        <button type="button" className={"seg-btn" + (tab === "parcours" ? " on" : "")}
+          onClick={() => setTab("parcours")}>
+          <Icon name="map" size={14} /> Mon parcours
+        </button>
         <button type="button" className={"seg-btn" + (tab === "formations" ? " on" : "")}
           onClick={() => setTab("formations")}>
           <Icon name="folder-check" size={14} /> Mes formations{triees ? ` (${triees.length})` : ""}
         </button>
-        <button type="button" className={"seg-btn" + (tab === "documents" ? " on" : "")}
-          onClick={() => setTab("documents")}>
-          <Icon name="file-text" size={14} /> Mes documents{documents.length ? ` (${documents.length})` : ""}
-        </button>
+        {/* L'entreprise : l'ancienne entrée de la barre, ramenée ici près des documents du
+            stagiaire, avec sa pastille de documents à signer. Montrée au seul stagiaire qui
+            représente son entreprise (user.has_company). */}
+        {user?.has_company && (
+          <button type="button" className={"seg-btn" + (tab === "entreprise" ? " on" : "")}
+            onClick={() => setTab("entreprise")}>
+            <Icon name="building" size={14} /> Entreprise
+            {repPending > 0 && <span className="stu-count">{repPending}</span>}
+          </button>
+        )}
       </div>
+
+      {/* Mon parcours : le dossier de la formation en cours, EMBARQUÉ — exactement le panneau
+          /formations/:id (documents + émargement + modales), sélecteur en tête. Vide tant qu'aucune
+          formation n'est suivie : on renvoie alors vers la grille. */}
+      {tab === "parcours" && (
+        !parcoursEnr ? (
+          <Card>
+            <EmptyState icon="pizza">
+              Vous n'avez pas encore de formation en cours. Retrouvez toutes vos formations
+              dans l'onglet « Mes formations ».
+            </EmptyState>
+          </Card>
+        ) : (
+          <StudentFormationDetail
+            enrollmentId={parcoursEnr}
+            embedded
+            formations={suivies}
+            onPick={setParcoursEnr}
+          />
+        )
+      )}
 
       {tab === "formations" && (
         <Card>
@@ -151,29 +203,14 @@ function MonEspace() {
             <EmptyState icon="pizza">Aucune formation au catalogue.</EmptyState>
           ) : (
             <div className="grid cols-3">
-              {triees.map((f) => <FormationCard key={f.program_id} f={f} navigate={navigate} onInfo={setInfo} />)}
+              {triees.map((f) => <FormationCard key={f.program_id} f={f} onOpen={ouvrirParcours} onInfo={setInfo} />)}
             </div>
           )}
         </Card>
       )}
 
-      {tab === "documents" && (
-        <Card>
-          {documents.length === 0 ? (
-            <EmptyState icon="pizza">
-              Aucun document pour le moment. Le secrétariat vous enverra vos documents avant la formation.
-            </EmptyState>
-          ) : (
-            <>
-              <p className="hint" style={{ marginTop: 0 }}>
-                Toutes vos pièces, signées comprises. Celles qui attendent encore une action
-                restent rappelées en haut de page.
-              </p>
-              <DocList docs={documents} onView={setViewId} onQuiz={setQuizDoc} />
-            </>
-          )}
-        </Card>
-      )}
+      {/* Entreprise : l'espace du représentant, embarqué (sans son propre en-tête). */}
+      {tab === "entreprise" && user?.has_company && <RepresentantEspace embedded />}
 
       {viewId && (
         <DocumentViewModal
@@ -226,7 +263,7 @@ function DocList({ docs, onView, onQuiz }) {
 
 /* ---- Carte d'une formation ------------------------------------------------------------ */
 
-function FormationCard({ f, navigate, onInfo }) {
+function FormationCard({ f, onOpen, onInfo }) {
   const color = f.color || colorOf(f.program_code);
   // Verrouillée si non inscrite OU RÉVOQUÉE (session commencée sans avoir franchi le point
   // d'accès). Une formation TERMINÉE reste toujours accessible.
@@ -238,7 +275,7 @@ function FormationCard({ f, navigate, onInfo }) {
   // inatteignables au clavier — donc l'espace entier. `role` + `tabIndex` + Entrée/Espace leur
   // rendent le comportement d'un bouton. Espace demande `preventDefault`, sinon le navigateur
   // fait défiler la page en même temps qu'il ouvre la carte.
-  const ouvrir = openable ? () => navigate(`/formations/${f.enrollment_id}`) : () => onInfo(f);
+  const ouvrir = openable ? () => onOpen(f.enrollment_id) : () => onInfo(f);
   // Le `title` seul donnait dix boutons au nom IDENTIQUE dans l'arbre d'accessibilité
   // (« Voir mes documents et mon émargement » ×10) : de quoi rendre la liste illisible en
   // navigation vocale. Le nom porte donc d'abord la formation, l'action ensuite.

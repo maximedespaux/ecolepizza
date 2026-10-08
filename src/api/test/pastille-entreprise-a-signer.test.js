@@ -1,15 +1,21 @@
 /**
- * UNE PASTILLE SUR « ENTREPRISE » : les documents de groupe que le REPRÉSENTANT doit signer.
+ * UNE PASTILLE POUR LES DOCUMENTS DE GROUPE QUE LE REPRÉSENTANT DOIT SIGNER.
  *
  * LE DÉFAUT GELÉ ICI, constaté le 2026-10-08. L'espace Entreprise (représentant d'une société, qui
- * signe devis/convention/CGV pour elle) affichait « 3 document(s) à signer » SUR LA PAGE, mais
- * l'entrée « Entreprise » de la barre ne portait AUCUNE pastille — un stagiaire qui n'ouvre pas cet
- * onglet ne voyait pas qu'il avait des documents à signer. Pendant de « Mes documents ».
+ * signe devis/convention/CGV pour elle) affichait « 3 document(s) à signer » SUR LA PAGE, mais rien
+ * ne le signalait depuis les autres pages — un stagiaire qui n'ouvre pas cet espace ne voyait pas
+ * qu'il avait des documents à signer. Pendant de « Mes documents ».
  *
  * La pastille compte, côté serveur (getMyAccess → repPendingDocsCount), les documents de GROUPE
  * (scope COMPANY) des entreprises DE CE COMPTE encore NON SIGNÉS — le même `toSign` que l'écran.
  * Elle retombe dès qu'il signe : les gestes de signature du représentant émettent `pingAcces`, que
  * StudentLayout écoute déjà. Tolérant : schémas absents ⇒ 0 (pas de pastille), rien ne casse.
+ *
+ * REMANIÉ le 2026-10-08 (même jour) : « Entreprise » n'est plus une entrée de barre mais un ONGLET
+ * de « Mes documents » (cf. MonEspace), ramené près des documents du stagiaire. La pastille se
+ * porte donc à DEUX endroits : sur l'onglet « Entreprise » (le compte `repPending` seul), et, pour
+ * rester visible depuis toute la barre, FONDUE dans la pastille de « Mes documents »
+ * (`docsBadge = pending + repPending`).
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -38,15 +44,28 @@ test('getMyAccess renvoie rep_pending_docs — les documents d\'entreprise à si
 
 /* ─── Écran : la barre ────────────────────────────────────────────────────────────────────────── */
 
-test('StudentLayout porte la pastille sur « Entreprise » et son infobulle', () => {
+test('StudentLayout fond repPending dans la pastille de « Mes documents »', () => {
     const l = lire(UI, 'layouts/StudentLayout.jsx');
     assert.match(l, /setRepPending\(Number\(r\?\.data\?\.rep_pending_docs\) \|\| 0\)/, 'lue depuis getMyAccess');
-    assert.match(l, /to: "\/entreprise-documents", ic: "building", label: "Entreprise", badge: repPending/,
-        'la pastille est portée par l\'entrée « Entreprise »');
-    assert.match(l, /titre: \(n\) => `\$\{n\} document\$\{n > 1 \? "s" : ""\} à signer`/, 'l\'infobulle dit « à signer », pas « commentaires »');
-    assert.match(l, /title=\{e\.badge > 0 && e\.titre \? e\.titre\(e\.badge\) : undefined\}/, 'chaque entrée a SON libellé d\'infobulle');
+    // La pastille de « Mes documents » somme ses propres pièces et celles de l'entreprise.
+    assert.match(l, /const docsBadge = pending \+ repPending;/, 'docsBadge = pending + repPending');
+    assert.match(l, /\{docsBadge > 0 && <span className="stu-count">\{docsBadge\}<\/span>\}/, 'la barre porte docsBadge');
+    assert.match(l, /badge=\{docsBadge\}/, 'le tiroir (téléphone) aussi');
+    // « Entreprise » N'EST PLUS une entrée de barre : elle est devenue un onglet de « Mes documents ».
+    assert.doesNotMatch(l, /to: "\/entreprise-documents"/, 'plus d\'entrée « Entreprise » dans la barre');
     // Le point du menu replié (téléphone) s'allume aussi pour les documents d'entreprise.
     assert.match(l, /\(pending > 0 \|\| repPending > 0 \|\| news > 0\)/);
+});
+
+test('MonEspace porte « Entreprise » en onglet, avec sa pastille repPending', () => {
+    const m = lire(UI, 'pages/MonEspace.jsx');
+    assert.match(m, /setRepPending\(Number\(r\?\.data\?\.rep_pending_docs\) \|\| 0\)/, 'repPending lu depuis getMyAccess');
+    // L'onglet « Entreprise » n'apparaît qu'au stagiaire qui représente son entreprise.
+    assert.match(m, /\{user\?\.has_company && \(/, 'onglet « Entreprise » conditionné à has_company');
+    assert.match(m, /onClick=\{\(\) => setTab\("entreprise"\)\}/, 'le bouton bascule sur l\'onglet entreprise');
+    assert.match(m, /\{repPending > 0 && <span className="stu-count">\{repPending\}<\/span>\}/, 'sa pastille porte repPending');
+    // Son contenu : l'espace du représentant, embarqué (sans son propre en-tête).
+    assert.match(m, /tab === "entreprise" && user\?\.has_company && <RepresentantEspace embedded \/>/);
 });
 
 test('signer un document de l\'entreprise fait retomber la pastille (pingAcces)', () => {

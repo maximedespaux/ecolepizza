@@ -75,8 +75,10 @@ test('DocumentViewModal signale l\'ouverture (pingAcces) pour faire retomber la 
 test('la pastille « Mes documents » existe et dit ce qu\'elle compte', () => {
     const l = lire(UI, 'layouts/StudentLayout.jsx');
     assert.match(l, /to="\/mon-espace"/, 'la pastille est sur « Mes documents »');
-    assert.match(l, /pending > 0 && <span className="stu-count">\{pending\}<\/span>/, 'elle montre le nombre');
-    assert.match(l, /document.*à consulter ou signer/, 'et dit « à consulter ou signer »');
+    // Depuis le 2026-10-08, la pastille somme ses propres pièces et les documents d'entreprise
+    // à signer (`docsBadge = pending + repPending`) : « Entreprise » est devenu un onglet de la page.
+    assert.match(l, /docsBadge > 0 && <span className="stu-count">\{docsBadge\}<\/span>/, 'elle montre le nombre');
+    assert.match(l, /document.*en attente/, 'et dit « en attente »');
 });
 
 /* ─── Migration 204 ──────────────────────────────────────────────────────────────────────────── */
