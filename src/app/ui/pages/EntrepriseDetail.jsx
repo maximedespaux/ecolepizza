@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
-  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl, supprimerRemiseFichier } from "../api/apiClient.js";
+  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl, supprimerRemiseFichier,
+  getReglementsEntreprise, updateReglementEntreprise } from "../api/apiClient.js";
+import { UserContext } from "../context/UserContext.jsx";
+import { peutEcrire } from "../lib/nav.js";
+import CarteReglement from "../components/CarteReglement.jsx";
 import EnrollmentParcours from "../components/EnrollmentParcours.jsx";
 import ReferentEntreprise from "../components/ReferentEntreprise.jsx";
 import { messageReferentPerdu } from "../lib/referent.js";
@@ -79,12 +83,16 @@ const poids = (o) => (o >= 1024 * 1024 ? `${Math.round((o / 1024 / 1024) * 10) /
 
 export default function EntrepriseDetail() {
   const { id } = useParams();
+  const { user } = useContext(UserContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState(null);
   const [form, setForm] = useState({});
   const [status, setStatus] = useState(null);
   const [savingInfo, setSavingInfo] = useState(false);
+  // Le règlement, un bloc par dossier de l'entreprise (comme la fiche stagiaire). null = en cours.
+  const [reglements, setReglements] = useState(null);
+  const [moyensReglement, setMoyensReglement] = useState([]);
 
   // Inscription de groupe
   const [sessions, setSessions] = useState([]);
@@ -164,6 +172,13 @@ export default function EntrepriseDetail() {
     }).catch((e) => setStatus({ type: "error", message: e.message }));
   }
   useEffect(() => { load(); }, [id]);
+  // Le règlement à part (comme sur la fiche stagiaire), rechargé après chaque saisie.
+  function loadReglements() {
+    return getReglementsEntreprise(id)
+      .then((r) => { setReglements(r.data || []); setMoyensReglement(r.moyens || []); })
+      .catch(() => setReglements([]));
+  }
+  useEffect(() => { loadReglements(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   /* Un message venu de la création (« créée, sauf le lien vers le stagiaire… ») : la liste ne peut
      pas l'afficher, elle vient de laisser la place à cette fiche. */
   useEffect(() => { if (location.state?.info) setStatus({ type: "info", message: location.state.info }); }, [location.state]);
@@ -778,7 +793,18 @@ export default function EntrepriseDetail() {
         <button className={"seg-btn" + (tab === "coordonnees" ? " on" : "")} onClick={() => setTab("coordonnees")}>Coordonnées</button>
         <button className={"seg-btn" + (tab === "stagiaires" ? " on" : "")} onClick={() => setTab("stagiaires")}>Stagiaires</button>
         <button className={"seg-btn" + (tab === "documents" ? " on" : "")} onClick={() => setTab("documents")}>Documents</button>
+        <button className={"seg-btn" + (tab === "reglement" ? " on" : "")} onClick={() => setTab("reglement")}>Règlement</button>
       </span>
+
+      {tab === "reglement" && (
+        <CarteReglement
+          reglements={reglements} moyens={moyensReglement}
+          canEdit={peutEcrire(user, "/entreprises")}
+          onSaved={loadReglements}
+          onUpdate={(eid, patch) => updateReglementEntreprise(id, eid, patch)}
+          videMessage="Aucun dossier : le règlement se suit une fois un stagiaire inscrit par l'entreprise."
+        />
+      )}
 
       {tab === "stagiaires" && (
         <Card title={<span className="card-ttl"><Icon name="users" size={16} /> Inscrire un groupe de stagiaires</span>}>

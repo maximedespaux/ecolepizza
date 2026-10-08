@@ -1,5 +1,5 @@
 const express = require('express');
-const { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments } = require('../controllers/company.controller.js');
+const { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments, getReglementsEntreprise, updateReglementEntreprise } = require('../controllers/company.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -14,6 +14,10 @@ router.get('/:id/parcours', getCompanyParcours);
 router.get('/:id/documents-recuperables', getCompanyDocumentsRecuperables);
 router.post('/:id/recuperer-documents', authorizeRoles(...ADMIN_ROLES), recupererCompanyDocuments);
 router.get('/:id/learner-documents', getCompanyLearnerDocuments);
+// Le règlement des dossiers de l'entreprise (même carte que la fiche stagiaire). Lecture = STAFF
+// (router.use ci-dessus) ; écriture = ADMIN + délégation sur /entreprises (companies → /entreprises).
+router.get('/:id/reglements', getReglementsEntreprise);
+router.patch('/:id/reglement/:enrollmentId', authorizeRoles(...ADMIN_ROLES), updateReglementEntreprise);
 router.post('/', authorizeRoles(...ADMIN_ROLES), createCompany);
 // L'import CSV : mêmes rôles que la création d'une fiche (lib/importFiches.js).
 router.post('/import', authorizeRoles(...ADMIN_ROLES), importCompanies);

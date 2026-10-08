@@ -1010,10 +1010,76 @@ async function moyensPaiementOrg(conn, orgId) {
     }
 }
 
+/* ASSEMBLE le suivi du règlement pour un ENSEMBLE de dossiers — ceux d'un STAGIAIRE
+   (`e.learner_id = ?`) OU d'une ENTREPRISE (`e.company_id = ?`), d'où `filtre`/`filtreVals`. Partagé
+   par la fiche stagiaire ET la fiche entreprise (même carte, mêmes colonnes 194/195). Rend
+   { data, moyens } tel que la carte l'attend : un bloc par dossier, acompte et solde, payés ou dus
+   d'après les factures (table `payment`) OU la coche manuelle (migration 194). La règle vit dans
+   lib/reglementDossier.js (pure, éprouvée) ; ici on ne fait que rassembler. */
+async function reponseReglements(conn, orgId, filtre, filtreVals) {
+    // Les deux dates « payé le … » arrivent avec la 194 ; sans elles, on lit le règlement d'après
+    // les seules factures, et l'écran n'offre pas la coche (`migration_194: false`).
+    const aDates = await colonneExiste(conn, 'enrollment', 'acompte_paye_le');
+    const colsDates = aDates
+        ? "DATE_FORMAT(e.acompte_paye_le, '%Y-%m-%d') AS acompte_paye_le, DATE_FORMAT(e.solde_paye_le, '%Y-%m-%d') AS solde_paye_le"
+        : 'NULL AS acompte_paye_le, NULL AS solde_paye_le';
+    // Le moyen de paiement (migration 195) — mêmes précautions : sans les colonnes, on lit NULL et
+    // l'écran n'offre pas le sélecteur (`migration_195: false`).
+    const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
+    const colsMoyen = aMoyen
+        ? 'e.acompte_moyen, e.acompte_ref, e.solde_moyen, e.solde_ref'
+        : 'NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref';
+    const [dossiers] = await conn.query(
+        `SELECT e.id AS enrollment_id, e.price AS enroll_price, e.acompte, ${colsDates}, ${colsMoyen},
+                p.title AS program_title, p.code AS program_code, p.price AS tarif, s.year, s.week
+           FROM enrollment e
+           JOIN training_session s ON s.id = e.session_id
+           LEFT JOIN training_program p ON p.id = s.program_id
+          WHERE ${filtre} AND e.organization_id = ?
+          ORDER BY s.year DESC, s.week DESC, p.code`,
+        [...filtreVals, orgId]
+    );
+
+    const data = [];
+    for (const d of dossiers) {
+        /* Les factures qui désignent le dossier — sur la facture même OU sur l'une de ses lignes
+           (une facture d'entreprise en porte une par stagiaire), comme lib/inscriptionsFacturees.js.
+           Le PAYÉ = somme des règlements REUSSI ; la date, le plus récent d'entre eux. */
+        const [factures] = await conn.query(
+            `SELECT i.number AS numero, i.type, i.status AS statut, i.amount_net AS montant,
+                    COALESCE(SUM(CASE WHEN pay.status = 'REUSSI' THEN pay.amount END), 0) AS paye,
+                    DATE_FORMAT(MAX(CASE WHEN pay.status = 'REUSSI' THEN pay.paid_at END), '%Y-%m-%d') AS dernier_paiement
+               FROM invoice i
+               LEFT JOIN payment pay ON pay.invoice_id = i.id
+              WHERE i.organization_id = ? AND i.type IN ('ACOMPTE', 'FACTURE')
+                AND (i.enrollment_id = ? OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = ?))
+              GROUP BY i.id`,
+            [orgId, d.enrollment_id, d.enrollment_id]
+        );
+        const { montant: prix } = montantDuDossier(d.enroll_price, d.tarif);
+        const r = calculerReglement({
+            prix, acompteConvenu: d.acompte,
+            acomptePayeLe: d.acompte_paye_le, soldePayeLe: d.solde_paye_le,
+            acompteMoyen: d.acompte_moyen, acompteRef: d.acompte_ref,
+            soldeMoyen: d.solde_moyen, soldeRef: d.solde_ref,
+            factures,
+        });
+        data.push({
+            enrollment_id: d.enrollment_id, program_title: d.program_title, program_code: d.program_code,
+            year: d.year, week: d.week,
+            acompte_convenu: d.acompte != null ? Number(d.acompte) : null, // pour préremplir le champ de saisie
+            migration_194: aDates, // l'écran n'offre la coche « payé le… » que si la 194 est jouée
+            migration_195: aMoyen, // … et le moyen de paiement que si la 195 est jouée
+            ...r,
+        });
+    }
+    // La liste PROPOSÉE par la carte (le sélecteur « Réglé par ») : les moyens de l'entité.
+    const moyens = await moyensPaiementOrg(conn, orgId);
+    return { data, moyens };
+}
+
 /**
- * GET /api/stagiaires/:id/reglements — le suivi du règlement, un bloc par DOSSIER : l'acompte et le
- * solde, payés ou dus, d'après les factures (table `payment`) OU la coche manuelle (migration 194).
- * La règle vit dans lib/reglementDossier.js (pure, éprouvée) ; ici on ne fait que rassembler.
+ * GET /api/stagiaires/:id/reglements — le suivi du règlement, un bloc par DOSSIER du stagiaire.
  */
 const getReglements = async (req, res) => {
     try {
@@ -1021,66 +1087,7 @@ const getReglements = async (req, res) => {
         const orgId = req.user.organization_id;
         const [[learner]] = await conn.query('SELECT id FROM learner WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!learner) return res.status(404).json({ message: 'Stagiaire introuvable' });
-
-        // Les deux dates « payé le … » arrivent avec la 194 ; sans elles, on lit le règlement d'après
-        // les seules factures, et l'écran n'offre pas la coche (`migration_194: false`).
-        const aDates = await colonneExiste(conn, 'enrollment', 'acompte_paye_le');
-        const colsDates = aDates
-            ? "DATE_FORMAT(e.acompte_paye_le, '%Y-%m-%d') AS acompte_paye_le, DATE_FORMAT(e.solde_paye_le, '%Y-%m-%d') AS solde_paye_le"
-            : 'NULL AS acompte_paye_le, NULL AS solde_paye_le';
-        // Le moyen de paiement (migration 195) — mêmes précautions : sans les colonnes, on lit NULL et
-        // l'écran n'offre pas le sélecteur (`migration_195: false`).
-        const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
-        const colsMoyen = aMoyen
-            ? 'e.acompte_moyen, e.acompte_ref, e.solde_moyen, e.solde_ref'
-            : 'NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref';
-        const [dossiers] = await conn.query(
-            `SELECT e.id AS enrollment_id, e.price AS enroll_price, e.acompte, ${colsDates}, ${colsMoyen},
-                    p.title AS program_title, p.code AS program_code, p.price AS tarif, s.year, s.week
-               FROM enrollment e
-               JOIN training_session s ON s.id = e.session_id
-               LEFT JOIN training_program p ON p.id = s.program_id
-              WHERE e.learner_id = ? AND e.organization_id = ?
-              ORDER BY s.year DESC, s.week DESC, p.code`,
-            [req.params.id, orgId]
-        );
-
-        const data = [];
-        for (const d of dossiers) {
-            /* Les factures qui désignent le dossier — sur la facture même OU sur l'une de ses lignes
-               (une facture d'entreprise en porte une par stagiaire), comme lib/inscriptionsFacturees.js.
-               Le PAYÉ = somme des règlements REUSSI ; la date, le plus récent d'entre eux. */
-            const [factures] = await conn.query(
-                `SELECT i.number AS numero, i.type, i.status AS statut, i.amount_net AS montant,
-                        COALESCE(SUM(CASE WHEN pay.status = 'REUSSI' THEN pay.amount END), 0) AS paye,
-                        DATE_FORMAT(MAX(CASE WHEN pay.status = 'REUSSI' THEN pay.paid_at END), '%Y-%m-%d') AS dernier_paiement
-                   FROM invoice i
-                   LEFT JOIN payment pay ON pay.invoice_id = i.id
-                  WHERE i.organization_id = ? AND i.type IN ('ACOMPTE', 'FACTURE')
-                    AND (i.enrollment_id = ? OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = ?))
-                  GROUP BY i.id`,
-                [orgId, d.enrollment_id, d.enrollment_id]
-            );
-            const { montant: prix } = montantDuDossier(d.enroll_price, d.tarif);
-            const r = calculerReglement({
-                prix, acompteConvenu: d.acompte,
-                acomptePayeLe: d.acompte_paye_le, soldePayeLe: d.solde_paye_le,
-                acompteMoyen: d.acompte_moyen, acompteRef: d.acompte_ref,
-                soldeMoyen: d.solde_moyen, soldeRef: d.solde_ref,
-                factures,
-            });
-            data.push({
-                enrollment_id: d.enrollment_id, program_title: d.program_title, program_code: d.program_code,
-                year: d.year, week: d.week,
-                acompte_convenu: d.acompte != null ? Number(d.acompte) : null, // pour préremplir le champ de saisie
-                migration_194: aDates, // l'écran n'offre la coche « payé le… » que si la 194 est jouée
-                migration_195: aMoyen, // … et le moyen de paiement que si la 195 est jouée
-                ...r,
-            });
-        }
-        // La liste PROPOSÉE par la carte (le sélecteur « Réglé par ») : les moyens de l'entité.
-        const moyens = await moyensPaiementOrg(conn, orgId);
-        res.json({ data, moyens });
+        res.json(await reponseReglements(conn, orgId, 'e.learner_id = ?', [req.params.id]));
     } catch (err) {
         console.error('getReglements:', err.message);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -1088,9 +1095,72 @@ const getReglements = async (req, res) => {
 };
 
 /**
- * PATCH /api/stagiaires/:id/reglement/:enrollmentId — la PART MANUELLE du règlement d'un dossier :
- * le montant de l'acompte convenu (colonne `acompte`, déjà là) et les deux « payé le … » (194).
- * Ce que porte une facture ne se saisit PAS ici : la facture fait foi (cf. lib/reglementDossier.js).
+ * APPLIQUE la part manuelle du règlement d'un dossier DÉJÀ vérifié (appartenant à son stagiaire OU à
+ * son entreprise) : le montant de l'acompte convenu (colonne `acompte`, déjà là), les deux « payé
+ * le … » (194), et le moyen + référence (195). Rend { status, error } en cas de refus, ou null si
+ * tout s'est écrit. Partagé par la fiche stagiaire ET la fiche entreprise. Ce que porte une facture
+ * ne se saisit PAS ici : la facture fait foi (cf. lib/reglementDossier.js).
+ */
+async function appliquerReglement(conn, orgId, enrollmentId, b) {
+    const sets = [];
+    const vals = [];
+
+    // Montant de l'acompte convenu — les montants se TAPENT en français (cf. lib/montantSaisi.js).
+    if ('acompte' in b) {
+        const brut = b.acompte;
+        if (brut === null || brut === '' || brut === undefined) sets.push('acompte = NULL');
+        else {
+            const m = lireMontant(brut); // NaN (pas null) si illisible — d'où Number.isFinite.
+            if (!Number.isFinite(m)) return { status: 422, error: 'Montant de l\'acompte invalide, écrivez-le par exemple 450,00.' };
+            sets.push('acompte = ?');
+            vals.push(m.toFixed(2));
+        }
+    }
+
+    // Les « payé le … » sont les colonnes de la 194 : sans elles, un refus lisible plutôt qu'un plantage.
+    if (('acompte_paye_le' in b) || ('solde_paye_le' in b)) {
+        const aDates = await colonneExiste(conn, 'enrollment', 'acompte_paye_le');
+        if (!aDates) return { status: 503, error: 'La coche « payé le… » arrive avec la migration 194 (non jouée).' };
+        for (const cle of ['acompte_paye_le', 'solde_paye_le']) {
+            if (!(cle in b)) continue;
+            const v = b[cle];
+            if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
+            else if (/^\d{4}-\d{2}-\d{2}$/.test(String(v))) { sets.push(`${cle} = ?`); vals.push(v); }
+            else return { status: 422, error: 'Date invalide (attendu AAAA-MM-JJ).' };
+        }
+    }
+
+    // Le moyen de paiement du règlement (195), séparément acompte / solde. Sans les colonnes, un
+    // refus lisible. Le moyen est l'un des moyens connus (ou vide) ; la référence, un texte court.
+    if (['acompte_moyen', 'solde_moyen', 'acompte_ref', 'solde_ref'].some((k) => k in b)) {
+        const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
+        if (!aMoyen) return { status: 503, error: 'Le moyen de paiement arrive avec la migration 195 (non jouée).' };
+        // On accepte les moyens de l'entité (ceux que la carte propose) et les codes historiques.
+        const autorises = await moyensPaiementOrg(conn, orgId);
+        for (const cle of ['acompte_moyen', 'solde_moyen']) {
+            if (!(cle in b)) continue;
+            const v = b[cle];
+            if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
+            else if (moyenValide(v, autorises)) { sets.push(`${cle} = ?`); vals.push(v); }
+            else return { status: 422, error: 'Moyen de paiement inconnu.' };
+        }
+        for (const cle of ['acompte_ref', 'solde_ref']) {
+            if (!(cle in b)) continue;
+            const v = b[cle];
+            if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
+            else { sets.push(`${cle} = ?`); vals.push(String(v).trim().slice(0, 80)); }
+        }
+    }
+
+    if (!sets.length) return { status: 422, error: 'Rien à enregistrer.' };
+    vals.push(enrollmentId, orgId);
+    await conn.query(`UPDATE enrollment SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+    return null;
+}
+
+/**
+ * PATCH /api/stagiaires/:id/reglement/:enrollmentId — la part manuelle du règlement d'un dossier
+ * DU STAGIAIRE. Le détail (validation, UPDATE) vit dans `appliquerReglement`, partagé avec l'entreprise.
  */
 const updateReglement = async (req, res) => {
     try {
@@ -1101,61 +1171,8 @@ const updateReglement = async (req, res) => {
             [req.params.enrollmentId, req.params.id, orgId]
         );
         if (!enr) return res.status(404).json({ message: 'Dossier introuvable' });
-
-        const b = req.body || {};
-        const sets = [];
-        const vals = [];
-
-        // Montant de l'acompte convenu — les montants se TAPENT en français (cf. lib/montantSaisi.js).
-        if ('acompte' in b) {
-            const brut = b.acompte;
-            if (brut === null || brut === '' || brut === undefined) sets.push('acompte = NULL');
-            else {
-                const m = lireMontant(brut); // NaN (pas null) si illisible — d'où Number.isFinite.
-                if (!Number.isFinite(m)) return res.status(422).json({ error: 'Montant de l\'acompte invalide, écrivez-le par exemple 450,00.' });
-                sets.push('acompte = ?');
-                vals.push(m.toFixed(2));
-            }
-        }
-
-        // Les « payé le … » sont les colonnes de la 194 : sans elles, un refus lisible plutôt qu'un plantage.
-        if (('acompte_paye_le' in b) || ('solde_paye_le' in b)) {
-            const aDates = await colonneExiste(conn, 'enrollment', 'acompte_paye_le');
-            if (!aDates) return res.status(503).json({ error: 'La coche « payé le… » arrive avec la migration 194 (non jouée).' });
-            for (const cle of ['acompte_paye_le', 'solde_paye_le']) {
-                if (!(cle in b)) continue;
-                const v = b[cle];
-                if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
-                else if (/^\d{4}-\d{2}-\d{2}$/.test(String(v))) { sets.push(`${cle} = ?`); vals.push(v); }
-                else return res.status(422).json({ error: 'Date invalide (attendu AAAA-MM-JJ).' });
-            }
-        }
-
-        // Le moyen de paiement du règlement (195), séparément acompte / solde. Sans les colonnes, un
-        // refus lisible. Le moyen est l'un des moyens connus (ou vide) ; la référence, un texte court.
-        if (['acompte_moyen', 'solde_moyen', 'acompte_ref', 'solde_ref'].some((k) => k in b)) {
-            const aMoyen = await colonneExiste(conn, 'enrollment', 'acompte_moyen');
-            if (!aMoyen) return res.status(503).json({ error: 'Le moyen de paiement arrive avec la migration 195 (non jouée).' });
-            // On accepte les moyens de l'entité (ceux que la carte propose) et les codes historiques.
-            const autorises = await moyensPaiementOrg(conn, orgId);
-            for (const cle of ['acompte_moyen', 'solde_moyen']) {
-                if (!(cle in b)) continue;
-                const v = b[cle];
-                if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
-                else if (moyenValide(v, autorises)) { sets.push(`${cle} = ?`); vals.push(v); }
-                else return res.status(422).json({ error: 'Moyen de paiement inconnu.' });
-            }
-            for (const cle of ['acompte_ref', 'solde_ref']) {
-                if (!(cle in b)) continue;
-                const v = b[cle];
-                if (v === null || v === '' || v === undefined) sets.push(`${cle} = NULL`);
-                else { sets.push(`${cle} = ?`); vals.push(String(v).trim().slice(0, 80)); }
-            }
-        }
-
-        if (!sets.length) return res.status(422).json({ error: 'Rien à enregistrer.' });
-        vals.push(req.params.enrollmentId, orgId);
-        await conn.query(`UPDATE enrollment SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
+        const err = await appliquerReglement(conn, orgId, req.params.enrollmentId, req.body || {});
+        if (err) return res.status(err.status).json({ error: err.error });
         // Journalisé comme le retrait de session : sur le STAGIAIRE (sa fiche), pas sur un objet
         // « dossier » qui n'a d'écran nulle part — la cloche mène ainsi à la fiche où vit le règlement.
         logAudit(req, 'enrollment.reglement', 'Learner', req.params.id);
@@ -1169,4 +1186,5 @@ const updateReglement = async (req, res) => {
 module.exports = {
     getLearners, getDistinctions, getARecontacter, getACloturer, getLearner, createLearner, updateLearner, deleteLearner, resetStagiairePassword,
     deleteStagiaireAccount, createStagiaireAccount, normaliserSaisie, RE_EMAIL, importLearners, getReglements, updateReglement,
+    reponseReglements, appliquerReglement,
 };

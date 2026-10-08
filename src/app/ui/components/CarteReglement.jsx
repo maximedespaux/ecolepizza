@@ -21,7 +21,10 @@ import { updateReglement } from "../api/apiClient.js";
  * Écriture réservée au bureau (`canEdit`). Sans la migration 194, la coche « payé le… » est absente
  * et le dit ; le montant de l'acompte, lui, se saisit déjà (sa colonne préexiste).
  */
-export default function CarteReglement({ learnerId, reglements, moyens, canEdit, onSaved }) {
+/* `onUpdate(enrollmentId, patch)` : l'écriture d'un dossier. Fourni par la fiche ENTREPRISE
+   (updateReglementEntreprise) ; à défaut, on écrit côté stagiaire (updateReglement(learnerId, …)),
+   la fiche stagiaire ne passant que `learnerId`. `videMessage` adapte le texte « aucun dossier ». */
+export default function CarteReglement({ learnerId, reglements, moyens, canEdit, onSaved, onUpdate, videMessage }) {
   const [erreur, setErreur] = useState("");
   const [enCours, setEnCours] = useState(false);
   // Texte du champ « acompte » en cours d'édition, par dossier (sinon on lit la valeur du serveur).
@@ -32,12 +35,12 @@ export default function CarteReglement({ learnerId, reglements, moyens, canEdit,
 
   if (!reglements) return <Card title={<Titre />}><p className="hint" style={{ margin: 0 }}>Chargement…</p></Card>;
   if (reglements.length === 0) {
-    return <Card title={<Titre />}><p className="hint" style={{ margin: 0 }}>Aucun dossier : le règlement se suit une fois le stagiaire inscrit à une session.</p></Card>;
+    return <Card title={<Titre />}><p className="hint" style={{ margin: 0 }}>{videMessage || "Aucun dossier : le règlement se suit une fois le stagiaire inscrit à une session."}</p></Card>;
   }
 
   async function enregistrer(enrollmentId, patch) {
     setErreur(""); setEnCours(true);
-    try { await updateReglement(learnerId, enrollmentId, patch); onSaved?.(); }
+    try { await (onUpdate ? onUpdate(enrollmentId, patch) : updateReglement(learnerId, enrollmentId, patch)); onSaved?.(); }
     catch (e) { setErreur(e.message || "Enregistrement impossible."); }
     finally { setEnCours(false); }
   }

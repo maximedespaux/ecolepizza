@@ -222,5 +222,5 @@ test('LA FICHE ENTREPRISE : une remise à l\'entreprise liste TOUS ses fichiers,
     assert.match(retirer, /await supprimerRemiseFichier\(f\.id\);/);
     assert.match(retirer, /setParcoursRefresh\(\(n\) => n \+ 1\)/);
     assert.match(retirer, /L'accusé de réception de l'entreprise sera ANNULÉ/);
-    assert.match(page, /supprimerRemiseFichier \} from "\.\.\/api\/apiClient\.js"|, supprimerRemiseFichier \}/);
+    assert.match(page, /import \{[^}]*\bsupprimerRemiseFichier\b[^}]*\} from "\.\.\/api\/apiClient\.js"/);
 });
