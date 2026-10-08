@@ -22,6 +22,9 @@ const { capitaliser, CAPITALES_ENTREPRISE } = require('../lib/saisie.js');
 const { sendMail, appUrl } = require('../lib/mailer.js');
 const { representativeEmail } = require('../lib/mailTemplates.js');
 const { createStagiaireAccount } = require('./learner.controller.js');
+/* Le règlement d'une entreprise réutilise l'assemblage et l'écriture de la fiche stagiaire : même
+   carte, mêmes colonnes (194/195), seul le filtre change (company_id au lieu de learner_id). */
+const { reponseReglements, appliquerReglement } = require('./learner.controller.js');
 const { loadOrgSteps } = require('./template.controller.js');
 const { formationSteps, enrollmentSteps, resoudreVariantesEntreprise } = require('./formationProgram.controller.js');
 const { companySignsDoc, stepSigners, typeDuModele, groupesParOpco, cleOpco } = require('../lib/documents.js');
@@ -1298,4 +1301,45 @@ const recupererCompanyDocuments = async (req, res) => {
     }
 };
 
-module.exports = { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments, normaliserEntreprise, RE_EMAIL_ENT };
+/**
+ * GET /api/companies/:id/reglements — le suivi du règlement, un bloc par DOSSIER de l'entreprise
+ * (ses stagiaires inscrits). Même carte que la fiche stagiaire, filtre `e.company_id = ?`.
+ */
+const getReglementsEntreprise = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[c]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        if (!c) return res.status(404).json({ message: 'Entreprise introuvable' });
+        res.json(await reponseReglements(conn, orgId, 'e.company_id = ?', [req.params.id]));
+    } catch (err) {
+        console.error('getReglementsEntreprise:', err.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * PATCH /api/companies/:id/reglement/:enrollmentId — la part manuelle du règlement d'un dossier de
+ * l'entreprise. Le dossier doit appartenir à CETTE entreprise (company_id), sinon 404.
+ */
+const updateReglementEntreprise = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const [[enr]] = await conn.query(
+            'SELECT id FROM enrollment WHERE id = ? AND company_id = ? AND organization_id = ?',
+            [req.params.enrollmentId, req.params.id, orgId]
+        );
+        if (!enr) return res.status(404).json({ message: 'Dossier introuvable' });
+        const err = await appliquerReglement(conn, orgId, req.params.enrollmentId, req.body || {});
+        if (err) return res.status(err.status).json({ error: err.error });
+        // Journalisé sur l'ENTREPRISE (sa fiche, où vit cette carte) — la cloche y mène.
+        logAudit(req, 'enrollment.reglement', 'Company', req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('updateReglementEntreprise:', err.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { importCompanies, getCompanies, getCompany, createCompany, updateCompany, deleteCompany, registerCompanyStagiaires, detachLearner, companyDocTemplates, listCompanyDocuments, createCompanyDocument, getCompanyParcours, generateGroupDocuments, getCompanyLearnerDocuments, createRepresentativeAccount, getCompanyDocumentsRecuperables, recupererCompanyDocuments, getReglementsEntreprise, updateReglementEntreprise, normaliserEntreprise, RE_EMAIL_ENT };

@@ -617,6 +617,13 @@ export function getReglements(learnerId) {
 export function updateReglement(learnerId, enrollmentId, payload) {
   return request(`/stagiaires/${learnerId}/reglement/${enrollmentId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
+// Même suivi, côté ENTREPRISE : un bloc par dossier de l'entreprise (ses stagiaires inscrits).
+export function getReglementsEntreprise(companyId) {
+  return request(`/companies/${companyId}/reglements`);
+}
+export function updateReglementEntreprise(companyId, enrollmentId, payload) {
+  return request(`/companies/${companyId}/reglement/${enrollmentId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
 
 export function resetStagiairePassword(id) {
   return request(`/stagiaires/${id}/reset-password`, { method: "POST" });
