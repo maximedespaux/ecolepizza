@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, repDocumentPdfUrl,
   getRepRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
+import { pingAcces } from "../lib/gamification.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
@@ -65,7 +66,7 @@ function RepresentantEspace() {
       await signRepDocument(signing.id, { signer_name, signature_data });
       setSigning(null);
       setStatus({ type: "success", message: "Document signé. Merci !" });
-      load();
+      load(); pingAcces(); // la pastille « Entreprise » de la barre retombe aussitôt
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   /* CONFIRMER, C'EST S'ENGAGER — la même question qu'au stagiaire (StudentFormationDetail) : le
@@ -77,14 +78,14 @@ function RepresentantEspace() {
     try {
       await accuserRemise(r.remise_id);
       setStatus({ type: "success", message: "Réception confirmée. Merci." });
-      load();
+      load(); pingAcces();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function signWithStamp(doc) {
     try {
       await signRepDocument(doc.id, { use_saved: true, signer_name: fullName });
       setStatus({ type: "success", message: "Document signé avec votre cachet." });
-      load();
+      load(); pingAcces();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 

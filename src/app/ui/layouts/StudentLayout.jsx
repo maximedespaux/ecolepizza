@@ -106,6 +106,7 @@ function StudentLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [unlocked, setUnlocked] = useState(true); // fail-open : débloqué par défaut
   const [pending, setPending] = useState(0);      // documents à signer / QCM à faire
+  const [repPending, setRepPending] = useState(0);// documents de l'ENTREPRISE à signer (si représentant)
   const [news, setNews] = useState(0);            // commentaires nouveaux dans la Communauté
   const [done, setDone] = useState(0);            // formations terminées → cadre de l'avatar
   const choixCadre = useCadreChoisi(user?.id);    // resynchronisé dès qu'il change de cadre
@@ -120,6 +121,7 @@ function StudentLayout() {
       .then((r) => {
         setUnlocked(r?.data?.quest_unlocked !== false);
         setPending(Number(r?.data?.pending_docs) || 0);
+        setRepPending(Number(r?.data?.rep_pending_docs) || 0);
         setNews(Number(r?.data?.community_news) || 0);
         setDone(Number(r?.data?.formations_done) || 0);
         setExclusifs(r?.data?.cadres_exclusifs || []);
@@ -179,9 +181,12 @@ function StudentLayout() {
   // Destinations hors « Outils », dans l'ordre de la barre. `gated` = fermé tant que le
   // point d'accès n'est pas franchi.
   const extras = [
-    { to: "/communaute", ic: "users", label: "Communauté", gated: true, badge: news },
+    { to: "/communaute", ic: "users", label: "Communauté", gated: true, badge: news,
+      titre: (n) => `${n} nouveau${n > 1 ? "x" : ""} commentaire${n > 1 ? "s" : ""}` },
     ...(user?.role === "INTERVENANT" ? [{ to: "/intervention", ic: "clipboard-check", label: "Intervention" }] : []),
-    ...(user?.has_company ? [{ to: "/entreprise-documents", ic: "building", label: "Entreprise" }] : []),
+    // L'entreprise a-t-elle des documents à signer ? Même pastille que « Mes documents », côté représentant.
+    ...(user?.has_company ? [{ to: "/entreprise-documents", ic: "building", label: "Entreprise", badge: repPending,
+      titre: (n) => `${n} document${n > 1 ? "s" : ""} à signer` }] : []),
   ];
 
   return (
@@ -221,7 +226,7 @@ function StudentLayout() {
             e.gated && !unlocked
               ? <LockedBtn key={e.to}>{e.label}</LockedBtn>
               : <NavLink key={e.to} to={e.to} className={navClass}
-                  title={e.badge > 0 ? `${e.badge} nouveau${e.badge > 1 ? "x" : ""} commentaire${e.badge > 1 ? "s" : ""}` : undefined}>
+                  title={e.badge > 0 && e.titre ? e.titre(e.badge) : undefined}>
                   {e.label}
                   {e.badge > 0 && <span className="stu-count">{e.badge}</span>}
                 </NavLink>
@@ -251,7 +256,7 @@ function StudentLayout() {
         <button className="icon-btn stu-burger" onClick={() => setMenuOpen((o) => !o)}
           aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menuOpen}>
           <Icon name={menuOpen ? "x" : "menu"} size={20} />
-          {!menuOpen && (pending > 0 || news > 0) && <span className="stu-burger-dot" />}
+          {!menuOpen && (pending > 0 || repPending > 0 || news > 0) && <span className="stu-burger-dot" />}
         </button>
       </header>
 
