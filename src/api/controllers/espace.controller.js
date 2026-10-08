@@ -513,7 +513,7 @@ async function communityNewsCount(conn, userId, orgId) {
     }
 }
 
-async function pendingDocsCount(conn, learner, orgId) {
+async function pendingDocsCount(conn, learner, orgId, userId) {
     try {
         // company_id remonte PAR DOCUMENT, via le dossier auquel il appartient : c'est le
         // dossier qui dit si l'entreprise signe, jamais la fiche du stagiaire. Sinon la
@@ -528,17 +528,46 @@ async function pendingDocsCount(conn, learner, orgId) {
              GROUP BY d.id`,
             [learner.id]
         );
-        if (!rows.length) return 0;
-        const orgSteps = await loadOrgSteps(orgId);
-        return rows.filter((d) => {
+        const orgSteps = rows.length ? await loadOrgSteps(orgId) : [];
+        // À FAIRE : ses PROPRES documents en attente d'une action — QCM, émargement, ou à signer
+        // (ceux que l'entreprise signe à sa place sont écartés : rien à y faire pour lui).
+        const aFaire = rows.filter((d) => {
             if (d.quiz_id) return true;                                          // QCM à faire
             if (d.doc_company_id && companySignsDoc(orgSteps, d)) return false;  // signé par l'entreprise
             return d.type === 'EMARGEMENT' || stagiaireSignsDoc(orgSteps, d);
         }).length;
+        // + À CONSULTER : les documents de GROUPE (devis, convention, CGV) reçus par son entreprise
+        // et qu'il n'a JAMAIS OUVERTS. Il ne les signe pas, mais doit pouvoir les voir arriver ; la
+        // pastille retombe dès qu'il les ouvre (document_vu, migration 204, cf. getDocument).
+        return aFaire + await groupeNonVusCount(conn, learner.id, orgId, userId);
     } catch (e) {
         if (isMissingSchema(e)) return 0;
         console.error('Erreur comptage documents en attente :', e);
         return 0; // une pastille absente vaut mieux qu'un menu en erreur
+    }
+}
+
+/* Documents de GROUPE (scope COMPANY) rattachés à un dossier du stagiaire, reçus (ENVOYE/CONSULTE)
+   et JAMAIS OUVERTS par ce compte. À PART, et tolérant : sans la migration 204 (table document_vu),
+   on rend 0 et la pastille garde son décompte d'avant — sans faire échouer tout le comptage. */
+async function groupeNonVusCount(conn, learnerId, orgId, userId) {
+    if (!userId) return 0;
+    try {
+        const [[r]] = await conn.query(
+            `SELECT COUNT(DISTINCT gd.id) AS n
+             FROM generated_document gd
+             JOIN document_formation df ON df.document_id = gd.id
+             JOIN enrollment e ON e.id = df.enrollment_id
+             LEFT JOIN document_vu v ON v.document_id = gd.id AND v.user_id = ?
+             WHERE e.learner_id = ? AND gd.organization_id = ? AND gd.scope = 'COMPANY'
+               AND gd.status IN ('ENVOYE','CONSULTE') AND v.document_id IS NULL`,
+            [userId, learnerId, orgId]
+        );
+        return Number(r?.n) || 0;
+    } catch (e) {
+        if (isMissingSchema(e)) return 0; // migration 204 non jouée (ou scope absent) : pastille d'avant
+        console.error('Comptage documents de groupe non vus :', e.message);
+        return 0;
     }
 }
 
@@ -550,7 +579,7 @@ const getMyAccess = async (req, res) => {
         if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: await communityNewsCount(conn, req.user.id, req.user.organization_id) } });
         // Pastille du menu : calculée pour TOUTES les sorties ci-dessous, sans quoi elle
         // disparaîtrait dès qu'une formation est terminée ou qu'aucune n'est suivie.
-        const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id);
+        const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id, req.user.id);
         const community_news = await communityNewsCount(conn, req.user.id, learner.organization_id);
         const [enrollments] = await conn.query(
             `SELECT e.id AS enrollment_id, e.financing, s.program_id,

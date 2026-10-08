@@ -29,11 +29,14 @@ test('gamification.js expose le signal ACCES_EVENT et son émetteur pingAcces', 
 test('DocumentViewModal émet pingAcces APRÈS la signature du document', () => {
     const m = lire('components/DocumentViewModal.jsx');
     assert.match(m, /import \{ pingAcces \} from "\.\.\/lib\/gamification\.js"/);
-    /* L'ordre compte : le ping suit signDocument (le serveur a enregistré la signature), sinon
-       StudentLayout relirait l'accès AVANT que le point soit franchi et se croirait encore fermé. */
-    const iSign = m.indexOf('await signDocument(id');
-    const iPing = m.indexOf('pingAcces()');
-    assert.ok(iSign > 0 && iPing > iSign, 'pingAcces() doit être appelé après await signDocument(...)');
+    /* pingAcces est désormais émis à DEUX moments — à l'OUVERTURE (le document est marqué « vu »,
+       la pastille « reçus mais jamais vus » retombe) et après la SIGNATURE. On vérifie ici le second,
+       dans son propre bloc : l'ordre compte, le ping suit signDocument (le serveur a enregistré la
+       signature), sinon StudentLayout relirait l'accès AVANT que le point soit franchi. */
+    const sign = m.slice(m.indexOf('async function handleSign'), m.indexOf('async function handleSign') + 600);
+    const iSign = sign.indexOf('await signDocument(id');
+    const iPing = sign.indexOf('pingAcces()');
+    assert.ok(iSign >= 0 && iPing > iSign, 'pingAcces() doit être appelé après await signDocument(...) dans handleSign');
 });
 
 test('StudentLayout relit l\'accès sur ACCES_EVENT, pas seulement au changement de page', () => {
