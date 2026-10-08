@@ -384,7 +384,7 @@ function StudentFormationDetail({ enrollmentId, embedded = false, formations, on
                               <Badge tone={e.d.status === "SIGNE" ? "g" : "b"}>{e.d.status === "SIGNE" ? "Répondu" : "QCM à faire"}</Badge>
                               <button className="btn sm primary" onClick={() => setQuizDoc(e.d.id)}>{e.d.status === "SIGNE" ? "Voir" : "Répondre"}</button>
                             </>
-                          ) : e.d.consultable === 0 || e.d.consultable === false ? (
+                          ) : e.d.consultable === 0 || e.d.consultable === false || e.d.consultable === null ? (
                             /* Document de GROUPE de l'ENTREPRISE (devis, convention, CGV) : le
                                stagiaire en voit le STATUT (fait ou non), pas le contenu — pas de
                                bouton « Consulter ». Son entreprise le reçoit et le signe de son
