@@ -1118,6 +1118,35 @@ const checkDocumentConditions = async (req, res) => {
 /**
  * GET /api/documents/:id — document + contenu HTML fusionné (aperçu).
  */
+/* QUI PEUT LIRE UN DOCUMENT (LECTURE SEULE). Le personnel, oui. Un stagiaire, seulement :
+   - le document qui lui est NOMMÉMENT rattaché (`doc.learner_id`) ;
+   - un document (de GROUPE, sans `learner_id`) RATTACHÉ À SON DOSSIER par `document_formation` —
+     c'est ainsi qu'un stagiaire inscrit par une entreprise ouvre EN LECTURE le devis / la
+     convention / les CGV de sa formation (décidé avec l'école le 2026-10-08). Il ne les SIGNE pas
+     pour autant : `signDocument` garde son propre contrôle, inchangé ;
+   - un document dont une CASE de signature lui est attribuée (`document_signature`) — un
+     intervenant à qui l'on fait signer un document de session (migration 157), sans `learner_id`.
+   Tout reste borné à l'organisme : le document a déjà été chargé sous `organization_id`, et le
+   rattachement est vérifié dans le même organisme. */
+async function lecteurDuDocument(conn, user, doc) {
+    const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
+    if (STAFF.includes(user.role)) return true;
+    if (doc.learner_id) {
+        const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, user.id]);
+        if (own.length) return true;
+    }
+    const [lie] = await conn.query(
+        `SELECT 1 FROM document_formation df
+           JOIN enrollment e ON e.id = df.enrollment_id
+           JOIN learner l ON l.id = e.learner_id
+          WHERE df.document_id = ? AND l.user_id = ? AND e.organization_id = ?
+          LIMIT 1`,
+        [doc.id, user.id, doc.organization_id]);
+    if (lie.length) return true;
+    const [att] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?', [doc.id, user.id]);
+    return att.length > 0;
+}
+
 const getDocument = async (req, res) => {
     try {
         const conn = db.promise();
@@ -1128,12 +1157,9 @@ const getDocument = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ message: 'Document introuvable' });
         const doc = rows[0];
 
-        // Anti-IDOR : un non-membre du personnel ne peut lire que ses propres documents.
-        const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
-        if (!STAFF.includes(req.user.role)) {
-            const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
-            if (own.length === 0) return res.status(403).json({ message: 'Accès refusé' });
-        }
+        // Anti-IDOR : hors personnel, on ne lit que ses propres documents — ou ceux (de GROUPE)
+        // rattachés à son dossier (cf. lecteurDuDocument).
+        if (!(await lecteurDuDocument(conn, req.user, doc))) return res.status(403).json({ message: 'Accès refusé' });
 
         // Le corps vient du MODÈLE, et de lui seul. Il existait ici un rendu de secours codé
         // en dur (lib/render.js) qui fabriquait un document plausible pour n'importe quel type
@@ -1261,11 +1287,7 @@ async function fillForRequest(req, res) {
     if (rows.length === 0) { res.status(404).json({ message: 'Document introuvable' }); return null; }
     const doc = rows[0];
 
-    const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
-    if (!STAFF.includes(req.user.role)) {
-        const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
-        if (own.length === 0) { res.status(403).json({ message: 'Accès refusé' }); return null; }
-    }
+    if (!(await lecteurDuDocument(conn, req.user, doc))) { res.status(403).json({ message: 'Accès refusé' }); return null; }
 
     const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
     // Signature du document (stagiaire/signataire) pour le jeton {Signature stagiaire}.
@@ -1479,23 +1501,11 @@ const downloadPdf = async (req, res) => {
                 [req.params.id, req.user.organization_id]
             );
             if (sdoc) {
-                const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
-                let allowed = STAFF.includes(req.user.role);
-                if (!allowed) {
-                    const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [sdoc.learner_id, req.user.id]);
-                    allowed = own.length > 0;
-                }
-                if (!allowed) {
-                    /* LE SIGNATAIRE ATTRIBUÉ PEUT RELIRE CE QU'ON LUI DEMANDE DE SIGNER. Un
-                       document de session (migration 157) n'a pas de stagiaire : les deux gardes
-                       ci-dessus le refusaient donc à l'intervenant à qui il est justement
-                       destiné — on lui demandait de signer sans pouvoir ouvrir. La garde reste
-                       étroite : sa case, sur CE document, et rien d'autre. */
-                    const [att] = await conn.query(
-                        'SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?',
-                        [sdoc.id, req.user.id]);
-                    allowed = att.length > 0;
-                }
+                /* MÊME RÈGLE DE LECTURE QUE PARTOUT (lecteurDuDocument) : personnel, stagiaire
+                   propriétaire, document de GROUPE rattaché à son dossier, ou signataire attribué —
+                   un document de session (migration 157) n'a pas de stagiaire, l'intervenant à qui
+                   on le fait signer doit pouvoir l'ouvrir. */
+                const allowed = await lecteurDuDocument(conn, req.user, sdoc);
                 if (allowed) {
                     /* LE FICHIER REÇU PASSE AVANT TOUT — même raison que le PDF signé figé juste en
                        dessous : ce qui fait foi ne se régénère pas. Réservé au PDF : servir une image ou
@@ -1645,18 +1655,9 @@ const downloadProof = async (req, res) => {
             [req.params.id, req.user.organization_id]);
         if (!doc) return res.status(404).json({ message: 'Document introuvable' });
 
-        // Même garde que le téléchargement : personnel, stagiaire propriétaire, ou signataire attribué.
-        const STAFF = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR'];
-        let allowed = STAFF.includes(req.user.role);
-        if (!allowed) {
-            const [own] = await conn.query('SELECT id FROM learner WHERE id = ? AND user_id = ?', [doc.learner_id, req.user.id]);
-            allowed = own.length > 0;
-        }
-        if (!allowed) {
-            const [att] = await conn.query('SELECT id FROM document_signature WHERE document_id = ? AND user_id = ?', [doc.id, req.user.id]);
-            allowed = att.length > 0;
-        }
-        if (!allowed) return res.status(403).json({ message: 'Accès refusé' });
+        // Même garde de LECTURE que partout (lecteurDuDocument) : personnel, stagiaire propriétaire,
+        // document de groupe rattaché à son dossier, ou signataire attribué.
+        if (!(await lecteurDuDocument(conn, req.user, doc))) return res.status(403).json({ message: 'Accès refusé' });
 
         const signataires = await collecterSignataires(conn, doc);
         if (!signataires.length) {
@@ -2257,4 +2258,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive, compterStagiairesSemaine };
+module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive, compterStagiairesSemaine, lecteurDuDocument };
