@@ -571,12 +571,37 @@ async function groupeNonVusCount(conn, learnerId, orgId, userId) {
     }
 }
 
+/* Documents de GROUPE que le REPRÉSENTANT d'une entreprise doit encore signer (espace Entreprise) :
+   le compte de la pastille portée par l'entrée « Entreprise », pendant de « Mes documents ». Un
+   représentant est un compte rattaché à une (ou des) entreprise(s) (`company.user_id`) ; on compte
+   ses documents de groupe non encore SIGNÉS, exactement comme `toSign` de l'écran. Rend 0 pour qui
+   n'est pas représentant (aucune entreprise à son nom), et reste tolérant aux schémas absents. */
+async function repPendingDocsCount(conn, userId, orgId) {
+    try {
+        const [[r]] = await conn.query(
+            `SELECT COUNT(*) AS n
+             FROM generated_document gd
+             JOIN company c ON c.id = gd.company_id AND c.user_id = ?
+             WHERE gd.organization_id = ? AND gd.scope = 'COMPANY' AND gd.status <> 'SIGNE'`,
+            [userId, orgId]
+        );
+        return Number(r?.n) || 0;
+    } catch (e) {
+        if (isMissingSchema(e)) return 0;
+        console.error('Comptage documents entreprise à signer :', e.message);
+        return 0;
+    }
+}
+
 const getMyAccess = async (req, res) => {
     try {
         const conn = db.promise();
+        // Pastille « Entreprise » : documents de groupe que ce compte doit signer comme représentant.
+        // Calculée pour toutes les sorties — y compris un représentant SANS fiche stagiaire.
+        const rep_pending_docs = await repPendingDocsCount(conn, req.user.id, req.user.organization_id);
         const learner = await learnerForUser(conn, req.user.id);
         // Pas de fiche stagiaire (intervenant, staff…) : on ne bloque pas.
-        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: await communityNewsCount(conn, req.user.id, req.user.organization_id) } });
+        if (!learner) return res.json({ data: { quest_unlocked: true, pending_docs: 0, rep_pending_docs, community_news: await communityNewsCount(conn, req.user.id, req.user.organization_id) } });
         // Pastille du menu : calculée pour TOUTES les sorties ci-dessous, sans quoi elle
         // disparaîtrait dès qu'une formation est terminée ou qu'aucune n'est suivie.
         const pending_docs = await pendingDocsCount(conn, learner, learner.organization_id, req.user.id);
@@ -611,10 +636,10 @@ const getMyAccess = async (req, res) => {
                 if (c.complete) { finished = true; break; }
             }
         }
-        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, community_news, formations_done, cadres_exclusifs } });
+        if (finished) return res.json({ data: { quest_unlocked: true, pending_docs, rep_pending_docs, community_news, formations_done, cadres_exclusifs } });
 
         // AUCUNE formation → verrouillé (rien à débloquer tant qu'il n'est pas inscrit).
-        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, community_news, formations_done, cadres_exclusifs } });
+        if (!enrollments.length) return res.json({ data: { quest_unlocked: false, pending_docs, rep_pending_docs, community_news, formations_done, cadres_exclusifs } });
         const gating = [];
         for (const e of enrollments) {
             const g = await emargementGate(conn, e, learner.organization_id, agefice);
@@ -622,10 +647,10 @@ const getMyAccess = async (req, res) => {
         }
         // Inscrit : débloqué si aucune formation n'a de point d'accès, ou si au moins un est franchi.
         const quest_unlocked = gating.length === 0 || gating.some((g) => !g.locked);
-        res.json({ data: { quest_unlocked, pending_docs, community_news, formations_done, cadres_exclusifs } });
+        res.json({ data: { quest_unlocked, pending_docs, rep_pending_docs, community_news, formations_done, cadres_exclusifs } });
     } catch (err) {
         console.error('Erreur accès stagiaire :', err);
-        res.json({ data: { quest_unlocked: true, pending_docs: 0, community_news: 0 } });
+        res.json({ data: { quest_unlocked: true, pending_docs: 0, rep_pending_docs: 0, community_news: 0 } });
     }
 };
 
