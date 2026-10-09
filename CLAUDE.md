@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (348 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-08** : **2739 tests — 2732 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (349 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-09** : **2743 tests — 2736 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
