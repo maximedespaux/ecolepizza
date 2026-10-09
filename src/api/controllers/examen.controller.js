@@ -44,6 +44,11 @@ function juryPropre(brut) {
     const liste = Array.isArray(brut) ? brut.slice(0, 10) : [];
     const out = liste.map((m) => ({
         nom: texte(m && m.nom, 120) || '',
+        /* LE PRÉNOM, saisi À PART du nom depuis le 2026-10-09 (noms composés). Il manquait à cette
+           liste blanche : la saisie l'envoyait, l'écriture le JETAIT, et au rechargement le prénom
+           était vide — à retaper à chaque fois. Le jury est du JSON (colonne `exam_session.jury`),
+           donc aucune migration : il suffit de le garder ici. */
+        prenom: texte(m && m.prenom, 120) || '',
         qualite: texte(m && m.qualite, 120) || '',
         employeur: texte(m && m.employeur, 120) || '',
         /* `externe` et `na_pas_forme` ne sont pas du confort : la majorité du jury doit être
