@@ -129,11 +129,12 @@ function CommissionJury({ sessionId }) {
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  /* Télécharge le PDF du PV (bouton « Télécharger », dans l'aperçu) — nommé d'après son numéro. */
+  /* Télécharge le PDF du PV (bouton « Télécharger », dans l'aperçu) — nommé d'après son numéro.
+     Avant clôture, « (projet) » dans le nom rappelle que ce n'est pas encore le document signé. */
   async function telecharger() {
     setStatus(null);
     try {
-      const base = `Procès-verbal ${commission?.pv_ref || ""}`.trim().replace(/[\\/:*?"<>|]/g, "");
+      const base = `Procès-verbal ${commission?.pv_ref || ""}${close ? "" : " (projet)"}`.trim().replace(/[\\/:*?"<>|]/g, "");
       await telechargerPvJury(sessionId, `${base || "proces-verbal"}.pdf`);
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
@@ -314,12 +315,11 @@ function CommissionJury({ sessionId }) {
                 {peutPoserModele && (
                   <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle de PV</button>
                 )}
-                {/* LE PDF OFFICIEL SE GÉNÈRE APRÈS CLÔTURE SEULEMENT : un procès-verbal tiré d'une
-                    délibération en cours porterait des décisions qui peuvent encore changer.
-                    Désactivé plutôt que caché, avec la raison écrite à côté — l'aperçu, lui, reste
-                    disponible pour voir le brouillon. */}
-                <button type="button" className="btn sm" disabled={!close} onClick={editerPv}
-                  title={close ? "" : "Clôturez la commission d'abord"}>Générer le PV (PDF)</button>
+                {/* LE PDF SE GÉNÈRE À TOUT MOMENT : l'école l'envoie au jury AVANT la séance. Tiré
+                    avant la clôture, il porte la mention « PROJET » (bandeau rouge + « -projet »
+                    dans le nom) pour ne pas se confondre avec le procès-verbal signé. */}
+                <button type="button" className="btn sm" onClick={editerPv}
+                  title={close ? "" : "Avant clôture : PDF marqué « projet »"}>Générer le PV (PDF)</button>
                 {peutEditer && !close && (
                   <button type="button" className="btn primary" onClick={cloturer}>Clôturer la commission</button>
                 )}
@@ -342,7 +342,8 @@ function CommissionJury({ sessionId }) {
             {!apercu.cloture && (
               <div className="status info" style={{ margin: "10px 14px 0" }}>
                 <b>Brouillon.</b> La commission n'est pas clôturée : décisions et composition peuvent
-                encore changer. L'aperçu reflète la commission <b>enregistrée</b>.
+                encore changer. L'aperçu reflète la commission <b>enregistrée</b>, et le PDF — qu'on
+                peut déjà envoyer au jury — porte la mention <b>« projet »</b>.
               </div>
             )}
             <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
@@ -350,12 +351,12 @@ function CommissionJury({ sessionId }) {
             </div>
             <div className="mfoot">
               <button className="btn ghost" onClick={() => setApercu(null)}>Fermer</button>
-              {/* Depuis l'aperçu, on passe au PDF officiel — même garde : après clôture seulement.
-                  Ouvrir dans un onglet, ou enregistrer le fichier. */}
-              <button type="button" className="btn ghost" disabled={!close} onClick={editerPv}
-                title={close ? "" : "Clôturez la commission d'abord"}>Ouvrir le PDF</button>
-              <button type="button" className="btn" disabled={!close} onClick={telecharger}
-                title={close ? "" : "Clôturez la commission d'abord"}>
+              {/* Disponible à tout moment : avant clôture, le PDF est marqué « projet » (cf. le
+                  bandeau rouge). Ouvrir dans un onglet, ou enregistrer le fichier pour l'envoyer. */}
+              <button type="button" className="btn ghost" onClick={editerPv}
+                title={apercu.cloture ? "" : "Avant clôture : PDF marqué « projet »"}>Ouvrir le PDF</button>
+              <button type="button" className="btn" onClick={telecharger}
+                title={apercu.cloture ? "" : "Avant clôture : PDF marqué « projet »"}>
                 <Icon name="download" size={14} /> Télécharger le PDF
               </button>
             </div>
