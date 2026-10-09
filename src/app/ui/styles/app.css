@@ -3016,6 +3016,12 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .arch-docs{margin-left:16px;padding:2px 6px 8px;border-left:1px solid var(--border-soft)}
 .arch-doc{display:flex;align-items:center;gap:10px;padding:6px 4px}
 .arch-doc+.arch-doc{border-top:1px solid var(--border-soft)}
+/* Onglet Usage de Pizza Quest : chaque fait d'un stagiaire en PASTILLE, pour qu'il se lise seul
+   au lieu d'une phrase grise où tout se suit à la file (chapitres, étoiles, bonnes réponses…). */
+.qu-stats{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:4px}
+.qu-stat{font-size:11px;color:var(--muted);background:var(--bg2);border:1px solid var(--border-soft);border-radius:7px;padding:1px 7px;white-space:nowrap}
+.qu-stat b{color:var(--text);font-weight:700}
+.qu-when{font-size:11px;color:var(--dim)}
 /* LES SOUS-DOSSIERS DE L'ARBORESCENCE D'ARCHIVAGE dans le dossier d'un stagiaire (« Justificatifs »,
    2026-09-28) : un titre discret et un filet, pas un nouveau <details> — ils se lisent d'un coup d'œil,
    comme les fichiers d'un dossier ouvert. */
