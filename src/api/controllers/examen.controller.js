@@ -300,6 +300,14 @@ async function contextePv(conn, orgId, sessionId) {
     return { org: org || {}, ...ctx };
 }
 
+/* LE BANDEAU « PROJET », en tête d'un PV tiré AVANT la clôture. L'école l'envoie aux membres du
+   jury pour préparer la séance : c'est légitime, mais un brouillon ne doit pas se confondre avec le
+   procès-verbal signé. Texte en rouge (couleur littérale dans un <span>, lue par LibreOffice —
+   cf. CLAUDE.md §3 : les avertissements rouges des modèles rendent). */
+const BANDEAU_PROJET = '<p style="text-align: center;"><strong><span style="color: #c0392b;">'
+    + 'PROJET — document de travail, non finalisé. La commission de délibération ne s\'est pas encore '
+    + 'réunie ; décisions et composition susceptibles de changer.</span></strong></p>';
+
 /** POST /api/examens/session/:id/pv — rend le procès-verbal en PDF. */
 const pvPdf = async (req, res) => {
     const orgId = req.user.organization_id;
@@ -315,14 +323,19 @@ const pvPdf = async (req, res) => {
         if (!content || content.kind !== 'builder') {
             return res.status(404).json({ error: `Modèle « ${slug} » introuvable. Créez-le depuis Modèles.` });
         }
+        /* AVANT CLÔTURE = un PROJET. On le rend quand même (le jury le reçoit pour préparer), mais
+           on le MARQUE : un bandeau rouge en tête, et « -projet » dans le nom du fichier. */
+        const brouillon = ctx.exam.status !== 'CLOTUREE';
         const pdf = await composeDocumentPdf({
-            bodyHtml: content.html, headerHtml: content.header, footerHtml: content.footer,
+            bodyHtml: brouillon ? BANDEAU_PROJET + content.html : content.html,
+            headerHtml: content.header, footerHtml: content.footer,
             ctx, useLetterhead: avecPapierEnTete(content.layout),
             bleed: (content.layout && content.layout.bleed) || {},
         });
         logAudit(req, 'examen.pv', 'ExamSession', req.params.id);
+        const base = (ctx.exam.pv_ref || 'jury').replace(/[^a-zA-Z0-9-]/g, '');
         res.set('Content-Type', 'application/pdf');
-        res.set('Content-Disposition', `inline; filename="pv-${(ctx.exam.pv_ref || 'jury').replace(/[^a-zA-Z0-9-]/g, '')}.pdf"`);
+        res.set('Content-Disposition', `inline; filename="pv-${base}${brouillon ? '-projet' : ''}.pdf"`);
         res.send(pdf);
     } catch (e) {
         if (e && e.code === 'NO_SOFFICE') {
