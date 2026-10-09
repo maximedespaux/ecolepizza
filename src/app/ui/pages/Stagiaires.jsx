@@ -182,8 +182,8 @@ function Stagiaires() {
           <Icon name="search" size={18} />
           <input
             autoFocus
-            aria-label="Rechercher un stagiaire par nom, prénom ou e-mail"
-            placeholder="Rechercher un stagiaire, nom, prénom, e-mail…"
+            aria-label="Rechercher un stagiaire par nom, prénom, e-mail ou téléphone"
+            placeholder="Rechercher un stagiaire, nom, prénom, e-mail, téléphone…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />

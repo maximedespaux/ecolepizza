@@ -244,11 +244,31 @@ function normaliserSaisie(b) {
 }
 
 /**
- * GET /api/stagiaires — liste des stagiaires de l'organisme, filtre ?q= (nom/email).
+ * GET /api/stagiaires — liste des stagiaires de l'organisme, filtre ?q= (nom, e-mail ou téléphone).
  */
 const getLearners = async (req, res) => {
     const organizationId = req.user.organization_id;
-    const q = req.query.q ? `%${req.query.q}%` : '%';
+    const raw = (req.query.q || '').trim();
+    /* LA RECHERCHE, MOT À MOT. « abadie c » doit trouver « Abadie Christelle » : « abadie » et
+       « c » tombent dans des champs DIFFÉRENTS (nom, prénom), qu'un seul LIKE sur une colonne ne
+       peut rapprocher. On exige donc que CHAQUE mot corresponde à l'un des champs (prénom, nom,
+       e-mail) — ET entre les mots, OU entre les champs.
+       Un NUMÉRO (chiffres et séparateurs, SANS lettre) se cherche à part, sur les seuls chiffres du
+       téléphone : « 06 12 34 56 78 » se retrouve en tapant « 0612 », « 06 12 » ou « 612 ». La garde
+       « sans lettre » évite qu'une saisie « abadie 06 » rende tous les téléphones contenant « 06 ». */
+    const ors = [];
+    const filtres = [];
+    const chiffres = raw.replace(/\D/g, '');
+    if (chiffres && !/[a-zA-Z]/.test(raw)) {
+        ors.push("REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(l.phone, ''), ' ', ''), '.', ''), '-', ''), '/', '') LIKE ?");
+        filtres.push(`%${chiffres}%`);
+    }
+    const termes = raw.split(/\s+/).filter(Boolean);
+    if (termes.length) {
+        ors.push(`(${termes.map(() => '(l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ?)').join(' AND ')})`);
+        for (const t of termes) { const like = `%${t}%`; filtres.push(like, like, like); }
+    }
+    const filtreSql = ors.length ? `AND (${ors.join(' OR ')})` : '';
     /* Civilité et projet : lus pour le repère « Fiche incomplète » (plus bas), jamais renvoyés. Les
        cases arrivées par migration (158, 172, 173) se lisent NULL tant que la leur n'est pas jouée :
        la liste ne tombe pas pour une colonne absente (lib/projet.js, comme l'export des partenaires). */
@@ -265,9 +285,9 @@ const getLearners = async (req, res) => {
          LEFT JOIN user u ON u.id = l.user_id
          LEFT JOIN company c ON c.id = l.company_id
          WHERE l.organization_id = ?
-           AND (l.first_name LIKE ? OR l.last_name LIKE ? OR l.email LIKE ?)
+           ${filtreSql}
          ORDER BY l.last_name, l.first_name`,
-        [organizationId, q, q, q],
+        [organizationId, ...filtres],
         async (err, results) => {
             if (err) {
                 console.error('Erreur récupération stagiaires :', err);
