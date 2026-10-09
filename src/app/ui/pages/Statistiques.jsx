@@ -7,7 +7,9 @@ import Card from "../components/Card.jsx";
 /**
  * STATISTIQUES DE CONNEXION (Qualité & conformité) — qui se connecte, et quand.
  *
- * DEUX VUES, stagiaires (orange) et équipe (bleu) séparés :
+ * STAGIAIRES SEULEMENT (orange) : l'équipe de l'organisme a été RETIRÉE de l'affichage (non
+ * pertinente pour une statistique de qualité). Le serveur peut encore calculer sa part : l'écran
+ * ne la lit simplement plus. Deux vues :
  *  · les CONNEXIONS PAR JOUR sur une fenêtre réglable (7 / 14 / 30 j, `connexion_jour`, migration
  *    200) : colonnes empilées, DÉTAIL PAR FORMATION au survol d'un jour (« NIV1 : 1, NIV2 : 4 »),
  *    un résumé des personnes distinctes, et les plus assidus. Sans la table, la courbe se remplira
@@ -39,14 +41,13 @@ function labelJour(iso) {
   return `${JOURS_FR[dt.getDay()]} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 }
 
-/* Légende de la courbe : une pastille par FORMATION (sa couleur), puis l'équipe. */
+/* Légende de la courbe : une pastille par FORMATION (sa couleur). L'équipe n'est plus affichée. */
 function LegendeFormations({ cles, couleur }) {
   return (
     <div className="stat-legende">
       {(cles || []).map((c) => (
         <span key={c.key}><span className="stat-pastille" style={{ background: couleur(c.key) }} /> {c.label}</span>
       ))}
-      <span><span className="stat-pastille" style={{ background: COUL.equipe }} /> Équipe</span>
     </div>
   );
 }
@@ -69,7 +70,7 @@ function Synthese({ titre, couleur, v }) {
    barre STAGIAIRE est colorée PAR FORMATION, comme la courbe du dessus (segments empilés en largeur),
    quand le serveur rend `recence_formations` ; sinon elle retombe sur la couleur stagiaire unie. */
 function Recence({ d, couleur }) {
-  const max = Math.max(1, ...d.tranches.flatMap((t) => [d.stagiaires.recence[t.cle], d.equipe.recence[t.cle]]));
+  const max = Math.max(1, ...d.tranches.map((t) => d.stagiaires.recence[t.cle]));
   const rf = d.stagiaires.recence_formations || {};
   const Barre = ({ n, couleur: c }) => (
     <div className="stat-barre" title={`${n}`}>
@@ -99,7 +100,6 @@ function Recence({ d, couleur }) {
           <div className="stat-recence-lbl">{t.libelle}</div>
           <div className="stat-recence-barres">
             <BarreStag cle={t.cle} n={d.stagiaires.recence[t.cle]} />
-            <Barre n={d.equipe.recence[t.cle]} couleur={COUL.equipe} />
           </div>
         </div>
       ))}
@@ -128,12 +128,13 @@ function Relancer({ r }) {
 /* Résumé de la fenêtre : personnes DIFFÉRENTES connectées + jour le plus actif. */
 function Resume({ parJour, resume }) {
   if (!resume || !parJour) return null;
-  if (!resume.uniques_stagiaires && !resume.uniques_equipe) return null;
-  const busy = parJour.reduce((a, j) => { const t = j.stagiaires + j.equipe; return t > a.t ? { jour: j.jour, t } : a; }, { t: 0 });
-  const s = resume.uniques_stagiaires, e = resume.uniques_equipe;
+  if (!resume.uniques_stagiaires) return null;
+  // Jour le plus actif : compté sur les seuls stagiaires (l'équipe n'est plus affichée).
+  const busy = parJour.reduce((a, j) => (j.stagiaires > a.t ? { jour: j.jour, t: j.stagiaires } : a), { t: 0 });
+  const s = resume.uniques_stagiaires;
   return (
     <p className="stat-resume">
-      <b>{s}</b> stagiaire{s > 1 ? "s" : ""} et <b>{e}</b> membre{e > 1 ? "s" : ""} de l'équipe se sont connectés (comptes différents).
+      <b>{s}</b> stagiaire{s > 1 ? "s" : ""} se sont connectés (comptes différents).
       {busy.t > 0 && <> Jour le plus actif : <b>{labelJour(busy.jour)}</b> ({busy.t}).</>}
     </p>
   );
@@ -141,12 +142,12 @@ function Resume({ parJour, resume }) {
 
 /* Les plus assidus : qui s'est connecté le plus de jours sur la fenêtre. */
 function Assidus({ assidus, couleur }) {
-  if (!assidus || !assidus.length) return null;
+  // L'équipe n'est plus affichée : on ne garde que les STAGIAIRES les plus assidus.
+  const liste = (assidus || []).filter((a) => a.stagiaire);
+  if (!liste.length) return null;
   /* La pastille devant le nom prend la couleur de LA FORMATION du stagiaire (un camembert à parts
-     égales s'il en suit plusieurs) ; l'équipe reste bleue, et un stagiaire sans formation retombe
-     sur l'orange « stagiaire ». */
+     égales s'il en suit plusieurs) ; un stagiaire sans formation retombe sur l'orange « stagiaire ». */
   const pastille = (a) => {
-    if (!a.stagiaire) return COUL.equipe;
     const cols = (a.formations || []).map((f) => (f.key === "__autre" ? UNKNOWN_COLOR : couleur(f.key)));
     if (!cols.length) return COUL.stagiaires;
     if (cols.length === 1) return cols[0];
@@ -157,10 +158,10 @@ function Assidus({ assidus, couleur }) {
     <div className="stat-assidus">
       <div className="stat-assidus-t">Les plus assidus</div>
       <ol className="stat-assidus-l">
-        {assidus.map((a, i) => (
+        {liste.map((a, i) => (
           <li key={i}>
             <span className="stat-pastille" style={{ background: pastille(a) }}
-              title={a.stagiaire && a.formations && a.formations.length ? a.formations.map((f) => f.label).join(", ") : undefined} />
+              title={a.formations && a.formations.length ? a.formations.map((f) => f.label).join(", ") : undefined} />
             <span className="stat-assidus-nom">{a.nom}</span>
             <span className="stat-assidus-j">{a.jours} jour{a.jours > 1 ? "s" : ""}</span>
           </li>
@@ -181,21 +182,22 @@ function Fenetre({ valeur, options, onChange }) {
   );
 }
 
-/* Connexions par jour : colonnes empilées — part stagiaire colorée PAR FORMATION, équipe au-dessus ;
-   détail par formation au survol. Un stagiaire multi-formations est réparti (50/50 pour NIV1+NIV2). */
+/* Connexions par jour : colonnes empilées — part stagiaire colorée PAR FORMATION, détail par
+   formation au survol. L'équipe n'est plus comptée. Un stagiaire multi-formations est réparti
+   (50/50 pour NIV1+NIV2). */
 function CourbeJours({ parJour, couleur }) {
   const [tip, setTip] = useState(null); // { i, left, top } — position du survol, relative au cadre
   const wrapRef = useRef(null);
   if (!parJour) {
     return <p className="hint">La courbe des connexions se remplira à partir du déploiement — une fois la migration 200 jouée, chaque connexion est comptée pour le jour même.</p>;
   }
-  const total = parJour.reduce((s, j) => s + j.stagiaires + j.equipe, 0);
+  const total = parJour.reduce((s, j) => s + j.stagiaires, 0);
   if (!total) {
-    return <p className="hint">Aucune connexion sur les {parJour.length} derniers jours pour l'instant.</p>;
+    return <p className="hint">Aucune connexion de stagiaire sur les {parJour.length} derniers jours pour l'instant.</p>;
   }
   const W = 720, H = 210, padB = 22, padL = 26, padT = 10;
   const n = parJour.length;
-  const max = Math.max(1, ...parJour.map((d) => d.stagiaires + d.equipe));
+  const max = Math.max(1, ...parJour.map((d) => d.stagiaires));
   const bw = (W - padL) / n;
   const hFor = (v) => (v / max) * (H - padB - padT);
   const jj = (iso) => iso.slice(8, 10);
@@ -214,22 +216,20 @@ function CourbeJours({ parJour, couleur }) {
         {parJour.map((d, i) => {
           const x = padL + i * bw + bw * 0.18;
           const w = bw * 0.64;
-          const hE = hFor(d.equipe);
           // Part stagiaire : un segment par formation, empilé depuis la base, à la couleur de la formation.
           let yb = H - padB;
           const segs = (d.formations || []).map((f) => {
             const h = hFor(f.n); const y = yb - h; yb = y;
-            // Un filet couleur du fond sépare les segments empilés (p. ex. NIV1 sombre et l'équipe).
+            // Un filet couleur du fond sépare les segments empilés (p. ex. NIV1 et NIV2).
             return h > 0 ? <rect key={f.key} x={x} y={y} width={w} height={h} fill={couleur(f.key)} stroke="var(--surface)" strokeWidth="0.75" /> : null;
           });
           return (
             <g key={d.jour} style={{ cursor: "pointer" }}
               onMouseMove={(e) => montrer(i, e)} onTouchStart={(e) => montrer(i, e.touches[0])}>
-              <title>{`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s), ${d.equipe} équipe`}</title>
+              <title>{`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s)`}</title>
               {/* Zone de survol = toute la colonne, pour attraper le pointeur au-dessus des barres. */}
               <rect x={padL + i * bw} y={padT} width={bw} height={H - padB - padT} fill="transparent" />
               {segs}
-              {hE > 0 && <rect x={x} y={yb - hE} width={w} height={hE} fill={COUL.equipe} stroke="var(--surface)" strokeWidth="0.75" />}
               <text x={x + w / 2} y={H - padB + 12} textAnchor="middle" fontSize="9" fill="var(--muted)">{jj(d.jour)}</text>
             </g>
           );
@@ -238,18 +238,15 @@ function CourbeJours({ parJour, couleur }) {
       {j && (
         <div className="stat-tip" style={{ left: tip.left, top: tip.top }}>
           <div className="stat-tip-d">{labelJour(j.jour)}</div>
-          {(j.stagiaires || j.equipe) ? (
+          {j.stagiaires > 0 ? (
             <>
-              {j.stagiaires > 0 && <div className="stat-tip-l">Stagiaires : <b>{j.stagiaires}</b></div>}
+              <div className="stat-tip-l">Stagiaires : <b>{j.stagiaires}</b></div>
               {j.formations && j.formations.length > 0 && (
                 <div className="stat-badges">
                   {j.formations.map((f) => (
                     <span className="stat-badge" key={f.key} style={{ background: couleur(f.key), color: "#fff" }}>{f.label} : {fmtN(f.n)}</span>
                   ))}
                 </div>
-              )}
-              {j.equipe > 0 && (
-                <div className="stat-tip-l"><span className="stat-pastille" style={{ background: COUL.equipe }} /> Équipe : <b>{j.equipe}</b></div>
               )}
             </>
           ) : <div className="stat-tip-l muted">Aucune connexion</div>}
@@ -288,7 +285,6 @@ export default function Statistiques() {
           <Card title="Synthèse">
             <div className="stat-synth-grille">
               <Synthese titre="Stagiaires" couleur={COUL.stagiaires} v={d.stagiaires} />
-              <Synthese titre="Équipe" couleur={COUL.equipe} v={d.equipe} />
             </div>
           </Card>
 
@@ -303,8 +299,8 @@ export default function Statistiques() {
           </Card>
 
           <Card title={<span className="card-ttl">Depuis la dernière connexion</span>} style={{ marginTop: 14 }}>
-            {/* La récence colore les stagiaires PAR FORMATION : même légende que la courbe (formations
-                + Équipe), pas l'ancienne « Stagiaires / Équipe » qui ne correspondait plus aux barres. */}
+            {/* La récence colore les stagiaires PAR FORMATION : même légende que la courbe (une pastille
+                par formation). L'équipe n'est plus affichée (non pertinente pour un organisme). */}
             <LegendeFormations cles={d.formations_cle} couleur={couleur} />
             <Recence d={d} couleur={couleur} />
             <Relancer r={d.stagiaires.relancer} />
