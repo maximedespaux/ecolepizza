@@ -4,7 +4,7 @@ const { logAudit } = require('../lib/audit.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { getTemplateContent } = require('./template.controller.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
-const { avecPapierEnTete } = require('../lib/htmlfill.js');
+const { avecPapierEnTete, renderTemplateHtml } = require('../lib/htmlfill.js');
 
 /**
  * PROCÈS-VERBAL DE JURY DE CERTIFICATION — la commission de délibération d'une session.
@@ -333,7 +333,39 @@ const pvPdf = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/examens/session/:id/pv/apercu — l'APERÇU HTML du procès-verbal.
+ *
+ * Une VUE de ce que donnera le PV, AVANT de l'imprimer et même commission OUVERTE : tant qu'elle
+ * n'est pas clôturée, c'est un brouillon (décisions et composition peuvent encore changer), et
+ * l'écran le dit. Même modèle épinglé (`pv-jury`) et même contexte que le PDF (`contextePv`) —
+ * mais rendu en HTML par htmlfill plutôt qu'en PDF : aucune imprimante LibreOffice à la clé, donc
+ * un aperçu immédiat, et le MÊME remplissage de jetons (`fillHtml`) que la version imprimée. On
+ * n'exige pas la clôture : l'intérêt de l'aperçu est justement de voir le PV avant de figer.
+ */
+const pvApercu = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        const ctx = await contextePv(conn, orgId, req.params.id);
+        if (!ctx) return res.status(404).json({ error: 'Aucune commission pour cette session.' });
+        const content = await getTemplateContent(orgId, 'pv-jury');
+        if (!content || content.kind !== 'builder') {
+            return res.status(404).json({ error: 'Modèle « Procès-verbal de jury » introuvable. Créez-le d’abord (bouton « Créer le modèle de PV »).' });
+        }
+        const html = renderTemplateHtml(content.html, ctx, {
+            title: 'Procès-verbal de jury',
+            headerHtml: content.header, footerHtml: content.footer,
+            letterhead: avecPapierEnTete(content.layout),
+        });
+        res.json({ data: { html, cloture: ctx.exam.status === 'CLOTUREE' } });
+    } catch (e) {
+        console.error('Erreur aperçu PV :', e);
+        res.status(500).json({ error: 'Aperçu impossible' });
+    }
+};
+
 module.exports = {
-    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf,
+    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf, pvApercu,
     commissionDeLaSession, contexteExamen, contextePv, ADMIS, DECISIONS,
 };

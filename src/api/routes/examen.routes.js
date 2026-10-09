@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf,
+    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf, pvApercu,
 } = require('../controllers/examen.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -15,5 +15,7 @@ router.put('/session/:id', authorizeRoles(...ADMIN_ROLES), saveCommission);
 router.put('/decision', authorizeRoles(...ADMIN_ROLES), saveDecision);
 router.post('/session/:id/cloturer', authorizeRoles(...ADMIN_ROLES), cloturerCommission);
 router.post('/session/:id/pv', authorizeRoles(...STAFF_ROLES), pvPdf);
+/* L'aperçu HTML du PV (sans LibreOffice) : une vue de ce qu'il donnera, même avant clôture. */
+router.get('/session/:id/pv/apercu', authorizeRoles(...STAFF_ROLES), pvApercu);
 
 module.exports = router;

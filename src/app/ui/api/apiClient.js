@@ -1740,6 +1740,11 @@ export function cloturerCommission(sessionId) {
    PAS UN SIMPLE LIEN `href` : la route est en POST (elle journalise l'édition), et un lien nu
    avalerait l'erreur — « modèle introuvable » s'afficherait en page blanche au lieu d'un
    message. On passe donc par `fetch`, comme les factures. */
+/* L'aperçu HTML du PV : « ce que donnera le procès-verbal », rendu sans LibreOffice, disponible
+   même avant la clôture (brouillon). Silencieux : on l'ouvre souvent, pas de barre de chargement. */
+export function getPvApercu(sessionId) {
+  return request(`/examens/session/${sessionId}/pv/apercu`, { silent: true });
+}
 export async function ouvrirPvJury(sessionId) {
   startLoading();
   let res;
