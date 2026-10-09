@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Card from "./Card.jsx";
 import Badge from "./Badge.jsx";
 import HelpDot from "./HelpDot.jsx";
@@ -8,7 +9,7 @@ import { Icon } from "./Icon.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import {
-  getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury,
+  getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury, getPvApercu,
 } from "../api/apiClient.js";
 
 /**
@@ -62,6 +63,8 @@ function CommissionJury({ sessionId }) {
   const [status, setStatus] = useState(null);
   const [ouvert, setOuvert] = useState(false);
   const [f, setF] = useState(null);      // formulaire de la commission
+  const [apercu, setApercu] = useState(null);     // { html, cloture } de l'aperçu ouvert
+  const [apercuEnCours, setApercuEnCours] = useState(false);
 
   async function charger() {
     try {
@@ -124,6 +127,20 @@ function CommissionJury({ sessionId }) {
     setStatus(null);
     try { await ouvrirPvJury(sessionId); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
+  /* L'APERÇU : ce que donnera le PV, rendu en HTML (sans LibreOffice) à partir de la commission
+     ENREGISTRÉE. Ouvert même commission non clôturée — c'est tout l'intérêt : voir avant de figer.
+     Une erreur (modèle pas encore créé) s'affiche en message, on n'ouvre pas une fenêtre vide. */
+  async function voirApercu() {
+    setStatus(null);
+    setApercuEnCours(true);
+    try {
+      const r = await getPvApercu(sessionId);
+      setApercu({ html: r.data.html, cloture: !!r.data.cloture });
+    } catch (e) {
+      setStatus({ type: "error", message: e.message || "Aperçu impossible." });
+    } finally { setApercuEnCours(false); }
   }
 
   async function poserModele() {
@@ -276,14 +293,20 @@ function CommissionJury({ sessionId }) {
                   {close ? "Procès-verbal figé." : `${prises.length} / ${(data.candidats || []).length} décision(s) · ${(f.jury || []).filter((m) => m.nom).length} membre(s)`}
                 </span>
                 <span style={{ flex: 1 }} />
+                {/* L'APERÇU est offert à tout moment : c'est une VUE, pas le document officiel.
+                    Voir le PV avant de clôturer évite de figer une commission sur une coquille. */}
+                <button type="button" className="btn sm ghost" onClick={voirApercu} disabled={apercuEnCours}>
+                  <Icon name="eye" size={14} /> {apercuEnCours ? "Aperçu…" : "Aperçu du PV"}
+                </button>
                 {peutPoserModele && (
                   <button type="button" className="btn sm ghost" onClick={poserModele}>Créer le modèle de PV</button>
                 )}
-                {/* LE PV S'ÉDITE APRÈS CLÔTURE SEULEMENT : un procès-verbal tiré d'une
+                {/* LE PDF OFFICIEL SE GÉNÈRE APRÈS CLÔTURE SEULEMENT : un procès-verbal tiré d'une
                     délibération en cours porterait des décisions qui peuvent encore changer.
-                    Désactivé plutôt que caché, avec la raison écrite à côté. */}
+                    Désactivé plutôt que caché, avec la raison écrite à côté — l'aperçu, lui, reste
+                    disponible pour voir le brouillon. */}
                 <button type="button" className="btn sm" disabled={!close} onClick={editerPv}
-                  title={close ? "" : "Clôturez la commission d'abord"}>Éditer le PV</button>
+                  title={close ? "" : "Clôturez la commission d'abord"}>Générer le PV (PDF)</button>
                 {peutEditer && !close && (
                   <button type="button" className="btn primary" onClick={cloturer}>Clôturer la commission</button>
                 )}
@@ -291,6 +314,36 @@ function CommissionJury({ sessionId }) {
             </>
           )}
         </>
+      )}
+
+      {/* L'APERÇU DU PV, en grand : un iframe `srcDoc` isolé (comme l'aperçu d'un document), pour
+          que le CSS du PV ne déborde pas sur l'application. Rendu dans document.body (createPortal)
+          comme les autres fenêtres. */}
+      {apercu && createPortal(
+        <div className="overlay">
+          <div className="modal wide">
+            <div className="mhead">
+              <h2 style={{ margin: 0, fontSize: 17 }}>Aperçu du procès-verbal</h2>
+              <button className="x" onClick={() => setApercu(null)} aria-label="Fermer">×</button>
+            </div>
+            {!apercu.cloture && (
+              <div className="status info" style={{ margin: "10px 14px 0" }}>
+                <b>Brouillon.</b> La commission n'est pas clôturée : décisions et composition peuvent
+                encore changer. L'aperçu reflète la commission <b>enregistrée</b>.
+              </div>
+            )}
+            <div className="mbody" style={{ padding: 0, background: "var(--surface3)" }}>
+              <iframe srcDoc={apercu.html} title="Aperçu du procès-verbal" className="doc-pdf-frame" sandbox="allow-same-origin" />
+            </div>
+            <div className="mfoot">
+              <button className="btn ghost" onClick={() => setApercu(null)}>Fermer</button>
+              {/* Depuis l'aperçu, on passe au PDF officiel — même garde : après clôture seulement. */}
+              <button type="button" className="btn" disabled={!close} onClick={editerPv}
+                title={close ? "" : "Clôturez la commission d'abord"}>Générer le PV (PDF)</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </Card>
   );
