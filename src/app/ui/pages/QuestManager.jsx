@@ -136,6 +136,18 @@ export default function QuestManager() {
  * rattacher chaque partie à son chapitre. C'est un bilan qu'on demande, pas une donnée qu'on
  * traîne à chaque visite.
  */
+
+/* Formatages PARTAGÉS par l'onglet, pour une lecture homogène : un vrai pluriel français (fini
+   les « joueur(s) »), et un nombre d'étoiles à la virgule plutôt qu'au point anglais. */
+const sPl = (n) => (Number(n) > 1 ? "s" : "");
+const fmtEt = (n) => (Math.round(Number(n) * 100) / 100).toString().replace(".", ",");
+
+/* Une statistique en PASTILLE : un nombre fort, un libellé léger. Rend une ligne de faits
+   SCANNABLE, là où une phrase grise où tout se suit à la file se lit mot à mot. */
+function Stat({ n, children, title }) {
+  return <span className="qu-stat" title={title}><b>{n}</b> {children}</span>;
+}
+
 function UsageCard({ onStatus }) {
   const [data, setData] = useState(null);
   const [charge, setCharge] = useState(false);
@@ -173,7 +185,7 @@ function UsageCard({ onStatus }) {
               </div>
               <div className="manque-i" style={{ cursor: "default" }}>
                 <b className="chiffres">{data.joueurs}</b>
-                <span>stagiaire(s) ont joué<i>sur {data.stagiaires} au total</i></span>
+                <span>{data.joueurs > 1 ? "stagiaires ont joué" : "stagiaire a joué"}<i>sur {data.stagiaires} au total</i></span>
               </div>
               <div className="manque-i" style={{ cursor: "default" }}>
                 <b className="chiffres">{data.chapitresTermines}</b>
@@ -196,8 +208,9 @@ function UsageCard({ onStatus }) {
             {data.orphelines > 0 && (
               <p className="hint">
                 <Icon name="alert-triangle" size={13} style={{ verticalAlign: "-2px" }} />{" "}
-                {data.orphelines} partie(s) ne se rattachent plus à aucun chapitre — la banque a
-                changé depuis. Elles ne sont comptées nulle part ci-dessus.
+                {data.orphelines} partie{sPl(data.orphelines)} ne se rattache{data.orphelines > 1 ? "nt" : ""} plus
+                à aucun chapitre — la banque a changé depuis. Elle{sPl(data.orphelines)} n'
+                {data.orphelines > 1 ? "apparaissent" : "apparaît"} nulle part ci-dessus.
               </p>
             )}
           </>
@@ -206,6 +219,10 @@ function UsageCard({ onStatus }) {
 
       {!aucun && (
         <Card title={<span className="card-ttl"><Icon name="graduation" size={16} /> Par formation</span>}>
+          <p className="hint" style={{ marginTop: 0 }}>
+            La barre compare, d'une formation à l'autre, la <b>part des questions jouées</b> (chapitres
+            terminés). « ch. » = chapitres en banque, « q. » = questions.
+          </p>
           <div className="grid" style={{ gap: 8 }}>
             {data.parFormation.filter((f) => f.chapitres > 0).map((f) => (
               <div key={f.code} className="dept-row" style={{ cursor: "default" }}>
@@ -218,7 +235,7 @@ function UsageCard({ onStatus }) {
                     background: colorOf(f.code), borderRadius: 999 }} />
                 </div>
                 <span style={{ width: 150, textAlign: "right", fontSize: 12, color: "var(--dim)" }}>
-                  <b className="chiffres" style={{ color: "var(--text)" }}>{f.questionsParcourues}</b> q. · {f.joueurs} joueur(s)
+                  <b className="chiffres" style={{ color: "var(--text)" }}>{f.questionsParcourues}</b> q. · {f.joueurs} joueur{sPl(f.joueurs)}
                 </span>
               </div>
             ))}
@@ -236,10 +253,10 @@ function UsageCard({ onStatus }) {
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <b>{c.titre}</b>
                   <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                    {c.formation} · {c.questions} question(s) · {c.moyenneEtoiles} étoile(s) en moyenne
+                    {c.formation} · {c.questions} question{sPl(c.questions)} · ★ {fmtEt(c.moyenneEtoiles)} en moyenne
                   </span>
                 </span>
-                <span className="arch-count">{c.joueurs} joueur(s)</span>
+                <span className="arch-count">{c.joueurs} joueur{sPl(c.joueurs)}</span>
               </div>
             ))}
           </div>
@@ -268,7 +285,7 @@ function UsageCard({ onStatus }) {
                   <span className="sub" style={{ color: "var(--dim)", marginLeft: 8 }}>
                     {sess.joueurs}/{sess.stagiaires} ont joué
                     {sess.completion != null && <> · {sess.completion} % des chapitres</>}
-                    {sess.questions > 0 && <> · {sess.questions} questions, au moins {sess.bonnesMin} justes</>}
+                    {sess.questions > 0 && <> · {sess.questions} question{sPl(sess.questions)}, au moins {sess.bonnesMin} juste{sPl(sess.bonnesMin)}</>}
                   </span>
                   <span className="arch-count">{sess.termines}</span>
                 </summary>
@@ -281,16 +298,19 @@ function UsageCard({ onStatus }) {
                     <div key={a.id} className="arch-doc">
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <b>{a.nom}</b>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>
-                          {a.termines === 0 && a.horsFormation === 0
-                            ? "n'a pas joué"
-                            : <>
-                                {a.termines}/{a.chapitres} chapitre(s) · {a.questions} question(s) ·
-                                {" "}au moins {a.bonnesMin} juste(s) · {a.moyenneEtoiles} étoile(s) en moyenne
-                                {a.horsFormation > 0 && <> · {a.horsFormation} chapitre(s) hors de sa formation</>}
-                                {a.derniere && <> · dernière partie {a.derniere}</>}
-                              </>}
-                        </span>
+                        {a.termines === 0 && a.horsFormation === 0 ? (
+                          <span className="hint" style={{ display: "block", fontSize: 11, marginTop: 2 }}>n'a pas joué</span>
+                        ) : (
+                          <div className="qu-stats">
+                            <Stat n={`${a.termines}/${a.chapitres}`} title="Chapitres terminés de sa formation">chapitre{sPl(a.chapitres)}</Stat>
+                            <Stat n={`★ ${fmtEt(a.moyenneEtoiles)}`} title="Étoiles en moyenne">moyenne</Stat>
+                            <Stat n={`≥ ${a.bonnesMin}`} title="Au moins, d'après les étoiles (le compte exact n'est pas enregistré)">bonne{sPl(a.bonnesMin)} réponse{sPl(a.bonnesMin)}</Stat>
+                            {a.horsFormation > 0 && (
+                              <Stat n={`+${a.horsFormation}`} title="Chapitres joués hors de sa formation">hors formation</Stat>
+                            )}
+                            {a.derniere && <span className="qu-when">· {a.derniere}</span>}
+                          </div>
+                        )}
                       </span>
                       {/* La barre porte la complétion : elle se compare d'un coup d'œil d'une
                           ligne à l'autre, ce qu'un pourcentage écrit ne permet pas. */}
@@ -317,7 +337,7 @@ function UsageCard({ onStatus }) {
             {data.miniJeux.map((m) => (
               <div key={m.cle} className="manque-i" style={{ cursor: "default" }}>
                 <b className="chiffres">{m.joueurs}</b>
-                <span>{MINI_JEUX[m.cle] || m.cle}<i>{m.etoiles} étoile(s)</i></span>
+                <span>{MINI_JEUX[m.cle] || m.cle}<i>★ {m.etoiles} au total</i></span>
               </div>
             ))}
           </div>
