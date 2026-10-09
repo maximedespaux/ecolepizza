@@ -244,6 +244,11 @@ export function getStatistiquesConnexions(jours) {
   return request(`/statistiques/connexions${jours ? `?jours=${jours}` : ""}`);
 }
 
+// Le détail d'un jour de la courbe : les stagiaires connectés ce jour-là (chargé au clic).
+export function getConnexionsJour(date) {
+  return request(`/statistiques/connexions/jour?date=${encodeURIComponent(date)}`);
+}
+
 // --- Notes CRM (dossier) ---
 export function getNotes(enrollmentId) {
   return request(`/enrollments/${enrollmentId}/notes`);

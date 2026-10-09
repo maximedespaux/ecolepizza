@@ -162,4 +162,66 @@ const connexions = async (req, res) => {
     }
 };
 
-module.exports = { connexions };
+/**
+ * GET /api/statistiques/connexions/jour?date=AAAA-MM-JJ — QUI s'est connecté ce jour-là.
+ *
+ * Le détail d'une colonne de la courbe : au CLIC sur un jour, la liste NOMMÉE des stagiaires qui se
+ * sont connectés (l'équipe n'est pas renvoyée, comme le reste de la page). Chargé À LA DEMANDE — pas
+ * dans la charge utile de la courbe, qui porterait des noms pour 7 à 30 jours : un clic = une
+ * requête. Chaque stagiaire porte SES formations (pour la pastille colorée, comme « les plus
+ * assidus »). Sans la table `connexion_jour` (migration 200), la liste est vide — mais la courbe elle
+ * aussi, donc l'écran n'offre pas le clic.
+ */
+const connexionsJour = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const orgId = req.user.organization_id;
+        const date = String(req.query.date || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(422).json({ message: 'Date attendue (AAAA-MM-JJ).' });
+
+        let stagiaires = [];
+        try {
+            // Les stagiaires connectés ce jour-là, nom par nom. La clé primaire (user_id, jour) de
+            // connexion_jour garantit une ligne par compte ; le GROUP BY protège d'un doublon de fiche.
+            const [rows] = await conn.query(
+                `SELECT cj.user_id AS uid, ${NOM} AS nom
+                   FROM connexion_jour cj
+                   JOIN user u ON u.id = cj.user_id
+                   LEFT JOIN learner l ON l.user_id = cj.user_id AND l.organization_id = cj.organization_id
+                  WHERE cj.organization_id = ? AND cj.jour = ? AND cj.est_stagiaire = 1
+                  GROUP BY cj.user_id, ${NOM}
+                  ORDER BY nom ASC`, [orgId, date]);
+
+            // Les formations de chaque stagiaire (pour la pastille colorée), en une seule requête.
+            const uids = rows.map((r) => r.uid);
+            const formParUser = new Map();
+            if (uids.length) {
+                const [fr] = await conn.query(
+                    `SELECT u.id AS uid, p.id AS pkey, COALESCE(NULLIF(p.code, ''), p.title, 'Formation') AS label
+                       FROM user u
+                       JOIN learner l ON l.user_id = u.id AND l.organization_id = u.organization_id
+                       JOIN enrollment e ON e.learner_id = l.id
+                       JOIN training_session s ON s.id = e.session_id
+                       JOIN training_program p ON p.id = s.program_id
+                      WHERE u.organization_id = ? AND u.id IN (?)`, [orgId, uids]);
+                for (const r of fr) {
+                    if (!formParUser.has(r.uid)) formParUser.set(r.uid, new Map());
+                    formParUser.get(r.uid).set(String(r.pkey), r.label);
+                }
+            }
+            stagiaires = rows.map((r) => ({
+                nom: r.nom,
+                formations: [...(formParUser.get(r.uid) || new Map())].map(([key, label]) => ({ key, label })),
+            }));
+        } catch (e) {
+            if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e;
+        }
+
+        res.json({ data: { jour: date, stagiaires } });
+    } catch (err) {
+        console.error('Statistiques connexions (jour) :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+module.exports = { connexions, connexionsJour };
