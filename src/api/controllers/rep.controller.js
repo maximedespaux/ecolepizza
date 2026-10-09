@@ -3,6 +3,7 @@
 const db = require('../config/database.js');
 const { renderDocumentHtml, applySlotSignature, clientIp, loadSignedPdf } = require('./document.controller.js');
 const { estSignatureValide } = require('../lib/signatures.js');
+const { notify } = require('./notification.controller.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE');
 
@@ -114,6 +115,18 @@ const signRepDocument = async (req, res) => {
         await applySlotSignature(conn, doc.organization_id, doc, {
             slot: 'representant', label: 'Signature du représentant',
             signerName, signatureData, ip: clientIp(req), userAgent: req.headers['user-agent'] || '',
+        });
+        /* LE BUREAU EST PRÉVENU (2026-10-09). Une signature d'ENTREPRISE passait par ici SANS poser
+           la moindre notification : le représentant signait depuis son espace, personne au bureau ne
+           le savait — contrairement à une signature DANS l'app (signDocument) ou par LIEN PUBLIC
+           (public.controller), qui posent toutes deux la notification d'organisme. On la pose ici
+           aussi, et on l'ATTEND avant de répondre : la réponse réussie déclenche la diffusion SSE
+           `refresh` de l'organisme, qui ne verrait pas une insertion non encore validée. Le lien
+           mène à la fiche de l'entreprise. Best-effort : une alerte ratée ne casse pas la signature. */
+        await notify(doc.organization_id, {
+            type: 'SIGNATURE', title: 'Document signé',
+            body: `Signé par ${signerName} (entreprise)`,
+            link: doc.company_id ? `/entreprises/${doc.company_id}` : (doc.learner_id ? `/stagiaires/${doc.learner_id}` : '/suivi'),
         });
         res.json({ success: true, message: 'Document signé.' });
     } catch (err) {
