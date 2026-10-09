@@ -135,3 +135,17 @@ test('écran : bouton « Aperçu du PV », fenêtre d\'aperçu, et « Générer 
     assert.match(api, /export function getPvApercu\(sessionId\)/);
     assert.match(api, /\/examens\/session\/\$\{sessionId\}\/pv\/apercu/);
 });
+
+test('écran : télécharger le PV depuis l\'aperçu, et saisir NOM / Prénom à part', () => {
+    const jsx = lire(path.join(UI, 'components/CommissionJury.jsx'));
+    // Le téléchargement, dans la fenêtre d'aperçu.
+    assert.match(jsx, /telechargerPvJury/, 'le téléchargeur est importé');
+    assert.match(jsx, /onClick=\{telecharger\}[\s\S]*Télécharger le PDF/, 'bouton « Télécharger le PDF » dans l\'aperçu');
+    // Nom et prénom saisis séparément (noms composés).
+    assert.match(jsx, /prenom: ""/, 'un membre a un champ prénom à part');
+    assert.match(jsx, /placeholder="Prénom"/, 'le champ Prénom existe');
+    assert.match(jsx, /setJure\(i, \{ prenom: e\.target\.value \}\)/, 'le prénom se saisit à part du nom');
+    const api = lire(path.join(UI, 'api/apiClient.js'));
+    assert.match(api, /export async function telechargerPvJury\(sessionId/);
+    assert.match(api, /a\.download = filename/, 'un vrai téléchargement de fichier');
+});

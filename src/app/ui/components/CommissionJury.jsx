@@ -9,7 +9,7 @@ import { Icon } from "./Icon.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import {
-  getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury, getPvApercu,
+  getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury, getPvApercu, telechargerPvJury,
 } from "../api/apiClient.js";
 
 /**
@@ -47,7 +47,7 @@ const DEFAVORABLE = new Set(["AJOURNE", "EXCLU"]);
 const QUALITE_PRESIDENT = "présidente de la présente commission de délibération";
 const QUALITE_MEMBRE = "membre du jury de la présente commission de délibération";
 const membreVide = (premier) => ({
-  nom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
+  nom: "", prenom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
   employeur: "", externe: false, na_pas_forme: true,
 });
 
@@ -127,6 +127,15 @@ function CommissionJury({ sessionId }) {
     setStatus(null);
     try { await ouvrirPvJury(sessionId); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
+  /* Télécharge le PDF du PV (bouton « Télécharger », dans l'aperçu) — nommé d'après son numéro. */
+  async function telecharger() {
+    setStatus(null);
+    try {
+      const base = `Procès-verbal ${commission?.pv_ref || ""}`.trim().replace(/[\\/:*?"<>|]/g, "");
+      await telechargerPvJury(sessionId, `${base || "proces-verbal"}.pdf`);
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
   /* L'APERÇU : ce que donnera le PV, rendu en HTML (sans LibreOffice) à partir de la commission
@@ -226,8 +235,12 @@ function CommissionJury({ sessionId }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {(f.jury || []).map((m, i) => (
                   <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <input className="inp" style={{ flex: "1 1 180px", minWidth: 0 }} value={m.nom}
-                      onChange={(e) => setJure(i, { nom: e.target.value })} placeholder="NOM Prénom" />
+                    {/* NOM et PRÉNOM À PART : un nom composé (« Le Faou ») ne se devine pas d'un seul
+                        champ, et le PV imprime le patronyme en capitales pour qu'on le distingue. */}
+                    <input className="inp" style={{ flex: "1 1 120px", minWidth: 0 }} value={m.nom}
+                      onChange={(e) => setJure(i, { nom: e.target.value })} placeholder="Nom" aria-label="Nom (de famille)" />
+                    <input className="inp" style={{ flex: "1 1 110px", minWidth: 0 }} value={m.prenom || ""}
+                      onChange={(e) => setJure(i, { prenom: e.target.value })} placeholder="Prénom" aria-label="Prénom" />
                     <input className="inp" style={{ flex: "1 1 160px", minWidth: 0 }} value={m.qualite}
                       onChange={(e) => setJure(i, { qualite: e.target.value })} placeholder={i === 0 ? "présidente de la présente commission de délibération" : "membre du jury de la présente commission de délibération"} />
                     <input className="inp" style={{ flex: "1 1 140px", minWidth: 0 }} value={m.employeur}
@@ -337,9 +350,14 @@ function CommissionJury({ sessionId }) {
             </div>
             <div className="mfoot">
               <button className="btn ghost" onClick={() => setApercu(null)}>Fermer</button>
-              {/* Depuis l'aperçu, on passe au PDF officiel — même garde : après clôture seulement. */}
-              <button type="button" className="btn" disabled={!close} onClick={editerPv}
-                title={close ? "" : "Clôturez la commission d'abord"}>Générer le PV (PDF)</button>
+              {/* Depuis l'aperçu, on passe au PDF officiel — même garde : après clôture seulement.
+                  Ouvrir dans un onglet, ou enregistrer le fichier. */}
+              <button type="button" className="btn ghost" disabled={!close} onClick={editerPv}
+                title={close ? "" : "Clôturez la commission d'abord"}>Ouvrir le PDF</button>
+              <button type="button" className="btn" disabled={!close} onClick={telecharger}
+                title={close ? "" : "Clôturez la commission d'abord"}>
+                <Icon name="download" size={14} /> Télécharger le PDF
+              </button>
             </div>
           </div>
         </div>,

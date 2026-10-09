@@ -859,13 +859,30 @@ function pvCandidatsTable(lignes) {
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 /**
+ * LE NOM AFFICHABLE D'UN MEMBRE DE LA COMMISSION — « NOM Prénom », le PATRONYME EN CAPITALES pour
+ * le distinguer du prénom. Sans capitales, un nom composé est ambigu : « Le Faou Dominique » se lit
+ * aussi bien « M. Le » prénom « Faou Dominique ». Nom et prénom sont désormais SAISIS À PART (deux
+ * champs) ; capitaliser le seul patronyme lève le doute.
+ *
+ * RÉTRO-COMPATIBLE : un membre d'AVANT la saisie séparée n'a qu'un `nom` écrit d'un bloc
+ * (« Ferrand Hélène »). Sans prénom à part, on le montre TEL QUEL — pas de capitalisation de
+ * travers, faute de savoir où finit le patronyme.
+ */
+function nomJure(m) {
+    if (!m) return '';
+    const prenom = String(m.prenom || '').trim();
+    const nom = String(m.nom || '').trim();
+    return prenom ? `${nom.toUpperCase()} ${prenom}` : nom;
+}
+
+/**
  * La composition, une ligne par membre, telle que le procès-verbal l'écrit :
  *   - DESPAUX Marie-Christine, présidente de la présente commission de délibération
  * Le nom EST EN GRAS comme sur le document ; la qualité est reprise telle qu'elle a été saisie.
  */
 function pvJuryListe(jury) {
     if (!jury || !jury.length) return '';
-    return jury.map((m) => `- <strong>${escCell(m.nom)}</strong>${m.qualite ? `, ${escCell(m.qualite)}` : ''}`)
+    return jury.map((m) => `- <strong>${escCell(nomJure(m))}</strong>${m.qualite ? `, ${escCell(m.qualite)}` : ''}`)
         .join('<br>');
 }
 
@@ -881,7 +898,7 @@ function pvSignaturesTable(jury) {
     if (!jury || !jury.length) return '';
     const cel = (v) => `<td valign="top">${v}</td>`;
     const qualites = jury.map((m) => cel(`<strong>${escCell(m.qualite || 'Membre du jury')},</strong>`)).join('');
-    const noms = jury.map((m) => cel(`<strong>${escCell(m.nom)}</strong>`)).join('');
+    const noms = jury.map((m) => cel(`<strong>${escCell(nomJure(m))}</strong>`)).join('');
     const vides = jury.map(() => cel('&nbsp;<br>&nbsp;<br>&nbsp;')).join('');
     const sigs = jury.map(() => cel('<strong>Signature</strong>')).join('');
     return `<table width="100%" data-border="0"><tbody><tr>${qualites}</tr><tr>${noms}</tr>`
@@ -899,19 +916,23 @@ function pvMembresTable(jury) {
     if (!jury || !jury.length) return '';
     const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
     const body = jury.map((m) => {
-        /* Le nom est saisi d'un bloc (« DESPAUX Marie-Christine ») : on sépare sur le premier
-           espace, le patronyme étant écrit en tête et en capitales sur le PV. */
-        const [nom, ...reste] = String(m.nom || '').trim().split(/\s+/);
-        return `<tr><td>${escCell((nom || '').toUpperCase())}</td><td>${escCell(reste.join(' '))}</td>`
+        /* NOM (patronyme) en capitales, Prénom à part. Saisis séparément désormais, donc sûrs même
+           pour un nom composé. Un membre d'AVANT n'a qu'un `nom` d'un bloc (« DESPAUX Marie-Christine ») :
+           on le sépare alors sur le premier espace, le patronyme étant écrit en tête sur le PV. */
+        let nom, prenom;
+        if (String(m.prenom || '').trim()) { nom = String(m.nom || ''); prenom = String(m.prenom); }
+        else { const [n, ...reste] = String(m.nom || '').trim().split(/\s+/); nom = n || ''; prenom = reste.join(' '); }
+        return `<tr><td>${escCell(nom.toUpperCase())}</td><td>${escCell(prenom)}</td>`
             + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`;
     }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
 
-// « M. Paul Rossi — pizzaïolo, La Napoli ». Le rôle vient de la position dans le jury.
+// « ROSSI Paul — pizzaïolo, La Napoli ». Le rôle vient de la position dans le jury ; le nom, « NOM
+// Prénom » (patronyme en capitales, cf. nomJure).
 const juryMembre = (m) => {
     if (!m) return '';
-    return [m.nom, [m.qualite, m.employeur].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
+    return [nomJure(m), [m.qualite, m.employeur].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
 };
 
 // Liste des stagiaires d'un groupe (document « entreprise »), un par ligne :

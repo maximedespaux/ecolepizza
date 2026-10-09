@@ -1763,6 +1763,26 @@ export async function ouvrirPvJury(sessionId) {
      vient de s'ouvrir, et la page resterait blanche. */
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+/* Comme ouvrirPvJury, mais ENREGISTRE le PDF (bouton « Télécharger ») au lieu de l'ouvrir dans un
+   onglet. Même route POST (elle journalise l'édition), un `<a download>` déclenche la sauvegarde. */
+export async function telechargerPvJury(sessionId, filename = "proces-verbal.pdf") {
+  startLoading();
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}/examens/session/${sessionId}/pv`, { method: "POST", credentials: "include" });
+  } finally {
+    stopLoading();
+  }
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.message || d.error || "Téléchargement du procès-verbal impossible.");
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 
 /* Une formation porte au moins DEUX grilles : celle du formateur (notation continue) et celle du
    jury (examen). Le rôle dit laquelle on demande — et côté formateur, `grilleId` dit LAQUELLE,
