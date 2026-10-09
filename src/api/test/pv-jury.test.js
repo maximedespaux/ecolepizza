@@ -190,6 +190,24 @@ test('chaque membre a sa case d\'émargement, et le NOM est en capitales', () =>
     assert.match(html, /<th>Émargement<\/th>/);
 });
 
+test('NOM COMPOSÉ : patronyme en CAPITALES, prénom à part (saisie séparée) — l\'ancien format tient', () => {
+    /* Nom et prénom sont désormais saisis À PART : un nom composé (« Le Faou ») ne se devine pas
+       d'un seul champ, et le PV imprime le PATRONYME EN CAPITALES pour qu'on le distingue du prénom
+       (« LE FAOU Dominique », pas « Le Faou Dominique » qu'on lirait « M. Le, prénom Faou Dominique »).
+       Un membre d'AVANT (un seul `nom` d'un bloc) reste rendu tel quel, sans capitalisation de travers. */
+    const jury = [
+        { nom: 'Le Faou', prenom: 'Dominique Marie', qualite: 'présidente' }, // saisie séparée
+        { nom: 'Rossi Paul', qualite: 'membre du jury' },                      // ancien format (combiné)
+    ];
+    const v = resolveTokens({ exam: { ...ctxPv([]).exam, jury }, pvCandidats: [] });
+    // Annexe d'émargement : deux colonnes NOM / Prénom.
+    assert.match(v.PVMembres, /<td>LE FAOU<\/td><td>Dominique Marie<\/td>/, 'nom composé : séparé proprement');
+    assert.match(v.PVMembres, /<td>ROSSI<\/td><td>Paul<\/td>/, 'ancien format : séparé sur l\'espace, faute de mieux');
+    // Composition en ligne : « NOM Prénom » pour la saisie séparée ; le combiné reste tel qu'il a été tapé.
+    assert.match(v.PVJuryListe, /LE FAOU Dominique Marie/);
+    assert.match(v.PVJuryListe, /Rossi Paul/, 'l\'ancien format combiné n\'est pas capitalisé de travers');
+});
+
 test('les tableaux du PV sont injectés en HTML', () => {
     for (const k of ['PVCandidats', 'PVMembres']) assert.ok(RAW_TOKENS.has(k), k);
 });
