@@ -6973,6 +6973,17 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .stat-tip-l.muted{color:var(--muted)}
 .stat-badges{display:flex;flex-wrap:wrap;gap:4px;margin:3px 0 2px 16px;max-width:260px;white-space:normal}
 .stat-badge{border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap}/* fond = couleur de la formation, texte blanc (comme les badges .lvl-chip) — posés en ligne */
+
+/* Détail d'un jour (au clic sur la courbe) : qui s'est connecté ce jour-là. Panneau sous le graphe. */
+.stat-jour{margin-top:12px;border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.stat-jour-t{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px}
+.stat-jour-t b{font-weight:700}
+.stat-jour-n{color:var(--muted);font-size:12px}
+.stat-jour-x{margin-left:auto;border:none;background:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
+.stat-jour-x:hover{color:var(--text)}
+.stat-jour-l{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:5px 14px}
+.stat-jour-l li{display:flex;align-items:center;gap:7px;font-size:13px;min-width:0}
+.stat-jour-nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Les plus assidus. */
 .stat-assidus{margin-top:16px}
 .stat-assidus-t{font-weight:700;font-size:13px;margin-bottom:7px}

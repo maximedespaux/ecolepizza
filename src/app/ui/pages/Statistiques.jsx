@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getStatistiquesConnexions } from "../api/apiClient.js";
+import { getStatistiquesConnexions, getConnexionsJour } from "../api/apiClient.js";
 import { colorForLevel, UNKNOWN_COLOR } from "../lib/levels.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -33,6 +33,17 @@ function couleursFormations(cles) {
 }
 // Un compte PONDÉRÉ : entier tel quel, sinon une décimale à la française (« 2,5 »).
 const fmtN = (n) => { const r = Math.round(Number(n) * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ","); };
+
+// La pastille d'un stagiaire = la couleur de SA formation (un camembert à parts égales s'il en suit
+// plusieurs) ; sans formation, l'orange « stagiaire ». Partagée par « les plus assidus » et le détail
+// d'un jour (au clic sur la courbe) — un seul rendu pour la même idée.
+function pastilleFormations(formations, couleur) {
+  const cols = (formations || []).map((f) => (f.key === "__autre" ? UNKNOWN_COLOR : couleur(f.key)));
+  if (!cols.length) return COUL.stagiaires;
+  if (cols.length === 1) return cols[0];
+  const pas = 100 / cols.length;
+  return `conic-gradient(${cols.map((c, i) => `${c} ${i * pas}% ${(i + 1) * pas}%`).join(", ")})`;
+}
 
 // « mer. 03/10 » — date LOCALE reconstruite depuis l'ISO, pour ne pas décaler d'un fuseau.
 function labelJour(iso) {
@@ -147,13 +158,7 @@ function Assidus({ assidus, couleur }) {
   if (!liste.length) return null;
   /* La pastille devant le nom prend la couleur de LA FORMATION du stagiaire (un camembert à parts
      égales s'il en suit plusieurs) ; un stagiaire sans formation retombe sur l'orange « stagiaire ». */
-  const pastille = (a) => {
-    const cols = (a.formations || []).map((f) => (f.key === "__autre" ? UNKNOWN_COLOR : couleur(f.key)));
-    if (!cols.length) return COUL.stagiaires;
-    if (cols.length === 1) return cols[0];
-    const pas = 100 / cols.length;
-    return `conic-gradient(${cols.map((c, i) => `${c} ${i * pas}% ${(i + 1) * pas}%`).join(", ")})`;
-  };
+  const pastille = (a) => pastilleFormations(a.formations, couleur);
   return (
     <div className="stat-assidus">
       <div className="stat-assidus-t">Les plus assidus</div>
@@ -187,7 +192,19 @@ function Fenetre({ valeur, options, onChange }) {
    (50/50 pour NIV1+NIV2). */
 function CourbeJours({ parJour, couleur }) {
   const [tip, setTip] = useState(null); // { i, left, top } — position du survol, relative au cadre
+  const [jourSel, setJourSel] = useState(null); // le jour cliqué (ISO) dont on montre les noms
+  const [noms, setNoms] = useState(null); // null = en cours de chargement ; tableau = chargé
   const wrapRef = useRef(null);
+  const demandeRef = useRef(0); // garde anti-course : seule la dernière demande est appliquée
+  // Au CLIC d'un jour : on charge QUI s'est connecté. Re-cliquer le même jour referme le détail.
+  const choisirJour = (iso) => {
+    if (iso === jourSel) { setJourSel(null); setNoms(null); return; }
+    setJourSel(iso); setNoms(null);
+    const t = ++demandeRef.current;
+    getConnexionsJour(iso)
+      .then((r) => { if (t === demandeRef.current) setNoms(r.data.stagiaires || []); })
+      .catch(() => { if (t === demandeRef.current) setNoms([]); });
+  };
   if (!parJour) {
     return <p className="hint">La courbe des connexions se remplira à partir du déploiement — une fois la migration 200 jouée, chaque connexion est comptée pour le jour même.</p>;
   }
@@ -216,6 +233,7 @@ function CourbeJours({ parJour, couleur }) {
         {parJour.map((d, i) => {
           const x = padL + i * bw + bw * 0.18;
           const w = bw * 0.64;
+          const choisi = d.jour === jourSel;
           // Part stagiaire : un segment par formation, empilé depuis la base, à la couleur de la formation.
           let yb = H - padB;
           const segs = (d.formations || []).map((f) => {
@@ -224,13 +242,15 @@ function CourbeJours({ parJour, couleur }) {
             return h > 0 ? <rect key={f.key} x={x} y={y} width={w} height={h} fill={couleur(f.key)} stroke="var(--surface)" strokeWidth="0.75" /> : null;
           });
           return (
-            <g key={d.jour} style={{ cursor: "pointer" }}
-              onMouseMove={(e) => montrer(i, e)} onTouchStart={(e) => montrer(i, e.touches[0])}>
-              <title>{`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s)`}</title>
-              {/* Zone de survol = toute la colonne, pour attraper le pointeur au-dessus des barres. */}
-              <rect x={padL + i * bw} y={padT} width={bw} height={H - padB - padT} fill="transparent" />
+            <g key={d.jour} style={{ cursor: "pointer" }} role="button" tabIndex={0}
+              aria-label={`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s). Voir qui s'est connecté.`}
+              onMouseMove={(e) => montrer(i, e)} onClick={() => choisirJour(d.jour)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choisirJour(d.jour); } }}>
+              <title>{`${labelJour(d.jour)} : ${d.stagiaires} stagiaire(s) — cliquez pour la liste`}</title>
+              {/* Zone de clic/survol = toute la colonne ; fond teinté sur le jour sélectionné. */}
+              <rect x={padL + i * bw} y={padT} width={bw} height={H - padB - padT} fill={choisi ? "var(--border-soft)" : "transparent"} />
               {segs}
-              <text x={x + w / 2} y={H - padB + 12} textAnchor="middle" fontSize="9" fill="var(--muted)">{jj(d.jour)}</text>
+              <text x={x + w / 2} y={H - padB + 12} textAnchor="middle" fontSize="9" fontWeight={choisi ? 700 : 400} fill={choisi ? "var(--text)" : "var(--muted)"}>{jj(d.jour)}</text>
             </g>
           );
         })}
@@ -252,7 +272,31 @@ function CourbeJours({ parJour, couleur }) {
           ) : <div className="stat-tip-l muted">Aucune connexion</div>}
         </div>
       )}
-      <p className="hint" style={{ margin: "4px 0 0" }}>Du {parJour[0].jour.slice(8)}/{parJour[0].jour.slice(5, 7)} au {parJour[n - 1].jour.slice(8)}/{parJour[n - 1].jour.slice(5, 7)} — survolez un jour pour le détail par formation.</p>
+      {jourSel && (
+        <div className="stat-jour">
+          <div className="stat-jour-t">
+            <b>{labelJour(jourSel)}</b>
+            <span className="stat-jour-n">{noms === null ? "…" : `${noms.length} stagiaire${noms.length > 1 ? "s" : ""}`}</span>
+            <button type="button" className="stat-jour-x" onClick={() => choisirJour(jourSel)} aria-label="Fermer le détail du jour">×</button>
+          </div>
+          {noms === null ? (
+            <p className="hint" style={{ margin: 0 }}>Chargement…</p>
+          ) : noms.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>Aucune connexion de stagiaire ce jour-là.</p>
+          ) : (
+            <ul className="stat-jour-l">
+              {noms.map((a, i) => (
+                <li key={i}>
+                  <span className="stat-pastille" style={{ background: pastilleFormations(a.formations, couleur) }}
+                    title={a.formations && a.formations.length ? a.formations.map((f) => f.label).join(", ") : undefined} />
+                  <span className="stat-jour-nom">{a.nom}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      <p className="hint" style={{ margin: "4px 0 0" }}>Du {parJour[0].jour.slice(8)}/{parJour[0].jour.slice(5, 7)} au {parJour[n - 1].jour.slice(8)}/{parJour[n - 1].jour.slice(5, 7)} — survolez un jour pour le détail par formation, cliquez pour la liste des stagiaires.</p>
     </div>
   );
 }
