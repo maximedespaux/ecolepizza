@@ -53,8 +53,28 @@ function statutsDocuments(docs) {
 function exigencesDossier(etapesDuDossier, seuil) {
     return (etapesDuDossier || []).filter((s) => s.stagiaire_sign && !s.repli && !s.facultatif && !exempte(s) && Number(s.sort_order) <= seuil);
 }
-/** Signée par son modèle, ou à défaut par son type (documents antérieurs aux modèles). */
-const signeeDossier = (s, statuts) => statuts.parSlug[s.slug] === 'SIGNE' || statuts.parType[s.doc_type] === 'SIGNE';
+/**
+ * UN DOCUMENT ÉQUIVALENT SIGNÉ VAUT POUR CELUI-CI (2026-10-12). Deux variantes interchangeables —
+ * « Convention de formation » et « Convention de formation AGEFICE » — sont déclarées équivalentes
+ * par l'organisme (Modèles → Équivalences, un choix « OU »). Le parcours du dossier résout le groupe
+ * vers UNE variante ; mais le stagiaire peut avoir signé l'AUTRE (financeur mal détecté, variante
+ * générée à la main…). Sans ce rattrapage, le point d'accès réclamait la Convention « normale »
+ * qu'aucun geste ne pouvait plus satisfaire, alors que l'AGEFICE, équivalente, était signée.
+ * `eqMap` : slug → { group }. Absent (ancien appelant) → on s'en tient au modèle et au type.
+ */
+function memeGroupeSigne(slug, parSlug, eqMap) {
+    const g = eqMap && typeof eqMap.get === 'function' ? eqMap.get(slug) : null;
+    if (!g) return false;
+    for (const autre of Object.keys(parSlug)) {
+        if (autre !== slug && parSlug[autre] === 'SIGNE' && eqMap.get(autre)?.group === g.group) return true;
+    }
+    return false;
+}
+
+/** Signée par son modèle, par son type (documents antérieurs aux modèles), ou par un ÉQUIVALENT. */
+const signeeDossier = (s, statuts, eqMap) => statuts.parSlug[s.slug] === 'SIGNE'
+    || statuts.parType[s.doc_type] === 'SIGNE'
+    || memeGroupeSigne(s.slug, statuts.parSlug, eqMap);
 
 /**
  * VOLET ENTREPRISE — la section « À l'arrivée via une entreprise » jusqu'au point : ses étapes
@@ -71,10 +91,11 @@ function exigencesEntreprise(liste, pointSlug, etapesParSlug, facultatifs = new 
         .map((sl) => etapesParSlug.get(sl))
         .filter((s) => s && s.active && !exempte(s) && stepSigners(s).length > 0);
 }
-/** Un document de GROUPE compte par sa signature collective ; les autres, par le dossier. */
-const signeeEntreprise = (s, propres, groupe) => (s.company_level
-    ? groupe.parSlug[s.slug] === 'SIGNE'
-    : signeeDossier(s, propres));
+/** Un document de GROUPE compte par sa signature collective ; les autres, par le dossier. L'équivalence
+ *  « OU » s'applique des deux côtés (une variante de groupe équivalente signée vaut pour l'autre). */
+const signeeEntreprise = (s, propres, groupe, eqMap) => (s.company_level
+    ? (groupe.parSlug[s.slug] === 'SIGNE' || memeGroupeSigne(s.slug, groupe.parSlug, eqMap))
+    : signeeDossier(s, propres, eqMap));
 
 /** Le bilan d'un volet : { need, done, locked }. Rien d'exigé = rien ne bloque. */
 function bilan(exigees, estSignee) {

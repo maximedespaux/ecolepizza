@@ -158,7 +158,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
             const brk = (await toutesLesEtapes(program)).find((s) => s.slug === pt.dossier);
             if (brk) {
                 const exigees = PointDeRupture.exigencesDossier(etapesDuDossier, Number(brk.sort_order));
-                if (PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeDossier(s, propres)).locked) franchi = false;
+                if (PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeDossier(s, propres, eqMap)).locked) franchi = false;
             }
         }
         // Volet entreprise : seulement pour un dossier ARRIVÉ par une entreprise (enrollment.company_id).
@@ -168,7 +168,7 @@ async function avancementDossiers(conn, orgId, dossiers, { avecDocuments = false
                de son parcours, que les modèles de l'organisme (`etapesOrg`) ne connaissent pas. */
             const facultatifs = new Set((await toutesLesEtapes(program)).filter((x) => x.facultatif).map((x) => x.slug));
             const exigees = PointDeRupture.exigencesEntreprise(pt.section, pt.entreprise, etapesOrg, facultatifs);
-            if (exigees && PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe)).locked) franchi = false;
+            if (exigees && PointDeRupture.bilan(exigees, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe, eqMap)).locked) franchi = false;
         }
 
         const parc = computeDocParcours({
