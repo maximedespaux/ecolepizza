@@ -480,6 +480,13 @@ const TOKEN_CATALOG = [
         tokens: [
             { key: 'Certification', label: 'Certification visée', sample: 'Artisan pizzaïolo' },
             { key: 'Code RNCP', label: 'Numéro RNCP', sample: 'RNCP41234' },
+            /* LE NUMÉRO DU PARCHEMIN (migration 205) — propre au CANDIDAT, pas à la session : il
+               identifie son diplôme. Attribué à la clôture du jury, modifiable ensuite. Vide tant
+               que le candidat n'est pas certifié, et sur un dossier non certifiant. */
+            { key: 'Numéro de certification', label: 'N° de certification (diplôme)', sample: '42',
+              desc: 'Le numéro unique du parchemin du stagiaire, attribué à la clôture du jury pour un '
+                  + 'candidat certifié et modifiable sur l’écran de la commission. Vide s’il n’est pas '
+                  + 'encore attribué.' },
             { key: 'PV', label: 'Numéro de procès-verbal', sample: 'EPJJD-EX-2026-014' },
             { key: 'Date examen', label: "Date de la session d'examen", sample: '12/11/2026' },
             { key: 'Lieu examen', label: "Lieu de la session (adresse)", sample: '101 rue Alsace-Lorraine, 65300 Lannemezan' },
@@ -1435,6 +1442,9 @@ const OPTIONAL_TOKENS = new Set([
        non encore payée est normale, un document ne doit pas se bloquer pour autant. {Montant solde}
        est l'alias de {Reste à payer}, lui aussi facultatif (un dossier sans reste existe). */
     'Montant solde', 'Acompte payé le', 'Solde payé le', 'Acompte payé', 'Solde payé', 'Total payé',
+    /* LE NUMÉRO DE CERTIFICATION (migration 205) : vide tant que le candidat n'est pas certifié, et
+       sur tout dossier non certifiant. Un modèle partagé qui le porte ne doit pas se bloquer pour ça. */
+    'Numéro de certification',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -1742,6 +1752,9 @@ function resolveTokens(ctx = {}) {
         IBAN: o.iban || '', BIC: o.bic || '', Banque: o.bank_name || '',
         // Examen de certification (procès-verbal de session)
         Certification: ex.certification || '', 'Code RNCP': ex.rncp_code || '',
+        /* Le numéro du parchemin (migration 205) : propre au CANDIDAT, lu sur son dossier (f), pas
+           sur la session d'examen (ex). Vide tant qu'il n'est pas attribué. */
+        'Numéro de certification': f.numero_certification != null ? String(f.numero_certification) : '',
         PV: ex.pv_ref || '', 'Date examen': frDate(ex.date_examen),
         'Lieu examen': ex.lieu || '', 'Centre examen': ex.centre || '',
         "Voie d'accès": VOIES[ex.voie_acces] || '',

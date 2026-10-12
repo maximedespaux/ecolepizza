@@ -181,6 +181,7 @@ const ACTION_LABEL = {
     'examen.commission': ['Commission de délibération enregistrée', A],
     'examen.decision': ['Décision de jury enregistrée', B],
     'examen.cloture': ['Commission de délibération clôturée', B],
+    'examen.numero': ['Numéro de certification attribué', B],
     'examen.pv': ['Procès-verbal de jury édité', B],
     'piece.depot': ['Pièce déposée', B],
     'piece.validee': ['Pièce validée', G],

@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (355 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-12** : **2777 tests — 2770 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (358 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-12** : **2794 tests — 2787 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,25 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**205 est À JOUER** (`205_enrollment_numero_certification.sql`, le NUMÉRO DE CERTIFICATION d'un dossier —
+demandé le 2026-10-12). Une colonne `enrollment.numero_certification` (int). Une formation CERTIFIANTE (code
+RS) délivre un parchemin au NUMÉRO UNIQUE par certifié — le numéro du diplôme. On le pose sur l'inscription :
+lié au stagiaire dans le contexte d'une formation, réutilisable pour TOUTE formation certifiante. Attribué
+AUTOMATIQUEMENT à la clôture du jury aux candidats admis (décision CERTIFIÉ / BLOCS ACQUIS), en une séquence
+SIMPLE par organisme (1, 2, 3…), puis modifiable à la main sur l'écran de la commission (CommissionJury) ;
+unique par organisme (le serveur refuse 409 un doublon). Règles pures dans `lib/numeroCertification.js`
+(`DECISIONS_NUMEROTEES`, `prochainsNumeros`, `numeroSaisi`). S'imprime sur le diplôme par le jeton nommé
+**{Numéro de certification}** (groupe « Examen », lu sur le dossier, facultatif). Écarté des « Champs documents »
+(`EXCLUDED_EXACT`, lib/conditions.js) : ce n'est pas une donnée de dossier. Sans la migration, rien ne casse :
+la clôture n'attribue rien, le jeton sort vide, et saisir un numéro répond 503 « migration 205 non jouée ».
+**Elle se vérifie par l'API, sans SQL** : clôturer un jury avec un candidat certifié, puis `GET
+/api/examens/session/:id` rend `numero_certification` non nul sur ce candidat ; sans la colonne, il est null.
+Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='enrollment' AND column_name='numero_certification';`
+⚠️ Son revert efface les numéros attribués ; les parchemins déjà imprimés gardent le leur (PDF figé). Tests :
+`certification-numero.test.js`.
 
 **204 : CRÉÉE le 2026-10-08, puis sa FONCTION REVERSÉE le même jour — la table `document_vu` est désormais
 INUTILISÉE** (`204_document_vu.sql`). Elle avait été faite pour une pastille « documents de groupe reçus mais

@@ -51,6 +51,11 @@ const EXCLUDED_EXACT = new Set([
        en condition, ne diraient rien d'un dossier. Les dates du règlement (194) sont déjà écartées, en
        tant que colonnes `date`. */
     'acompte_moyen', 'acompte_ref', 'solde_moyen', 'solde_ref',
+    /* LE NUMÉRO DE CERTIFICATION (migration 205) : `enrollment.numero_certification`. Ce n'est pas un
+       « Champ document » — il s'attribue à la clôture du jury et se corrige sur l'écran de la
+       commission, et s'imprime par le jeton nommé {Numéro de certification}. Offert comme champ, il
+       ferait double emploi ; en condition, il ne dirait rien d'un dossier. */
+    'numero_certification',
 ]);
 function isExcludedColumn(name) {
     if (EXCLUDED_EXACT.has(name)) return true;
