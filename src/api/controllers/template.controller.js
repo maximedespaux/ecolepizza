@@ -689,6 +689,17 @@ const TYPES_FACTURE = ['FACTURE', 'ACOMPTE', 'AVOIR', 'DEVIS'];
 
 const GROUPES_DE_LIGNE = new Set(['Ligne de facture', 'Ligne de règlement']);
 
+/* LE RÈGLEMENT, REPROPOSÉ SOUS « ENTREPRISE » (demandé le 2026-10-12). Ces jetons vivent dans le
+   groupe « Stagiaire » du catalogue — MASQUÉ sur un document d'entreprise (HIDDEN_FOR_COMPANY). Or
+   quand l'entreprise paie pour ses stagiaires, « comment la formation a été payée » a tout son sens
+   sur SES documents (devis, convention), où les montants comptent le règlement de TOUT le groupe
+   (cf. document.controller, agrégation). On les y repropose donc, avec leur couleur d'origine bleue
+   (`origin:'Stagiaire'`), comme le groupe « Acheteur (facture) ». L'acompte et le reste compris : eux
+   aussi étaient hors de portée sur un document d'entreprise. */
+const REGLEMENT_ENTREPRISE = ['Acompte', 'Reste à payer', 'Montant solde',
+    'Moyen acompte', 'Réf acompte', 'Moyen solde', 'Réf solde',
+    'Acompte payé le', 'Solde payé le', 'Acompte payé', 'Solde payé', 'Total payé'];
+
 /** Le groupe de la palette où se range un jeton du catalogue. */
 function groupeEnPalette(cle, groupeCatalogue) {
     return PLACE_EN_PALETTE[cle] || NOM_EN_PALETTE[groupeCatalogue] || groupeCatalogue;
@@ -817,6 +828,24 @@ const getTokens = async (req, res) => {
             let g = groups.find((x) => x.group === cat);
             if (!g) { g = { group: cat, tokens: [] }; groups.push(g); }
             g.tokens.push({ key: `custom:${d.token_key}`, label: d.label, sample: resolus[`custom:${d.token_key}`] || '' });
+        }
+
+        /* COMMENT LA FORMATION A ÉTÉ PAYÉE, CÔTÉ ENTREPRISE : sur un document d'entreprise, le groupe
+           « Stagiaire » (où vivent ces jetons) est masqué ci-dessous — on les repropose donc sous
+           « Entreprise », AVANT le filtrage et la complétion (qui les verront alors déjà proposés et
+           ne les dédoubleront pas). Sur un document de stagiaire, rien ici : ils restent sous
+           « Stagiaire », rattachés par la complétion. */
+        if (companyLevel === 1) {
+            const parCle = {};
+            for (const cg of TOKEN_CATALOG) for (const t of (cg.tokens || [])) parCle[t.key] = t;
+            let ent = groups.find((g) => g.group === 'Entreprise');
+            if (!ent) { ent = { group: 'Entreprise', tokens: [] }; groups.push(ent); }
+            for (const key of REGLEMENT_ENTREPRISE) {
+                const t = parCle[key];
+                if (t && !ent.tokens.some((x) => x.key === key)) {
+                    ent.tokens.push({ key: t.key, label: t.label, sample: echantillon(t), origin: 'Stagiaire', ...(t.desc ? { desc: t.desc } : {}) });
+                }
+            }
         }
 
         // Filtrage selon le type de document (si connu), PUIS complétion : un jeton ne se range pas
