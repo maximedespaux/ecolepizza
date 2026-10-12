@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf, pvApercu,
+    getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu,
 } = require('../controllers/examen.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -13,6 +13,9 @@ router.use(authenticateToken);
 router.get('/session/:id', authorizeRoles(...STAFF_ROLES), getCommission);
 router.put('/session/:id', authorizeRoles(...ADMIN_ROLES), saveCommission);
 router.put('/decision', authorizeRoles(...ADMIN_ROLES), saveDecision);
+/* Le numéro de certification d'un candidat (migration 205), saisi ou corrigé à la main — reste
+   modifiable même après clôture (la clôture fige la DÉCISION, pas le numéro du parchemin). */
+router.put('/numero', authorizeRoles(...ADMIN_ROLES), setNumeroCertification);
 router.post('/session/:id/cloturer', authorizeRoles(...ADMIN_ROLES), cloturerCommission);
 router.post('/session/:id/pv', authorizeRoles(...STAFF_ROLES), pvPdf);
 /* L'aperçu HTML du PV (sans LibreOffice) : une vue de ce qu'il donnera, même avant clôture. */

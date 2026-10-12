@@ -242,6 +242,9 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 /* Les dates « payé le … » cochées à la main (migration 194) → {Acompte payé le} /
                    {Solde payé le}. Mises en forme au jour ci-dessus. NULL sans la 194. */
                 ${colAcPaye}, ${colSoPaye},
+                /* Le numéro de certification (migration 205) → {Numéro de certification}, imprimé sur
+                   le parchemin d'une formation certifiante. NULL sans la 205 ou tant que non attribué. */
+                ${await colonneOuNull(conn, 'enrollment', 'numero_certification', 'e.')},
                 /* L'inscription, pour agréger les « Champs documents » sur TOUTES les formations
                    du document dans le MÊME ordre que les jetons nommés (cf. agregationChamps).
                    La session (__sid) sert à n'agréger les champs de SESSION qu'une fois par session :
@@ -283,7 +286,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                             DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                             NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id,
                             NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref,
-                            NULL AS acompte_paye_le, NULL AS solde_paye_le
+                            NULL AS acompte_paye_le, NULL AS solde_paye_le, NULL AS numero_certification
                        FROM training_session s
                        LEFT JOIN training_program p ON p.id = s.program_id
                       WHERE s.id = ? AND s.organization_id = ?`,

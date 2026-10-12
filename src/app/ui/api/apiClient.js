@@ -1732,6 +1732,10 @@ export function saveCommission(sessionId, payload) {
 export function saveDecisionJury(payload) {
   return request("/examens/decision", { method: "PUT", body: JSON.stringify(payload) });
 }
+// Numéro de certification d'un candidat (migration 205) : { session_id, learner_id, numero } (null = effacer).
+export function setNumeroCertification(payload) {
+  return request("/examens/numero", { method: "PUT", body: JSON.stringify(payload) });
+}
 export function cloturerCommission(sessionId) {
   return request(`/examens/session/${sessionId}/cloturer`, { method: "POST" });
 }

@@ -9,7 +9,7 @@ import { Icon } from "./Icon.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import {
-  getCommission, saveCommission, saveDecisionJury, cloturerCommission, ouvrirPvJury, poserModelesJury, getPvApercu, telechargerPvJury,
+  getCommission, saveCommission, saveDecisionJury, cloturerCommission, setNumeroCertification, ouvrirPvJury, poserModelesJury, getPvApercu, telechargerPvJury,
 } from "../api/apiClient.js";
 
 /**
@@ -40,6 +40,9 @@ const DECISIONS = [
   { v: "EXCLU", l: "Exclu" },
 ];
 const DEFAVORABLE = new Set(["AJOURNE", "EXCLU"]);
+/* Les décisions qui donnent droit à un numéro de certification (parchemin) : admis, blocs acquis.
+   Le champ « N° de certification » n'apparaît que pour eux (même ensemble que le serveur). */
+const ADMIS = new Set(["CERTIFIE", "BLOCS_ACQUIS"]);
 /* LA QUALITÉ EST PRÉ-REMPLIE avec la formule du procès-verbal papier (« présidente de la
    présente commission de délibération »). Elle est reprise TELLE QUELLE dans le document : la
    laisser vide obligerait à la retaper à chaque commission, et la moindre variation de
@@ -113,12 +116,24 @@ function CommissionJury({ sessionId }) {
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
+  /* Le numéro de certification d'un candidat (migration 205). Il vit sur le CANDIDAT (pas sur la
+     commission) : on recharge pour le relire — y compris les numéros posés automatiquement à la
+     clôture. Vide efface. */
+  async function setNumero(learnerId, numero) {
+    setStatus(null);
+    try {
+      await setNumeroCertification({ session_id: sessionId, learner_id: learnerId, numero: numero === "" ? null : numero });
+      await charger();
+    } catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+
   async function cloturer() {
     if (!window.confirm("Clôturer la commission ?\n\nLe procès-verbal sera figé : ni les décisions ni la composition du jury ne pourront plus changer.")) return;
     setStatus(null);
     try {
-      const r = await cloturerCommission(sessionId);
-      setData((d) => ({ ...d, commission: r.data }));
+      await cloturerCommission(sessionId);
+      // La clôture attribue les numéros de certification : on recharge pour les afficher.
+      await charger();
       setStatus({ type: "success", message: "Commission clôturée. Le procès-verbal peut être édité." });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
@@ -295,6 +310,20 @@ function CommissionJury({ sessionId }) {
                           <input className="inp" style={{ flex: "1 1 220px", minWidth: 0 }} defaultValue={r.observations || ""}
                             disabled={close || !peutEditer} placeholder="Motif (obligatoire)"
                             onBlur={(e) => { if (e.target.value !== (r.observations || "")) decider(c.learner_id, r.decision, e.target.value); }} />
+                        )}
+                        {/* LE NUMÉRO DE CERTIFICATION (migration 205) : posé automatiquement à la
+                            clôture pour les candidats admis, et modifiable à la main — y compris
+                            APRÈS clôture (la clôture fige la décision, pas le numéro du parchemin).
+                            Le `key` le rafraîchit quand le numéro change (clôture, saisie). */}
+                        {ADMIS.has(r.decision) && (
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}
+                            title="Numéro unique du parchemin, imprimé sur le diplôme ({Numéro de certification}).">
+                            <span className="hint" style={{ margin: 0 }}>N° certif.</span>
+                            <input className="inp" style={{ width: 86 }} inputMode="numeric" placeholder="auto"
+                              key={`num-${c.learner_id}-${c.numero_certification ?? ""}`}
+                              defaultValue={c.numero_certification ?? ""} disabled={!peutEditer}
+                              onBlur={(e) => { const v = e.target.value.trim(); if (v !== String(c.numero_certification ?? "")) setNumero(c.learner_id, v); }} />
+                          </label>
                         )}
                       </div>
                     );

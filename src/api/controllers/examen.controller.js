@@ -1,7 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { colonneExiste } = require('../lib/colonnes.js');
+const { colonneExiste, colonneOuNull } = require('../lib/colonnes.js');
+// Le numéro de certification (migration 205) : qui y a droit, le prochain de la séquence, la saisie.
+const { DECISIONS_NUMEROTEES, prochainsNumeros, numeroSaisi } = require('../lib/numeroCertification.js');
 const { getTemplateContent } = require('./template.controller.js');
 const { composeDocumentPdf } = require('../lib/pdfcompose.js');
 const { avecPapierEnTete, renderTemplateHtml } = require('../lib/htmlfill.js');
@@ -99,7 +101,8 @@ const getCommission = async (req, res) => {
 
         const [candidats] = await conn.query(
             `SELECT l.id AS learner_id, l.first_name, l.last_name, l.civility,
-                    DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday
+                    DATE_FORMAT(l.birthday, '%Y-%m-%d') AS birthday,
+                    ${await colonneOuNull(conn, 'enrollment', 'numero_certification', 'e.')}
                FROM enrollment e JOIN learner l ON l.id = e.learner_id
               WHERE e.session_id = ? AND e.organization_id = ?
               ORDER BY l.last_name, l.first_name`, [req.params.id, orgId]);
@@ -252,10 +255,86 @@ const cloturerCommission = async (req, res) => {
             return res.status(422).json({ error: 'La commission doit compter au moins trois membres.' });
         }
         await conn.query("UPDATE exam_session SET status = 'CLOTUREE', cloture_at = NOW() WHERE id = ?", [commission.id]);
+        /* LE NUMÉRO DE CERTIFICATION (migration 205) : la clôture le pose sur les dossiers ADMIS qui
+           n'en ont pas encore. Idempotent (IS NULL). La CLÔTURE est déjà écrite : un numéro qui ne
+           s'écrit pas (base indisponible…) ne doit pas la défaire ni répondre 500 — on l'avale et on
+           le journalise, le numéro se posera à la main sur l'écran de la commission. */
+        try {
+            await attribuerNumerosCertification(conn, orgId, req.params.id, commission.resultats);
+        } catch (e) {
+            console.error('Numéros de certification non attribués à la clôture :', e && e.message);
+        }
         logAudit(req, 'examen.cloture', 'ExamSession', req.params.id);
         res.json({ data: await commissionDeLaSession(conn, orgId, req.params.id) });
     } catch (err) {
         console.error('Erreur clôture commission :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * ATTRIBUE les numéros de certification aux candidats admis d'une session, à la clôture du jury
+ * (migration 205). Séquence SIMPLE par organisme (1, 2, 3…), continuée depuis le plus grand déjà
+ * posé ; ordre stable (nom, prénom) pour que les numéros soient déterministes ; idempotent (on ne
+ * touche qu'aux dossiers SANS numéro). Tolérant : sans la colonne, on ne fait rien.
+ *
+ * `admisIds` est la liste des candidats dont la décision ouvre droit à un numéro (DECISIONS_NUMEROTEES).
+ */
+async function attribuerNumerosCertification(conn, orgId, sessionId, resultats) {
+    if (!(await colonneExiste(conn, 'enrollment', 'numero_certification'))) return;
+    const admisIds = (resultats || []).filter((r) => DECISIONS_NUMEROTEES.has(r.decision)).map((r) => r.learner_id);
+    if (!admisIds.length) return;
+    // Les dossiers admis de CETTE session, encore sans numéro, dans un ordre stable.
+    const [dossiers] = await conn.query(
+        `SELECT e.id FROM enrollment e JOIN learner l ON l.id = e.learner_id
+          WHERE e.session_id = ? AND e.organization_id = ? AND e.learner_id IN (?)
+            AND e.numero_certification IS NULL
+          ORDER BY l.last_name, l.first_name`,
+        [sessionId, orgId, admisIds]);
+    if (!dossiers.length) return;
+    // Le prochain numéro continue la plus grande valeur déjà attribuée dans l'organisme.
+    const [[m]] = await conn.query(
+        'SELECT COALESCE(MAX(numero_certification), 0) AS n FROM enrollment WHERE organization_id = ?', [orgId]);
+    for (const { id, numero } of prochainsNumeros(dossiers, m.n)) {
+        // IS NULL : on n'écrase jamais un numéro déjà posé (idempotent, insensible aux courses).
+        await conn.query('UPDATE enrollment SET numero_certification = ? WHERE id = ? AND numero_certification IS NULL', [numero, id]);
+    }
+}
+
+/**
+ * PUT /api/examens/numero — le numéro de certification d'UN candidat, saisi ou corrigé à la main
+ * (migration 205). Un entier positif, ou vide pour l'effacer. UNIQUE par organisme : deux
+ * parchemins ne portent jamais le même numéro.
+ */
+const setNumeroCertification = async (req, res) => {
+    const orgId = req.user.organization_id;
+    const { session_id: sessionId, learner_id: learnerId } = req.body || {};
+    if (!sessionId || !learnerId) return res.status(422).json({ error: 'Session et candidat requis.' });
+    const { valeur, erreur } = numeroSaisi(req.body.numero);
+    if (erreur) return res.status(422).json({ error: erreur });
+    try {
+        const conn = db.promise();
+        if (!(await colonneExiste(conn, 'enrollment', 'numero_certification'))) {
+            return res.status(503).json({ error: 'Le numéro de certification arrive avec la migration 205 (non jouée).' });
+        }
+        /* LE CANDIDAT DOIT ÊTRE INSCRIT À LA SESSION — même garde que la décision : un identifiant
+           glissé dans la requête ne doit pas porter un numéro au dossier d'un autre. */
+        const [[enr]] = await conn.query(
+            'SELECT id FROM enrollment WHERE session_id = ? AND learner_id = ? AND organization_id = ? LIMIT 1',
+            [sessionId, learnerId, orgId]);
+        if (!enr) return res.status(404).json({ error: 'Candidat non inscrit à cette session.' });
+        if (valeur != null) {
+            const [[dup]] = await conn.query(
+                'SELECT id FROM enrollment WHERE organization_id = ? AND numero_certification = ? AND id <> ? LIMIT 1',
+                [orgId, valeur, enr.id]);
+            if (dup) return res.status(409).json({ error: `Le numéro ${valeur} est déjà attribué à un autre dossier.` });
+        }
+        await conn.query('UPDATE enrollment SET numero_certification = ? WHERE id = ? AND organization_id = ?', [valeur, enr.id, orgId]);
+        // Journalisé sur le STAGIAIRE : sa fiche est l'écran où ce numéro se lit, comme le règlement.
+        logAudit(req, 'examen.numero', 'Learner', learnerId);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Erreur numéro de certification :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -384,6 +463,6 @@ const pvApercu = async (req, res) => {
 };
 
 module.exports = {
-    getCommission, saveCommission, saveDecision, cloturerCommission, pvPdf, pvApercu,
+    getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu,
     commissionDeLaSession, contexteExamen, contextePv, ADMIS, DECISIONS,
 };
