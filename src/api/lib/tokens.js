@@ -164,6 +164,26 @@ const TOKEN_CATALOG = [
               desc: 'Comment le solde (le reste) a été réglé. Vide si rien n’a été noté.' },
             { key: 'Réf solde', label: 'Solde : n° / référence', sample: 'VIR-2026-07',
               desc: 'Le n° de chèque ou la référence du virement du solde. Vide sinon.' },
+            /* COMMENT LA FORMATION A ÉTÉ PAYÉE (demandé le 2026-10-12) — les dates et les montants
+               réglés, lus comme la carte « Règlement » (facture OU coche manuelle). Sur un document
+               d'entreprise, ils comptent le règlement de TOUS les stagiaires du groupe. Vides tant que
+               rien n'est payé (donc facultatifs, OPTIONAL_TOKENS). */
+            { key: 'Montant solde', label: 'Montant du solde (€)', sample: '1 050 €',
+              desc: 'Le montant du solde (le reste à payer) — la même valeur que {Reste à payer}, sous '
+                  + 'un nom plus clair. Prix du dossier moins l’acompte, symbole « € » compris.' },
+            { key: 'Acompte payé le', label: 'Acompte : payé le', sample: '12/03/2026',
+              desc: 'La date à laquelle l’acompte a été payé — celle d’une facture d’acompte réglée, ou '
+                  + 'celle cochée sur la carte « Règlement ». Vide tant que l’acompte n’est pas payé.' },
+            { key: 'Solde payé le', label: 'Solde : payé le', sample: '18/06/2026',
+              desc: 'La date à laquelle le solde (le reste) a été payé. Vide tant qu’il ne l’est pas.' },
+            { key: 'Acompte payé', label: 'Acompte : montant payé (€)', sample: '450 €',
+              desc: 'Le montant d’acompte effectivement encaissé (factures d’acompte réglées et/ou '
+                  + 'acompte coché payé). Vide si rien n’a été encaissé.' },
+            { key: 'Solde payé', label: 'Solde : montant payé (€)', sample: '1 050 €',
+              desc: 'Le montant du solde effectivement encaissé. Vide si rien n’a été encaissé.' },
+            { key: 'Total payé', label: 'Total payé (€)', sample: '1 500 €',
+              desc: 'Le total réglé sur le dossier (acompte + solde), tout moyen confondu. Sur un '
+                  + 'document d’entreprise, la somme pour tous les stagiaires du groupe. Vide si rien.' },
         ],
     },
     /* LES RÉPONSES DU STAGIAIRE, IMPRIMÉES (2026-09-22) — photos et partenaires, deux questions
@@ -1411,6 +1431,10 @@ const OPTIONAL_TOKENS = new Set([
     /* LE MOYEN DE PAIEMENT du règlement (migration 195) : vide tant que l'école ne l'a pas noté sur la
        carte « Règlement ». Une facture ne doit pas se bloquer parce que le moyen n'est pas renseigné. */
     'Moyen acompte', 'Réf acompte', 'Moyen solde', 'Réf solde',
+    /* COMMENT LA FORMATION A ÉTÉ PAYÉE (2026-10-12) : vides tant que rien n'est réglé — une formation
+       non encore payée est normale, un document ne doit pas se bloquer pour autant. {Montant solde}
+       est l'alias de {Reste à payer}, lui aussi facultatif (un dossier sans reste existe). */
+    'Montant solde', 'Acompte payé le', 'Solde payé le', 'Acompte payé', 'Solde payé', 'Total payé',
 ]);
 
 /** Extrait les clés de jetons utilisées dans un corps HTML (puces + {Clé}). */
@@ -1623,6 +1647,12 @@ function resolveTokens(ctx = {}) {
     const factureVals = invoiceTokens(ctx.invoice);
     const evalVals = evaluationTokens(ctx.evaluation);
     const juryVals = juryTokens(ctx.jury);
+    /* LE RÈGLEMENT, posé sur le PREMIER dossier par loadContext (agrégé sur les dossiers du document,
+       cf. document.controller) : COMMENT la formation a été payée. Absent partout où loadContext ne
+       passe pas (aperçu de modèle, facture) → objets vides → jetons vides. */
+    const regl = (f && f.reglement) || {};
+    const reglAc = regl.acompte || {};
+    const reglSo = regl.solde || {};
 
     return {
         // Stagiaire
@@ -1668,6 +1698,13 @@ function resolveTokens(ctx = {}) {
            groupe partage un règlement global) ; {Moyen…} imprime le LIBELLÉ, {Réf…} le n° / la référence. */
         'Moyen acompte': libelleMoyen(f.acompte_moyen), 'Réf acompte': f.acompte_ref || '',
         'Moyen solde': libelleMoyen(f.solde_moyen), 'Réf solde': f.solde_ref || '',
+        /* COMMENT LA FORMATION A ÉTÉ PAYÉE (2026-10-12). {Montant solde} est l'alias clair de {Reste à
+           payer}. Les dates et montants réglés viennent du règlement agrégé (`regl`, ci-dessus) : les
+           montants par `euro` (vide à 0), les dates par `frDate`. Vides hors d'un dossier réglé. */
+        'Montant solde': euro(totalPrice - totalAcompte),
+        'Acompte payé le': frDate(reglAc.date), 'Solde payé le': frDate(reglSo.date),
+        'Acompte payé': euro(reglAc.montantPaye), 'Solde payé': euro(reglSo.montantPaye),
+        'Total payé': euro(regl.totalPaye),
         'Prix HT': euro(priceHT), TVA: euro(vatAmount),
         'Taux TVA': vatRate > 0 ? `${vatRate} %` : 'Exonérée', 'Prix TTC': euro(priceTTC),
         // Entreprise

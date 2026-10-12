@@ -52,6 +52,10 @@ const { supprimerDocument } = require('../lib/suppressionDocument.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { getEnabledFields, champsDesConditions, loadDossierFactsMap, evalCondition } = require('../lib/conditions.js');
 const { agregerChamps, joindreFr, uniq } = require('../lib/agregationChamps.js');
+// Le règlement du dossier (migrations 194/195) → jetons {Acompte payé le}, {Total payé}… : la MÊME
+// règle que la carte « Règlement » de la fiche (facture OU coche manuelle), jamais une deuxième copie.
+const { calculerReglement } = require('../lib/reglementDossier.js');
+const { montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 const { matchStep } = require('../lib/documents.js');
 const { notify } = require('./notification.controller.js');
 const { resultatDossier, resultatJuryDossier } = require('./evaluation.controller.js');
@@ -210,6 +214,13 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     // org ne doit jamais révéler ses données).
     const [[learner]] = await conn.query('SELECT * FROM learner WHERE id = ? AND organization_id = ?', [learnerId, organizationId]);
     let company = null;
+    /* Les dates « payé le … » (migration 194) se lisent AU JOUR, comme la carte « Règlement »
+       (`reponseReglements`) : mysql2 rend un DATETIME en objet Date, que `calculerReglement` ne
+       saurait pas réduire. `colonneOuNull` ne met pas en forme → on compose l'expression ici. */
+    const colAcPaye = await colonneExiste(conn, 'enrollment', 'acompte_paye_le')
+        ? "DATE_FORMAT(e.acompte_paye_le, '%Y-%m-%d') AS acompte_paye_le" : 'NULL AS acompte_paye_le';
+    const colSoPaye = await colonneExiste(conn, 'enrollment', 'solde_paye_le')
+        ? "DATE_FORMAT(e.solde_paye_le, '%Y-%m-%d') AS solde_paye_le" : 'NULL AS solde_paye_le';
     const [formations] = await conn.query(
         `SELECT p.code, p.title, p.days, p.hours, p.price, p.hygiene, p.rs_code AS rs_code,
                 p.audience, p.objectives, p.objective_general, p.duration_detail, p.program_detail,
@@ -228,6 +239,9 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 ${await colonneOuNull(conn, 'enrollment', 'acompte_ref', 'e.')},
                 ${await colonneOuNull(conn, 'enrollment', 'solde_moyen', 'e.')},
                 ${await colonneOuNull(conn, 'enrollment', 'solde_ref', 'e.')},
+                /* Les dates « payé le … » cochées à la main (migration 194) → {Acompte payé le} /
+                   {Solde payé le}. Mises en forme au jour ci-dessus. NULL sans la 194. */
+                ${colAcPaye}, ${colSoPaye},
                 /* L'inscription, pour agréger les « Champs documents » sur TOUTES les formations
                    du document dans le MÊME ordre que les jetons nommés (cf. agregationChamps).
                    La session (__sid) sert à n'agréger les champs de SESSION qu'une fois par session :
@@ -268,7 +282,8 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                             DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date,
                             DATE_FORMAT(s.end_date,   '%Y-%m-%d') AS end_date,
                             NULL AS financing, NULL AS enroll_price, NULL AS acompte, NULL AS company_id,
-                            NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref
+                            NULL AS acompte_moyen, NULL AS acompte_ref, NULL AS solde_moyen, NULL AS solde_ref,
+                            NULL AS acompte_paye_le, NULL AS solde_paye_le
                        FROM training_session s
                        LEFT JOIN training_program p ON p.id = s.program_id
                       WHERE s.id = ? AND s.organization_id = ?`,
@@ -378,6 +393,57 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                 }
             } catch { /* migration des lieux (067) non appliquée */ }
         } catch (e) { /* champs indisponibles (migration non jouée) : on ignore */ }
+    }
+    /* LE RÈGLEMENT DU DOSSIER (demandé le 2026-10-12) — COMMENT la formation a été payée : les dates
+       « payé le … » et les montants réglés, pour {Acompte payé le}, {Solde payé le}, {Acompte payé},
+       {Solde payé} et {Total payé}. On réemploie `calculerReglement`, la MÊME règle que la carte
+       « Règlement » de la fiche (facture OU coche manuelle, cf. lib/reglementDossier.js) : deux copies
+       finiraient par diverger. On la calcule POUR CHAQUE dossier du document et on AGRÈGE — montants
+       sommés, dates au plus récent —, pour qu'un document d'entreprise couvrant plusieurs stagiaires
+       dise le règlement de l'ensemble, comme {Acompte}/{Reste à payer} somment déjà. Le résultat est
+       posé sur formations[0] : il se FIGE alors avec les formations (migration 201), exactement comme
+       {Moyen acompte}, sans toucher au bundle gelé plus bas. TOLÉRANT : une erreur (table/colonne
+       absente) laisse `reglement` indéfini et les jetons sortent vides — un document ne casse pas pour
+       une ligne de paiement manquante. */
+    if (avecInscription.length) {
+        try {
+            let acPaye = 0, soPaye = 0, totPaye = 0, acDate = null, soDate = null;
+            const plusRecent = (a, b) => (!a ? b : !b ? a : (a >= b ? a : b)); // jours ISO : l'ordre suit le temps
+            for (const d of avecInscription) {
+                const [factures] = await conn.query(
+                    `SELECT i.number AS numero, i.type, i.status AS statut, i.amount_net AS montant,
+                            COALESCE(SUM(CASE WHEN pay.status = 'REUSSI' THEN pay.amount END), 0) AS paye,
+                            DATE_FORMAT(MAX(CASE WHEN pay.status = 'REUSSI' THEN pay.paid_at END), '%Y-%m-%d') AS dernier_paiement
+                       FROM invoice i
+                       LEFT JOIN payment pay ON pay.invoice_id = i.id
+                      WHERE i.organization_id = ? AND i.type IN ('ACOMPTE', 'FACTURE')
+                        AND (i.enrollment_id = ? OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = ?))
+                      GROUP BY i.id`,
+                    [organizationId, d.__eid, d.__eid]);
+                const { montant: prix } = montantDuDossier(d.enroll_price, d.price);
+                const r = calculerReglement({
+                    prix, acompteConvenu: d.acompte,
+                    acomptePayeLe: d.acompte_paye_le, soldePayeLe: d.solde_paye_le,
+                    acompteMoyen: d.acompte_moyen, acompteRef: d.acompte_ref,
+                    soldeMoyen: d.solde_moyen, soldeRef: d.solde_ref,
+                    factures,
+                });
+                acPaye += r.acompte.montantPaye || 0;
+                soPaye += r.solde.montantPaye || 0;
+                totPaye += r.totalPaye || 0;
+                acDate = plusRecent(acDate, r.acompte.date);
+                soDate = plusRecent(soDate, r.solde.date);
+            }
+            if (formations[0]) {
+                formations[0].reglement = {
+                    acompte: { montantPaye: acPaye, date: acDate },
+                    solde: { montantPaye: soPaye, date: soDate },
+                    totalPaye: totPaye,
+                };
+            }
+        } catch (e) {
+            if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
+        }
     }
     /* ÉVALUATION PRATIQUE du dossier (migration 148) — jetons {NoteTotale}, {NoteDétail}…
        `resultatDossier` rend `null` quand la formation n'a pas de grille OU quand la migration
