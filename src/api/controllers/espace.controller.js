@@ -10,6 +10,7 @@ const { loadOrgSteps } = require('./template.controller.js');
 /* La DÉCISION du point de rupture (quelles étapes il exige, ce qui compte comme signé), partagée avec
    l'avancement des dossiers : le tableau de bord et l'émargement disent la même chose. */
 const PointDeRupture = require('../lib/pointDeRupture.js');
+const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
 const { formationSteps, enrollmentSteps } = require('./formationProgram.controller.js');
 const { champsDesConditions, loadDossierFactsMap } = require('../lib/conditions.js');
 const { regenEmargement, fenetreSignature, calendrierSession, horaireDuJour } = require('../lib/emargement.js');
@@ -187,7 +188,7 @@ async function completionOf(conn, e, steps, agefice = false, repCompanyIds = [])
 //   · documents STAGIAIRE     → la signature du stagiaire sur son propre document.
 // Les étapes sans signataire, les QCM et l'émargement lui-même sont ignorés.
 // Aucun point / pas d'entreprise / migration absente → aucun blocage (fail-open).
-async function companyEmargementGate(conn, e, orgId) {
+async function companyEmargementGate(conn, e, orgId, eqMap) {
     const none = { locked: false, need: 0, done: 0, break_label: null };
     if (!e.program_id || !e.enrollment_id) return none;
 
@@ -264,7 +265,7 @@ async function companyEmargementGate(conn, e, orgId) {
     } catch { /* schéma documents entreprise absent → ces étapes resteront « à faire » */ }
     // Un document de groupe non signé n'écrase pas un homonyme signé (statutsDocuments).
     const groupe = PointDeRupture.statutsDocuments(grp);
-    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe)), break_label };
+    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeEntreprise(s, propres, groupe, eqMap)), break_label };
 }
 
 // Accès à l'émargement : point de rupture positionné ENTRE deux jalons du parcours DE LA
@@ -272,7 +273,7 @@ async function companyEmargementGate(conn, e, orgId) {
 // Le stagiaire doit avoir signé tous les documents qu'il doit signer situés à/avant ce point
 // (par sort_order du parcours de la formation). Aucun point → aucun blocage.
 // Renvoie { locked, need, done, break_label }.
-async function dossierEmargementGate(conn, e, orgId, agefice = false) {
+async function dossierEmargementGate(conn, e, orgId, agefice = false, eqMap) {
     if (!e.program_id) return { locked: false, need: 0, done: 0, break_label: null };
     let breakSlug = null;
     try {
@@ -309,7 +310,7 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
         const faits = await loadDossierFactsMap(conn, orgId, [e.enrollment_id], catalogue);
         Object.assign(ctx, faits.get(e.enrollment_id) || {});
     } catch { /* champs de condition indisponibles : on s'en tient aux conditions intégrées */ }
-    const etapesDuDossier = await enrollmentSteps(conn, orgId, program, ctx);
+    const etapesDuDossier = await enrollmentSteps(conn, orgId, program, ctx, undefined, eqMap);
     const required = PointDeRupture.exigencesDossier(etapesDuDossier, threshold);
     const break_label = brk.label;
     if (!required.length) return { locked: false, need: 0, done: 0, break_label };
@@ -320,7 +321,7 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
         [e.enrollment_id]
     );
     const statuts = PointDeRupture.statutsDocuments(rows);
-    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeDossier(s, statuts)), break_label };
+    return { ...PointDeRupture.bilan(required, (s) => PointDeRupture.signeeDossier(s, statuts, eqMap)), break_label };
 }
 
 /**
@@ -330,9 +331,13 @@ async function dossierEmargementGate(conn, e, orgId, agefice = false) {
  * Les compteurs sont cumulés ; `break_label` est celui du volet encore bloquant.
  */
 async function emargementGate(conn, e, orgId, agefice = false) {
+    // Les équivalences « OU » de l'organisme, chargées une fois : un document équivalent signé
+    // (Convention / Convention AGEFICE) vaut pour la variante que le parcours a retenue.
+    let eqMap;
+    try { eqMap = equivalenceMap(await loadEquivalences(conn, orgId)); } catch { eqMap = undefined; }
     const [dossier, company] = await Promise.all([
-        dossierEmargementGate(conn, e, orgId, agefice),
-        companyEmargementGate(conn, e, orgId),
+        dossierEmargementGate(conn, e, orgId, agefice, eqMap),
+        companyEmargementGate(conn, e, orgId, eqMap),
     ]);
     const locked = dossier.locked || company.locked;
     // Libellé affiché : le volet qui bloque encore (dossier prioritaire), sinon le dernier point posé.

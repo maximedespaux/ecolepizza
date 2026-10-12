@@ -51,7 +51,7 @@ test('la garde résout le parcours DU DOSSIER, pas celui de la formation', () =>
     const bloc = ESPACE.slice(ESPACE.indexOf('async function dossierEmargementGate'));
     const corps = bloc.slice(0, bloc.indexOf('\n}'));
     assert.ok(corps.length > 400, 'corps de la garde introuvable');
-    assert.match(corps, /await enrollmentSteps\(conn, orgId, program, ctx\)/,
+    assert.match(corps, /await enrollmentSteps\(conn, orgId, program, ctx(,|\))/,
         'la liste des exigences doit venir du parcours résolu du dossier');
     const code = corps.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     assert.doesNotMatch(code, /matchStep\(/,
