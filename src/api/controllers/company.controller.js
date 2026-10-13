@@ -740,10 +740,28 @@ const createCompanyDocument = async (req, res) => {
 const deleteCompany = async (req, res) => {
     try {
         const conn = db.promise();
-        // Son nom, lu avant : une entreprise effacée ne se nomme plus au journal (migration 186).
-        const [[avant]] = await conn.query('SELECT name FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
-        const [r] = await conn.query('DELETE FROM company WHERE id = ? AND organization_id = ?', [req.params.id, req.user.organization_id]);
+        const orgId = req.user.organization_id;
+        // Son nom (pour le journal, migration 186) ET son représentant, lus AVANT la suppression.
+        // `user_id` en colonne optionnelle (migration 084) : absente → pas de nettoyage, pas d'erreur.
+        const [[avant]] = await conn.query(
+            `SELECT name, ${await colonneOuNull(conn, 'company', 'user_id')} FROM company WHERE id = ? AND organization_id = ?`,
+            [req.params.id, orgId]);
+        const [r] = await conn.query('DELETE FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!r.affectedRows) return res.status(404).json({ message: 'Entreprise introuvable.' });
+        /* NETTOYER LE COMPTE DU REPRÉSENTANT, sinon il reste ORPHELIN : un login de rôle ENTREPRISE
+           qu'aucune entreprise ne gère plus réservait son e-mail et empêchait d'en faire un compte
+           stagiaire (« Cette adresse appartient déjà à un compte non-stagiaire »). On ne le supprime
+           QUE si c'est bien un compte ENTREPRISE ET que plus RIEN ne s'y rattache — aucune AUTRE
+           entreprise, aucune fiche stagiaire. Même prudence que deleteLearner pour les orphelins
+           stagiaire ; `role='ENTREPRISE'` en défense de profondeur (jamais un compte du bureau). */
+        const uid = avant && avant.user_id;
+        if (uid) {
+            const [[{ n: autresEntreprises }]] = await conn.query('SELECT COUNT(*) AS n FROM company WHERE user_id = ?', [uid]);
+            const [[{ n: fiches }]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [uid]);
+            if (autresEntreprises === 0 && fiches === 0) {
+                await conn.query("DELETE FROM user WHERE id = ? AND organization_id = ? AND role = 'ENTREPRISE'", [uid, orgId]);
+            }
+        }
         logAudit(req, 'company.delete', 'Company', req.params.id, avant ? { libelle: avant.name } : null);
         res.json({ success: true });
     } catch (err) {

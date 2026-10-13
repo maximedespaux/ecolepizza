@@ -296,7 +296,9 @@ test('une réponse QCM, une entreprise : lues AVANT d\'être effacées', () => {
     assert.ok(q.indexOf('SELECT q.title') > -1 && q.indexOf('SELECT q.title') < q.indexOf('DELETE FROM quiz_response'));
     assert.match(q, /\{ libelle: lue\.title, stagiaire: lue\.learner_id \}/);
     const c = bloc(CTRL('company.controller.js'), 'const deleteCompany');
-    assert.ok(c.indexOf('SELECT name FROM company') > -1 && c.indexOf('SELECT name FROM company') < c.indexOf('DELETE FROM company'));
+    // Le nom (et le représentant, pour nettoyer son compte orphelin) sont lus AVANT le DELETE.
+    const selName = c.search(/SELECT name,[^\n]*FROM company/);
+    assert.ok(selName > -1 && selName < c.indexOf('DELETE FROM company'));
     assert.match(c, /logAudit\(req, 'company\.delete', 'Company', req\.params\.id, avant \? \{ libelle: avant\.name \} : null\)/);
     // Une note se journalise sous l'EXERCICE : le stagiaire noté est passé à part.
     assert.strictEqual((CTRL('evaluation.controller.js').match(/logAudit\(req, 'evaluation\.note', 'EvaluationNote', exerciceId, \{ stagiaire: ex\.stagiaire \}\)/g) || []).length, 2);
