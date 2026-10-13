@@ -6,7 +6,7 @@ import EmptyState from "../components/EmptyState.jsx";
 import { Icon } from "../components/Icon.jsx";
 import BuilderHub from "../components/BuilderHub.jsx";
 import FicheRecette from "./FicheRecette.jsx";
-import { getMyRecipes, deleteRecipe, unshareRecipe, photoFicheUrl } from "../api/apiClient.js";
+import { getMyRecipes, deleteRecipe, photoFicheUrl } from "../api/apiClient.js";
 import { resumeFiche, RAYONS, KIND_MODE, MODE_KIND } from "../lib/rayonsFiches.js";
 
 /**
@@ -26,9 +26,9 @@ import { resumeFiche, RAYONS, KIND_MODE, MODE_KIND } from "../lib/rayonsFiches.j
  * du téléphone — le geste le plus naturel pour « revenir aux trois choix » — quittait la page
  * entière. L'éditeur, lui, reste un état : y entrer n'ajoute rien à l'historique, comme avant.
  *
- * Le PARTAGE à la communauté se fait dans l'éditeur (bouton « Partager », qui écrit la fiche
- * ENTIÈRE) ; on peut retirer du partage d'ici, car `unshareRecipe` est une route dédiée qui ne
- * touche qu'à la visibilité (repartager depuis la liste réécrirait la fiche sans ses ingrédients).
+ * TOUTE FICHE EST PARTAGÉE à la communauté (décidé le 2026-10-13) : il n'y a plus de choix côté
+ * auteur, donc plus de bouton « Partager » ni « Retirer » ici. La pastille « Partagée » le rappelle.
+ * (La modération peut encore retirer une fiche du fil depuis la Communauté — `unshareRecipe`.)
  */
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Préparation", RECETTE: "Réalisation" };
 // Même pastille que l'éditeur : chaque type a sa couleur (elles étaient toutes du même beige).
@@ -66,7 +66,6 @@ export default function FichesTechniques() {
   const count = (k) => toutes.filter((f) => f.kind === k).length;
   const ouvrir = (s) => setEdit({ mode: KIND_MODE[s.kind] || "realisation", id: s.id });
   const remove = async (id) => { if (!window.confirm("Supprimer cette fiche ?")) return; try { await deleteRecipe(id); reload(); } catch { /* barre d'erreur globale */ } };
-  const unshare = async (id) => { try { await unshareRecipe(id); reload(); } catch { /* ignore */ } };
 
   if (rayon) {
     const r = RAYONS[rayon];
@@ -108,9 +107,6 @@ export default function FichesTechniques() {
                     ? <span className="ft-carte-partage"><Icon name="users" size={13} /> Partagée</span>
                     : <span className="ft-carte-partage prive"><Icon name="lock" size={13} /> Privée</span>}
                   <span className="ft-carte-actions">
-                    {s.visibility === "SHARED" && (
-                      <button type="button" className="btn sm ghost" onClick={() => unshare(s.id)} title="Rendre privée (retirer du partage)">Retirer</button>
-                    )}
                     <button type="button" className="iconbtn del" title="Supprimer" aria-label={`Supprimer ${s.name}`} onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
                   </span>
                 </div>
@@ -162,9 +158,6 @@ export default function FichesTechniques() {
                     {s.kind === "RECETTE" && s.type ? s.type : KIND_LABEL[s.kind]}{s.visibility === "SHARED" ? " · partagée" : ""}
                   </span>
                 </span>
-                {s.visibility === "SHARED" && (
-                  <button className="btn sm ghost" onClick={() => unshare(s.id)} title="Rendre privée (retirer du partage)"><Icon name="lock" size={13} /> Retirer</button>
-                )}
                 <button className="btn sm ghost" onClick={() => ouvrir(s)}><Icon name="pencil" size={13} /> Ouvrir</button>
                 <button className="iconbtn del" title="Supprimer" onClick={() => remove(s.id)}><Icon name="trash" size={14} /></button>
               </div>

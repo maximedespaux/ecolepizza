@@ -50,7 +50,8 @@ const YIELD_UNITS = ["g", "kg", "ml", "l", "piece"];
    commune s'applique — le coût au kg se calcule sur le poids des ingrédients. */
 const NEW = () => ({
   id: null, kind: "RECETTE", name: "", type: "Classique", description: "", servings: 6, paton_g: 250, flour_price: 1.2,
-  visibility: "PRIVATE", margin_pct: 70, yield_qty: "", yield_unit: "g", dough_params: { ...DP_DEFAULT },
+  // Toute fiche est partagée à la communauté (plus de choix) : une nouvelle fiche naît donc « SHARED ».
+  visibility: "SHARED", margin_pct: 70, yield_qty: "", yield_unit: "g", dough_params: { ...DP_DEFAULT },
   ingredients: [], steps: [], cooking: { type: "", temp: "", energy: "", time: "" }, pate: "",
 });
 
@@ -1275,18 +1276,14 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     : enregistre.session ? `Enregistrée à ${heure(enregistre.le)}`
     : enregistre.le ? `Enregistrée le ${dateHeure(enregistre.le)}` : "Enregistrée";
 
-  // Boutons du panneau : enregistrer, partager, imprimer.
+  // Boutons du panneau : enregistrer, imprimer. Le partage n'est plus un choix — toute fiche est sur
+  // la communauté (le bandeau de pied l'indique), il n'y a donc plus de bouton « Partager ».
   const actions = (
     <div className="fe-actions">
       <button type="button" className="btn primary fe-save" onClick={() => persist()} disabled={busy}>
         <Icon name="check" size={16} /> {r.id ? "Enregistrer" : "Créer la fiche"}
       </button>
       <div className="fe-actions-2">
-        <button type="button" className={"btn fe-ghost" + (shared ? " on" : "")} aria-pressed={shared} disabled={busy}
-          onClick={() => persist({ visibility: shared ? "PRIVATE" : "SHARED" })}
-          title={shared ? "Partagée à la communauté : cliquer pour la rendre privée" : "Partager à la communauté (enregistre la fiche)"}>
-          <Icon name={shared ? "users" : "send"} size={15} /> {shared ? "Partagée" : "Partager"}
-        </button>
         <button type="button" className="btn fe-ghost" onClick={() => setPrintOpen(true)} title="Aperçu imprimable au format fiche technique">
           <Icon name="printer" size={15} /> Imprimer
         </button>
