@@ -222,7 +222,10 @@ const ACTION_LABEL = {
        lisible : « fiche retirée » et non un code, sinon le journal ne sert qu'à qui l'a écrit.
        Le ton est ROUGE comme les suppressions, sans en être une : la fiche redevient privée,
        son auteur la garde. C'est bien un retrait de la vue de tous. */
-    'recipe.unshare': ['Fiche retirée de la communauté', R],
+    'recipe.unshare': ['Fiche retirée de la communauté', R], // gardé : d'anciennes lignes l'emploient
+    /* Depuis le 2026-10-14, la modération SUPPRIME la fiche (retirée de la communauté ET des fiches
+       de l'auteur) au lieu de la dépublier — d'où ce code, posé par deleteRecipe en modération. */
+    'recipe.delete': ['Fiche technique supprimée (modération)', R],
 
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],

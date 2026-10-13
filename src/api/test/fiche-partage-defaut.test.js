@@ -9,7 +9,7 @@
  *     la modération ne se republie pas au prochain enregistrement de l'auteur ;
  *   · l'écran n'offre plus de bouton « Partager » / « Retirer » à l'auteur.
  *
- * Le RETRAIT par la modération (`unshareRecipe`) reste, lui — c'est l'objet de retrait-fiche-dates.
+ * La MODÉRATION peut supprimer une fiche (`deleteRecipe`) — c'est l'objet de retrait-fiche-dates.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -86,7 +86,7 @@ test('l\'écran n\'offre plus de « Partager » / « Retirer » à l\'auteur', (
     assert.doesNotMatch(liste, /unshareRecipe\(|from "\.\.\/api\/apiClient\.js"[^\n]*unshareRecipe/, 'plus d\'appel ni d\'import du retrait auteur dans « Mes fiches »');
     // Une nouvelle fiche naît partagée (l'état initial).
     assert.match(editeur, /visibility: "SHARED"/, 'une nouvelle fiche part partagée');
-    // La modération, elle, garde son retrait (depuis la Communauté).
+    // La modération, elle, peut SUPPRIMER une fiche depuis la Communauté (décidé le 2026-10-14).
     const comm = fs.readFileSync(path.join(APP, 'pages/Communaute.jsx'), 'utf8');
-    assert.match(comm, /unshareRecipe\(d\.id\)/, 'le retrait de modération reste');
+    assert.match(comm, /deleteRecipe\(d\.id\)/, 'la modération supprime la fiche');
 });

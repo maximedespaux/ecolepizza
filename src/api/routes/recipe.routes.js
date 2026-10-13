@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { savePhoto, getPhoto, deletePhoto } = require('../controllers/photoFiche.controller.js');
-const { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, unshareRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment } = require('../controllers/recipe.controller.js');
+const { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment } = require('../controllers/recipe.controller.js');
 const { authenticateToken } = require('../middlewares/auth.middleware.js');
 
 const router = express.Router();
@@ -21,10 +21,9 @@ router.get('/author/:userId', authenticateToken, authorProfile);
 router.get('/:id', authenticateToken, getRecipe);
 router.post('/', authenticateToken, createRecipe);
 router.put('/:id', authenticateToken, updateRecipe);
+// Supprimer : l'auteur sa fiche, un membre qui MODÈRE celle d'un autre (elle part alors de partout,
+// y compris des fiches de l'auteur). L'ancien « retirer du fil » (dépublier) a été retiré le 2026-10-14.
 router.delete('/:id', authenticateToken, deleteRecipe);
-// Dépublier n'est PAS supprimer : route à part, pour que la modération ne puisse que
-// retirer du fil — jamais toucher au contenu d'une fiche qui n'est pas la sienne.
-router.post('/:id/retirer', authenticateToken, unshareRecipe);
 // La photo de la fiche (migration 191) : servie à qui peut ouvrir la fiche, posée par son auteur.
 router.get('/:id/photo', authenticateToken, getPhoto);
 router.put('/:id/photo', authenticateToken, photoUpload.single('photo'), savePhoto);

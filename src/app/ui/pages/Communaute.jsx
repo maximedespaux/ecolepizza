@@ -19,7 +19,7 @@ import { cadrePorteDe, cadreClass, cadreStyle, cadreValeur, useCadreChoisi } fro
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
-import { photoFicheUrl, getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, unshareRecipe } from "../api/apiClient.js";
+import { photoFicheUrl, getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, deleteRecipe } from "../api/apiClient.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -531,18 +531,17 @@ export default function Communaute() {
     } catch { /* ignore */ }
   }
 
-  /* Retirer une fiche du fil — modération. Elle repasse en PRIVÉE : l'auteur la garde dans ses
-     empâtements ou ses préparations, souvent le travail d'une session. Le libellé le dit en toutes
-     lettres dans la confirmation : « retirer » et « supprimer » ne doivent pas se confondre au
-     moment où l'on clique. */
-  async function retirerDuFil(d) {
-    if (!window.confirm(`Retirer « ${d.name} » de la communauté ?\n\nLa fiche redevient privée : elle disparaît du fil, mais ${d.author_name || "son auteur"} la garde dans ses propres fiches.`)) return;
+  /* Supprimer une fiche — modération (décidé le 2026-10-14). Elle part de la communauté ET des
+     fiches de son auteur : c'est une SUPPRESSION, pas un simple retrait du fil. La confirmation le
+     dit en toutes lettres (« définitivement », l'auteur nommé) pour qu'on mesure le geste. */
+  async function supprimerFiche(d) {
+    if (!window.confirm(`Supprimer « ${d.name} » ?\n\nLa fiche est retirée de la communauté ET supprimée des fiches de ${d.author_name || "son auteur"}. Cette action est définitive.`)) return;
     setBusy(true);
     try {
-      await unshareRecipe(d.id);
+      await deleteRecipe(d.id);
       setOpenId(null);
       setList((p) => p.filter((x) => x.id !== d.id));
-    } catch (e) { window.alert(e.message || "Retrait impossible."); }
+    } catch (e) { window.alert(e.message || "Suppression impossible."); }
     finally { setBusy(false); }
   }
 
@@ -888,14 +887,13 @@ export default function Communaute() {
                       {!duBureau && (
                         <button className="btn sm primary comm-save" disabled={busy} onClick={() => copyToMine(detail)} title="Enregistrer dans mes fiches"><Icon name="folder-check" size={14} /> Enregistrer</button>
                       )}
-                      {/* La modération pouvait retirer un commentaire, mais pas la fiche qui le
-                          portait : il ne restait qu'à supprimer la fiche entière — ce que la
-                          route refuse à quiconque n'en est pas l'auteur. Retirer du fil suffit,
-                          et se défait : l'auteur peut repartager. */}
+                      {/* MODÉRATION : supprimer la fiche d'un autre. Elle part de la communauté ET
+                          des fiches de son auteur — c'est une suppression définitive (décidé le
+                          2026-10-14). Jamais sur sa PROPRE fiche (on la supprime depuis « Mes fiches »). */}
                       {detail.can_moderate && !detail.mine && (
                         <button className="btn sm ghost danger" disabled={busy} style={{ marginLeft: "auto" }}
-                          onClick={() => retirerDuFil(detail)} title="Retirer cette fiche de la communauté (elle redevient privée)">
-                          <Icon name="shield" size={14} /> Retirer du fil
+                          onClick={() => supprimerFiche(detail)} title="Supprimer cette fiche (retirée de la communauté et des fiches de son auteur)">
+                          <Icon name="trash" size={14} /> Supprimer
                         </button>
                       )}
                     </div>

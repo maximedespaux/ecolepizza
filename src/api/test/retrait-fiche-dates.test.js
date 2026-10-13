@@ -1,17 +1,12 @@
 /**
- * Retirer une fiche du fil, et lire une date sans la déchiffrer.
+ * Supprimer une fiche depuis la Communauté (modération), et lire une date sans la déchiffrer.
  *
- * RETIRER N'EST PAS SUPPRIMER, et c'est tout l'objet de la route séparée. La modération pouvait
- * retirer un COMMENTAIRE mais pas la fiche qui le portait : il ne restait qu'à supprimer la
- * fiche entière — ce que `deleteRecipe` refuse d'ailleurs à quiconque n'en est pas l'auteur.
- *
- * Or une fiche partagée appartient AUSSI à son auteur : elle vit dans ses empâtements, ses
- * garnitures, ses réalisations, et c'est souvent le travail d'une session. La détruire parce que
- * sa publication dérange punit la personne pour le geste, et sans recours. `unshareRecipe` la
- * repasse en PRIVÉE : elle quitte le fil, l'auteur la garde, et cela se défait.
- *
- * La route est SÉPARÉE de `updateRecipe` — un modérateur n'a rien à faire dans le contenu d'une
- * fiche qui n'est pas la sienne. Il peut la retirer du fil, un point.
+ * LA MODÉRATION SUPPRIME (décidé le 2026-10-14). Avant, « retirer du fil » repassait la fiche en
+ * privée et l'auteur la gardait. Mais toute fiche est désormais partagée d'office (plus de choix
+ * côté auteur) : garder une copie privée n'avait plus de sens. Un membre qui MODÈRE SUPPRIME donc
+ * la fiche — elle part de la communauté ET des fiches de son auteur. `deleteRecipe` l'autorise à
+ * l'AUTEUR ou à la MODÉRATION (peutModerer), bornée à l'organisme, et la trace (`recipe.delete`).
+ * L'ancien `unshareRecipe` (dépublier → privée) a été retiré, route comprise.
  *
  * LES DATES. Le fil affichait « 2026-08-01 » : format ISO, et sans heure. Trois questions du même
  * jour sortaient toutes avec la même date — on ne savait plus laquelle venait d'arriver.
@@ -35,42 +30,45 @@ const srcFormat = fs.readFileSync(path.join(APP, 'ui/lib/format.js'), 'utf8');
 const srcPage = fs.readFileSync(path.join(APP, 'ui/pages/Communaute.jsx'), 'utf8');
 const srcPost = fs.readFileSync(path.join(APP, 'ui/components/QuestionPost.jsx'), 'utf8');
 
-test('retirer une fiche la DÉPUBLIE, sans jamais la détruire', () => {
-    assert.match(srcRecipe, /UPDATE recipe SET visibility = \? WHERE id = \?', \['PRIVATE'/,
-        'la fiche doit repasser en privee, pas etre supprimee');
-    /* Le corps est ISOLÉ avant d'être inspecté. Cherché dans tout le fichier, un
-       `[\s\S]*?DELETE FROM recipe` partant de `unshareRecipe` finissait toujours par tomber sur
-       le `DELETE FROM recipe_like` d'une AUTRE fonction, cent lignes plus bas — l'assertion
-       échouait quoi qu'on écrive, et n'aurait donc rien gelé du tout. */
-    const corps = /const unshareRecipe = async \(req, res\) => \{[\s\S]*?\n\};/.exec(srcRecipe);
-    assert.ok(corps, 'unshareRecipe introuvable');
-    assert.doesNotMatch(corps[0], /DELETE FROM/,
-        'aucun DELETE dans le retrait — l\'auteur garde son travail');
-    assert.match(srcRoutes, /router\.post\('\/:id\/retirer', authenticateToken, unshareRecipe\)/,
-        'route dediee attendue');
-    // Supprimer pour de bon reste à l'auteur SEUL : la modération n'y touche pas.
-    assert.match(srcRecipe, /if \(cur\.author_user_id !== req\.user\.id\) return res\.status\(403\)/,
-        'deleteRecipe doit rester reserve a l\'auteur');
+/* Le corps de deleteRecipe, ISOLÉ avant inspection : cherché dans tout le fichier, un
+   `DELETE FROM recipe` finirait sur celui d'une autre fonction. */
+function corpsDelete() {
+    const m = /const deleteRecipe = async \(req, res\) => \{[\s\S]*?\n\};/.exec(srcRecipe);
+    assert.ok(m, 'deleteRecipe introuvable');
+    return m[0];
+}
+
+test('SUPPRIMER une fiche la DÉTRUIT — l\'ancien « retirer du fil » n\'existe plus', () => {
+    const corps = corpsDelete();
+    assert.match(corps, /DELETE FROM recipe WHERE id = \? AND organization_id = \?/,
+        'la fiche est SUPPRIMÉE, et cadrée sur l\'organisme');
+    // Plus de dépublier → privée : ni la fonction, ni la route, ni l'appel écran.
+    assert.doesNotMatch(srcRecipe, /const unshareRecipe/, 'le dépublier (→ privée) a été retiré du contrôleur');
+    assert.doesNotMatch(srcRoutes, /\/:id\/retirer/, 'et sa route aussi');
 });
 
-test('le retrait est tracé, et refusé à qui n\'y a pas droit', () => {
-    assert.match(srcRecipe, /if \(cur\.author_user_id !== req\.user\.id && !await peutModerer\(req\.user\)\)/,
-        'l\'auteur ou la moderation, personne d\'autre');
-    // Le WHERE porte aussi sur l'organisme : on ne retire pas la fiche d'une autre école.
-    assert.match(srcRecipe, /FROM recipe WHERE id = \? AND organization_id = \?/,
-        'le retrait doit etre cadre sur l\'organisme');
-    assert.match(srcRecipe, /logAudit\(req, 'recipe\.unshare', 'Recipe', req\.params\.id\)/,
-        'retirer la publication de quelqu\'un doit laisser une trace');
+test('la suppression de modération est TRACÉE, bornée à l\'organisme, et refusée aux autres', () => {
+    const corps = corpsDelete();
+    // Auteur OU modération dans SON organisme — personne d'autre (403).
+    assert.match(corps, /cur\.organization_id === orgId && await peutModerer\(req\.user\)/,
+        'la modération ne vaut que dans son organisme');
+    assert.match(corps, /return res\.status\(403\)/, 'tout autre que l\'auteur ou la modération : refusé');
+    assert.match(corps, /logAudit\(req, 'recipe\.delete', 'Recipe', req\.params\.id, \{ libelle: cur\.name \}\)/,
+        'supprimer la fiche d\'un autre laisse une trace nommée');
+    // Le nom est lu AVANT la suppression (migration 186 : une fiche effacée ne se nomme plus).
+    const sel = corps.search(/SELECT author_user_id, organization_id, name FROM recipe/);
+    assert.ok(sel > -1 && sel < corps.indexOf('DELETE FROM recipe'), 'le nom est lu avant le DELETE');
 });
 
-test('le bouton n\'apparaît qu\'à la modération, et jamais sur sa propre fiche', () => {
-    // Sur la sienne, « Retirer du fil » ferait doublon avec le partage, réglé dans ses fiches.
+test('le bouton de suppression n\'apparaît qu\'à la modération, jamais sur sa propre fiche', () => {
+    // Sur la sienne, on supprime depuis « Mes fiches » : ici, c'est la modération sur celle d'un autre.
     assert.match(srcPage, /\{detail\.can_moderate && !detail\.mine && \(/,
         'bouton reserve a la moderation, hors de ses propres fiches');
-    assert.match(srcPage, /await unshareRecipe\(d\.id\)/, 'il doit appeler la route de retrait');
-    // La confirmation doit DIRE ce qui se passe : « retirer » et « supprimer » ne se confondent pas.
-    assert.match(srcPage, /Retirer «[^»]*» de la communauté \?/, 'confirmation attendue');
-    assert.match(srcPage, /la garde dans ses propres fiches/, 'elle doit dire que l\'auteur garde sa fiche');
+    assert.match(srcPage, /await deleteRecipe\(d\.id\)/, 'il supprime bien la fiche');
+    // La confirmation DIT que c'est définitif et que l'auteur perd sa fiche.
+    assert.match(srcPage, /Supprimer «[^»]*» \?/, 'confirmation attendue');
+    assert.match(srcPage, /supprimée des fiches de/, 'elle doit dire que l\'auteur perd sa fiche');
+    assert.match(srcPage, /définitive/, 'et que c\'est définitif');
 });
 
 test('les dates partent en ISO et s\'affichent en français', () => {
