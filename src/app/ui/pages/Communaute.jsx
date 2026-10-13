@@ -549,7 +549,9 @@ export default function Communaute() {
   async function copyToMine(d) {
     setBusy(true);
     try {
-      await createRecipe({ ...d, id: null, name: `${d.name} (copie)`, visibility: "PRIVATE" });
+      // La copie devient MA fiche. Toute fiche étant partagée (plus de visibilité au choix), le
+      // serveur la crée « SHARED » — inutile de passer `visibility`.
+      await createRecipe({ ...d, id: null, name: `${d.name} (copie)` });
       navigate("/fiches-techniques");
     } catch { /* ignore */ }
     finally { setBusy(false); }

@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (359 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-13** : **2799 tests — 2792 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (360 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-14** : **2803 tests — 2796 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,20 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**206 est À JOUER mais FACULTATIVE** (`206_fiches_toutes_partagees.sql`, TOUTES les fiches techniques sur la
+communauté — décidé le 2026-10-13). L'école a tranché : une fiche technique n'a plus de choix « privée /
+partagée », elle est TOUJOURS sur la communauté. Le CODE le fait désormais seul — `createRecipe` force
+`visibility = 'SHARED'`, `updateRecipe` ne touche plus la visibilité (il la préserve, pour qu'un retrait de
+modération ne se défasse pas au prochain enregistrement), et l'écran n'offre plus de bouton « Partager » /
+« Retirer » à l'auteur (le retrait de MODÉRATION, lui, reste, cf. `unshareRecipe`). Les NOUVELLES fiches sont
+donc partagées sans migration. La 206 ne sert qu'à publier AUSSI les fiches DÉJÀ en base restées privées
+(`UPDATE recipe SET visibility='SHARED' WHERE visibility='PRIVATE'`). ⚠️ Elle EXPOSE du contenu gardé privé par
+des stagiaires : à jouer seulement si l'école le veut, et quand aucune fiche n'est en attente de retrait de
+modération. Son revert NE RESTAURE RIEN (`DO 0`) : la visibilité d'origine n'est conservée nulle part, re-tout-
+privatiser cacherait aussi les fiches volontairement partagées — on re-privatise fiche par fiche via le fil.
+Tests : `fiche-partage-defaut.test.js` ; le retrait de modération reste couvert par `retrait-fiche-dates.test.js`.
 
 **205 est À JOUER** (`205_enrollment_numero_certification.sql`, le NUMÉRO DE CERTIFICATION d'un dossier —
 demandé le 2026-10-12). Une colonne `enrollment.numero_certification` (int). Une formation CERTIFIANTE (code

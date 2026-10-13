@@ -1,6 +1,10 @@
 // Espace « fiches techniques » (recettes) des stagiaires + catalogue d'ingrédients.
-// Les recettes sont privées par défaut ; en « SHARED » elles apparaissent dans la
-// communauté (autres stagiaires du même organisme).
+// TOUTE FICHE EST PARTAGÉE À LA COMMUNAUTÉ (décidé par l'école le 2026-10-13) : il n'y a plus de
+// choix « privée/partagée » côté auteur. `createRecipe` force donc `visibility = 'SHARED'`, et
+// `updateRecipe` NE TOUCHE PLUS à la visibilité (il la préserve) — ainsi une fiche RETIRÉE par la
+// modération (`unshareRecipe`, repasse en PRIVÉE) ne se republie pas d'elle-même au prochain
+// enregistrement de l'auteur. Les fiches déjà en base restent en l'état (une migration FACULTATIVE,
+// la 206, publie celles encore privées si l'école le veut).
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
@@ -452,7 +456,8 @@ function normRecipe(b) {
         yield_qty: (b.yield_qty != null && b.yield_qty !== '') ? Math.max(0, Number(b.yield_qty) || 0) : null,
         yield_unit: b.yield_unit ? String(b.yield_unit).slice(0, 20) : null,
         dough_params: (b.dough_params && typeof b.dough_params === 'object') ? JSON.stringify(prixPateLus(b.dough_params)) : null,
-        visibility: b.visibility === 'SHARED' ? 'SHARED' : 'PRIVATE',
+        // Plus de `visibility` ici : la création force 'SHARED', la modification ne la touche pas.
+        // Un `visibility` envoyé par un ancien client est donc ignoré (il n'y a plus de choix).
     };
 }
 async function saveIngredients(conn, recipeId, ingredients) {
@@ -480,10 +485,11 @@ const createRecipe = async (req, res) => {
         const r = normRecipe(req.body || {});
         if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         const id = crypto.randomUUID();
+        // Toute fiche naît PARTAGÉE (plus de choix côté auteur) : 'SHARED' en dur, pas de valeur client.
         await conn.query(
             `INSERT INTO recipe (id, organization_id, author_user_id, author_name, kind, name, type, description, servings, paton_g, flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, r.visibility]
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SHARED')`,
+            [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params]
         );
         await saveIngredients(conn, id, (req.body || {}).ingredients);
         res.status(201).json({ data: { id } });
@@ -505,9 +511,11 @@ const updateRecipe = async (req, res) => {
         if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});
         if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
+        // On NE touche PAS à `visibility` : une fiche reste partagée, et une fiche RETIRÉE par la
+        // modération (repassée en privée) ne se republie pas d'elle-même au prochain enregistrement.
         await conn.query(
-            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=?, visibility=? WHERE id=?`,
-            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, r.visibility, req.params.id]
+            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=? WHERE id=?`,
+            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, req.params.id]
         );
         await saveIngredients(conn, req.params.id, (req.body || {}).ingredients);
         res.json({ data: { id: req.params.id } });
