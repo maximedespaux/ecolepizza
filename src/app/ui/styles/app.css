@@ -3227,7 +3227,11 @@ details[open]>.arch-sum::before{transform:rotate(90deg)}
 .comm-c:first-child{padding-top:0}
 /* Communauté — galerie de cartes (v2) */
 .comm-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
-.comm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+/* `align-items:start` : chaque carte prend sa PROPRE hauteur. Sans lui, la grille étire toutes les
+   cartes d'une rangée à la hauteur de la plus haute — déplier le « Procédé » d'une carte gonflait
+   alors ses voisines (du vide au bas), comme si elles se dépliaient aussi. Chaque carte est
+   désormais indépendante : en déplier une ne touche plus les autres. */
+.comm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;align-items:start}
 .comm-card2{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;transition:transform .14s var(--ease),box-shadow .14s var(--ease),border-color .14s var(--ease)}
 .comm-card2:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ember1) 32%,var(--border));box-shadow:0 12px 28px -16px rgba(0,0,0,.4)}
 .comm-card2-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:15px 16px 13px;cursor:pointer}
