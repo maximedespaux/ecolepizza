@@ -70,6 +70,26 @@ function withParsedNav(user) {
 /**
  * GET /api/auth/me — renvoie l'utilisateur connecté (sans le mot de passe).
  */
+/**
+ * LA TRACE D'UNE CONNEXION — partagée par le LOGIN et par l'OUVERTURE de l'app (/auth/me).
+ *
+ * `last_login_at` à maintenant, et une ligne par compte et par JOUR pour les statistiques (migration
+ * 200, INSERT IGNORE sur la clé primaire : les visites suivantes du jour ne changent rien). Une seule
+ * copie : deux finiraient par diverger (le rôle du jour, la forme de la ligne). `est_stagiaire` fige
+ * le rôle pour séparer stagiaires et équipe sans jointure.
+ *
+ * DEUX requêtes À PART et TOLÉRÉES (`.catch`) : sans la table/colonne (migration non jouée), elles
+ * échouent seules, sans jamais gêner l'authentification. On N'Y MET PAS l'annulation d'une
+ * désactivation (migration 199) : elle n'appartient qu'au VRAI login — ouvrir l'app sur un jeton encore
+ * valide ne doit pas annuler une désactivation en attente (la purge se compte sur `deactivated_at`,
+ * jamais sur `last_login_at`).
+ */
+function tracerConnexion(conn, user) {
+    conn.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id]).catch(() => {});
+    conn.query('INSERT IGNORE INTO connexion_jour (user_id, jour, organization_id, est_stagiaire) VALUES (?, CURDATE(), ?, ?)',
+        [user.id, user.organization_id, user.role === 'STAGIAIRE' ? 1 : 0]).catch(() => {});
+}
+
 const getCurrentUser = async (req, res) => {
     try {
         const conn = db.promise();
@@ -77,6 +97,13 @@ const getCurrentUser = async (req, res) => {
         if (!rows.length) return res.status(404).json({ message: 'Utilisateur introuvable' });
         const { password, ...user } = rows[0];
         withParsedNav(user);
+        /* OUVRIR L'APP COMPTE COMME UNE CONNEXION DU JOUR (demandé le 2026-10-13). Avec un jeton
+           « rester connecté » de 7 jours, un compte actif chaque jour ne se reconnecte pas : il
+           n'apparaissait dans les statistiques que le jour de son login. /auth/me est le passage que
+           l'app fait à chaque ouverture — on y pose la même trace que le login. Pas pour un compte
+           désactivé par l'administration (`active = 0`) : le login le refuse (403), on ne le compte pas
+           davantage ici. */
+        if (user.active !== 0) tracerConnexion(conn, user);
         // Ce compte est-il aussi rattaché à une fiche stagiaire ? (ex. intervenant
         // ancien stagiaire) -> on lui redonne l'espace stagiaire en plus.
         const [[lc]] = await conn.query('SELECT COUNT(*) AS n FROM learner WHERE user_id = ?', [req.user.id]);
@@ -133,19 +160,14 @@ const userAuthentification = async (req, res) => {
             return res.status(403).json({ message: 'Compte désactivé. Contactez un administrateur.' });
         }
 
-        // Trace de la dernière connexion (non bloquant).
-        conn.query('UPDATE user SET last_login_at = NOW() WHERE id = ?', [user.id]).catch(() => {});
+        // Trace de la connexion (dernière connexion + statistiques du jour), non bloquant. La MÊME
+        // que l'ouverture de l'app (tracerConnexion) : un seul endroit décrit comment on compte.
+        tracerConnexion(conn, user);
         /* SE RECONNECTER ANNULE UNE DÉSACTIVATION EN ATTENTE (migration 199) : le profil est gardé,
-           rien n'est purgé. Requête À PART — et non fondue dans celle du dessus — pour qu'une
+           rien n'est purgé. Requête À PART — propre au VRAI login, pas à /auth/me — pour qu'une
            colonne absente (migration non jouée) n'empêche jamais la trace de connexion. On n'arrive
            ici qu'avec `active = 1` : un compte déjà purgé (active = 0) a répondu 403 plus haut. */
         conn.query('UPDATE user SET deactivated_at = NULL WHERE id = ? AND deactivated_at IS NOT NULL', [user.id]).catch(() => {});
-        /* STATISTIQUES DE CONNEXION (migration 200) : une ligne par compte et par jour (INSERT IGNORE
-           sur la clé primaire — les connexions suivantes du jour ne changent rien). `est_stagiaire`
-           fige le rôle du jour, pour séparer stagiaires et équipe sans jointure. À part et tolérée :
-           sans la table, ça échoue seul, sans gêner la connexion. */
-        conn.query('INSERT IGNORE INTO connexion_jour (user_id, jour, organization_id, est_stagiaire) VALUES (?, CURDATE(), ?, ?)',
-            [user.id, user.organization_id, user.role === 'STAGIAIRE' ? 1 : 0]).catch(() => {});
 
         // Toujours une expiration (pas de jeton éternel) : 7 j si « rester connecté », sinon 1 h.
         const token = jwt.sign(
