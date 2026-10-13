@@ -526,13 +526,28 @@ const updateRecipe = async (req, res) => {
 };
 
 /** DELETE /api/recipes/:id — supprime (auteur uniquement). */
+/**
+ * DELETE /api/recipes/:id — supprime une fiche. L'AUTEUR supprime la sienne ; un MEMBRE qui MODÈRE
+ * (peutModerer) supprime celle d'un autre pour la retirer de la Communauté — et elle part ALORS de
+ * partout, y compris des fiches de son auteur (décidé le 2026-10-14 : la modération supprime, elle
+ * ne se contente plus de dépublier). Bornée à l'organisme : jamais la fiche d'une autre école.
+ */
 const deleteRecipe = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[cur]] = await conn.query('SELECT author_user_id FROM recipe WHERE id = ?', [req.params.id]);
+        const orgId = req.user.organization_id;
+        // Auteur, organisme ET nom lus AVANT : une fiche effacée ne se nomme plus au journal (migration 186).
+        const [[cur]] = await conn.query('SELECT author_user_id, organization_id, name FROM recipe WHERE id = ?', [req.params.id]);
         if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
-        if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut supprimer.' });
-        await conn.query('DELETE FROM recipe WHERE id = ?', [req.params.id]);
+        const estAuteur = cur.author_user_id === req.user.id;
+        // La modération ne vaut que DANS son organisme — un garde-fou, même si la fiche vient d'ailleurs.
+        const moderation = !estAuteur && cur.organization_id === orgId && await peutModerer(req.user);
+        if (!estAuteur && !moderation) {
+            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut supprimer cette fiche.' });
+        }
+        await conn.query('DELETE FROM recipe WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+        // Supprimer la fiche d'un AUTRE (modération) laisse une trace, comme tout geste de modération.
+        if (moderation) logAudit(req, 'recipe.delete', 'Recipe', req.params.id, { libelle: cur.name });
         res.json({ success: true });
     } catch (err) {
         console.error('Erreur suppression recette :', err);
@@ -540,40 +555,10 @@ const deleteRecipe = async (req, res) => {
     }
 };
 
-/**
- * POST /api/recipes/:id/retirer — retirer une fiche du fil de la Communauté.
- *
- * ELLE REPASSE EN PRIVÉE, elle n'est PAS supprimée. Une fiche partagée appartient aussi à son
- * auteur : elle vit dans ses empâtements, ses préparations, ses réalisations, et c'est souvent le
- * travail d'une session. Détruire sa fiche parce que sa publication dérange dans le fil punit
- * la personne pour le geste — et sans recours. Dépublier suffit à la modération, et se défait :
- * l'auteur peut repartager, l'école re-retirer.
- *
- * D'où une route SÉPARÉE de `updateRecipe` : un modérateur n'a rien à faire dans le contenu
- * d'une fiche qui n'est pas la sienne. Il peut la retirer du fil, un point.
- *
- * Journalisé : retirer la publication de quelqu'un doit laisser une trace, comme toute action
- * de modération — le Journal d'audit existe pour ça.
- */
-const unshareRecipe = async (req, res) => {
-    try {
-        const conn = db.promise();
-        const [[cur]] = await conn.query(
-            'SELECT author_user_id, name, visibility FROM recipe WHERE id = ? AND organization_id = ?',
-            [req.params.id, req.user.organization_id]);
-        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
-        if (cur.author_user_id !== req.user.id && !await peutModerer(req.user)) {
-            return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut retirer cette fiche.' });
-        }
-        if (cur.visibility !== 'SHARED') return res.json({ success: true, message: 'Déjà retirée du fil.' });
-        await conn.query('UPDATE recipe SET visibility = ? WHERE id = ?', ['PRIVATE', req.params.id]);
-        logAudit(req, 'recipe.unshare', 'Recipe', req.params.id);
-        res.json({ success: true, message: 'Fiche retirée de la communauté.' });
-    } catch (err) {
-        console.error('Erreur retrait fiche :', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-};
+/* « Retirer du fil » (dépublier → privée) a été RETIRÉ le 2026-10-14 : la modération SUPPRIME
+   désormais la fiche (deleteRecipe, ci-dessus) plutôt que de la repasser en privée — décidé avec
+   l'école. L'ancienne route POST /recipes/:id/retirer et son jeton d'audit `recipe.unshare` n'ont
+   plus lieu d'être. */
 
 /** GET /api/recipes/author/:userId — profil public d'un auteur (même organisme, ayant partagé). */
 const authorProfile = async (req, res) => {
@@ -766,4 +751,4 @@ const markRecipeRead = async (req, res) => {
     }
 };
 
-module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, unshareRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
+module.exports = { markRecipeRead, searchCatalog, catalogFamilies, catalogBrands, listMine, listShared, listComponents, getRecipe, createRecipe, updateRecipe, deleteRecipe, authorProfile, toggleLike, addComment, updateComment, deleteComment };
