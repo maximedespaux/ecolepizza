@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (362 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-14** : **2811 tests — 2804 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (363 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-14** : **2817 tests — 2810 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,22 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**208 est À JOUER** (`208_recipe_allergens.sql`, les ALLERGÈNES d'une fiche technique — demandé le 2026-10-14).
+Une colonne `recipe.allergens` (texte) : la liste JSON des codes d'allergènes PROPRES à la fiche (parmi les 14
+réglementaires INCO). On coche les allergènes sur une fiche (boutons dans l'éditeur) ; une RÉALISATION HÉRITE en
+plus, à l'affichage, de ceux des empâtements / préparations qu'elle importe (non retirables, calculé à la volée —
+jamais stocké, pour suivre un composant qui change). La LISTE des 14 vit déjà dans `src/app/ui/lib/allergenes.js`
+(le référentiel ingrédient→allergène du mini-jeu) ; on y a AJOUTÉ `parseAllergenes` / `normaliserAllergenes` /
+`allergenesAffichees`, et `src/api/lib/allergenes.js` reprend les mêmes `cle` (un test confronte les deux).
+S'affiche dans l'éditeur, le détail de la Communauté et la version imprimable. `RECIPE_COLS` est devenu la
+fonction `colsRecette(conn)` : `allergens` y est TOLÉRÉ (`colonneOuNull`), et l'écriture passe par un UPDATE à part
+en try/catch — sans la colonne, rien ne casse (les allergènes sortent vides partout). **Elle se vérifie par l'API,
+sans SQL** : enregistrer une fiche avec un allergène, puis `GET /api/recipes/:id` rend `allergens` non nul. Ou une
+requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='recipe' AND column_name='allergens';`
+⚠️ Son revert retire la colonne : les allergènes saisis sont perdus. Tests : `allergenes.test.js`.
 
 **207 est À JOUER** (`207_comptes_entreprise_orphelins.sql`, nettoyer les comptes « entreprise » orphelins —
 constaté le 2026-10-14). Supprimer une entreprise ne supprimait PAS le compte de connexion de son REPRÉSENTANT

@@ -9,6 +9,7 @@ import AvatarCadre from "../components/AvatarCadre.jsx";
 import Distinctions from "../components/Distinctions.jsx";
 import { euro, colorOf, initials, dateHeure } from "../lib/format.js";
 import { coutFiche } from "../lib/coutFiche.js";
+import { allergenesAffichees, nomAllergene } from "../lib/allergenes.js";
 import { procedeDe } from "../lib/procede.js";
 import { computeBuild, gfmt } from "../lib/dough.js";
 import { useCountUp } from "../lib/useCountUp.js";
@@ -875,6 +876,26 @@ export default function Communaute() {
 
                     {/* Le procédé — celui de TOUTES les fiches, déroulé généré compris pour une pâte. */}
                     <ProcedeRepli fiche={detail} dansDetail />
+
+                    {/* Allergènes : les siens + ceux hérités des empâtements/préparations utilisés. */}
+                    {(() => {
+                      const al = allergenesAffichees(detail);
+                      if (!al.toutes.length) return null;
+                      const hs = new Set(al.herites);
+                      return (
+                        <div style={{ margin: "14px 0 0" }}>
+                          <span className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="alert-triangle" size={13} /> Allergènes</span>
+                          <div className="alg-liste">
+                            {al.toutes.map((code) => (
+                              <span key={code} className={"alg-chip" + (hs.has(code) ? " herite" : "")}
+                                title={hs.has(code) ? "Hérité d'un empâtement / préparation utilisé" : "Déclaré sur cette fiche"}>
+                                {nomAllergene(code)}{hs.has(code) && <Icon name="link" size={11} />}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>

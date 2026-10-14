@@ -14,6 +14,9 @@ const { coutLigne, poidsIngredients, prixUnitairePreparation, coutPate } = requi
 const { accessibleRecipe } = require('../lib/ficheAccessible.js');
 const { ajouterPhotos } = require('../lib/photoFiche.js');
 const { lireMontant } = require('../lib/montantSaisi.js');
+const { colonneOuNull } = require('../lib/colonnes.js');
+// Les 14 allergènes réglementaires (migration 208) : liste cochée sur la fiche, héritée des composants.
+const { normaliserAllergenes } = require('../lib/allergenes.js');
 
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
 const authorName = (u) => [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || 'Stagiaire';
@@ -93,8 +96,15 @@ const catalogBrands = async (req, res) => {
 };
 
 // Résumé d'une fiche (sans ingrédients).
-const RECIPE_COLS = `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
-    flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at`;
+/* Les colonnes d'une fiche. `allergens` est TOLÉRÉ (migration 208) : sans la colonne, `colonneOuNull`
+   rend `NULL AS allergens` et toute lecture marche quand même. D'où une FONCTION (une sonde par
+   lecture, pas de cache — même choix que colonnes.js), et non plus une constante. */
+async function colsRecette(conn) {
+    return `id, kind, author_user_id, author_name, name, type, description, servings, paton_g,
+        flour_price, margin_pct, yield_qty, yield_unit, dough_params, visibility,
+        ${await colonneOuNull(conn, 'recipe', 'allergens')},
+        DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at`;
+}
 
 // Coût unitaire d'une fiche (pour l'importer dans une recette) : { unit:'g'|'piece', unitPrice, total }.
 // PÂTE = coût par pâton : farine, sel, huile, levure (et substitutions, adjonctions) — le calcul
@@ -124,7 +134,7 @@ const listMine = async (req, res) => {
         const kind = String(req.query.kind || '').toUpperCase();
         const kf = ['PATE', 'PREPARATION', 'RECETTE'].includes(kind);
         const [rows] = await conn.query(
-            `SELECT ${RECIPE_COLS} FROM recipe WHERE author_user_id = ? ${kf ? 'AND kind = ?' : ''} ORDER BY updated_at DESC, name`,
+            `SELECT ${await colsRecette(conn)} FROM recipe WHERE author_user_id = ? ${kf ? 'AND kind = ?' : ''} ORDER BY updated_at DESC, name`,
             kf ? [req.user.id, kind] : [req.user.id]
         );
         await ajouterPhotos(conn, rows);
@@ -142,7 +152,7 @@ const listComponents = async (req, res) => {
         const conn = db.promise();
         const q = String(req.query.q || '').trim();
         const [rows] = await conn.query(
-            `SELECT ${RECIPE_COLS} FROM recipe
+            `SELECT ${await colsRecette(conn)} FROM recipe
              WHERE organization_id = ? AND kind IN ('PATE','PREPARATION')
                AND (author_user_id = ? OR visibility = 'SHARED') ${q ? 'AND name LIKE ?' : ''}
              ORDER BY kind, name LIMIT 80`,
@@ -166,7 +176,7 @@ const listShared = async (req, res) => {
     try {
         const conn = db.promise();
         const [rows] = await conn.query(
-            `SELECT ${RECIPE_COLS} FROM recipe
+            `SELECT ${await colsRecette(conn)} FROM recipe
              WHERE organization_id = ? AND visibility = 'SHARED'
              ORDER BY updated_at DESC LIMIT 200`,
             [req.user.organization_id]
@@ -328,12 +338,15 @@ async function decrireFichesImportees(conn, ings, user) {
     const ids = [...new Set(ings.map((i) => i.component_recipe_id).filter(Boolean))];
     if (!ids.length) return;
     const [fiches] = await conn.query(
-        `SELECT ${RECIPE_COLS}, organization_id FROM recipe WHERE id IN (?) AND organization_id = ?`,
+        `SELECT ${await colsRecette(conn)}, organization_id FROM recipe WHERE id IN (?) AND organization_id = ?`,
         [ids, user.organization_id]);
     const parId = new Map();
     for (const f of fiches) {
         const lisible = f.author_user_id === user.id || f.visibility === 'SHARED';
-        const d = { kind: f.kind, piece_g: poidsPiece(f) };
+        /* `allergens` du composant : rendu TOUJOURS (comme `kind`), même si la fiche est privée d'un
+           autre — un allergène est une info de sécurité qui doit remonter à la réalisation qui
+           l'importe. L'écran l'ajoute aux allergènes HÉRITÉS (allergenesAffichees). */
+        const d = { kind: f.kind, piece_g: poidsPiece(f), allergens: f.allergens || null };
         if (lisible) { const c = await ficheUnitCost(conn, f); d.unit = c.unit; d.unit_price = Number(c.unitPrice.toFixed(4)); }
         parId.set(f.id, d);
     }
@@ -342,6 +355,7 @@ async function decrireFichesImportees(conn, ings, user) {
         if (!d) continue;
         i.component_kind = d.kind;
         i.component_piece_g = d.piece_g;
+        i.component_allergens = d.allergens;
         if (d.unit_price != null) { i.component_unit = d.unit; i.component_unit_price = d.unit_price; }
     }
 }
@@ -351,7 +365,7 @@ const getRecipe = async (req, res) => {
     try {
         const conn = db.promise();
         const [[r]] = await conn.query(
-            `SELECT ${RECIPE_COLS}, organization_id FROM recipe WHERE id = ?`, [req.params.id]);
+            `SELECT ${await colsRecette(conn)}, organization_id FROM recipe WHERE id = ?`, [req.params.id]);
         if (!r) return res.status(404).json({ message: 'Recette introuvable.' });
         const mine = r.author_user_id === req.user.id;
         const sharedSameOrg = r.visibility === 'SHARED' && r.organization_id === req.user.organization_id;
@@ -476,6 +490,18 @@ async function saveIngredients(conn, recipeId, ingredients) {
     }
 }
 
+/* Les allergènes PROPRES de la fiche (migration 208), écrits À PART et TOLÉRÉS : sans la colonne,
+   l'écriture échoue seule et la fiche s'enregistre quand même. On ne stocke que des codes connus ;
+   vide → NULL. Les allergènes HÉRITÉS des composants ne sont PAS stockés (recalculés à l'affichage).
+   `'allergens' in body` : un ancien client qui n'en envoie pas ne les efface pas. */
+async function ecrireAllergenes(conn, id, body) {
+    if (!(body && 'allergens' in body)) return;
+    const codes = normaliserAllergenes(body.allergens);
+    const val = codes.length ? JSON.stringify(codes) : null;
+    try { await conn.query('UPDATE recipe SET allergens = ? WHERE id = ?', [val, id]); }
+    catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
+}
+
 /** POST /api/recipes — crée une recette. */
 const createRecipe = async (req, res) => {
     try {
@@ -492,6 +518,7 @@ const createRecipe = async (req, res) => {
             [id, req.user.organization_id, req.user.id, authorName(req.user), r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params]
         );
         await saveIngredients(conn, id, (req.body || {}).ingredients);
+        await ecrireAllergenes(conn, id, req.body || {});
         res.status(201).json({ data: { id } });
     } catch (err) {
         if (noTable(err)) return res.status(422).json({ message: 'Espace recettes non initialisé (migration 071).' });
@@ -518,6 +545,7 @@ const updateRecipe = async (req, res) => {
             [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, req.params.id]
         );
         await saveIngredients(conn, req.params.id, (req.body || {}).ingredients);
+        await ecrireAllergenes(conn, req.params.id, req.body || {});
         res.json({ data: { id: req.params.id } });
     } catch (err) {
         console.error('Erreur mise à jour recette :', err);
