@@ -203,3 +203,47 @@ export function verdict(ingredients, allergene) {
   if (douteux.length) return { rep: "verifier", causes: douteux };
   return { rep: "oui", causes: [] };
 }
+
+/* ───────────────────────────────────────────────────────────────────────────────────────────────
+ * LES ALLERGÈNES DÉCLARÉS SUR UNE FICHE TECHNIQUE (migration 208, demandé le 2026-10-14).
+ *
+ * Distinct du référentiel ci-dessus (qui dit ce qu'un ingrédient PORTE, pour le mini-jeu) : ici on
+ * lit/écrit les allergènes COCHÉS sur une fiche, et on calcule ceux HÉRITÉS des empâtements /
+ * préparations qu'une réalisation importe. Les codes sont les `cle` des 14 ci-dessus — une seule
+ * liste d'allergènes dans tout le projet. `lib/allergenes.js` (serveur) reprend les mêmes cle.
+ */
+const CLES = new Set(ALLERGENES.map((a) => a.cle));
+export const CODES = ALLERGENES.map((a) => a.cle);
+
+/** Ne garde que des cle CONNUES, uniques, dans l'ordre du manuel. */
+export function normaliserAllergenes(input) {
+  const vus = new Set((Array.isArray(input) ? input : []).filter((x) => CLES.has(x)));
+  return CODES.filter((c) => vus.has(c));
+}
+
+/** Lecture d'une valeur STOCKÉE (chaîne JSON, tableau, ou vide) → tableau de cle valides. */
+export function parseAllergenes(stored) {
+  if (!stored) return [];
+  let v = stored;
+  if (typeof v === "string") { try { v = JSON.parse(v); } catch { return []; } }
+  return normaliserAllergenes(v);
+}
+
+/**
+ * Les allergènes AFFICHÉS d'une fiche : les SIENS (cochés) + ceux HÉRITÉS de ses composants
+ * (empâtements / préparations importés, `ingredient.component_allergens`). Les hérités ne se retirent
+ * pas. Rend { propres, herites, toutes } (toutes dans l'ordre du manuel). Même source pour l'éditeur,
+ * la Communauté et l'impression.
+ */
+export function allergenesAffichees(recipe) {
+  const propres = parseAllergenes(recipe && recipe.allergens);
+  const herites = new Set();
+  for (const ing of (recipe && recipe.ingredients) || []) {
+    if (ing && ing.component_recipe_id) for (const c of parseAllergenes(ing.component_allergens)) herites.add(c);
+  }
+  return {
+    propres,
+    herites: CODES.filter((c) => herites.has(c)),
+    toutes: CODES.filter((c) => herites.has(c) || propres.includes(c)),
+  };
+}

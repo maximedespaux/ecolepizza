@@ -3,6 +3,7 @@ import { Icon } from "./Icon.jsx";
 import { euro } from "../lib/format.js";
 import { num, computeBuild } from "../lib/dough.js";
 import { coutFiche } from "../lib/coutFiche.js";
+import { allergenesAffichees, nomAllergene } from "../lib/allergenes.js";
 
 /**
  * FICHE TECHNIQUE IMPRIMABLE — au format des fiches de l'école (les 2 PDF de référence) :
@@ -63,6 +64,8 @@ function contenu(r) {
 
 export default function FichePrint({ fiche, onClose }) {
   const { rows, poidsTotal, poidsIncomplet, coutTotal, coutKg, fini, prixPiece, steps } = contenu(fiche);
+  // Allergènes : les siens + ceux hérités des empâtements/préparations importés (règlement INCO).
+  const allerg = allergenesAffichees(fiche).toutes;
   const titre = fiche.kind === "RECETTE" ? `Fiche technique ${fiche.name || ""}`.trim() : (fiche.name || "Fiche technique");
   // La cellule « procédure » couvre la ligne des en-têtes de colonnes + les ingrédients + les 2 totaux.
   const procSpan = rows.length + 3 + (fini ? 1 : 0);
@@ -116,6 +119,9 @@ export default function FichePrint({ fiche, onClose }) {
             </tr>
           </tbody>
         </table>
+        {allerg.length > 0 && (
+          <p className="fp-allerg"><b>Allergènes :</b> {allerg.map(nomAllergene).join(", ")}.</p>
+        )}
       </div>
     </div>,
     document.body

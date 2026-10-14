@@ -6481,6 +6481,7 @@ label .requis {
 .fp-proc ol { margin: 0; padding-left: 20px; }
 .fp-proc li { margin-bottom: 4px; line-height: 1.35; }
 .fp-total td { background: #f3f4f8; }
+.fp-allerg { margin: 10px 0 0; font-size: 12.5px; color: #111; line-height: 1.4; }
 @media print {
   body > *:not(.fiche-print) { display: none !important; }
   .fiche-print { position: static; padding: 0; overflow: visible; }
@@ -6683,6 +6684,19 @@ button.fe-lock:hover{background:var(--hover);color:var(--text)}
 .fe-sanspate{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:10px 0 0;padding:11px 14px;border-radius:12px;background:var(--gold-bg);color:var(--text);font-size:13.5px}
 .fe-insight{display:flex;align-items:flex-start;gap:10px;margin:18px 0 0;padding:12px 15px;border-radius:14px;background:var(--gold-bg);color:var(--text);font-size:14px;font-weight:600;line-height:1.45}
 .fe-sanspate > svg,.fe-insight > svg{flex:none;color:#946800}
+/* Allergènes — boutons à cocher (éditeur). Les hérités d'un composant sont dorés et verrouillés. */
+.fe-allerg{margin-top:18px}
+.fe-allerg-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.fe-allerg-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;transition:background .12s var(--ease),border-color .12s var(--ease),color .12s var(--ease)}
+.fe-allerg-btn:hover:not(:disabled){border-color:var(--ember1);color:var(--text)}
+.fe-allerg-btn.on{background:color-mix(in srgb,var(--ember1) 14%,var(--surface));border-color:var(--ember1);color:var(--text);font-weight:600}
+.fe-allerg-btn.herite{cursor:default;background:color-mix(in srgb,var(--gold) 16%,var(--surface));border-color:color-mix(in srgb,var(--gold) 55%,var(--border));color:var(--text);font-weight:600}
+.fe-allerg-btn.herite > svg{opacity:.7}
+/* Liste d'allergènes affichée (détail Communauté, lecture seule) : puces, les hérités distincts. */
+.alg-liste{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.alg-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;font-size:13px;background:color-mix(in srgb,var(--ember1) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--ember1) 30%,var(--border));color:var(--text)}
+.alg-chip.herite{background:color-mix(in srgb,var(--gold) 14%,var(--surface));border-color:color-mix(in srgb,var(--gold) 45%,var(--border))}
+.alg-chip > svg{opacity:.65}
 [data-theme="dark"] .fe-sanspate > svg,[data-theme="dark"] .fe-insight > svg{color:var(--gold)}
 
 /* Sous ~660 px de composition, chaque ligne devient une CARTE : le nom a toute la largeur (il

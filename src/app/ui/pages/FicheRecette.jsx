@@ -8,6 +8,7 @@ import { num, W_BRACKETS, wBracket, maxTotalFor, PRESETS, NEEDS_LABEL, INDIRECT,
 import { reduireSiImage, PROFILS } from "../lib/image.js";
 import { perWeightUnit, unitShort } from "../lib/garnitures.js";
 import { coutFiche, coutLigne, repartition, pctPart, phraseCout, aUneFichePate, pateEstimeeActive, MASS_VOL } from "../lib/coutFiche.js";
+import { ALLERGENES, allergenesAffichees, parseAllergenes } from "../lib/allergenes.js";
 import Mercuriale from "../components/Mercuriale.jsx";
 import MercProductPicker from "../components/MercProductPicker.jsx";
 import PairingSuggest from "../components/PairingSuggest.jsx";
@@ -52,6 +53,7 @@ const NEW = () => ({
   id: null, kind: "RECETTE", name: "", type: "Classique", description: "", servings: 6, paton_g: 250, flour_price: 1.2,
   // Toute fiche est partagée à la communauté (plus de choix) : une nouvelle fiche naît donc « SHARED ».
   visibility: "SHARED", margin_pct: 70, yield_qty: "", yield_unit: "g", dough_params: { ...DP_DEFAULT },
+  allergens: [], // codes d'allergènes PROPRES (cochés à la main) ; les hérités se calculent à l'affichage
   ingredients: [], steps: [], cooking: { type: "", temp: "", energy: "", time: "" }, pate: "",
 });
 
@@ -97,8 +99,40 @@ function signature(r) {
     r.name || "", r.type || "", r.description || "", nbSig(r.servings), nbSig(r.paton_g), nbSig(r.flour_price),
     nbSig(r.margin_pct), nbSig(r.yield_qty), r.yield_unit || "", r.visibility || "PRIVATE",
     r.kind === "PATE" ? r.dough_params : null, r.steps || [], r.kind === "RECETTE" ? (r.cooking || {}) : null, r.pate || "",
+    r.allergens || [], // cocher/décocher un allergène rend la fiche « modifiée »
     (r.ingredients || []).map((t) => [t.label || "", nbSig(t.qty), t.unit, nbSig(t.unit_price), t.product_id || null, t.component_recipe_id || null]),
   ]);
+}
+
+/**
+ * Les 14 allergènes réglementaires, en boutons à cocher. Les HÉRITÉS d'un empâtement / préparation
+ * importé sont allumés et VERROUILLÉS (non retirables, `disabled`) ; les autres se (dé)cochent et
+ * deviennent les allergènes PROPRES de la fiche. `onToggle` reçoit un code à basculer.
+ */
+function BlocAllergenes({ propres, herites, onToggle }) {
+  const heriteSet = new Set(herites);
+  return (
+    <div className="fe-allerg">
+      <div className="fe-sec-head">
+        <h3 className="fe-h3"><Icon name="alert-triangle" size={16} /> Allergènes</h3>
+        <span className="fe-scope">cliquez pour (dé)cocher · ceux d'un empâtement/préparation utilisé sont automatiques</span>
+      </div>
+      <div className="fe-allerg-btns">
+        {ALLERGENES.map((a) => {
+          const herite = heriteSet.has(a.cle);
+          const on = herite || propres.includes(a.cle);
+          return (
+            <button type="button" key={a.cle} aria-pressed={on} disabled={herite}
+              className={"fe-allerg-btn" + (on ? " on" : "") + (herite ? " herite" : "")}
+              title={herite ? "Hérité d'un composant — non retirable" : (on ? "Retirer cet allergène" : "Ajouter cet allergène")}
+              onClick={() => { if (!herite) onToggle(a.cle); }}>
+              {a.nom}{herite && <Icon name="link" size={12} />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // Curseur simple (empâtement en pourcentage boulanger).
@@ -1028,6 +1062,11 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const set = (k) => (e) => setR((p) => ({ ...p, [k]: e.target.value }));
   const setIng = (i, patch) => setR((p) => ({ ...p, ingredients: p.ingredients.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
   const delIng = (i) => setR((p) => ({ ...p, ingredients: p.ingredients.filter((_, j) => j !== i) }));
+  // Basculer un allergène PROPRE (les hérités, eux, ne passent jamais par ici — ils sont verrouillés).
+  const toggleAllergene = (code) => setR((p) => {
+    const cur = Array.isArray(p.allergens) ? p.allergens : [];
+    return { ...p, allergens: cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code] };
+  });
   // Ajoute une ligne, puis rend actif son champ quantité (ou son nom, pour une ligne sans nom) :
   // on choisit un ingrédient, on tape sa quantité, sans chercher la ligne.
   const ajouter = (ligne, { enTete = false, champ = "qte", focus = true } = {}) => {
@@ -1046,6 +1085,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   // verrouillé). Un empâtement se range EN TÊTE : la pâte d'abord, comme sur la fiche imprimée.
   const addComponent = (c) => ajouter({
     label: c.name, product_id: null, component_recipe_id: c.id, component_kind: c.kind, piece_g: c.piece_g ?? null,
+    component_allergens: c.allergens ?? null, // allergènes du composant → hérités, dès l'import (avant d'enregistrer)
     unit: c.unit === "piece" ? "piece" : "g", unit_price: Number(c.unit_price) || 0,
     qty: c.unit === "piece" ? 1 : 80,
   }, { enTete: c.kind === "PATE" });
@@ -1174,6 +1214,8 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const totalCost = build.totalCost + ingSum * effNb;
   const setPrixPate = (k, v) => setDP("prices", { ...(dp.prices || {}), [k]: v });
   const cf = useMemo(() => coutFiche({ ...r, kind }), [r, kind]);
+  // Allergènes affichés = les PROPRES (cochés) + les HÉRITÉS des composants importés (verrouillés).
+  const alg = useMemo(() => allergenesAffichees(r), [r]);
   const estimee = pateEstimeeActive({ ...r, kind });
   const decal = estimee ? 1 : 0;
   const phrase = isPate ? null : phraseCout(cf.lignes);
@@ -1249,8 +1291,10 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
         steps: Array.isArray(dpv.steps) ? dpv.steps : [],
         cooking: (dpv.cooking && typeof dpv.cooking === "object") ? { ...NEW_COOKING(), ...dpv.cooking } : NEW_COOKING(),
         pate: dpv.pate === "aucune" ? "aucune" : "",
+        allergens: parseAllergenes(d.allergens), // ses allergènes PROPRES (les hérités restent calculés)
         ingredients: (d.ingredients || []).map((t) => ({ ...t, qty: nbChamp(t.qty), unit_price: nbChamp(t.unit_price),
-          component_kind: t.component_kind || null, piece_g: t.component_piece_g ?? null })) };
+          component_kind: t.component_kind || null, piece_g: t.component_piece_g ?? null,
+          component_allergens: t.component_allergens ?? null })) };
       setEnregistre({ sig: signature(charge), le: d.updated_at || null, session: false });
       // Une fiche importée garde le prix du jour de l'import : on reprend celui d'AUJOURD'HUI,
       // et on le dit. La fiche reste « modifiée » tant qu'on n'a pas enregistré.
@@ -1459,6 +1503,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
         </div>
         {isPrep && <Rendement r={r} cf={cf} set={set} />}
         {phrase && <p className="fe-insight"><Icon name="info" size={17} /> <span>{phrase}</span></p>}
+        <BlocAllergenes propres={alg.propres} herites={alg.herites} onToggle={toggleAllergene} />
       </div>
     </section>
   );
