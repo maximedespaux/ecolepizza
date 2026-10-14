@@ -482,7 +482,12 @@ const mesDocuments = async (req, res) => {
                    LEFT JOIN training_program p ON p.id = s.program_id
                   WHERE ds.user_id = ? AND ds.organization_id = ?
                   GROUP BY d.id, d.title, d.status, d.template_slug, d.created_at, l.last_name, l.first_name, s.year, s.week, p.code, p.title
-                  ORDER BY signe_le IS NOT NULL, d.created_at DESC`,
+                  /* On ne trie PAS par l'alias signe_le : il contient SUM()/MAX(), et référencer un
+                     alias d'agrégat en ORDER BY lève ER_ILLEGAL_REFERENCE (1247) — la requête
+                     échouait A CHAQUE FOIS (500), et Documents a signer restait vide pour TOUS les
+                     intervenants. On ordonne par l'agrégat lui-même : tout signé (SUM(...)=0 vaut 1)
+                     apres les dossiers encore en attente (0), puis par date décroissante. */
+                  ORDER BY SUM(ds.signed_at IS NULL) = 0, d.created_at DESC`,
                 [req.user.id, req.user.organization_id]);
         } catch (e) {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
