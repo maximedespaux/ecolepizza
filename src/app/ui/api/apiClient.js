@@ -734,7 +734,7 @@ export function getMesCasesSession(sessionId) { return request(`/sessions/${sess
 export function signerMesCases(documentId, payload = {}) {
   return request(`/documents/${documentId}/mes-cases/sign`, { method: "POST", body: JSON.stringify(payload) });
 }
-export function getMesDocumentsIntervenant() { return request("/intervenant/documents"); }
+export function getMesDocumentsIntervenant(opts) { return request("/intervenant/documents", opts); }
 export function signerMonDocumentIntervenant(id, payload = {}) {
   return request(`/intervenant/documents/${id}/signer`, { method: "POST", body: JSON.stringify(payload) });
 }
@@ -1004,8 +1004,8 @@ export function removeSessionIntervenant(sessionId, siId) {
   return request(`/sessions/${sessionId}/intervenants/${siId}`, { method: "DELETE" });
 }
 // Espace intervenant (rôle INTERVENANT).
-export function getMyIntervenantSheets() {
-  return request("/intervenant/emargement");
+export function getMyIntervenantSheets(opts) {
+  return request("/intervenant/emargement", opts);
 }
 export function signMyIntervenantSheet(payload) {
   return request("/intervenant/emargement/sign", { method: "POST", body: JSON.stringify(payload) });

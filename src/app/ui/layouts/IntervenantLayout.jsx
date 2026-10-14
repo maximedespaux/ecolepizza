@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { Outlet, Navigate, NavLink } from "react-router-dom";
+import { Outlet, Navigate, NavLink, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
 import ChangePasswordModal from "../components/ChangePasswordModal.jsx";
@@ -7,6 +7,8 @@ import ProfileModal from "../components/ProfileModal.jsx";
 import { Icon } from "../components/Icon.jsx";
 import { initials } from "../lib/format.js";
 import { getAvatar, AVATAR_EVENT, hydrateProfile } from "../lib/gamification.js";
+import { getMyIntervenantSheets, getMesDocumentsIntervenant } from "../api/apiClient.js";
+import { INTERVENANT_REFRESH, semainesEmargement, aSignerDansSemaine } from "../lib/intervenant.js";
 
 const navClass = ({ isActive }) => `btn sm ${isActive ? "primary" : "ghost"}`;
 const LOGO = `${import.meta.env.BASE_URL}brand/logo.png`;
@@ -24,6 +26,31 @@ function IntervenantLayout() {
     return () => window.removeEventListener(AVATAR_EVENT, sync);
   }, [user?.id]);
   useEffect(() => { if (user?.id) hydrateProfile(user.id); }, [user?.id]);
+
+  // Pastilles « à signer » de la barre : la semaine d'émargement à ouvrir (même règle que la page,
+  // cf. semainesEmargement) et les documents non signés. Recomptées à CHAQUE navigation et à chaque
+  // signature (évènement INTERVENANT_REFRESH), en silence — une pastille ne fait pas clignoter la
+  // barre de chargement. Best-effort : si un appel échoue, la pastille reste à 0, rien ne casse.
+  const loc = useLocation();
+  const [emargBadge, setEmargBadge] = useState(0);
+  const [docsBadge, setDocsBadge] = useState(0);
+  useEffect(() => {
+    let vivant = true;
+    const compter = async () => {
+      const [sheets, docs] = await Promise.all([
+        getMyIntervenantSheets({ silent: true }).catch(() => ({ data: [] })),
+        getMesDocumentsIntervenant({ silent: true }).catch(() => ({ data: [] })),
+      ]);
+      if (!vivant) return;
+      const { defaut } = semainesEmargement(sheets.data || []);
+      setEmargBadge(defaut ? aSignerDansSemaine(sheets.data || [], defaut) : 0);
+      setDocsBadge((docs.data || []).filter((d) => !d.signe_le).length);
+    };
+    compter();
+    const onRefresh = () => compter();
+    window.addEventListener(INTERVENANT_REFRESH, onRefresh);
+    return () => { vivant = false; window.removeEventListener(INTERVENANT_REFRESH, onRefresh); };
+  }, [loc.pathname]);
 
   if (isLoading) {
     return (
@@ -45,8 +72,8 @@ function IntervenantLayout() {
           </div>
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-          <NavLink to="/emargement" className={navClass}>Émargement</NavLink>
-          <NavLink to="/documents" className={navClass}>Documents</NavLink>
+          <NavLink to="/emargement" className={navClass}>Émargement{emargBadge > 0 && <span className="stu-count">{emargBadge}</span>}</NavLink>
+          <NavLink to="/documents" className={navClass}>Documents{docsBadge > 0 && <span className="stu-count">{docsBadge}</span>}</NavLink>
         </nav>
         <div className="spacer" />
         <ThemeToggle />
