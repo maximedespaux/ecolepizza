@@ -15,6 +15,7 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import StudentLayout from "./layouts/StudentLayout.jsx";
 import IntervenantLayout from "./layouts/IntervenantLayout.jsx";
 import IntervenantEspace from "./pages/IntervenantEspace.jsx";
+import IntervenantDocuments from "./pages/IntervenantDocuments.jsx";
 import RepresentantLayout from "./layouts/RepresentantLayout.jsx";
 import RepresentantEspace from "./pages/RepresentantEspace.jsx";
 import LoadingBar from "./components/LoadingBar.jsx";
@@ -199,7 +200,8 @@ function AppRoutes() {
         // --- Espace intervenant externe seul (signature d'émargement) ---
         <Route path="/" element={<IntervenantLayout />}>
           <Route index element={<Navigate to="/emargement" replace />} />
-          <Route path="emargement" element={<IntervenantEspace />} />
+          <Route path="emargement" element={<IntervenantEspace showDocuments={false} />} />
+          <Route path="documents" element={<IntervenantDocuments />} />
           <Route path="*" element={<Navigate to="/emargement" replace />} />
         </Route>
       ) : (isStudent || isIntervenant || studentView) ? (

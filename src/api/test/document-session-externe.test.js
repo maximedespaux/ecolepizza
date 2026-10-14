@@ -120,6 +120,17 @@ test('L\'ATTRIBUTION SURVIT À LA SIGNATURE', () => {
     assert.match(INTERV, /UPDATE document_signature SET user_id = \? WHERE document_id = \? AND slot = \?/);
 });
 
+test('LA LISTE NE TRIE PAS PAR UN ALIAS D\'AGRÉGAT (sinon 500 pour TOUS les intervenants)', () => {
+    /* `mesDocuments` ordonnait par l'alias `signe_le`, qui contient SUM()/MAX(). Référencer un
+       alias d'agrégat en ORDER BY lève ER_ILLEGAL_REFERENCE (1247) : la requête échouait À CHAQUE
+       FOIS (GET /api/intervenant/documents → 500), et « Documents à signer » restait vide pour
+       tout le monde — un contrat d'hygiène envoyé n'apparaissait jamais. On ordonne par l'agrégat
+       lui-même. Réintroduire `ORDER BY signe_le …` fait rougir ce test. */
+    const zone = INTERV.slice(INTERV.indexOf('const mesDocuments'));
+    assert.doesNotMatch(zone, /ORDER BY\s+signe_le\b/, 'un alias d\'agrégat ne se référence pas en ORDER BY');
+    assert.match(zone, /ORDER BY SUM\(ds\.signed_at IS NULL\) = 0, d\.created_at DESC/);
+});
+
 test('LES DEUX PORTES SONT GARDÉES', () => {
     /* La LECTURE est ouverte au personnel — le formateur doit voir où en est la signature.
        L'ENVOI engage l'organisme et reste au bureau, comme toute génération de document. */

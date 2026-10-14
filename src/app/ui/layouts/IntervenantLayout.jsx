@@ -46,6 +46,7 @@ function IntervenantLayout() {
         </div>
         <nav style={{ display: "flex", gap: 6, marginLeft: 8 }}>
           <NavLink to="/emargement" className={navClass}>Émargement</NavLink>
+          <NavLink to="/documents" className={navClass}>Documents</NavLink>
         </nav>
         <div className="spacer" />
         <ThemeToggle />

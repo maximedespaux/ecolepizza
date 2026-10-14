@@ -31,7 +31,7 @@ const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", {
  * des intervenants n'en recevront jamais : une carte vide sur chaque espace ferait du bruit
  * pour rien, comme la grille de jury juste en dessous.
  */
-function MesDocuments({ onStatus, fullName, version }) {
+export function MesDocuments({ onStatus, fullName, version, autonome }) {
   const [docs, setDocs] = useState(null);
   const [occupe, setOccupe] = useState(null);
   const [dessiner, setDessiner] = useState(null);
@@ -58,7 +58,15 @@ function MesDocuments({ onStatus, fullName, version }) {
     } finally { setOccupe(null); }
   }
 
-  if (!docs || docs.length === 0) return null;
+  if (!docs) return null; // en cours de chargement
+  if (docs.length === 0) {
+    /* Sur sa PAGE dédiée (autonome), « rien » doit se dire — une page blanche paraît cassée.
+       Au bas de l'émargement, au contraire, la carte s'efface quand il n'y a rien à signer. */
+    return autonome
+      ? <Card><EmptyState icon="file-text" title="Aucun document à signer"
+          text="L'école vous enverra ici les documents à signer (contrat d'hygiène, grille de jury…). Rien pour le moment." /></Card>
+      : null;
+  }
   return (
     <>
       <Card title={<span className="card-ttl"><Icon name="file-text" size={16} /> Documents à signer</span>}>
@@ -99,7 +107,7 @@ function MesDocuments({ onStatus, fullName, version }) {
   );
 }
 
-function IntervenantEspace() {
+function IntervenantEspace({ showDocuments = true } = {}) {
   const { user } = useContext(UserContext);
   const [data, setData] = useState(null);
   const [savedSig, setSavedSig] = useState(null);   // signature enregistrée (cachet)
@@ -270,7 +278,10 @@ function IntervenantEspace() {
           une carte vide sur chaque session ferait du bruit pour rien. */}
       {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} onCloture={() => setDocsVersion((v) => v + 1)} />)}
 
-      <MesDocuments onStatus={setStatus} fullName={fullName} version={docsVersion} />
+      {/* L'intervenant a désormais un onglet « Documents » dédié dans sa barre ; l'émargement ne
+          porte plus la carte (showDocuments=false) pour ne pas la montrer deux fois. L'onglet
+          « Intervention » du stagiaire-intervenant, lui, la garde ici (showDocuments par défaut). */}
+      {showDocuments && <MesDocuments onStatus={setStatus} fullName={fullName} version={docsVersion} />}
 
       {signing && (
         <SignatureModal doc={{ label: signing.label }} defaultName={fullName} onConfirm={drawSign} onClose={() => setSigning(null)} />
