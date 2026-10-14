@@ -11,6 +11,20 @@ import { RAYONS, rayonOf, isRawProduct } from "../lib/garnitures.js";
 const metroUnit = (t) => (t === "Piece" ? "pièce" : t === "L" ? "litre" : "kg");
 const unitPer = (u) => (u === "kg" ? "kg" : u === "litre" ? "L" : u);
 
+// TÉLÉPHONE : « Prix du marché » bascule du tableau (grand écran) aux CARTES (≤ 640 px) — un tableau
+// à six colonnes ne se lit pas sous le pouce, et l'image du produit, réservée au survol, n'existe
+// pas sur un écran tactile. Même seuil que la barre du bas, même idiome matchMedia que StudentLayout.
+function useEstTelephone() {
+  const [tel, setTel] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = (e) => setTel(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return tel;
+}
+
 // Ma mercuriale = liste de prix curée. Deux onglets : « Ma mercuriale » (ma liste éditable, avec un
 // AJOUT UNIFIÉ en tête : on cherche un produit, il vient des « Prix du marché » en un clic ou se crée
 // à la main s'il n'y est pas) et « Prix du marché » (le catalogue Metro + frais/marché, à parcourir).
@@ -52,7 +66,8 @@ function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
   const [metro, setMetro] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [hover, setHover] = useState(null); // { row, x, y }, bulle info au survol
+  const [hover, setHover] = useState(null); // { row, x, y }, bulle info au survol (grand écran)
+  const tel = useEstTelephone();
   const dir = sort.endsWith("desc") ? -1 : 1;
   const sortKey = sort.replace(/_(asc|desc)$/, "");
   const toggleSort = (field) => setSort((s) => (s === field + "_asc" ? field + "_desc" : field + "_asc"));
@@ -85,7 +100,7 @@ function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
   return (
     <Card>
       <div className="eyebrow" style={{ color: "var(--ember1)" }}>Référence marché</div>
-      <p className="hint" style={{ margin: "4px 0 14px" }}>Ajoute les produits que tu utilises vraiment. Le frais/marché complète le catalogue Metro (sans produits frais). <b>Clique une colonne pour trier</b> (nom, origine, prix).</p>
+      <p className="hint" style={{ margin: "4px 0 14px" }}>Ajoute les produits que tu utilises vraiment. Le frais/marché complète le catalogue Metro (sans produits frais).{!tel && <> <b>Clique une colonne pour trier</b> (nom, origine, prix).</>}</p>
 
       <div className="bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <div className="src">
@@ -105,33 +120,52 @@ function CatalogueTab({ refs, onAddFresh, onAddMetro }) {
         ))}
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table className="merc-table" style={{ minWidth: 560 }}>
-          <thead><tr>
-            <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("name")}>Produit{arrow("name")}</th>
-            <th>Famille</th>
-            <th className="hidecol">Marque</th>
-            <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("origin")}>Origine{arrow("origin")}</th>
-            <th className="r" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("price")}>Prix{arrow("price")}</th>
-            <th></th>
-          </tr></thead>
-          <tbody>
-            {loading && src === "metro" && sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Chargement…</div></td></tr>
-              : sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Aucun produit ici, change de rayon ou de mot-clé.</div></td></tr>
-              : sorted.map((r) => { const added = refs.has(r.id); return (
-                <tr key={r.id}
-                    onMouseEnter={(e) => { const q = e.currentTarget.getBoundingClientRect(); setHover({ row: r, x: q.right, y: q.top, left: q.left }); }}
-                    onMouseLeave={() => setHover((h) => (h && h.row.id === r.id ? null : h))}>
-                  <td><b style={{ display: "block", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.full}>{r.label}</b></td>
-                  <td><span className="chip">{r.family || "-"}</span></td>
-                  <td className="hidecol" style={{ color: "var(--muted)", fontSize: 12.5 }}>{r.brand || "-"}</td>
-                  <td>{r.origin || "-"}</td>
-                  <td className="r"><span className="price">{euro(num(r.price))}</span><span style={{ color: "var(--dim)" }}>/{unitPer(r.unit)}</span></td>
-                  <td className="r">{added ? <span className="chip">✓ Ajouté</span> : <button className="btn sm primary" onClick={r.add}><Icon name="plus" size={12} /> Ajouter</button>}</td>
-                </tr>); })}
-          </tbody>
-        </table>
-      </div>
+      {tel ? (
+        <>
+          <div className="merc-sort">
+            <label htmlFor="merc-sort">Trier</label>
+            <select id="merc-sort" className="inp" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="name_asc">Nom (A → Z)</option>
+              <option value="name_desc">Nom (Z → A)</option>
+              <option value="price_asc">Prix (du moins cher)</option>
+              <option value="price_desc">Prix (du plus cher)</option>
+              <option value="origin_asc">Origine (A → Z)</option>
+              <option value="origin_desc">Origine (Z → A)</option>
+            </select>
+          </div>
+          {loading && src === "metro" && sorted.length === 0 ? <div className="cat-empty">Chargement…</div>
+            : sorted.length === 0 ? <div className="cat-empty">Aucun produit ici, change de rayon ou de mot-clé.</div>
+            : <div className="merc-cards">{sorted.map((r) => <MercCatCard key={r.id} r={r} added={refs.has(r.id)} />)}</div>}
+        </>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table className="merc-table">
+            <thead><tr>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("name")}>Produit{arrow("name")}</th>
+              <th>Famille</th>
+              <th className="hidecol">Marque</th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("origin")}>Origine{arrow("origin")}</th>
+              <th className="r" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("price")}>Prix{arrow("price")}</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              {loading && src === "metro" && sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Chargement…</div></td></tr>
+                : sorted.length === 0 ? <tr><td colSpan="6"><div className="cat-empty">Aucun produit ici, change de rayon ou de mot-clé.</div></td></tr>
+                : sorted.map((r) => { const added = refs.has(r.id); return (
+                  <tr key={r.id}
+                      onMouseEnter={(e) => { const q = e.currentTarget.getBoundingClientRect(); setHover({ row: r, x: q.right, y: q.top, left: q.left }); }}
+                      onMouseLeave={() => setHover((h) => (h && h.row.id === r.id ? null : h))}>
+                    <td><b style={{ display: "block", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.full}>{r.label}</b></td>
+                    <td><span className="chip">{r.family || "-"}</span></td>
+                    <td className="hidecol" style={{ color: "var(--muted)", fontSize: 12.5 }}>{r.brand || "-"}</td>
+                    <td>{r.origin || "-"}</td>
+                    <td className="r"><span className="price">{euro(num(r.price))}</span><span style={{ color: "var(--dim)" }}>/{unitPer(r.unit)}</span></td>
+                    <td className="r">{added ? <span className="chip">✓ Ajouté</span> : <button className="btn sm primary" onClick={r.add}><Icon name="plus" size={12} /> Ajouter</button>}</td>
+                  </tr>); })}
+            </tbody>
+          </table>
+        </div>
+      )}
       {src === "metro" && total > sorted.length && <p className="hint" style={{ margin: "8px 0 0", fontSize: 11.5 }}>{sorted.length} produits affichés (sur {total} au rayon), affine avec la recherche.</p>}
       {hover && <ProductBubble r={hover.row} anchor={hover} />}
     </Card>
@@ -152,6 +186,35 @@ function ProductBubble({ r, anchor }) {
       <b style={{ fontSize: 13, lineHeight: 1.3, display: "block" }}>{r.full}</b>
       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>{[r.brand, r.origin, r.market].filter(Boolean).join(" · ") || "-"}</div>
       <div style={{ fontSize: 13, marginTop: 5 }}><b className="price">{euro(num(r.price))}</b><span style={{ color: "var(--dim)" }}>/{unitPer(r.unit)}</span> · {r.family}</div>
+    </div>
+  );
+}
+
+// Carte « Prix du marché » sur TÉLÉPHONE : l'image (invisible au survol sur un écran tactile) et le
+// récap sont posés à plat, avec un bouton « Ajouter » franc. Mêmes données que la ligne du tableau.
+function MercCatCard({ r, added }) {
+  return (
+    <div className="merc-card">
+      <div className="merc-card-img">
+        {r.image
+          ? <img src={r.image} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          : <span aria-hidden="true">🧺</span>}
+      </div>
+      <div className="merc-card-body">
+        <b className="merc-card-name" title={r.full}>{r.full}</b>
+        <div className="merc-card-meta">
+          {r.family && <span className="chip">{r.family}</span>}
+          {r.origin && <span className="chip">{r.origin}</span>}
+          {r.brand && <span className="chip">{r.brand}</span>}
+          {r.market && <span className="chip">{r.market}</span>}
+        </div>
+        <div className="merc-card-foot">
+          <span><b className="price">{euro(num(r.price))}</b><span className="per">/{unitPer(r.unit)}</span></span>
+          {added
+            ? <span className="chip">✓ Ajouté</span>
+            : <button className="btn sm primary merc-add" onClick={r.add}><Icon name="plus" size={13} /> Ajouter</button>}
+        </div>
+      </div>
     </div>
   );
 }
