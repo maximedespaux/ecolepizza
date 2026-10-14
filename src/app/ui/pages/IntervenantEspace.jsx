@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import {
   getMyIntervenantSheets, signMyIntervenantSheet, getMyIntervenantProfile, setMyIntervenantSignature,
@@ -13,6 +13,7 @@ import SignatureModal from "../components/SignatureModal.jsx";
 import JuryGrille from "../components/JuryGrille.jsx";
 import BoutonsDocument from "../components/BoutonsDocument.jsx";
 import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
+import { rafraichirIntervenant, semainesEmargement, aSignerDansSemaine } from "../lib/intervenant.js";
 
 const frDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
 
@@ -48,7 +49,7 @@ export function MesDocuments({ onStatus, fullName, version, autonome }) {
       const r = await signerMonDocumentIntervenant(d.id, signature_data ? { signature_data } : {});
       onStatus?.({ type: "success", message: r.message || "Document signé." });
       setDessiner(null);
-      charger();
+      charger(); rafraichirIntervenant(); // la pastille « Documents » de la barre recompte
     } catch (e) {
       /* PAS DE SIGNATURE ENREGISTRÉE : le serveur le dit en 422 plutôt que de deviner. On ouvre
          alors le dessin, au lieu de renvoyer l'intervenant dans son profil et de lui faire
@@ -115,6 +116,7 @@ function IntervenantEspace({ showDocuments = true } = {}) {
   const [docsVersion, setDocsVersion] = useState(0); // +1 à chaque clôture : « Documents à signer » se recharge
   const [signing, setSigning] = useState(null);     // dessin ponctuel pour une demi-journée
   const [settingSig, setSettingSig] = useState(false); // dessin de la signature enregistrée
+  const [semaineSel, setSemaineSel] = useState(null); // "AAAA-SS" de la semaine affichée
   const fileRef = useRef(null);
 
   async function load() {
@@ -127,6 +129,20 @@ function IntervenantEspace({ showDocuments = true } = {}) {
   useEffect(() => { load(); }, []);
 
   const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
+
+  // ÉMARGEMENT PAR SEMAINE : on n'affiche qu'une semaine à la fois — celle « concernée » par
+  // défaut (aujourd'hui si on y enseigne, sinon la plus proche, cf. semainesEmargement), avec un
+  // va-et-vient ‹ › pour rattraper une semaine passée. Fini la liste de toute l'année scolaire.
+  const { groupes, defaut } = useMemo(() => semainesEmargement(data || []), [data]);
+  // On garde la semaine choisie tant qu'elle existe (un rechargement après signature ne doit pas
+  // renvoyer l'intervenant sur la semaine par défaut) ; sinon on retombe sur le défaut.
+  useEffect(() => {
+    setSemaineSel((prev) => (prev && groupes.some((g) => g.cle === prev) ? prev : defaut));
+  }, [defaut, groupes]);
+  const ordre = useMemo(() => [...groupes].sort((a, b) => (a.annee - b.annee) || (a.semaine - b.semaine)), [groupes]);
+  const iSemaine = ordre.findIndex((g) => g.cle === semaineSel);
+  const groupeSel = iSemaine >= 0 ? ordre[iSemaine] : null;
+  const allerSemaine = (d) => { const g = ordre[iSemaine + d]; if (g) setSemaineSel(g.cle); };
 
   // Enregistre une signature réutilisable (image importée ou tracé).
   async function saveSignature(dataUrl) {
@@ -153,7 +169,7 @@ function IntervenantEspace({ showDocuments = true } = {}) {
     try {
       await signMyIntervenantSheet({ session_id: s.session_id, date: sl.date, slot: sl.slot, use_saved: true });
       setStatus({ type: "success", message: "Demi-journée signée." });
-      load();
+      load(); rafraichirIntervenant(); // la pastille de la barre recompte
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function drawSign({ signer_name, signature_data }) {
@@ -161,11 +177,12 @@ function IntervenantEspace({ showDocuments = true } = {}) {
       await signMyIntervenantSheet({ ...signing, signature_data, signer_name });
       setSigning(null);
       setStatus({ type: "success", message: "Demi-journée signée." });
-      load();
+      load(); rafraichirIntervenant();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
-  const toSign = (data || []).reduce((n, s) => n + s.slots.filter((x) => !x.signed).length, 0);
+  // Les demi-journées à signer de la SEMAINE AFFICHÉE (la pastille de la barre compte la même chose).
+  const toSign = aSignerDansSemaine(data, semaineSel);
 
   return (
     <>
@@ -233,7 +250,16 @@ function IntervenantEspace({ showDocuments = true } = {}) {
                 : "En attendant, enregistrez votre signature ci-dessus — ce sera fait.")} />
         </Card>
       ) : (
-        data.map((s) => (
+        <>
+          {ordre.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, margin: "0 0 14px" }}>
+              <button className="btn sm ghost" disabled={iSemaine <= 0} onClick={() => allerSemaine(-1)} aria-label="Semaine précédente"><Icon name="chevron-left" size={15} /></button>
+              <b style={{ minWidth: 150, textAlign: "center" }}>Semaine {groupeSel?.semaine} · {groupeSel?.annee}</b>
+              {ordre.length > 1 && <span className="hint" style={{ fontSize: 11.5 }}>{iSemaine + 1}/{ordre.length}</span>}
+              <button className="btn sm ghost" disabled={iSemaine >= ordre.length - 1} onClick={() => allerSemaine(1)} aria-label="Semaine suivante"><Icon name="chevron-right" size={15} /></button>
+            </div>
+          )}
+          {(groupeSel ? groupeSel.sessions : []).map((s) => (
           <Card key={s.session_id} title={`${s.program_title || ""} ${s.program_code ? `(${s.program_code})` : ""}`}>
             <p className="hint" style={{ marginTop: 0 }}>
               Semaine {s.week} · {s.year}{s.specialty ? ` · ${s.specialty}` : ""}
@@ -270,13 +296,14 @@ function IntervenantEspace({ showDocuments = true } = {}) {
               ))}
             </div>
           </Card>
-        ))
+          ))}
+        </>
       )}
 
       {/* LA GRILLE DU JURY, sous les demi-journées de la session concernée. Elle s'efface
           d'elle-même quand la formation n'a pas de grille de jury — la plupart n'en ont pas, et
           une carte vide sur chaque session ferait du bruit pour rien. */}
-      {(data || []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} onCloture={() => setDocsVersion((v) => v + 1)} />)}
+      {(groupeSel ? groupeSel.sessions : []).map((s) => <JuryGrille key={`j-${s.session_id}`} sessionId={s.session_id} onCloture={() => setDocsVersion((v) => v + 1)} />)}
 
       {/* L'intervenant a désormais un onglet « Documents » dédié dans sa barre ; l'émargement ne
           porte plus la carte (showDocuments=false) pour ne pas la montrer deux fois. L'onglet
