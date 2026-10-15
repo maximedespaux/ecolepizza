@@ -57,7 +57,7 @@ const NEW = () => ({
   ingredients: [], steps: [], cooking: { type: "", temp: "", energy: "", time: "" }, pate: "",
 });
 
-// Chaque page (mode) est verrouillée sur un type de fiche — trois builders distincts.
+// `mode` (l'URL/rayon d'entrée) fixe le type de DÉPART ; le type se change ensuite dans l'en-tête.
 const MODE_KIND = { empatement: "PATE", preparation: "PREPARATION", realisation: "RECETTE" };
 const KIND_LABEL = { PATE: "Empâtement", PREPARATION: "Préparation", RECETTE: "Réalisation" };
 const KIND_ICON = { PATE: "wheat", PREPARATION: "list-checks", RECETTE: "pizza" };
@@ -979,15 +979,18 @@ function Repliable({ titre, sous, icone, defaultOpen = false, children }) {
 }
 
 /**
- * `mode` verrouille le TYPE de fiche (empâtement / préparation / réalisation). Toujours EMBARQUÉ par
- * « Mes fiches techniques » (FichesTechniques.jsx), qui gère la liste de toutes les fiches :
+ * `mode` donne le TYPE de DÉPART (empâtement / préparation / réalisation) ; on en change ensuite
+ * dans l'en-tête (`changerType`). Toujours EMBARQUÉ par « Mes fiches techniques »
+ * (FichesTechniques.jsx) ou la Communauté (modération), qui gèrent la liste des fiches :
  * l'éditeur reçoit `openId` (la fiche à ouvrir à l'entrée), `onExit` (retour à la liste) et
  * `onOpen(kind, id)` (ouvrir une autre fiche : celle qu'on importe, ou une réalisation qui
  * utilise celle-ci). Il ne rend que l'éditeur, jamais son propre en-tête de page ni sa liste.
  */
 function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOpen = null, retourLabel = "Mes fiches techniques" }) {
-  const kind = MODE_KIND[mode] || "RECETTE"; // chaque page est verrouillée sur son type de fiche
   const [r, setR] = useState(() => initFor(mode));
+  // LE TYPE SUIT L'ÉTAT (et non plus le `mode` d'ouverture) : on peut en changer dans l'en-tête
+  // sans rouvrir l'éditeur. `mode` ne sert plus qu'à l'initialisation (fiche neuve).
+  const kind = r.kind;
   const [busy, setBusy] = useState(false);
   const [catalogueOpen, setCatalogueOpen] = useState(false);
   const [pateOpen, setPateOpen] = useState(false);
@@ -1103,6 +1106,18 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   const isRecette = kind === "RECETTE";
   const isPate = kind === "PATE";
   const isPrep = kind === "PREPARATION";
+
+  /* CHANGER LE TYPE d'une fiche (empâtement / préparation / réalisation) — demandé le 2026-10-15.
+     Le nom, la COMPOSITION (ingrédients et fiches importées), le PROCÉDÉ et les ALLERGÈNES sont
+     gardés ; ce qui est propre au type quitté — le calcul de pâte d'un empâtement, la cuisson d'une
+     réalisation — n'a plus de sens dans le nouveau et ne sera pas réenregistré (la sérialisation
+     de `dough_params` suit déjà le `kind`, cf. persist). Changer d'avis AVANT d'enregistrer les
+     retrouve : rien n'est réellement perdu tant qu'on n'a pas enregistré dans le nouveau type. */
+  const changerType = (nouveau) => {
+    if (!nouveau || nouveau === kind) return;
+    if (!window.confirm(`Changer le type en « ${KIND_LABEL[nouveau]} » ?\n\nLe nom, la composition et le procédé sont gardés. Les réglages propres au type actuel (calcul de pâte, cuisson…) ne s'appliqueront plus.`)) return;
+    setR((p) => ({ ...p, kind: nouveau }));
+  };
 
   // Procédé (préparation ET réalisation) & cuisson (réalisation) — persistés dans dough_params (JSON).
   const steps = r.steps || [];
@@ -1545,7 +1560,16 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
           <span className={"fe-etat" + (modifie ? " modifie" : "")} role="status">{modifie && <span className="fe-etat-pt" aria-hidden="true" />}{etat}</span>
         </div>
         <div className="fe-head-titre">
-          <span className={"fe-kind fe-k-" + kind}><Icon name={KIND_ICON[kind]} size={15} /> {KIND_LABEL[kind]}</span>
+          {/* Le type se CHANGE ici : pastille + menu natif, la couleur suit le type choisi. */}
+          <label className={"fe-kind fe-kind-sel fe-k-" + kind} title="Changer le type de fiche">
+            <Icon name={KIND_ICON[kind]} size={15} />
+            <select value={kind} onChange={(e) => changerType(e.target.value)} aria-label="Type de la fiche">
+              <option value="PATE">Empâtement</option>
+              <option value="PREPARATION">Préparation</option>
+              <option value="RECETTE">Réalisation</option>
+            </select>
+            <Icon name="chevron-down" size={13} aria-hidden="true" />
+          </label>
           <label className="fe-nom" data-valeur={r.name || nomExemple}>
             {/* `size={1}` : sans lui, le champ garde sa largeur par défaut (20 caractères) et c'est
                 elle, pas le texte, qui fixe la case. */}
