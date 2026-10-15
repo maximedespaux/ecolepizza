@@ -226,6 +226,9 @@ const ACTION_LABEL = {
     /* Depuis le 2026-10-14, la modération SUPPRIME la fiche (retirée de la communauté ET des fiches
        de l'auteur) au lieu de la dépublier — d'où ce code, posé par deleteRecipe en modération. */
     'recipe.delete': ['Fiche technique supprimée (modération)', R],
+    /* Depuis le 2026-10-15, un membre qui modère peut aussi CORRIGER la fiche d'un autre
+       (updateRecipe en modération) — même règle que la suppression ; la trace le dit. */
+    'recipe.update': ['Fiche technique modifiée (modération)', R],
 
     // Organisme et accès
     'organization.update': ['Organisme modifié', A],

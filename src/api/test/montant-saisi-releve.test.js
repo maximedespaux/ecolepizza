@@ -43,7 +43,7 @@ function repondre(q, p = []) {
     if (/information_schema\.columns/i.test(q) && /table_name = 'learner'/.test(q)) return [COLONNES_STAGIAIRE.map((c) => ({ c }))];
     if (/information_schema\.columns/i.test(q)) return [[{ 1: 1 }]];
     if (/^SELECT company_id, financing, user_id, email FROM learner/.test(q)) return [[{ company_id: null, financing: 'PARTICULIER', user_id: null, email: 'marie@exemple.fr' }]];
-    if (/^SELECT author_user_id FROM recipe/.test(q)) return [[{ author_user_id: 'u1' }]];
+    if (/^SELECT author_user_id, organization_id FROM recipe/.test(q)) return [[{ author_user_id: 'u1', organization_id: 'org-1' }]];
     if (/^SELECT id FROM partner WHERE id = \? AND organization_id = \?/.test(q)) return [[{ id: p[0] }]];
     if (/FROM mercuriale_item WHERE id = \?/.test(q)) return [[{ id: p[0], label: 'Mozzarella' }]];
     if (/^(INSERT|UPDATE|DELETE)/.test(q)) return [{ affectedRows: 1 }];

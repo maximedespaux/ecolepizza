@@ -24,7 +24,7 @@ const faux = {
         query: async (sql, p = []) => {
             const q = plat(sql);
             if (/^(INSERT|UPDATE|DELETE)/.test(q)) ecritures.push({ q, p });
-            if (/^SELECT author_user_id FROM recipe/.test(q)) return [[{ author_user_id: 'u1' }]];
+            if (/^SELECT author_user_id, organization_id FROM recipe/.test(q)) return [[{ author_user_id: 'u1', organization_id: 'org-1' }]];
             if (/^(INSERT|UPDATE|DELETE)/.test(q)) return [{ affectedRows: 1 }];
             return [[]];
         },

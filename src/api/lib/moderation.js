@@ -39,4 +39,21 @@ const peutModerer = async (user) => {
     } catch { return false; } // en cas de doute, on ne modère pas : refuser est réversible
 };
 
-module.exports = { STAFF, estStaff, peutModerer, CAP_MODERER };
+/**
+ * QUI PEUT ÉCRIRE UNE FICHE TECHNIQUE — son AUTEUR, ou un membre qui MODÈRE (dans SON organisme).
+ *
+ * Exactement la règle de la SUPPRESSION (deleteRecipe) : l'école corrige la fiche d'un stagiaire
+ * comme elle en retire une du fil (demandé le 2026-10-15). Un point UNIQUE, pour que « modifier »,
+ * « changer la photo » et « supprimer » ne divergent jamais sur qui a le droit. Bornée à
+ * l'organisme : jamais la fiche d'une autre école (même si, de toute façon, on ne voit que les
+ * fiches partagées de son organisme). `conn` est passé pour rester dans la transaction appelante.
+ */
+async function droitEcritureFiche(conn, recipeId, user) {
+    const [[cur]] = await conn.query('SELECT author_user_id, organization_id FROM recipe WHERE id = ?', [recipeId]);
+    if (!cur) return { trouvee: false };
+    const estAuteur = cur.author_user_id === user.id;
+    const moderation = !estAuteur && cur.organization_id === user.organization_id && await peutModerer(user);
+    return { trouvee: true, cur, estAuteur, moderation, autorise: estAuteur || moderation };
+}
+
+module.exports = { STAFF, estStaff, peutModerer, CAP_MODERER, droitEcritureFiche };

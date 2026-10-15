@@ -58,15 +58,18 @@ test('le format se lit dans les octets, pas dans ce que l\'envoi déclare', () =
     assert.equal(formatImage('RIFF....WEBP'), null, 'une chaîne n\'est pas un tampon');
 });
 
-test('seul l\'auteur pose ou retire la photo, dans les limites', () => {
+test('l\'auteur OU la modération pose ou retire la photo, dans les limites', () => {
     const pose = corps('savePhoto');
     assert.match(pose, /if \(f\.buffer\.length > MAX_PHOTO_FICHE\)[\s\S]*?status\(413\)/, 'trop lourde : 413 lisible');
     assert.match(pose, /const mime = formatImage\(f\.buffer\);\s*\n\s*if \(!mime\) return res\.status\(415\)/, 'le type ENREGISTRÉ est celui des octets');
-    assert.match(pose, /if \(cur\.author_user_id !== req\.user\.id\) return res\.status\(403\)/);
+    // Depuis le 2026-10-15 : l'auteur OU un membre qui modère (même règle que la suppression).
+    assert.match(pose, /droitEcritureFiche\(conn, req\.params\.id, req\.user\)/);
+    assert.match(pose, /if \(!autorise\) return res\.status\(403\)/);
     assert.match(pose, /encryptBytes\(f\.buffer\)/, 'chiffrée au repos, comme les photos de la Communauté');
     assert.match(pose, /if \(noTable\(err\)\) return res\.status\(503\)/, 'sans la migration : 503, dit comme tel');
     const retrait = corps('deletePhoto');
-    assert.match(retrait, /if \(cur\.author_user_id !== req\.user\.id\) return res\.status\(403\)/);
+    assert.match(retrait, /droitEcritureFiche\(conn, req\.params\.id, req\.user\)/);
+    assert.match(retrait, /if \(!autorise\) return res\.status\(403\)/);
 });
 
 test('la lire, c\'est pouvoir ouvrir la fiche — et rien d\'autre', () => {

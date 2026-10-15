@@ -21,6 +21,8 @@ import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
 import { parseAvatar, pingCommunaute } from "../lib/gamification.js";
 import { photoFicheUrl, getSharedRecipes, getRecipe, createRecipe, getAuthorProfile, likeRecipe, addRecipeComment, updateRecipeComment, deleteRecipeComment, markCommunitySeen, markRecipeRead, getPosts, updatePost, deleteRecipe } from "../api/apiClient.js";
+import FicheRecette from "./FicheRecette.jsx";
+import { KIND_MODE } from "../lib/rayonsFiches.js";
 
 /**
  * Temps de présence à l'écran avant qu'un halo « j'aime » s'éteigne.
@@ -394,6 +396,7 @@ export default function Communaute() {
   // `composer` ne dit plus seulement « ouvert » mais QUOI ouvrir : « Créer une annonce »
   // doit tomber directement du bon côté du formulaire (null | "QUESTION" | "ANNONCE").
   const [composer, setComposer] = useState(null);
+  const [editFiche, setEditFiche] = useState(null); // { id, kind } — modération : corriger la fiche d'un autre dans l'éditeur
   const [deplie, setDeplie] = useState(false);      // bandeau : voir les annonces précédentes
   const toggleWish = (id) => setWish((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); writeWish(n); return n; });
   const navigate = useNavigate();
@@ -591,6 +594,17 @@ export default function Communaute() {
     }
     return String(b._date || "").localeCompare(String(a._date || ""));
   });
+
+  // MODÉRATION — corriger la fiche d'un stagiaire dans le vrai éditeur (FicheRecette), ouvert
+  // plein écran à la place du fil, comme « Mes fiches techniques » l'ouvre. En sortir recharge la
+  // galerie (le nom, la photo… ont pu changer). Le serveur autorise l'écriture (droitEcritureFiche).
+  if (editFiche) {
+    return (
+      <FicheRecette key={editFiche.id} openId={editFiche.id} mode={KIND_MODE[editFiche.kind] || "realisation"} retourLabel="Communauté"
+        onExit={() => { setEditFiche(null); getSharedRecipes().then((r) => setList(r.data || [])).catch(() => {}); }}
+        onOpen={(k, id) => setEditFiche({ id, kind: k })} />
+    );
+  }
 
   return (
     <>
@@ -912,10 +926,18 @@ export default function Communaute() {
                           des fiches de son auteur — c'est une suppression définitive (décidé le
                           2026-10-14). Jamais sur sa PROPRE fiche (on la supprime depuis « Mes fiches »). */}
                       {detail.can_moderate && !detail.mine && (
-                        <button className="btn sm ghost danger" disabled={busy} style={{ marginLeft: "auto" }}
-                          onClick={() => supprimerFiche(detail)} title="Supprimer cette fiche (retirée de la communauté et des fiches de son auteur)">
-                          <Icon name="trash" size={14} /> Supprimer
-                        </button>
+                        <>
+                          {/* MODÉRATION — corriger la fiche d'un autre dans le vrai éditeur. */}
+                          <button className="btn sm ghost" disabled={busy} style={{ marginLeft: "auto" }}
+                            onClick={() => { setEditFiche({ id: detail.id, kind: detail.kind }); setOpenId(null); }}
+                            title="Corriger cette fiche (modération)">
+                            <Icon name="pencil" size={14} /> Modifier
+                          </button>
+                          <button className="btn sm ghost danger" disabled={busy}
+                            onClick={() => supprimerFiche(detail)} title="Supprimer cette fiche (retirée de la communauté et des fiches de son auteur)">
+                            <Icon name="trash" size={14} /> Supprimer
+                          </button>
+                        </>
                       )}
                     </div>
 

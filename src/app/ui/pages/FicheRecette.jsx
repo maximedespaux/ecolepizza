@@ -985,7 +985,7 @@ function Repliable({ titre, sous, icone, defaultOpen = false, children }) {
  * `onOpen(kind, id)` (ouvrir une autre fiche : celle qu'on importe, ou une réalisation qui
  * utilise celle-ci). Il ne rend que l'éditeur, jamais son propre en-tête de page ni sa liste.
  */
-function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOpen = null }) {
+function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOpen = null, retourLabel = "Mes fiches techniques" }) {
   const kind = MODE_KIND[mode] || "RECETTE"; // chaque page est verrouillée sur son type de fiche
   const [r, setR] = useState(() => initFor(mode));
   const [busy, setBusy] = useState(false);
@@ -1541,7 +1541,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     <div className="fe">
       <header className="fe-head">
         <div className="fe-head-top">
-          <button type="button" className="fe-back" onClick={quitter}><Icon name="chevron-left" size={18} /> Mes fiches techniques</button>
+          <button type="button" className="fe-back" onClick={quitter}><Icon name="chevron-left" size={18} /> {retourLabel}</button>
           <span className={"fe-etat" + (modifie ? " modifie" : "")} role="status">{modifie && <span className="fe-etat-pt" aria-hidden="true" />}{etat}</span>
         </div>
         <div className="fe-head-titre">
