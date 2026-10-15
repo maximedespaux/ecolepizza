@@ -6026,6 +6026,20 @@ label .requis {
   .ss-txt { display: none; }
 }
 
+/* BARRES SIMPLES DES ESPACES EXTERNES (intervenant, entreprise) SUR TÉLÉPHONE.
+   `.topbar` ne s'enroule pas et ses commandes ne rétrécissent pas (ci-dessus) : avec marque +
+   onglets + thème + mot de passe + avatar + déconnexion, la barre débordait à droite sous ~720 px.
+   Ici on l'ENROULE : la navigation passe sur sa PROPRE ligne (pleine largeur, centrée), la marque
+   et les commandes tiennent sur la première, et « Mot de passe » se réduit à son icône (son
+   `title` reste). Réservé à `.topbar-compact` : la barre de l'admin et celle du stagiaire ont
+   leurs propres règles (tiroir, barre du bas) et ne doivent pas s'enrouler. */
+@media (max-width: 720px) {
+  .topbar-compact { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+  .topbar-compact > nav { order: 5; flex-basis: 100%; margin-left: 0; justify-content: center; }
+  .topbar-compact .lbl-opt { display: none; }   /* « Mot de passe » → icône seule */
+  .topbar-compact .brand .sub { display: none; } /* « Espace intervenant/entreprise » : déjà dans le bandeau, et il poussait une commande à la ligne */
+}
+
 /* ═══ RÉSULTATS QCM : la liste et le détail CÔTE À CÔTE ═══════════════════════════════════════
    Le détail s'ouvrait SOUS la liste. Avec neuf QCM groupés par formation, cliquer le premier
    obligeait à faire défiler toute la liste pour voir ce qu'on venait d'ouvrir — le clic ne

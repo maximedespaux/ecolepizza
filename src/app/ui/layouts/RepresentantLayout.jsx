@@ -25,7 +25,7 @@ function RepresentantLayout() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <header className="topbar" style={{ justifyContent: "space-between" }}>
+      <header className="topbar topbar-compact" style={{ justifyContent: "space-between" }}>
         <div className="brand" style={{ padding: 0, gap: 10 }}>
           <img src={LOGO} alt="École Pizza" style={{ width: 36, height: 36, borderRadius: 9, background: "#fff", padding: 3, objectFit: "contain" }} />
           <div>
@@ -38,7 +38,7 @@ function RepresentantLayout() {
         </nav>
         <div className="spacer" />
         <ThemeToggle />
-        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> Mot de passe</button>
+        <button className="btn sm ghost" onClick={() => setPwOpen(true)} title="Changer mon mot de passe"><Icon name="key" size={15} /> <span className="lbl-opt">Mot de passe</span></button>
         <span className="avatar" title="Représentant">{initials(user?.first_name, user?.last_name)}</span>
         <button className="icon-btn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="power" size={18} /></button>
       </header>
