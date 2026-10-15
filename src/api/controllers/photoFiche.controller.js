@@ -14,6 +14,7 @@ const db = require('../config/database.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // photos chiffrées au repos
 const { formatImage } = require('../lib/formatImage.js');
 const { accessibleRecipe } = require('../lib/ficheAccessible.js');
+const { droitEcritureFiche } = require('../lib/moderation.js'); // auteur OU modération (même org)
 const { MAX_PHOTO_FICHE, PHOTOS_INDISPONIBLES, noTable } = require('../lib/photoFiche.js');
 
 /**
@@ -32,9 +33,9 @@ const savePhoto = async (req, res) => {
         const mime = formatImage(f.buffer);
         if (!mime) return res.status(415).json({ message: 'Format accepté : WebP, JPEG ou PNG.' });
         const conn = db.promise();
-        const [[cur]] = await conn.query('SELECT author_user_id FROM recipe WHERE id = ?', [req.params.id]);
-        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
-        if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut changer la photo.' });
+        const { trouvee, autorise } = await droitEcritureFiche(conn, req.params.id, req.user);
+        if (!trouvee) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (!autorise) return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut changer la photo.' });
         const empreinte = crypto.createHash('sha256').update(f.buffer).digest('hex').slice(0, 12);
         // Une seule photo par fiche : la nouvelle REMPLACE l'ancienne.
         await conn.query(
@@ -77,9 +78,9 @@ const getPhoto = async (req, res) => {
 const deletePhoto = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[cur]] = await conn.query('SELECT author_user_id FROM recipe WHERE id = ?', [req.params.id]);
-        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
-        if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut retirer la photo.' });
+        const { trouvee, autorise } = await droitEcritureFiche(conn, req.params.id, req.user);
+        if (!trouvee) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (!autorise) return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut retirer la photo.' });
         await conn.query('DELETE FROM recipe_photo WHERE recipe_id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (err) {

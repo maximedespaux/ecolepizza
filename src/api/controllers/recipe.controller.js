@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { enrichirAuteurs, CADRE_PERSONNEL } = require('../lib/auteurs.js');
-const { peutModerer } = require('../lib/moderation.js');
+const { peutModerer, droitEcritureFiche } = require('../lib/moderation.js');
 const { logAudit } = require('../lib/audit.js');
 const { coutLigne, poidsIngredients, prixUnitairePreparation, coutPate } = require('../lib/coutFiche.js');
 const { accessibleRecipe } = require('../lib/ficheAccessible.js');
@@ -527,25 +527,32 @@ const createRecipe = async (req, res) => {
     }
 };
 
-/** PUT /api/recipes/:id — met à jour (auteur uniquement). */
+/**
+ * PUT /api/recipes/:id — met à jour. L'AUTEUR modifie la sienne ; un MEMBRE qui MODÈRE
+ * (droitEcritureFiche) modifie celle d'un autre pour la corriger — même règle que la suppression
+ * (demandé le 2026-10-15). Bornée à l'organisme.
+ */
 const updateRecipe = async (req, res) => {
     try {
         const conn = db.promise();
-        const [[cur]] = await conn.query('SELECT author_user_id FROM recipe WHERE id = ?', [req.params.id]);
-        if (!cur) return res.status(404).json({ message: 'Recette introuvable.' });
-        if (cur.author_user_id !== req.user.id) return res.status(403).json({ message: 'Seul l\'auteur peut modifier.' });
+        const { trouvee, moderation, autorise } = await droitEcritureFiche(conn, req.params.id, req.user);
+        if (!trouvee) return res.status(404).json({ message: 'Recette introuvable.' });
+        if (!autorise) return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut modifier cette fiche.' });
         const refus = refusPrixFiche(req.body || {});
         if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});
         if (r.dough_params && r.dough_params.length > DP_MAX) return res.status(422).json({ message: PARAMS_TROP_LONGS });
         // On NE touche PAS à `visibility` : une fiche reste partagée, et une fiche RETIRÉE par la
         // modération (repassée en privée) ne se republie pas d'elle-même au prochain enregistrement.
+        // Bornée à l'organisme (défense en profondeur, comme la suppression).
         await conn.query(
-            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=? WHERE id=?`,
-            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, req.params.id]
+            `UPDATE recipe SET kind=?, name=?, type=?, description=?, servings=?, paton_g=?, flour_price=?, margin_pct=?, yield_qty=?, yield_unit=?, dough_params=? WHERE id=? AND organization_id=?`,
+            [r.kind, r.name, r.type, r.description, r.servings, r.paton_g, r.flour_price, r.margin_pct, r.yield_qty, r.yield_unit, r.dough_params, req.params.id, req.user.organization_id]
         );
         await saveIngredients(conn, req.params.id, (req.body || {}).ingredients);
         await ecrireAllergenes(conn, req.params.id, req.body || {});
+        // Corriger la fiche d'un AUTRE laisse une trace, comme tout geste de modération.
+        if (moderation) logAudit(req, 'recipe.update', 'Recipe', req.params.id, { libelle: r.name });
         res.json({ data: { id: req.params.id } });
     } catch (err) {
         console.error('Erreur mise à jour recette :', err);
