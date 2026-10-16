@@ -25,6 +25,22 @@ test('SANS FACTURE : la coche manuelle décide, le montant de l\'acompte est cel
     assert.strictEqual(r.solde.source, null);
 });
 
+test('COCHÉ À LA MAIN = payé EN ENTIER : le montant payé n\'est pas 0 (sinon {Acompte payé}/{Total payé} vides)', () => {
+    /* LE DÉFAUT (relevé le 2026-10-16, attestation d'un dossier réglé sans facture) : `montantPaye`
+       ne se remplissait QUE depuis les factures, donc une ligne cochée « payé le … » restait à 0 —
+       {Acompte payé}/{Solde payé}/{Total payé} sortaient VIDES alors que les dates et le moyen, eux,
+       s'affichaient. Une coche manuelle (sans facture) = la ligne est payée en entier. */
+    const r = calculerReglement({ prix: 1780, acompteConvenu: 534, acomptePayeLe: '2026-10-08', soldePayeLe: '2026-10-12', factures: [] });
+    assert.strictEqual(r.acompte.montantPaye, 534, 'acompte coché = payé en entier (le montant convenu)');
+    assert.strictEqual(r.solde.montantPaye, 1246, 'solde coché = payé en entier (prix − acompte)');
+    assert.strictEqual(r.totalPaye, 1780, 'total payé = acompte + solde, coches manuelles comprises');
+    // Le solde NON coché reste non payé, et son montant payé à 0.
+    const partiel = calculerReglement({ prix: 1780, acompteConvenu: 534, acomptePayeLe: '2026-10-08', soldePayeLe: null, factures: [] });
+    assert.strictEqual(partiel.acompte.montantPaye, 534);
+    assert.strictEqual(partiel.solde.montantPaye, 0, 'solde non coché : rien de payé');
+    assert.strictEqual(partiel.totalPaye, 534);
+});
+
 test('UN ACOMPTE FACTURÉ ET PAYÉ : la facture fait foi (montant, date, source)', () => {
     const r = calculerReglement({
         prix: 1500, acompteConvenu: 999 /* ignoré : une facture d'acompte existe */, acomptePayeLe: null,
