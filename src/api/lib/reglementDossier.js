@@ -88,7 +88,10 @@ function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = nu
         acompte,
         solde,
         reste: euros(resteC),
-        totalPaye: euros(totalPayeC),
+        /* Le total payé = ce qui l'est sur l'acompte ET sur le solde — factures ET coches manuelles
+           comprises (chaque ligne a déjà fait la somme). `totalPayeC` seul (factures) laissait
+           {Total payé} à vide sur un dossier réglé à la main, cf. `ligne`. */
+        totalPaye: euros(cents(acompte.montantPaye) + cents(solde.montantPaye)),
         factures: actives.map((f) => ({ numero: f.numero, type: f.type, statut: f.statut, montant: euros(cents(f.montant)), paye: euros(cents(f.paye)) })),
     };
 }
@@ -99,12 +102,18 @@ function calculerReglement({ prix = 0, acompteConvenu = null, acomptePayeLe = nu
 function ligne({ montantC, payeParFacture, dateFacture, montantPayeC, payeLe, aUneFacture, moyen = null, ref = null }) {
     const payeManuel = !!payeLe;
     const paye = payeParFacture || payeManuel;
+    /* LE MONTANT PAYÉ : ce qu'une facture a encaissé. Mais une ligne COCHÉE À LA MAIN (« payé le … »,
+       sans facture pour la porter) est payée EN ENTIER — son montant payé est alors le montant de la
+       ligne, pas 0. Sans ça, {Acompte payé}/{Solde payé}/{Total payé} sortaient VIDES sur un dossier
+       réglé à la main, alors que les dates et le moyen, eux, s'affichaient (relevé le 2026-10-16,
+       attestation d'un dossier réglé par virement + chèque cochés sans facture). */
+    const montantPayeEff = (payeManuel && !payeParFacture) ? (montantC || 0) : (montantPayeC || 0);
     return {
         montant: montantC ? euros(montantC) : null,
         paye,
         date: payeParFacture ? dateFacture : (payeManuel ? jour(payeLe) : null),
         source: payeParFacture ? 'facture' : (payeManuel ? 'manuel' : null),
-        montantPaye: euros(montantPayeC || 0),
+        montantPaye: euros(montantPayeEff),
         // L'écran ne propose la coche/saisie manuelle que si aucune facture ne porte déjà la ligne.
         saisissable: !aUneFacture,
         // Le moyen de paiement noté à la main (migration 195) et son n° / référence — passifs ici, ils
