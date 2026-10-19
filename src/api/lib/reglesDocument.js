@@ -10,12 +10,25 @@
  * disent si la règle s'applique et à qui. Le test `regles-document.test.js` les éprouve seules.
  */
 
-/** Les deux déclencheurs d'événement, et l'état du document qui les arme. */
+/** Les deux déclencheurs d'événement SUR UN DOCUMENT (generated_document), et l'état qui les arme. */
 const DECLENCHEURS_DOC = {
     document_envoye: { libelle: 'un document envoyé pour signature', etat: 'ENVOYE' },
     document_signe: { libelle: 'un document signé', etat: 'SIGNE' },
 };
 const estDeclencheurDoc = (d) => Object.prototype.hasOwnProperty.call(DECLENCHEURS_DOC, d);
+
+/* DÉCLENCHEUR SUR UNE REMISE (demandé le 2026-10-19 : « quand l'école remet l'AGEFICE, écrire »).
+   À PART des documents : une remise vit dans remise_type/remise_document (migration 160), jamais
+   dans generated_document — d'où un crochet distinct (remise.controller → declencherReglesRemise).
+   « remise » = l'école DÉPOSE le document (statut REMISE), pas l'accusé de réception. */
+const DECLENCHEURS_REMISE = {
+    remise_remise: { libelle: 'un document remis par l’école (remise, ex. AGEFICE)' },
+};
+const estDeclencheurRemise = (d) => Object.prototype.hasOwnProperty.call(DECLENCHEURS_REMISE, d);
+/* Un déclencheur d'ÉVÉNEMENT (immédiat : document OU remise), par opposition à un déclencheur de
+   DATE (fin/début de session, inscription — lib/mailsProgrammes.js). Pour un événement, ni sens ni
+   décalage, et le « modèle ciblé » (template_slug) est permis. */
+const estDeclencheurEvenement = (d) => estDeclencheurDoc(d) || estDeclencheurRemise(d);
 
 /** À qui part le message — le choix se fait règle par règle. */
 const DESTINATAIRES = {
@@ -52,6 +65,22 @@ function regleViseDocument(regle, doc) {
 }
 
 /**
+ * La règle (remise_remise) vise-t-elle CETTE remise ? Même logique que `regleViseDocument`, mais le
+ * « modèle ciblé » d'une règle de remise est l'ID DU TYPE DE REMISE, rangé dans `template_slug` (on
+ * réutilise la colonne : une remise n'a pas de generated_document, donc pas de slug de modèle — et ça
+ * évite une migration). `remise` = { remise_type_id, learner_id, company_id, program_id }.
+ */
+function regleViseRemise(regle, remise) {
+    if (!regle || !remise) return false;
+    if (regle.template_slug && regle.template_slug !== remise.remise_type_id) return false;
+    if (regle.learner_id && regle.learner_id !== remise.learner_id) return false;
+    if (regle.company_id && regle.company_id !== remise.company_id) return false;
+    const formations = formationsDeRegle(regle);
+    if (formations && !formations.includes(remise.program_id)) return false;
+    return true;
+}
+
+/**
  * Les destinataires EFFECTIFS d'une règle → [{ type, email }]. Une adresse manquante est écartée
  * en silence (une entreprise sans espace n'a pas de représentant à qui écrire) : la règle part à
  * qui elle peut, jamais à personne par erreur.
@@ -66,6 +95,7 @@ function destinatairesDe(regle, { stagiaireEmail, entrepriseEmail } = {}) {
 }
 
 module.exports = {
-    DECLENCHEURS_DOC, estDeclencheurDoc, DESTINATAIRES, destinataireValide,
-    regleViseDocument, formationsDeRegle, destinatairesDe,
+    DECLENCHEURS_DOC, estDeclencheurDoc, DECLENCHEURS_REMISE, estDeclencheurRemise, estDeclencheurEvenement,
+    DESTINATAIRES, destinataireValide,
+    regleViseDocument, regleViseRemise, formationsDeRegle, destinatairesDe,
 };

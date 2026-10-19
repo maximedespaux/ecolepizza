@@ -11,7 +11,7 @@
  *
  * Le cœur `declencherReglesDocument` prend `envoyer` en paramètre : le test n'ouvre ni base ni SMTP.
  */
-const { estDeclencheurDoc, regleViseDocument, destinatairesDe } = require('./reglesDocument.js');
+const { estDeclencheurDoc, regleViseDocument, regleViseRemise, destinatairesDe } = require('./reglesDocument.js');
 const { rendre } = require('./mailsPersonnalises.js');
 const { colonneExiste, tableExiste } = require('./colonnes.js');
 
@@ -116,6 +116,81 @@ async function declencherReglesDocument(conn, { orgId, documentId, evenement, en
 }
 
 /**
+ * Le cœur pour les REMISES (declencheur `remise_remise`) — « quand l'école remet l'AGEFICE, écrire ».
+ * Même mécanique que `declencherReglesDocument`, mais la remise vit dans remise_type/remise_document :
+ * on la lit là, et le ciblage du type passe par `template_slug` = l'ID du type de remise (cf.
+ * regleViseRemise). Dédup réutilisant `mail_regle_doc` (document_id = l'id de la remise_document, pas
+ * de clé étrangère sur cette colonne — cf. migration 196).
+ */
+async function declencherReglesRemise(conn, { orgId, remiseDocumentId, envoyer, orgName }) {
+    if (!(await colonneExiste(conn, 'mail_regle', 'destinataire')) || !(await tableExiste(conn, 'mail_regle_doc'))) {
+        return { envoyes: 0, echecs: 0, regles: 0 };
+    }
+    const [regles] = await conn.query(
+        `SELECT id, template_slug, destinataire, learner_id, company_id, program_id, objet, corps
+           FROM mail_regle WHERE organization_id = ? AND actif = 1 AND declencheur = 'remise_remise'`,
+        [orgId]);
+    if (!regles.length) return { envoyes: 0, echecs: 0, regles: 0 };
+    if (await tableExiste(conn, 'mail_regle_formation')) {
+        const [liens] = await conn.query(
+            'SELECT regle_id, program_id FROM mail_regle_formation WHERE regle_id IN (?)', [regles.map((r) => r.id)]);
+        const parRegle = new Map();
+        for (const l of liens) { if (!parRegle.has(l.regle_id)) parRegle.set(l.regle_id, []); parRegle.get(l.regle_id).push(l.program_id); }
+        for (const r of regles) r.program_ids = parRegle.get(r.id) || [];
+    }
+    // La remise, son type (pour {Document} et le ciblage), et le dossier (stagiaire, entreprise, formation).
+    const [rows] = await conn.query(
+        `SELECT rd.id, rd.remise_type_id, rt.label AS remise_label,
+                e.company_id, e.learner_id, s.program_id, p.title AS formation, p.code,
+                l.email AS stagiaire_email, l.first_name, l.last_name,
+                DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
+           FROM remise_document rd
+           JOIN remise_type rt ON rt.id = rd.remise_type_id
+           JOIN enrollment e ON e.id = rd.enrollment_id
+           JOIN training_session s ON s.id = e.session_id
+           LEFT JOIN training_program p ON p.id = s.program_id
+           LEFT JOIN learner l ON l.id = e.learner_id
+          WHERE rd.id = ? AND rd.organization_id = ?`,
+        [remiseDocumentId, orgId]);
+    const rem = rows[0];
+    if (!rem) return { envoyes: 0, echecs: 0, regles: 0 };
+    let entrepriseEmail = null;
+    if (rem.company_id) {
+        const [cos] = await conn.query(
+            'SELECT c.email AS cemail, u.email AS uemail FROM company c LEFT JOIN user u ON u.id = c.user_id WHERE c.id = ?',
+            [rem.company_id]);
+        entrepriseEmail = (cos[0] && (cos[0].uemail || cos[0].cemail)) || null;
+    }
+    const remInfo = { remise_type_id: rem.remise_type_id, learner_id: rem.learner_id, company_id: rem.company_id, program_id: rem.program_id };
+    let envoyes = 0;
+    let echecs = 0;
+    for (const r of regles) {
+        if (!regleViseRemise(r, remInfo)) continue;
+        const cibles = destinatairesDe(r, { stagiaireEmail: rem.stagiaire_email, entrepriseEmail });
+        for (const cible of cibles) {
+            const [deja] = await conn.query(
+                'SELECT 1 AS x FROM mail_regle_doc WHERE regle_id = ? AND document_id = ? AND destinataire = ?',
+                [r.id, remiseDocumentId, cible.type]);
+            if (deja.length) continue;
+            const valeurs = {
+                'Prénom': rem.first_name || '', Nom: rem.last_name || '', Organisme: orgName || 'École Pizza',
+                Formation: rem.formation || rem.code || '',
+                Session: [rem.code, rem.debut].filter(Boolean).join(' du '),
+                'Date de fin': rem.fin || '', 'Date de début': rem.debut || '',
+                Document: rem.remise_label || '',
+            };
+            const res = await envoyer({ to: cible.email, objet: rendre(r.objet, valeurs), corps: rendre(r.corps, valeurs), orgId });
+            const statut = res && res.sent ? 'envoye' : 'echec';
+            if (statut === 'envoye') envoyes += 1; else echecs += 1;
+            await conn.query(
+                'INSERT IGNORE INTO mail_regle_doc (regle_id, document_id, destinataire, statut) VALUES (?, ?, ?, ?)',
+                [r.id, remiseDocumentId, cible.type, statut]);
+        }
+    }
+    return { envoyes, echecs, regles: regles.length };
+}
+
+/**
  * Le crochet que le contrôleur appelle après un envoi / une signature. NON ATTENDU : il rend la main
  * tout de suite et N'ÉCHOUE JAMAIS — une signature ne doit pas tomber parce qu'un e-mail n'est pas
  * parti. `db` = le module de base (config/database.js).
@@ -135,4 +210,20 @@ function declencherPuisOublier(db, { orgId, documentId, evenement }) {
         .catch((err) => console.error('Crochet e-mail document :', err && err.message));
 }
 
-module.exports = { declencherReglesDocument, declencherPuisOublier };
+/** Le même crochet, pour une REMISE déposée (declencheur `remise_remise`). NON ATTENDU, n'échoue jamais. */
+function declencherPuisOublierRemise(db, { orgId, remiseDocumentId }) {
+    Promise.resolve()
+        .then(() => {
+            const { construireEnvoyeur } = require('./envoiGroupe.js');
+            const org = require('./orgContext.js');
+            return declencherReglesRemise(db.promise(), {
+                orgId, remiseDocumentId,
+                envoyer: construireEnvoyeur(),
+                orgName: org.orgInfo().short_name || org.orgInfo().legal_name || null,
+            });
+        })
+        .then((r) => { if (r && (r.envoyes || r.echecs)) console.log(`[mailing/remise] remise_remise : ${r.envoyes} envoyé(s), ${r.echecs} échec(s)`); })
+        .catch((err) => console.error('Crochet e-mail remise :', err && err.message));
+}
+
+module.exports = { declencherReglesDocument, declencherPuisOublier, declencherReglesRemise, declencherPuisOublierRemise };

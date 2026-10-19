@@ -9,7 +9,7 @@ const {
 const { DECLENCHEURS, UNITES, SENS, phraseRegle, lireRegle } = require('../lib/mailsProgrammes.js');
 const { JETONS_REGLE } = require('../lib/passageMailsProgrammes.js');
 /* Les règles déclenchées par un document + le ciblage stagiaire/entreprise (migration 196). */
-const { DECLENCHEURS_DOC, DESTINATAIRES, estDeclencheurDoc } = require('../lib/reglesDocument.js');
+const { DECLENCHEURS_DOC, DECLENCHEURS_REMISE, DESTINATAIRES, estDeclencheurEvenement } = require('../lib/reglesDocument.js');
 const { colonneExiste, tableExiste } = require('../lib/colonnes.js');
 const modeles = require('../lib/mailTemplates.js');
 
@@ -601,16 +601,20 @@ async function ecrireFormations(conn, regleId, programIds) {
 
 /* LE VOCABULAIRE DE L'ÉCRAN, au même endroit que les règles (pas une liste recopiée à côté) :
    déclencheurs de date ET d'événement, destinataires, unités, sens, modèles de document, jetons. */
-function catalogueRegles(modeles = []) {
+function catalogueRegles(modeles = [], remises = []) {
     return {
         declencheurs: Object.entries(DECLENCHEURS).map(([cle, d]) => ({ cle, libelle: d.libelle })),
-        /* Les deux déclencheurs d'événement (document envoyé / signé), à part : l'écran cache le
-           décalage pour eux, et montre le filtre par modèle. */
+        /* Les déclencheurs d'ÉVÉNEMENT, à part : l'écran cache le décalage pour eux et montre un filtre.
+           Documents (envoyé / signé) → filtre par modèle ; REMISE (déposée) → filtre par type de remise. */
         declencheursDoc: Object.entries(DECLENCHEURS_DOC).map(([cle, d]) => ({ cle, libelle: d.libelle })),
+        declencheursRemise: Object.entries(DECLENCHEURS_REMISE).map(([cle, d]) => ({ cle, libelle: d.libelle })),
         destinataires: Object.entries(DESTINATAIRES).map(([cle, libelle]) => ({ cle, libelle })),
         unites: Object.entries(UNITES).map(([cle, libelle]) => ({ cle, libelle })),
         sens: Object.entries(SENS).map(([cle, libelle]) => ({ cle, libelle })),
         modeles,
+        /* Les types de REMISE (id → intitulé), pour le filtre d'une règle « remise déposée » — stocké
+           dans template_slug (cf. regleViseRemise). */
+        remises,
         jetons: JETONS_REGLE,
     };
 }
@@ -628,6 +632,13 @@ const getRegles = async (req, res) => {
                 [orgId]);
             modeles = ms;
         } catch (e) { if (!sansTable(e)) throw e; }
+        /* Les types de remise ACTIFS, pour cibler une règle « remise déposée » (ex. AGEFICE). */
+        let remises = [];
+        try {
+            const [rs] = await conn.query(
+                'SELECT id, label FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label', [orgId]);
+            remises = rs;
+        } catch (e) { if (!sansTable(e)) throw e; } // migration 160 non jouée : aucune remise à proposer
         /* Le ciblage et le destinataire arrivent avec la 196 : sans les colonnes, on lit les règles
            d'avant (stagiaire, aucun ciblage) et les envois des règles d'événement n'existent pas. */
         const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
@@ -680,7 +691,7 @@ const getRegles = async (req, res) => {
                     : (r.program_id ? [{ id: r.program_id, code: r.formation_code, title: r.formation_titre }] : []);
                 return { ...r, formations, program_ids: formations.map((f) => f.id), phrase: phraseRegle(r) };
             }),
-            catalogue: catalogueRegles(modeles),
+            catalogue: catalogueRegles(modeles, remises),
             formations_multiples: a198,
             disponible: true,
         });
@@ -709,7 +720,7 @@ const creerRegle = async (req, res) => {
         const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
         /* Une règle d'ÉVÉNEMENT, ou qui cible / choisit un destinataire, a besoin des colonnes de la
            196 : le dire (503) plutôt que d'écrire une règle amputée. Une règle de DATE ordinaire passe. */
-        const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
+        const besoin196 = estDeclencheurEvenement(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
         if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
         /* PLUSIEURS FORMATIONS (198) : le dire plutôt que de retomber en silence sur « toutes » (une
            seule formation, elle, tient dans program_id, donc passe sans la 198). */
@@ -750,7 +761,7 @@ const modifierRegle = async (req, res) => {
     try {
         const conn = db.promise();
         const a196 = await colonneExiste(conn, 'mail_regle', 'destinataire');
-        const besoin196 = estDeclencheurDoc(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
+        const besoin196 = estDeclencheurEvenement(v.declencheur) || v.template_slug || v.learner_id || v.company_id || v.destinataire !== 'stagiaire';
         if (besoin196 && !a196) return res.status(503).json({ message: MIGRATION_196 });
         if (v.program_ids.length > 1 && !(await tableExiste(conn, 'mail_regle_formation'))) {
             return res.status(503).json({ message: MIGRATION_198 });
