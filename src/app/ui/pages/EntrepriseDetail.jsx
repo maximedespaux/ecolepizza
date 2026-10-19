@@ -605,7 +605,11 @@ export default function EntrepriseDetail() {
   function gestesStagiaire(s) {
     const stagiaires = s.stagiaires || [];
     if (!stagiaires.length) return null; // « Aucun stagiaire concerné » : la sous-ligne le dit déjà
-    const info = `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
+    /* LE MOT SUIT LE GESTE : une pièce se DÉPOSE et se VALIDE (panneau « Pièces justificatives » de la
+       fiche stagiaire, où l'on peut aussi la voir et la retirer) ; un document se PRÉPARE. */
+    const info = s.piece
+      ? `« ${s.label} » se dépose et se valide sur la fiche du stagiaire (panneau « Pièces justificatives »), où vous pouvez la voir et la retirer.`
+      : `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
     const lien = (st, label) => (
       <Link key={st.enrollment_id} className="btn ghost sm" to={lienDossier(st.learner_id, st.enrollment_id)} state={{ info }}
         title={`Ouvrir le parcours de ${st.name} sur sa fiche`}>
@@ -673,9 +677,12 @@ export default function EntrepriseDetail() {
                   du stagiaire (RemisesReview) —, au lieu d'un œil sur le seul dernier déposé. C'est ici
                   qu'on dépose, c'est donc ici qu'on relit et qu'on corrige. */}
               {!versStagiaire && fichiers.length > 0 && (
-                <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 4, marginTop: 4, paddingLeft: 2 }}>
+                <div style={{ flexBasis: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 4, marginTop: 4, paddingLeft: 2 }}>
                   {fichiers.map((f, i) => (
-                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, flexWrap: "wrap" }}>
+                    /* Pas de flexWrap : le nom se tronque (ellipsis) et « Voir » / « Retirer » restent sur la
+                       ligne, à portée. min-width:0 remonte toute la chaîne jusqu'à la carte (cf. app.css .parc-etape) :
+                       sans lui, un nom long poussait les boutons hors de la carte, injoignables. */
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, minWidth: 0 }}>
                       <span style={{ color: "var(--dim)", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" }}>{i + 1}.</span>
                       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                         title={f.nom || `Fichier ${i + 1}`}>{f.nom || `Fichier ${i + 1}`}</span>

@@ -6082,9 +6082,14 @@ label .requis {
 /* LA CARTE CONTIENT son bouton de sélection ET les gestes de son document (2026-09-21) : un bouton
    ne peut pas en contenir d'autres. Le bouton occupe toute la carte (`flex:1`), les gestes se
    rangent en bas — à hauteur égale d'une carte à l'autre sur une même rangée de la grille. */
-.parc-etape{position:relative;display:flex;flex-direction:column;border-radius:12px;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
+/* min-width:0 : c'est une CARTE de grille (min-width:auto par défaut → elle refuse de rétrécir
+   sous son contenu). Sans ça, un nom de fichier long d'une remise (l'AGEFICE de l'entreprise)
+   élargit la carte et pousse ses boutons « Voir » / « Retirer » HORS d'atteinte, à droite. Toute
+   la chaîne jusqu'au nom doit porter min-width:0 pour que l'ellipsis prenne le relais :
+   .parc-etape → .parc-etape-gestes → .parc-gestes-multi → .parc-geste-ligne → la ligne du fichier. */
+.parc-etape{position:relative;min-width:0;display:flex;flex-direction:column;border-radius:12px;color:var(--text);background:transparent;border:1px solid var(--border-soft)}
 .parc-etape-choix{display:flex;flex:1;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.parc-etape-gestes{display:flex;align-items:center;gap:4px;padding:0 10px 8px 12px}
+.parc-etape-gestes{min-width:0;display:flex;align-items:center;gap:4px;padding:0 10px 8px 12px} /* cf. .parc-etape : maillon de la chaîne min-width:0 */
 /* La trace du document (envoyé, signé, importé le…) : DEUX lignes au plus, coupées au-delà. Sur une
    ligne, quatre boutons ne lui laissaient qu'une douzaine de caractères — « envoyé le 10/0… » ; la
    seconde ne coûte rien en hauteur, les boutons de 32 px la font déjà. */
@@ -6133,7 +6138,7 @@ label .requis {
 /* Une étape de GROUPE peut montrer plusieurs documents, un par OPCO (fiche entreprise) : une ligne
    chacun — nommée par son OPCO —, les boutons au bout de la sienne. */
 .parc-gestes-multi{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.parc-geste-ligne{display:flex;align-items:center;gap:4px}
+.parc-geste-ligne{min-width:0;display:flex;align-items:center;gap:4px} /* cf. .parc-etape : maillon de la chaîne min-width:0 */
 /* LA NOTE LIBRE DE LA FICHE STAGIAIRE (migration 168) : le compteur de mots sous la zone de saisie
    — même allure que celui d'une réponse libre de QCM —, et la note lue dans la carte « Projet ». */
 .mots-compte{margin-top:6px;font-size:12.5px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}

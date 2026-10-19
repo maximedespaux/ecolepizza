@@ -284,4 +284,38 @@ function compteRemiseGroupe(ids, lignes) {
     return { total, gen: deposes, signed: recus, done: total > 0 ? recus >= total : n > 0, sansObjet: n > 0 && total === 0 };
 }
 
-module.exports = { computeDocParcours, companyParcours, companyStepSlugs, compteRemiseGroupe, etatDeGroupe, pourcentFait, ETATS, needsSignature, SENT };
+/**
+ * L'ÉTAT D'UNE PIÈCE POUR UN GROUPE (fiche entreprise, 2026-10-19), d'après les dépôts de ses
+ * dossiers — pas d'après un document généré : une pièce n'en produit AUCUN, comme une remise. Son
+ * état vit dans `piece_depot`, dossier par dossier. Sans ce calcul, la fiche entreprise comptait la
+ * pièce comme un document (branche `else` de getCompanyParcours), interrogeait `generated_document`
+ * qui n'en a jamais, et affichait « 0/1 reçu(s) · À faire » pour une pièce POURTANT validée sur la
+ * fiche du stagiaire (relevé sur « Attestation contribution au faf »).
+ * `ids` : les dossiers concernés ; `lignes` : leurs `piece_depot` pour ce type de pièce.
+ *   déposée (DEPOSEE ou VALIDEE) = reçue du stagiaire ; validée (VALIDEE) = l'étape est faite.
+ * Un refus (REFUSEE) ne compte ni comme déposée ni comme validée : la pièce est à renvoyer.
+ */
+function comptePieceGroupe(ids, lignes) {
+    const parDossier = new Map((lignes || []).map((r) => [r.enrollment_id, r.statut]));
+    let deposes = 0, valides = 0;
+    for (const id of ids || []) {
+        const st = parDossier.get(id);
+        if (st === 'DEPOSEE' || st === 'VALIDEE') deposes += 1;
+        if (st === 'VALIDEE') valides += 1;
+    }
+    const total = (ids || []).length;
+    return { total, gen: deposes, signed: valides, done: total > 0 && valides >= total };
+}
+
+/** L'état d'une étape « pièce » de GROUPE, d'après ses compteurs (déposées / validées). Une pièce
+    déposée est REÇUE — à vérifier —, pas « envoyée » : c'est pourquoi on ne passe pas par
+    `etatDeGroupe` (qui dirait « Envoyé »), mais on reprend le vocabulaire des pièces du stagiaire
+    (etatEtape : DEPOSEE → RECU, VALIDEE → VALIDE). */
+function etatPieceGroupe({ total = 0, deposes = 0, valides = 0 }) {
+    if (!total) return 'SANS_OBJET';        // aucun stagiaire concerné
+    if (valides >= total) return 'VALIDE';  // toutes validées : l'étape est faite
+    if (deposes > 0) return 'RECU';         // au moins une déposée, à vérifier
+    return 'A_FAIRE';
+}
+
+module.exports = { computeDocParcours, companyParcours, companyStepSlugs, compteRemiseGroupe, comptePieceGroupe, etatDeGroupe, etatPieceGroupe, pourcentFait, ETATS, needsSignature, SENT };
