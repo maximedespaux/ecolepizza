@@ -21,7 +21,7 @@
 /* Les déclencheurs d'ÉVÉNEMENT (document envoyé / signé, migration 196) vivent à part : ils ne se
    calculent pas dans le temps, ils partent quand le document change d'état. On les lit ici pour que la
    même fonction `lireRegle` valide les deux familles de règles. */
-const { estDeclencheurDoc, DECLENCHEURS_DOC, destinataireValide } = require('./reglesDocument.js');
+const { DECLENCHEURS_DOC, DECLENCHEURS_REMISE, estDeclencheurEvenement, destinataireValide } = require('./reglesDocument.js');
 
 /** Les trois dates de départ possibles. L'écran propose exactement celles-là. */
 const DECLENCHEURS = {
@@ -85,7 +85,10 @@ function dateCible({ depart, sens = 'apres', decalage = 0, unite = 'jour' }) {
 /** « 3 mois après la fin de la session » — la règle dite en une ligne, pour l'écran et le journal. */
 function phraseRegle(r) {
     /* Un déclencheur d'événement n'a ni décalage ni sens : il se dit « Quand un document est signé ». */
-    if (r && estDeclencheurDoc(r.declencheur)) return `Quand ${DECLENCHEURS_DOC[r.declencheur].libelle}`;
+    if (r && estDeclencheurEvenement(r.declencheur)) {
+        const evt = DECLENCHEURS_DOC[r.declencheur] || DECLENCHEURS_REMISE[r.declencheur];
+        return `Quand ${evt.libelle}`;
+    }
     const d = DECLENCHEURS[r && r.declencheur];
     if (!d) return '';
     const n = Math.max(0, Math.round(Number(r.decalage) || 0));
@@ -104,15 +107,15 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
     const nom = String(b.nom == null ? '' : b.nom).replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!nom) return { erreur: 'Donnez un nom à cette règle : c’est ce qui la distingue dans la liste.' };
     const declencheur = String(b.declencheur || '');
-    const estDoc = estDeclencheurDoc(declencheur);
-    if (!estDoc && !DECLENCHEURS[declencheur]) return { erreur: 'Choisissez à partir de quel événement l’envoi se fait.' };
+    const estEvt = estDeclencheurEvenement(declencheur); // document OU remise : immédiat
+    if (!estEvt && !DECLENCHEURS[declencheur]) return { erreur: 'Choisissez à partir de quel événement l’envoi se fait.' };
 
-    /* LE DÉCALAGE N'EXISTE QUE POUR LES DÉCLENCHEURS DE DATE : un événement (document envoyé / signé)
-       part à l'instant. Pour une règle d'événement, sens et décalage sont laissés à leur valeur neutre. */
+    /* LE DÉCALAGE N'EXISTE QUE POUR LES DÉCLENCHEURS DE DATE : un événement (document envoyé / signé,
+       remise déposée) part à l'instant. Pour une règle d'événement, sens et décalage restent neutres. */
     let unite = 'jour';
     let sens = 'apres';
     let decalage = 0;
-    if (!estDoc) {
+    if (!estEvt) {
         unite = UNITES[b.unite] ? b.unite : 'jour';
         sens = SENS[b.sens] ? b.sens : 'apres';
         decalage = Math.max(0, Math.round(Number(b.decalage) || 0));
@@ -147,7 +150,7 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
         program_id, program_ids,
         /* Le modèle filtré n'a de sens que pour un événement de document ; une règle de date filtre
            par formation. Le ciblage stagiaire / entreprise vaut pour les deux familles. */
-        template_slug: (estDoc && b.template_slug) ? String(b.template_slug).slice(0, 60) : null,
+        template_slug: (estEvt && b.template_slug) ? String(b.template_slug).slice(0, 60) : null,
         destinataire,
         learner_id: b.learner_id ? String(b.learner_id) : null,
         company_id: b.company_id ? String(b.company_id) : null,

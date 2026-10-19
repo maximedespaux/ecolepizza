@@ -36,6 +36,7 @@ const { companyStepSlugs } = require('../lib/parcours.js');
 const { nbModeValide, nbDocumentsValide, plafondAtteint, manquePourRequis } = require('../lib/remiseNb.js');
 const { appliesWhenConditions, loadConditionMap, champsDesConditions, loadDossierFactsMap, matchCustom } = require('../lib/conditions.js'); // condition d'application (migration 209)
 const { parseApplies } = require('../lib/documents.js');           // applies_when stocké (JSON) -> objet
+const { declencherPuisOublierRemise } = require('../lib/crochetMailsDocument.js'); // règle e-mail « remise déposée » (mailing)
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -495,6 +496,9 @@ const deposer = async (req, res) => {
             [crypto.randomUUID(), r.id, n.m + 1, String(f.originalname || '').slice(0, 200) || null,
                 f.mimetype, encryptBytes(f.buffer), f.buffer.length]); // `taille` = taille CLAIRE
         logAudit(req, 'remise.depot', 'RemiseDocument', r.id);
+        /* RÈGLE E-MAIL « un document remis par l'école » (mailing → Envois programmés, declencheur
+           `remise_remise`). À part et JAMAIS bloquant : un e-mail raté ne fait pas échouer un dépôt. */
+        declencherPuisOublierRemise(db, { orgId: req.user.organization_id, remiseDocumentId: r.id });
         res.status(201).json({ success: true });
     } catch (err) {
         if (noTable(err)) return res.status(503).json(ABSENTE);

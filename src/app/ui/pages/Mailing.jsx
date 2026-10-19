@@ -813,7 +813,7 @@ function Programmes({ onStatus }) {
                     <b className="mail-regle-nom">{r.nom}</b>
                     <span className="mail-regle-phrase">
                       {r.phrase}
-                      {doc && (r.modele_titre ? ` · ${r.modele_titre}` : " · tous les documents")}
+                      {doc && libelleCibleEvt(r, cat)}
                     </span>
                     <div className="mail-regle-tags">
                       <span className="chip"><Icon name="target" size={11} /> {cibleRegleTexte(r)}</span>
@@ -851,7 +851,19 @@ function Programmes({ onStatus }) {
 
 /* Un déclencheur d'ÉVÉNEMENT (document envoyé / signé, 196) ? L'écran cache alors le décalage et
    montre le modèle + le destinataire. */
-const estDocDecl = (cat, d) => (cat?.declencheursDoc || []).some((x) => x.cle === d);
+// Un déclencheur d'ÉVÉNEMENT (document envoyé/signé OU remise déposée) : l'écran cache alors le
+// décalage et montre un filtre (modèle de document, ou type de remise).
+const estDocDecl = (cat, d) => (cat?.declencheursDoc || []).some((x) => x.cle === d) || (cat?.declencheursRemise || []).some((x) => x.cle === d);
+const estRemiseDecl = (cat, d) => (cat?.declencheursRemise || []).some((x) => x.cle === d);
+// Le filtre d'une règle d'événement, en texte : « · AGEFICE » (remise), « · Convention » (modèle),
+// ou « · toutes les remises » / « · tous les documents ».
+function libelleCibleEvt(r, cat) {
+  if (estRemiseDecl(cat, r.declencheur)) {
+    const rem = r.template_slug ? (cat?.remises || []).find((x) => x.id === r.template_slug) : null;
+    return rem ? ` · ${rem.label}` : " · toutes les remises";
+  }
+  return r.modele_titre ? ` · ${r.modele_titre}` : " · tous les documents";
+}
 const libelleDestinataireMail = (d) => ({
   stagiaire: "au stagiaire", entreprise: "à l’entreprise", stagiaire_entreprise: "au stagiaire et à l’entreprise",
 }[d] || "");
@@ -869,8 +881,11 @@ function resumeRegle(v, cat, formations) {
   const est = estDocDecl(cat, v.declencheur);
   let quand;
   if (est) {
-    const d = (cat.declencheursDoc || []).find((x) => x.cle === v.declencheur);
-    const m = v.template_slug ? (cat.modeles || []).find((x) => x.slug === v.template_slug) : null;
+    const estRem = estRemiseDecl(cat, v.declencheur);
+    const d = [...(cat.declencheursDoc || []), ...(cat.declencheursRemise || [])].find((x) => x.cle === v.declencheur);
+    const m = v.template_slug
+      ? (estRem ? (cat.remises || []).find((x) => x.id === v.template_slug) : (cat.modeles || []).find((x) => x.slug === v.template_slug))
+      : null;
     quand = `Quand ${d ? d.libelle : "un document change"}${m ? ` (${m.label})` : ""}`;
   } else {
     const d = (cat.declencheurs || []).find((x) => x.cle === v.declencheur);
@@ -956,23 +971,34 @@ function EditeurRegle({ regle, cat, formations, formationsMultiples, onFerme, on
             <Icon name="calendar" size={13} /> À une date
           </button>
           <button type="button" className={"seg-btn" + (estDoc ? " on" : "")} onClick={() => choisirType("document")}>
-            <Icon name="file-text" size={13} /> Quand un document…
+            <Icon name="file-text" size={13} /> Quand un document / une remise…
           </button>
         </div>
         {estDoc ? (
           <div className="mail-ed-grille">
             <div className="field">
               <label htmlFor="regle-evt">Événement</label>
-              <select id="regle-evt" className="inp" value={v.declencheur} onChange={maj("declencheur")}>
+              {/* Changer de FAMILLE (document ⇄ remise) remet le filtre à zéro : un slug de modèle
+                  n'est pas un id de remise, et inversement. */}
+              <select id="regle-evt" className="inp" value={v.declencheur} onChange={(e) => {
+                const avant = estRemiseDecl(cat, v.declencheur);
+                const apres = estRemiseDecl(cat, e.target.value);
+                setV((p) => ({ ...p, declencheur: e.target.value, template_slug: avant !== apres ? null : p.template_slug }));
+              }}>
                 {(cat.declencheursDoc || []).map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
+                {(cat.declencheursRemise || []).map((d) => <option key={d.cle} value={d.cle}>{d.libelle}</option>)}
               </select>
             </div>
             <div className="field">
-              <label htmlFor="regle-modele">Modèle concerné</label>
+              {/* Pour une REMISE, on cible un TYPE de remise (ex. AGEFICE) ; pour un document, un MODÈLE.
+                  Le choix est rangé dans le même champ (template_slug) côté serveur (cf. regleViseRemise). */}
+              <label htmlFor="regle-modele">{estRemiseDecl(cat, v.declencheur) ? "Type de remise concerné" : "Modèle concerné"}</label>
               <select id="regle-modele" className="inp" value={v.template_slug || ""}
                 onChange={(e) => setV((p) => ({ ...p, template_slug: e.target.value || null }))}>
-                <option value="">Tous les documents</option>
-                {(cat.modeles || []).map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+                <option value="">{estRemiseDecl(cat, v.declencheur) ? "Toutes les remises" : "Tous les documents"}</option>
+                {estRemiseDecl(cat, v.declencheur)
+                  ? (cat.remises || []).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)
+                  : (cat.modeles || []).map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
               </select>
             </div>
           </div>
