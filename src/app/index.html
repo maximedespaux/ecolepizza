@@ -2,8 +2,16 @@
 <html lang="fr" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="./brand/logo.png" />
-    <link rel="apple-touch-icon" href="./brand/logo.png" />
+    <!-- Favicons en chemins ABSOLUS (comme les assets JS/CSS, cf. vite.config.js) : en RELATIF, une
+         route à plusieurs segments (/stagiaires/<uuid>) résolvait l'icône sur
+         /stagiaires/<uuid>/brand/logo.png, que le repli SPA de nginx renvoie en HTML → icône invalide →
+         Safari retombait sur /favicon.ico (lui aussi renvoyé en HTML, faute de fichier) et gardait son
+         favicon EN CACHE, celui d'avant le déploiement (l'ancien OVH). On sert donc un VRAI /favicon.ico
+         (le monogramme JD) plus des PNG, tous en chemin absolu : Safari récupère la bonne icône. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="Impastio — le secrétariat de l'École Pizzaïolo Jean-Jacques Despaux : stagiaires, documents, signatures électroniques, émargement et conformité Qualiopi, réunis dans un seul outil." />
     <meta name="color-scheme" content="light dark" />
