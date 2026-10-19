@@ -673,9 +673,12 @@ export default function EntrepriseDetail() {
                   du stagiaire (RemisesReview) —, au lieu d'un œil sur le seul dernier déposé. C'est ici
                   qu'on dépose, c'est donc ici qu'on relit et qu'on corrige. */}
               {!versStagiaire && fichiers.length > 0 && (
-                <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 4, marginTop: 4, paddingLeft: 2 }}>
+                <div style={{ flexBasis: "100%", minWidth: 0, display: "flex", flexDirection: "column", gap: 4, marginTop: 4, paddingLeft: 2 }}>
                   {fichiers.map((f, i) => (
-                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, flexWrap: "wrap" }}>
+                    /* Pas de flexWrap : le nom se tronque (ellipsis) et « Voir » / « Retirer » restent sur la
+                       ligne, à portée. min-width:0 remonte toute la chaîne jusqu'à la carte (cf. app.css .parc-etape) :
+                       sans lui, un nom long poussait les boutons hors de la carte, injoignables. */
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, minWidth: 0 }}>
                       <span style={{ color: "var(--dim)", flex: "0 0 auto", fontVariantNumeric: "tabular-nums" }}>{i + 1}.</span>
                       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                         title={f.nom || `Fichier ${i + 1}`}>{f.nom || `Fichier ${i + 1}`}</span>
