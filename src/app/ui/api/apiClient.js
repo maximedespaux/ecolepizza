@@ -701,8 +701,12 @@ export function getRepRemises() {
 }
 export function getRepDocuments() { return request("/rep/documents"); }
 export function previewRepDocument(id) { return request(`/rep/documents/${id}/preview`, { silent: true }); }
-// URL directe du PDF signé (ouverte en nouvel onglet) : l'authentification passe par le cookie.
-export function repDocumentPdfUrl(id) { return `${API_BASE_URL}/rep/documents/${id}/pdf`; }
+// Télécharge (enregistre) le PDF d'un document entreprise — signé OU non (rendu à la volée côté
+// serveur pour un document pas encore signé), même mécanique que le téléchargement côté stagiaire.
+// L'authentification passe par le cookie (credentials: "include" dans download).
+export function downloadRepDocumentPdf(id, filename = "document.pdf") {
+  return download(`/rep/documents/${id}/pdf`, filename);
+}
 export function signRepDocument(id, payload) { return request(`/rep/documents/${id}/sign`, { method: "POST", body: JSON.stringify(payload) }); }
 export function setRepStamp(stamp) { return request("/rep/stamp", { method: "PUT", body: JSON.stringify({ stamp }) }); }
 // Génère un document « entreprise » (un doc par groupe, listant tous les stagiaires).

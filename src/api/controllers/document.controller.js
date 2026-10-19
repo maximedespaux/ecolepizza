@@ -1449,6 +1449,49 @@ async function composeDocPdf(conn, r) {
     return docxToPdf(out.buffer);
 }
 
+/**
+ * OCTETS PDF D'UN DOCUMENT NON SIGNÉ — modèle rempli par le même moteur que le reste de l'app
+ * (composeDocPdf), puis cachet PAdES de l'organisme à la volée (intégrité), SANS jamais figer le
+ * PDF en base. Factorisé pour que le téléchargement du REPRÉSENTANT d'entreprise
+ * (rep.controller : downloadRepDocument) rende EXACTEMENT ce que son aperçu montre — une
+ * divergence entre l'aperçu et le PDF ne se verrait qu'une fois le document signé, trop tard.
+ *
+ * N'APPLIQUE AUCUNE GARDE D'ACCÈS : l'appelant a déjà vérifié qui peut lire ce document
+ * (repCompanies côté entreprise, lecteurDuDocument côté stagiaire). Rendu comme un BROUILLON : pas
+ * de blocage « informations manquantes » — on sert ce qui est là, comme l'aperçu. Propage
+ * EMARG_NOT_READY / NO_SOFFICE, et lève NO_TEMPLATE si le document n'a aucun modèle à rendre.
+ * Renvoie { pdf, baseName }.
+ */
+async function renderUnsignedDocPdf(conn, doc) {
+    const ctx = await loadContext(conn, doc.organization_id, doc.learner_id, doc.id);
+    let slug, content;
+    if (isEmargDoc(doc)) {
+        slug = doc.template_slug || 'emargement';
+        content = { kind: 'emargement' };
+    } else {
+        const f = (ctx.formations && ctx.formations[0]) || {};
+        slug = doc.template_slug || templateSlugFor(doc.type, { financing: f.financing, rsCode: f.rs_code, hygiene: !!f.hygiene, jours: f.days });
+        content = slug ? await getTemplateContent(doc.organization_id, slug) : null;
+        if (!content) { const e = new Error('NO_TEMPLATE'); e.code = 'NO_TEMPLATE'; throw e; }
+    }
+    let pdf = await composeDocPdf(conn, { doc, ctx, slug, content });
+    // Cachet PAdES de l'organisme (intégrité), comme le téléchargement d'un document non signé côté stagiaire.
+    try {
+        const { sealPdf } = require('../lib/pdfseal.js');
+        const org = ctx.org || {};
+        const p12 = await getOrgSigner(conn, doc.organization_id, org.legal_name || org.short_name);
+        pdf = await sealPdf(pdf, p12, {
+            orgName: org.legal_name || org.short_name || 'Organisme',
+            reason: `Document ${doc.type} scellé électroniquement`,
+            contact: org.email || '', location: org.town || '',
+        });
+    } catch (e) { console.error('Scellement PAdES ignoré :', e.message); }
+    const who = [ctx.learner?.first_name, ctx.learner?.last_name].filter(Boolean).join(' ').trim();
+    const label = TYPE_LABELS[doc.type] || doc.type || 'document';
+    const baseName = (who ? `${doc.title || label} - ${who}` : (doc.title || label)).replace(/[\\/:*?"<>|]/g, '');
+    return { pdf, baseName };
+}
+
 // Certificat de signature du STAGIAIRE (auto-signé, généré + stocké chiffré au 1er usage,
 // comme celui de l'organisme). Repli : certificat éphémère si migration 068 non jouée.
 async function getLearnerSigner(conn, learnerId, name) {
@@ -2334,4 +2377,4 @@ const createSignLink = async (req, res) => {
     }
 };
 
-module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, fichierPourArchive, compterStagiairesSemaine, lecteurDuDocument };
+module.exports = { listDocuments, createDocument, importDocumentFile, marquerDocumentFait, getDocumentFile, checkDocumentConditions, prepareLearnerDoc, getDocument, downloadDocx, downloadPdf, downloadProof, previewHtml, sendDocument, sendPreparedDoc, signDocument, enregistrerSaisies, deleteDocument, createSignLink, renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument, loadSignedPdf, renderUnsignedDocPdf, fichierPourArchive, compterStagiairesSemaine, lecteurDuDocument };
