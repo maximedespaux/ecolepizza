@@ -477,6 +477,20 @@ function validateCondition(catalog, { field, op, value }) {
     return { ok: true, value: n };
 }
 
+/**
+ * applies_when d'un TYPE réglé dans Modèles (document, et depuis la 209 pièce / remise) : on ne
+ * retient que les CONDITIONS personnalisées. Renvoie la CHAÎNE JSON à STOCKER
+ * (« {"conditions":[...]} »), dédoublonnée, ou null si aucune — pour que la colonne reste NULL et
+ * que « aucune condition = toujours applicable » (comme un document sans condition).
+ */
+function appliesWhenConditions(appliesWhen) {
+    const aw = appliesWhen && typeof appliesWhen === 'object' ? appliesWhen : null;
+    const conds = aw && Array.isArray(aw.conditions)
+        ? [...new Set(aw.conditions.map((s) => String(s || '').trim()).filter(Boolean))]
+        : [];
+    return conds.length ? JSON.stringify({ conditions: conds }) : null;
+}
+
 // Conditions personnalisées d'un organisme -> Map slug => { field, op, value }.
 async function loadConditionMap(conn, orgId) {
     const m = new Map();
@@ -501,5 +515,5 @@ async function loadConditionMap(conn, orgId) {
 module.exports = {
     ELIGIBLE_TABLES, TABLE_LABEL, OPERATORS, VIRTUALS, computeAge,
     introspectFields, getAllFields, getEnabledFields, champsDesConditions, loadDossierFactsMap,
-    evalCondition, matchCustom, validateCondition, loadConditionMap,
+    evalCondition, matchCustom, validateCondition, loadConditionMap, appliesWhenConditions,
 };

@@ -34,6 +34,8 @@ const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { companyStepSlugs } = require('../lib/parcours.js');
 const { nbModeValide, nbDocumentsValide, plafondAtteint, manquePourRequis } = require('../lib/remiseNb.js');
+const { appliesWhenConditions } = require('../lib/conditions.js'); // condition d'application (migration 209), comme un document
+const { parseApplies } = require('../lib/documents.js');           // applies_when stocké (JSON) -> objet
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -59,6 +61,9 @@ const colNbExiste = (conn) => colonneExiste(conn, 'remise_type', 'nb_documents')
 const selNb = async (conn, alias = 'rt') => (await colNbExiste(conn)
     ? `${alias}.nb_documents, ${alias}.nb_mode` : "0 AS nb_documents, 'PLAFOND' AS nb_mode");
 const MIGRATION_203 = { message: "Migration 203 non jouée : un nombre de documents ne peut pas encore être fixé sur un type de remise." };
+// La colonne de CONDITION d'application (migration 209) : présente → on la lit/écrit ; sinon la remise n'a pas de condition de type.
+const colAppliesWhen = (conn) => colonneExiste(conn, 'remise_type', 'applies_when');
+const MIGRATION_209 = { message: "Migration 209 non jouée : une condition ne peut pas encore être posée sur un document remis." };
 // Le compte du représentant de l'entreprise (migration 084) — sans lui, aucun.
 const colRepresentant = async (conn) => (await colonneExiste(conn, 'company', 'user_id') ? 'c.user_id' : 'NULL');
 
@@ -81,12 +86,14 @@ const formatsLisibles = (mimes) => mimes.map((m) => LIB_FORMAT[m] || m).join(', 
 const listTypes = async (req, res) => {
     try {
         const conn = db.promise();
+        const awCol = await colAppliesWhen(conn) ? 'applies_when' : 'NULL AS applies_when';
         const [rows] = await conn.query(
             `SELECT id, code, label, consigne, active, ${await colDestinataire(conn, 'remise_type')} AS destinataire,
-                    ${await selNb(conn, 'remise_type')}
+                    ${await selNb(conn, 'remise_type')}, ${awCol}
                FROM remise_type WHERE organization_id = ? ORDER BY label`,
             [req.user.organization_id]);
-        res.json({ data: rows });
+        // applies_when renvoyé en OBJET (le front coche les conditions) : {conditions:[…]} ou {}.
+        res.json({ data: rows.map((r) => ({ ...r, applies_when: parseApplies(r.applies_when) })) });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] });
         console.error('Erreur types de remise :', err);
@@ -103,6 +110,8 @@ const champsType = (b) => ({
     // Nombre de documents (migration 203) : 0 = illimité ; le mode dit s'il plafonne ou s'il est requis.
     nb_documents: nbDocumentsValide(b.nb_documents),
     nb_mode: nbModeValide(b.nb_mode),
+    // Condition d'application (migration 209), comme un document : JSON « {conditions:[…]} » ou null.
+    applies_when: appliesWhenConditions(b.applies_when),
 });
 
 /* LE DESTINATAIRE S'ÉCRIT QUAND LA COLONNE EXISTE (188). Sans elle, « stagiaire » est ce que tout le
@@ -123,11 +132,15 @@ const createType = async (req, res) => {
         if (!d.ok) return res.status(503).json(MIGRATION_188);
         const avecNb = await colNbExiste(conn);
         if (c.nb_documents > 0 && !avecNb) return res.status(503).json(MIGRATION_203);
+        const avecCond = await colAppliesWhen(conn);
+        // Une condition posée sans la colonne serait IGNORÉE en silence : on refuse (503) plutôt.
+        if (c.applies_when && !avecCond) return res.status(503).json(MIGRATION_209);
         const id = crypto.randomUUID();
         const cols = ['id', 'organization_id', 'code', 'label', 'consigne', 'active'];
         const vals = [id, req.user.organization_id, c.code, c.label, c.consigne, c.active];
         if (d.avec) { cols.push('destinataire'); vals.push(c.destinataire); }
         if (avecNb) { cols.push('nb_documents', 'nb_mode'); vals.push(c.nb_documents, c.nb_mode); }
+        if (avecCond) { cols.push('applies_when'); vals.push(c.applies_when); }
         await conn.query(`INSERT INTO remise_type (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         logAudit(req, 'remise_type.create', 'RemiseType', id);
         res.status(201).json({ success: true, id });
@@ -150,10 +163,13 @@ const updateType = async (req, res) => {
         if (!d.ok) return res.status(503).json(MIGRATION_188);
         const avecNb = await colNbExiste(conn);
         if (c.nb_documents > 0 && !avecNb) return res.status(503).json(MIGRATION_203);
+        const avecCond = await colAppliesWhen(conn);
+        if (c.applies_when && !avecCond) return res.status(503).json(MIGRATION_209);
         const sets = ['code = ?', 'label = ?', 'consigne = ?', 'active = ?'];
         const vals = [c.code, c.label, c.consigne, c.active];
         if (d.avec) { sets.push('destinataire = ?'); vals.push(c.destinataire); }
         if (avecNb) { sets.push('nb_documents = ?', 'nb_mode = ?'); vals.push(c.nb_documents, c.nb_mode); }
+        if (avecCond) { sets.push('applies_when = ?'); vals.push(c.applies_when); }
         vals.push(req.params.id, req.user.organization_id);
         const [r] = await conn.query(`UPDATE remise_type SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
         if (!r.affectedRows) return res.status(404).json({ message: 'Type de remise introuvable.' });

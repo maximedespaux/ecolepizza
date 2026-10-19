@@ -26,6 +26,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { encryptBytes, decryptBytes } = require('../lib/crypto.js'); // pièces chiffrées AU REPOS (scans d'identité)
+const { appliesWhenConditions } = require('../lib/conditions.js'); // condition d'application (migration 209), comme un document
+const { parseApplies } = require('../lib/documents.js');           // applies_when stocké (JSON) -> objet
 
 // Migration 127 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
 const noTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -70,6 +72,17 @@ async function hasPieceLimits(conn) {
     return _hasPieceLimits;
 }
 
+// La colonne de CONDITION d'application (migration 209) existe-t-elle ? Même sonde que ci-dessus :
+// le code tourne AVANT comme APRÈS la 209 (sans elle, une pièce n'a pas de condition de type).
+let _hasPieceConditions = null;
+async function hasPieceConditions(conn) {
+    if (_hasPieceConditions !== null) return _hasPieceConditions;
+    try { await conn.query('SELECT applies_when FROM piece_type LIMIT 1'); _hasPieceConditions = true; }
+    catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') _hasPieceConditions = false; else throw e; }
+    return _hasPieceConditions;
+}
+const MIGRATION_209 = { message: "Migration 209 non jouée : une condition ne peut pas encore être posée sur une pièce à fournir." };
+
 /* ─────────────────────────── Référentiel : ce qu'on PEUT demander ─────────────────────────── */
 
 /** GET /api/pieces — le référentiel de l'organisme. */
@@ -77,12 +90,14 @@ const listTypes = async (req, res) => {
     try {
         const conn = db.promise();
         const lim = await hasPieceLimits(conn);
+        const cond = await hasPieceConditions(conn);
         const [rows] = await conn.query(
-            `SELECT id, code, label, consigne, fichiers_attendus, active${lim ? ', max_octets, mimes' : ''}
+            `SELECT id, code, label, consigne, fichiers_attendus, active${lim ? ', max_octets, mimes' : ''}${cond ? ', applies_when' : ''}
                FROM piece_type WHERE organization_id = ? ORDER BY active DESC, label`,
             [req.user.organization_id]);
         // mimes renvoyé en TABLEAU (le front coche des cases) ; max_octets tel quel (octets).
-        res.json({ data: rows.map((r) => ({ ...r, mimes: parseMimes(r.mimes) })) });
+        // applies_when renvoyé en OBJET (le front coche les conditions) : {conditions:[…]} ou {}.
+        res.json({ data: rows.map((r) => ({ ...r, mimes: parseMimes(r.mimes), applies_when: parseApplies(r.applies_when) })) });
     } catch (err) {
         if (noTable(err)) return res.json({ data: [] }); // avant la 127 : référentiel vide
         console.error('Erreur référentiel pièces :', err);
@@ -109,6 +124,8 @@ const champsType = (b) => ({
         return arr.length && arr.length < MIMES_CONNUS.length ? JSON.stringify(arr) : null;
     })(),
     active: b?.active === false || b?.active === 0 ? 0 : 1,
+    // Condition d'application (migration 209), comme un document : JSON « {conditions:[…]} » ou null.
+    applies_when: appliesWhenConditions(b?.applies_when),
 });
 
 /** POST /api/pieces — ajouter au référentiel. */
@@ -120,10 +137,14 @@ const createType = async (req, res) => {
     try {
         const conn = db.promise();
         const lim = await hasPieceLimits(conn);
+        const cond = await hasPieceConditions(conn);
+        // Une condition posée sans la colonne serait IGNORÉE en silence : on refuse (503) plutôt.
+        if (f.applies_when && !cond) return res.status(503).json(MIGRATION_209);
         const id = crypto.randomUUID();
         const cols = ['id', 'organization_id', 'code', 'label', 'consigne', 'fichiers_attendus', 'active'];
         const vals = [id, req.user.organization_id, f.code, f.label, f.consigne, f.fichiers_attendus, f.active];
         if (lim) { cols.push('max_octets', 'mimes'); vals.push(f.max_octets, f.mimes); }
+        if (cond) { cols.push('applies_when'); vals.push(f.applies_when); }
         await conn.query(`INSERT INTO piece_type (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         logAudit(req, 'piecetype.create', 'PieceType', id);
         res.status(201).json({ data: { id, ...f } });
@@ -142,9 +163,12 @@ const updateType = async (req, res) => {
     try {
         const conn = db.promise();
         const lim = await hasPieceLimits(conn);
+        const cond = await hasPieceConditions(conn);
+        if (f.applies_when && !cond) return res.status(503).json(MIGRATION_209);
         const sets = ['code = ?', 'label = ?', 'consigne = ?', 'fichiers_attendus = ?', 'active = ?'];
         const vals = [f.code, f.label, f.consigne, f.fichiers_attendus, f.active];
         if (lim) { sets.push('max_octets = ?', 'mimes = ?'); vals.push(f.max_octets, f.mimes); }
+        if (cond) { sets.push('applies_when = ?'); vals.push(f.applies_when); }
         vals.push(req.params.id, req.user.organization_id);
         const [r] = await conn.query(`UPDATE piece_type SET ${sets.join(', ')} WHERE id = ? AND organization_id = ?`, vals);
         if (!r.affectedRows) return res.status(404).json({ message: 'Pièce introuvable.' });

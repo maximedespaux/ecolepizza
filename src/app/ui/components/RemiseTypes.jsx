@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getRemiseTypes, createRemiseType, updateRemiseType, deleteRemiseType } from "../api/apiClient.js";
+import { getRemiseTypes, createRemiseType, updateRemiseType, deleteRemiseType, getConditions } from "../api/apiClient.js";
 import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
 
@@ -22,19 +22,35 @@ import { Icon } from "./Icon.jsx";
  */
 export default function RemiseTypes({ onStatus }) {
   const [items, setItems] = useState([]);
-  const [edite, setEdite] = useState(null); // { _new?, id?, code, label, consigne, active }
+  const [edite, setEdite] = useState(null); // { _new?, id?, code, label, consigne, active, conditions }
+  // Conditions personnalisées de l'organisme (migration 209) : pour restreindre une remise à certains
+  // dossiers, exactement comme un document (cf. Modèles → Conditions).
+  const [conditions, setConditions] = useState([]);
+  const condBySlug = Object.fromEntries(conditions.map((c) => [c.slug, c]));
+  const resumeCond = (aw) => (Array.isArray(aw?.conditions) ? aw.conditions : [])
+    .map((s) => condBySlug[s]?.label || s).join(" · ");
 
   function load() {
     getRemiseTypes().then((r) => setItems(r.data || [])).catch(() => setItems([]));
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    getConditions().then((r) => setConditions(r.data || [])).catch(() => { /* silencieux : la remise marche sans */ });
+  }, []);
+
+  const toggleCond = (slug) => setEdite((p) => {
+    const cur = Array.isArray(p.conditions) ? p.conditions : [];
+    return { ...p, conditions: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
 
   async function enregistrer(e) {
     e.preventDefault();
     const payload = { code: edite.code, label: edite.label, consigne: edite.consigne, active: edite.active !== false,
       destinataire: edite.destinataire === "ENTREPRISE" ? "ENTREPRISE" : "STAGIAIRE",
       nb_documents: Math.max(0, Math.min(99, Math.round(Number(edite.nb_documents) || 0))),
-      nb_mode: edite.nb_mode === "REQUIS" ? "REQUIS" : "PLAFOND" };
+      nb_mode: edite.nb_mode === "REQUIS" ? "REQUIS" : "PLAFOND",
+      // Condition d'application (migration 209) : { conditions:[…] } ou {} (toujours applicable).
+      applies_when: Array.isArray(edite.conditions) && edite.conditions.length ? { conditions: edite.conditions } : {} };
     try {
       if (edite._new) await createRemiseType(payload); else await updateRemiseType(edite.id, payload);
       setEdite(null); onStatus?.({ type: "success", message: "Remise enregistrée." }); load();
@@ -62,7 +78,7 @@ export default function RemiseTypes({ onStatus }) {
           modèle de document avec un PDF joint. Rattachez-les à un parcours dans <b>Formations → Parcours documentaire</b>.
         </p>
         <button type="button" className="btn sm primary" style={{ flex: "none" }}
-          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true, destinataire: "STAGIAIRE", nb_documents: 0, nb_mode: "PLAFOND" })}>＋ Ajouter une remise</button>
+          onClick={() => setEdite({ _new: true, code: "", label: "", consigne: "", active: true, destinataire: "STAGIAIRE", nb_documents: 0, nb_mode: "PLAFOND", conditions: [] })}>＋ Ajouter une remise</button>
       </div>
 
       {items.length === 0 ? (
@@ -80,8 +96,9 @@ export default function RemiseTypes({ onStatus }) {
                   </span>
                 )}
                 <div className="hint" style={{ fontSize: 12 }}>{r.code}{r.consigne ? ` · ${r.consigne}` : ""}</div>
+                {resumeCond(r.applies_when) && <div className="hint" style={{ fontSize: 12 }}>Condition : {resumeCond(r.applies_when)}</div>}
               </div>
-              <button type="button" className="btn sm ghost" onClick={() => setEdite({ ...r })}><Icon name="settings" size={14} /> Réglages</button>
+              <button type="button" className="btn sm ghost" onClick={() => setEdite({ ...r, conditions: Array.isArray(r.applies_when?.conditions) ? r.applies_when.conditions : [] })}><Icon name="settings" size={14} /> Réglages</button>
               <button type="button" className="btn sm ghost" onClick={() => supprimer(r)}>Supprimer</button>
             </div>
           ))}
@@ -162,6 +179,31 @@ export default function RemiseTypes({ onStatus }) {
                         Il en faut {edite.nb_documents} — l'accusé de réception n'est possible qu'une fois tous déposés.
                       </label>
                     </div>
+                  )}
+                </div>
+                {/* CONDITION D'APPLICATION (migration 209), comme un document : la remise n'apparaît
+                    dans le parcours d'un dossier que si TOUTES les conditions cochées sont vraies. */}
+                <div className="field">
+                  <label>Conditions d'application</label>
+                  {conditions.length > 0 ? (
+                    <>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {conditions.map((c) => (
+                          <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 400 }}>
+                            <input type="checkbox" checked={(edite.conditions || []).includes(c.slug)} onChange={() => toggleCond(c.slug)} />
+                            {c.label}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="hint" style={{ margin: "4px 0 0" }}>
+                        Cochez les conditions <b>requises</b> (toutes doivent être remplies). Rien coché = toujours proposée.
+                        Elles s'ajoutent à la condition par formation (Formations → Parcours documentaire).
+                      </p>
+                    </>
+                  ) : (
+                    <p className="hint" style={{ margin: 0 }}>
+                      Aucune condition définie. Créez-en dans <b>Modèles → Conditions</b> pour restreindre cette remise à certains dossiers.
+                    </p>
                   )}
                 </div>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14 }}>
