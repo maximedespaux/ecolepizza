@@ -86,8 +86,11 @@ async function formationSteps(conn, orgId, program) {
      * rester utilisable sans elle. */
     let pieceSteps = [];
     try {
+        // Condition DE TYPE (migration 209) : sondée à part, sinon son absence ferait disparaître
+        // TOUTES les pièces du parcours (le catch ci-dessous avale ER_BAD_FIELD_ERROR). Repli : NULL.
+        const awType = await colonneExiste(conn, 'piece_type', 'applies_when') ? 'applies_when' : 'NULL AS applies_when';
         const [pieces] = await conn.query(
-            'SELECT id, label, consigne, fichiers_attendus FROM piece_type WHERE organization_id = ? AND active = 1 ORDER BY label',
+            `SELECT id, label, consigne, fichiers_attendus, ${awType} FROM piece_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
             [orgId]);
         pieceSteps = pieces.map((pc) => {
             const slug = `piece:${pc.id}`;
@@ -103,6 +106,9 @@ async function formationSteps(conn, orgId, program) {
                 // distincts des équivalences d'organisme (réservées aux documents).
                 or_group: o ? (o.or_group || null) : null,
                 applies_when: parseAW(o && o.applies_when),
+                // Condition DE TYPE (migration 209), réglée dans Modèles comme pour un document :
+                // elle s'ajoute à celle par formation (le `passes()` de resoudreVariantes exige les deux).
+                cond_type: parseAW(pc.applies_when),
                 sort_order: o ? o.sort_order : 15, // tôt dans le parcours : c'est un préalable
                 active: o ? !!o.active : false,    // jamais imposée d'office à toutes les formations
                 facultatif: facultatif(slug),
@@ -124,8 +130,10 @@ async function formationSteps(conn, orgId, program) {
         const dest = await colonneExiste(conn, 'remise_type', 'destinataire') ? 'destinataire' : "'STAGIAIRE' AS destinataire";
         // Nombre de documents (migration 203) : porté par l'étape, pour afficher « fichiers / max ».
         const nb = await colonneExiste(conn, 'remise_type', 'nb_documents') ? 'nb_documents, nb_mode' : "0 AS nb_documents, 'PLAFOND' AS nb_mode";
+        // Condition DE TYPE (migration 209) : sondée à part (sinon son absence masquerait toutes les remises). Repli : NULL.
+        const awType = await colonneExiste(conn, 'remise_type', 'applies_when') ? 'applies_when' : 'NULL AS applies_when';
         const [remises] = await conn.query(
-            `SELECT id, label, consigne, ${dest}, ${nb} FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
+            `SELECT id, label, consigne, ${dest}, ${nb}, ${awType} FROM remise_type WHERE organization_id = ? AND active = 1 ORDER BY label`,
             [orgId]);
         remiseSteps = remises.map((rm) => {
             const slug = `remise:${rm.id}`;
@@ -138,6 +146,8 @@ async function formationSteps(conn, orgId, program) {
                 signable: false, stagiaire_sign: false, company_sign: false, company_level: false,
                 or_group: o ? (o.or_group || null) : null,
                 applies_when: parseAW(o && o.applies_when),
+                // Condition DE TYPE (migration 209), réglée dans Modèles comme pour un document : s'ajoute à la condition par formation.
+                cond_type: parseAW(rm.applies_when),
                 // TARD dans le parcours, à l'inverse d'une pièce à fournir : on remet un diplôme
                 // à la fin, on demande une carte d'identité au début.
                 sort_order: o ? o.sort_order : 900,
@@ -249,7 +259,9 @@ async function formationSteps(conn, orgId, program) {
  */
 function resoudreVariantes(active, ctx, conds, eq) {
     // Une étape « passe » si c'est un QCM ou si ses conditions correspondent au dossier.
-    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
+    // `cond_type` = condition DE TYPE des pièces/remises (migration 209), en PLUS de celle par
+    // formation (`applies_when`). Les deux doivent tenir. Absent (documents, QCM) → matchCustom rend true.
+    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds) && matchCustom(s.cond_type, ctx, conds));
     const groupOf = (s) => {
         const e = eq && eq.get(s.slug);
         if (e) return e.group; // équivalences d'organisme (documents)
@@ -315,7 +327,9 @@ function resoudreVariantes(active, ctx, conds, eq) {
  */
 function resoudreVariantesEntreprise(steps, ctx, conds, eq) {
     if (!eq || !eq.size) return steps;
-    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds));
+    // `cond_type` = condition DE TYPE des pièces/remises (migration 209), en PLUS de celle par
+    // formation (`applies_when`). Les deux doivent tenir. Absent (documents, QCM) → matchCustom rend true.
+    const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds) && matchCustom(s.cond_type, ctx, conds));
     const specificity = (s) => {
         const a = s.applies_when || {};
         let n = 0;

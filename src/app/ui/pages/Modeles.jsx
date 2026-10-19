@@ -442,6 +442,9 @@ function Modeles() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <b>{p.label}</b>{!p.active && <span className="hint"> · inactive</span>}
                   <div className="hint" style={{ fontSize: 12 }}>{resumePiece(p)}</div>
+                  {Array.isArray(p.applies_when?.conditions) && p.applies_when.conditions.length > 0 && (
+                    <div className="hint" style={{ fontSize: 12 }}>Condition : {condLabel(p.applies_when, condBySlug)}</div>
+                  )}
                 </div>
                 <button type="button" className="btn sm ghost" onClick={() => setEditing({ ...p })}><Icon name="settings" size={14} /> Réglages</button>
                 <button type="button" className="btn sm ghost" onClick={() => supprimerPiece(p)}>Supprimer</button>
@@ -753,6 +756,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
           max_octets: form.max_mo ? Math.round(Number(form.max_mo) * MO) : null,
           mimes: form.mimes,
           active: form.active,
+          applies_when, // condition d'application (migration 209), comme un document
         };
         if (isNew) await createPieceType(payload); else await updatePieceType(step.id, payload);
       } else if (isEmarg) {
@@ -856,7 +860,7 @@ function StepModal({ step, conditions = [], onClose, onSaved, onError }) {
             </div>
           )}
 
-          {!isPiece && (conditions.length > 0 ? (
+          {(conditions.length > 0 ? (
             <>
               <label style={{ fontSize: 13, fontWeight: 600, display: "block", margin: "10px 0 4px" }}>
                 Conditions personnalisées

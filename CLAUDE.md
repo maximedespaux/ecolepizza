@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (363 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-14** : **2817 tests — 2810 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-19** : **2843 tests — 2836 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,24 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**209 est À JOUER** (`209_piece_remise_conditions.sql`, une CONDITION d'application sur les PIÈCES à fournir et
+les DOCUMENTS REMIS — demandé le 2026-10-19). Deux colonnes `applies_when` (longtext JSON), une sur `piece_type`,
+une sur `remise_type`. Un DOCUMENT porte déjà sa condition au niveau du TYPE (`document_template.applies_when`) :
+il n'entre dans le parcours d'un dossier que si la condition est vraie. On donne la MÊME chose aux deux autres
+natures d'étape, réglée dans Modèles → Documents comme pour un document (cases « Conditions personnalisées »). Elle
+se CUMULE avec la condition PAR FORMATION qui existait déjà (`program_step.applies_when`, migration 140) : le
+parcours lit les DEUX (`cond_type` dans `formationSteps`, évalué par le `passes()` de `resoudreVariantes` en plus de
+`applies_when`). Sans la migration, rien ne casse : une pièce / remise sans condition reste proposée comme avant
+(sonde `colonneExiste` + repli NULL ; les pièces ne disparaissent PAS du parcours — la sonde est à part du catch),
+et poser une condition répond 503 « Migration 209 non jouée ». **Elle se vérifie par l'API, sans SQL** : enregistrer
+une remise (ou une pièce) avec une condition cochée répond 200 (et non 503), puis `GET /api/remises` (ou
+`/api/pieces`) rend `applies_when: {conditions:[…]}`. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND ((table_name='piece_type' AND column_name='applies_when') OR (table_name='remise_type' AND column_name='applies_when'));`
+⚠️ Son revert retire les deux colonnes : les conditions posées sur des pièces / remises sont perdues (les types,
+dépôts et accusés restent) ; le parcours revient à la seule condition par formation. Tests :
+`pieces-remises-conditions-type.test.js`.
 
 **208 est À JOUER** (`208_recipe_allergens.sql`, les ALLERGÈNES d'une fiche technique — demandé le 2026-10-14).
 Une colonne `recipe.allergens` (texte) : la liste JSON des codes d'allergènes PROPRES à la fiche (parmi les 14
