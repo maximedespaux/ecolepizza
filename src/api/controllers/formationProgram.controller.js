@@ -326,7 +326,6 @@ function resoudreVariantes(active, ctx, conds, eq) {
  * `doc_type`) ; c'est le DÉCOMPTE et l'AFFICHAGE qu'il faut corriger.
  */
 function resoudreVariantesEntreprise(steps, ctx, conds, eq) {
-    if (!eq || !eq.size) return steps;
     // `cond_type` = condition DE TYPE des pièces/remises (migration 209), en PLUS de celle par
     // formation (`applies_when`). Les deux doivent tenir. Absent (documents, QCM) → matchCustom rend true.
     const passes = (s) => s.quiz_id || (matchStep(s.applies_when, ctx) && matchCustom(s.applies_when, ctx, conds) && matchCustom(s.cond_type, ctx, conds));
@@ -337,12 +336,21 @@ function resoudreVariantesEntreprise(steps, ctx, conds, eq) {
         if (Array.isArray(a.conditions)) n += a.conditions.length;
         return n;
     };
-    const groupOf = (s) => { const e = eq.get(s.slug); return e ? e.group : null; };
+    const groupOf = (s) => { const e = eq && eq.get(s.slug); return e ? e.group : null; };
+    /* UN DOCUMENT de la section entreprise reste une liste EXPLICITE : choisi à la main, il y reste
+       quoi qu'il arrive (c'est le sens de cette fonction). MAIS une PIÈCE / REMISE porte une CONDITION
+       — type (migration 209) et/ou formation — qui DOIT filtrer : sinon ses variantes conditionnées
+       (« remise AGEFICE » / « remise FAFCEA ») restaient TOUTES présentes alors qu'une seule s'applique
+       au dossier (constaté le 2026-10-19, entreprise DBM, qui passe par CE collapse et pas par
+       `resoudreVariantes`). On filtre donc les pièces/remises ISOLÉES par leur condition, comme le
+       parcours du dossier le fait. (Avant, un `return steps` si aucune équivalence court-circuitait
+       TOUT le filtrage ; on boucle désormais toujours, groupOf rendant null quand eq est vide.) */
+    const gardee = (s) => (s.doc_type !== 'PIECE' && s.doc_type !== 'REMISE') || passes(s);
     const out = [];
     const seen = new Set();
     for (const s of steps) {
         const g = groupOf(s);
-        if (!g) { out.push(s); continue; } // isolée : conservée telle quelle (aucun filtre par condition)
+        if (!g) { if (gardee(s)) out.push(s); continue; } // isolée : document gardé, pièce/remise filtrée
         if (seen.has(g)) continue;
         seen.add(g);
         const membres = steps.filter((m) => groupOf(m) === g);

@@ -34,7 +34,7 @@ const { encryptBytes, decryptBytes } = require('../lib/crypto.js');
 const { colonneExiste } = require('../lib/colonnes.js');
 const { companyStepSlugs } = require('../lib/parcours.js');
 const { nbModeValide, nbDocumentsValide, plafondAtteint, manquePourRequis } = require('../lib/remiseNb.js');
-const { appliesWhenConditions } = require('../lib/conditions.js'); // condition d'application (migration 209), comme un document
+const { appliesWhenConditions, loadConditionMap, champsDesConditions, loadDossierFactsMap, matchCustom } = require('../lib/conditions.js'); // condition d'application (migration 209)
 const { parseApplies } = require('../lib/documents.js');           // applies_when stocké (JSON) -> objet
 
 // Migration 160 non jouée : on dégrade au lieu de renvoyer une 500 incompréhensible.
@@ -218,6 +218,27 @@ const deleteType = async (req, res) => {
 
 /* ─── Les remises d'un dossier ───────────────────────────────────────────────────────────── */
 
+/* NE GARDER QUE LES REMISES DUES À CE DOSSIER (condition migration 209) — même règle que le parcours.
+   Une remise dont la condition de TYPE (OPCO AGEFICE…) ou de FORMATION ne colle pas au dossier n'est
+   pas due. SAUF si elle a DÉJÀ un document (`remise_id`) : on ne fait jamais disparaître une remise
+   commencée — sa trace (preuve de remise) reste. Les conditions d'un type de remise sont PERSONNALISÉES
+   (matchCustom suffit, pas de critère intégré). FAIL OPEN : une erreur de chargement des faits ne doit
+   pas masquer des remises. ZÉRO requête de plus si aucune remise candidate n'a de condition (cas courant). */
+async function filtrerParCondition(conn, orgId, enrollmentId, candidats) {
+    if (!candidats.some((r) => r.aw_type || r.aw_step)) return candidats;
+    try {
+        const condById = await loadConditionMap(conn, orgId);
+        if (!condById.size) return candidats;
+        const catalog = await champsDesConditions(conn, orgId, condById);
+        const facts = (await loadDossierFactsMap(conn, orgId, [enrollmentId], catalog)).get(enrollmentId) || {};
+        return candidats.filter((r) => r.remise_id
+            || (matchCustom(parseApplies(r.aw_type), facts, condById) && matchCustom(parseApplies(r.aw_step), facts, condById)));
+    } catch (e) {
+        console.error('Filtre condition des remises ignoré (fail open) :', e.message);
+        return candidats;
+    }
+}
+
 async function remisesDuDossier(conn, orgId, enrollmentId) {
     /* CASCADE SUR `sans_objet` (migration 161), et ce n'est pas du zèle : demander une colonne
        absente fait échouer la requête ENTIÈRE, et `noTable` la rattrape en rendant une liste
@@ -227,10 +248,15 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
     const dest = await colDestinataire(conn);
     const representant = await colRepresentant(conn);
     const nbSel = await selNb(conn); // nombre de documents du type (migration 203) : pour l'écran
+    // Condition d'application (migration 209) : de TYPE (remise_type) et de FORMATION (program_step), pour
+    // ne garder que les remises DUES à ce dossier (cf. `filtrerParCondition` plus bas). Repli NULL sans colonne.
+    const awType = await colAppliesWhen(conn) ? 'rt.applies_when' : 'NULL';
+    const awStep = await colonneExiste(conn, 'program_step', 'applies_when') ? 'ps.applies_when' : 'NULL';
     const requete = (col) =>
         `SELECT rt.id AS remise_type_id, rt.code, rt.label, rt.consigne, ${nbSel},
                 ${dest} AS destinataire, e.company_id, c.name AS entreprise, ${representant} AS representant,
                 ps.active AS actif_parcours, ps.slug AS slug_etape, s.program_id,
+                ${awType} AS aw_type, ${awStep} AS aw_step,
                 r.id AS remise_id, r.statut, ${col} AS sans_objet,
                 DATE_FORMAT(r.remis_le, '%Y-%m-%d %H:%i') AS remis_le,
                 DATE_FORMAT(r.accuse_le, '%Y-%m-%d %H:%i') AS accuse_le,
@@ -259,10 +285,13 @@ async function remisesDuDossier(conn, orgId, enrollmentId) {
        avant. */
     const premier = lues[0];
     const section = premier && premier.company_id ? await companyStepSlugs(conn, orgId, premier.program_id) : [];
-    const rows = (section.length
+    const candidats = section.length
         ? lues.filter((r) => section.includes(r.slug_etape))
-        : lues.filter((r) => Number(r.actif_parcours) === 1))
-        .map(({ actif_parcours: _a, slug_etape: _s, program_id: _p, ...r }) => r);
+        : lues.filter((r) => Number(r.actif_parcours) === 1);
+    // FILTRE PAR CONDITION (migration 209), comme le parcours : une remise dont la condition (OPCO…) ne
+    // colle pas au dossier n'est pas DUE. Jamais une remise déjà commencée (cf. `filtrerParCondition`).
+    const dus = await filtrerParCondition(conn, orgId, enrollmentId, candidats);
+    const rows = dus.map(({ actif_parcours: _a, slug_etape: _s, program_id: _p, aw_type: _t, aw_step: _w, ...r }) => r);
     const ids = rows.map((r) => r.remise_id).filter(Boolean);
     let parRemise = {};
     if (ids.length) {

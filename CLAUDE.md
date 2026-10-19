@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (363 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-19** : **2843 tests — 2836 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-19** : **2846 tests — 2839 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -271,7 +271,15 @@ il n'entre dans le parcours d'un dossier que si la condition est vraie. On donne
 natures d'étape, réglée dans Modèles → Documents comme pour un document (cases « Conditions personnalisées »). Elle
 se CUMULE avec la condition PAR FORMATION qui existait déjà (`program_step.applies_when`, migration 140) : le
 parcours lit les DEUX (`cond_type` dans `formationSteps`, évalué par le `passes()` de `resoudreVariantes` en plus de
-`applies_when`). Sans la migration, rien ne casse : une pièce / remise sans condition reste proposée comme avant
+`applies_when`).
+⚠️ **Un dossier arrivé PAR UNE ENTREPRISE passe par un AUTRE résolveur, `resoudreVariantesEntreprise`** (section
+« à l'arrivée via une entreprise »), qui — exprès — garde les DOCUMENTS isolés sans les filtrer (liste explicite),
+mais ne filtrait PAS non plus les pièces/remises : les deux remises AGEFICE **et** FAFCEA de DBM restaient toutes
+les deux. **Corrigé le 2026-10-19** : il filtre désormais les pièces/remises ISOLÉES par leur condition (`gardee`),
+les documents restant intacts ; son court-circuit « aucune équivalence → tout passe » a été retiré. La liste
+« Documents remis » (`remisesDuDossier`) applique la même condition (`filtrerParCondition`), mais garde toujours une
+remise DÉJÀ commencée — la preuve reste.
+Sans la migration, rien ne casse : une pièce / remise sans condition reste proposée comme avant
 (sonde `colonneExiste` + repli NULL ; les pièces ne disparaissent PAS du parcours — la sonde est à part du catch),
 et poser une condition répond 503 « Migration 209 non jouée ». **Elle se vérifie par l'API, sans SQL** : enregistrer
 une remise (ou une pièce) avec une condition cochée répond 200 (et non 503), puis `GET /api/remises` (ou
