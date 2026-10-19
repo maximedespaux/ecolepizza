@@ -110,7 +110,11 @@ function Stagiaires() {
     setStatus(null);
     try {
       const r = await resetStagiairePassword(l.id);
-      setStatus({ type: "success", message: `${l.has_account ? "Nouveau mot de passe" : "Compte créé, mot de passe"} : ${r.password}` });
+      // Compte ENTREPRISE relié (il devient aussi stagiaire) : pas de nouveau mot de passe à montrer,
+      // il garde ses identifiants actuels — on affiche le message du serveur tel quel.
+      setStatus(r.linked
+        ? { type: "success", message: r.message }
+        : { type: "success", message: `${l.has_account ? "Nouveau mot de passe" : "Compte créé, mot de passe"} : ${r.password}` });
       load(query);
     } catch (err) {
       setStatus({ type: "error", message: err.message });

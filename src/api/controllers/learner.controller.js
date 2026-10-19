@@ -849,12 +849,34 @@ const resetStagiairePassword = async (req, res) => {
             }
             // Cloisonnement : ne rattacher/réinitialiser qu'un compte du MÊME organisme.
             const [ex] = await conn.query('SELECT id, role FROM user WHERE email = ? AND organization_id = ?', [learner.email, organizationId]);
+            if (ex.length > 0 && ex[0].role === 'ENTREPRISE') {
+                /* UN REPRÉSENTANT D'ENTREPRISE DEVIENT AUSSI STAGIAIRE (demandé le 2026-10-19). Le sens
+                   inverse marche déjà : un stagiaire qu'on relie à une entreprise RESTE STAGIAIRE et
+                   l'entreprise se superpose (has_company, cf. createRepresentativeAccount). On fait le
+                   MIROIR : on relie la fiche à SON compte et on le passe STAGIAIRE. Ça ne lui RETIRE
+                   PAS l'entreprise — l'espace entreprise est gardé par les DONNÉES (company.user_id),
+                   pas par le rôle (cf. rep.routes.js) —, et, choix de l'école, on NE TOUCHE NI au mot
+                   de passe NI aux sessions : il garde ses identifiants actuels. Le rôle se relit à
+                   chaque /auth/me (SELECT frais), l'espace stagiaire apparaît donc au prochain
+                   chargement, sans reconnexion. Réservé au rôle ENTREPRISE : tout AUTRE compte
+                   non-stagiaire (bureau, financeur…) reste refusé plus bas — garde anti prise de
+                   contrôle (un SECRETARIAT ne « devient » pas un admin par ce bouton). */
+                userId = ex[0].id;
+                await conn.query("UPDATE user SET role = 'STAGIAIRE' WHERE id = ? AND organization_id = ? AND role = 'ENTREPRISE'",
+                    [userId, organizationId]);
+                await conn.query('UPDATE learner SET user_id = ? WHERE id = ?', [userId, learner.id]);
+                return res.status(200).json({
+                    success: true, created: false, linked: true,
+                    message: "Compte entreprise relié : cette personne accède aussi à l'espace stagiaire, avec ses identifiants actuels.",
+                });
+            }
             if (ex.length > 0) {
                 /* #1 GARDE DE RÔLE — l'e-mail correspond à un compte existant : ne le toucher QUE si
-                   c'est un stagiaire. Sinon un SECRETARIAT pourrait créer une fiche à l'e-mail d'un
-                   admin puis « réinitialiser » = prise de contrôle du compte. Refuser. */
+                   c'est un stagiaire (le représentant d'entreprise est traité juste au-dessus). Sinon
+                   un SECRETARIAT pourrait créer une fiche à l'e-mail d'un admin puis « réinitialiser »
+                   = prise de contrôle du compte. Refuser. */
                 if (ex[0].role !== 'STAGIAIRE') {
-                    return res.status(409).json({ error: "Cette adresse appartient déjà à un compte non-stagiaire : impossible de le réinitialiser ici." });
+                    return res.status(409).json({ error: "Cette adresse appartient déjà à un compte non-stagiaire : impossible de le relier ici." });
                 }
                 userId = ex[0].id;
                 await conn.query('UPDATE user SET password = ? WHERE id = ? AND organization_id = ?',
