@@ -15,7 +15,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { resoudreVariantes } = require('../controllers/formationProgram.controller.js');
+const { resoudreVariantes, resoudreVariantesEntreprise } = require('../controllers/formationProgram.controller.js');
 const { appliesWhenConditions } = require('../lib/conditions.js');
 const lireSrc = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
@@ -54,6 +54,27 @@ test('sans condition de type (cond_type absent ou vide), rien ne change — comp
     assert.deepStrictEqual(slugsOf(resoudreVariantes([condVide], { financing: 'X' }, conds, EQ)), ['remise:b']);
 });
 
+test('ENTREPRISE : une remise ISOLÉE est filtrée par sa condition, un DOCUMENT reste (le vrai bug DBM)', () => {
+    /* LE DÉFAUT (constaté le 2026-10-19, entreprise DBM) : le parcours d'un dossier arrivé PAR UNE
+       ENTREPRISE passe par `resoudreVariantesEntreprise`, qui ne filtrait PAS les étapes isolées par
+       leur condition (et court-circuitait même tout quand l'organisme n'a aucune équivalence). Les
+       remises ne sont jamais en groupe « OU » → toujours isolées → les deux variantes AGEFICE et
+       FAFCEA restaient présentes. Un DOCUMENT, lui, doit rester (la section entreprise est une liste
+       explicite) — c'est la nuance à préserver. */
+    const condsOpco = new Map([
+        ['opco-agefice', { field: 'company.opco', op: 'eq', value: 'AGEFICE' }],
+        ['opco-fafcea', { field: 'company.opco', op: 'eq', value: 'FAFCEA' }],
+    ]);
+    const remiseAgefice = { slug: 'remise:ag', doc_type: 'REMISE', applies_when: {}, cond_type: { conditions: ['opco-agefice'] } };
+    const remiseFafcea = { slug: 'remise:fa', doc_type: 'REMISE', applies_when: {}, cond_type: { conditions: ['opco-fafcea'] } };
+    const doc = { slug: 'convention', doc_type: 'CONVENTION', applies_when: { conditions: ['opco-fafcea'] } };
+    const EQ = new Map(); // aucune équivalence, comme chez DBM — avant, ça court-circuitait tout le filtrage
+
+    const out = resoudreVariantesEntreprise([remiseAgefice, remiseFafcea, doc], { 'company.opco': 'AGEFICE' }, condsOpco, EQ);
+    assert.deepStrictEqual(out.map((s) => s.slug), ['remise:ag', 'convention'],
+        'remise FAFCEA écartée (condition non remplie) ; remise AGEFICE gardée ; document gardé malgré sa condition (liste explicite)');
+});
+
 test('appliesWhenConditions : ce que le contrôleur STOCKE — {conditions:[…]} dédoublonné, ou null si vide', () => {
     assert.strictEqual(appliesWhenConditions({ conditions: ['a', 'b', 'a'] }), JSON.stringify({ conditions: ['a', 'b'] }), 'dédoublonné');
     assert.strictEqual(appliesWhenConditions({ conditions: ['  x  ', ''] }), JSON.stringify({ conditions: ['x'] }), 'trim + vides retirés');
@@ -79,4 +100,27 @@ test('le parcours lit la condition DE TYPE (cond_type) pour les pièces ET les r
     const occ = (fp.match(/cond_type: parseAW\(/g) || []).length;
     assert.ok(occ >= 2, 'cond_type alimenté pour les pièces ET les remises (2 occurrences)');
     assert.match(fp, /matchCustom\(s\.cond_type, ctx, conds\)/, 'le passes() évalue la condition de type');
+});
+
+test('ENTREPRISE : resoudreVariantesEntreprise filtre les pièces/remises isolées, PAS les documents', () => {
+    const fp = lireSrc('controllers/formationProgram.controller.js');
+    // Le court-circuit « aucune équivalence → tout passe » est retiré (il sautait tout le filtrage).
+    const fn = fp.slice(fp.indexOf('function resoudreVariantesEntreprise'), fp.indexOf('function resoudreVariantesEntreprise') + 2800);
+    assert.doesNotMatch(fn, /if \(!eq \|\| !eq\.size\) return steps;/, 'plus de court-circuit qui sautait le filtrage');
+    assert.match(fn, /doc_type !== 'PIECE' && s\.doc_type !== 'REMISE'/, 'un document reste (liste explicite), une pièce/remise est filtrée');
+    assert.match(fn, /if \(gardee\(s\)\) out\.push\(s\)/, 'une étape isolée n\'est gardée que si sa condition passe (hors document)');
+});
+
+test('la liste « Documents remis » (remisesDuDossier) filtre par condition, garde les remises commencées, échoue OUVERT', () => {
+    const src = lireSrc('controllers/remise.controller.js');
+    assert.match(src, /filtrerParCondition\(conn, orgId, enrollmentId, candidats\)/, 'le filtre est appelé sur les candidates du dossier');
+    // Une remise DÉJÀ commencée (un document existe) n'est jamais masquée — la preuve reste.
+    assert.match(src, /candidats\.filter\(\(r\) => r\.remise_id/);
+    // Filtrée par la condition de TYPE et de FORMATION (matchCustom), via les faits du dossier.
+    assert.match(src, /matchCustom\(parseApplies\(r\.aw_type\), facts, condById\)/);
+    assert.match(src, /matchCustom\(parseApplies\(r\.aw_step\), facts, condById\)/);
+    // FAIL OPEN : une erreur de chargement des faits ne masque RIEN.
+    assert.match(src, /catch \(e\) \{[\s\S]*?return candidats;/);
+    // Les conditions sont lues dans la requête, gardées par colonneExiste (migration 209).
+    assert.match(src, /awType = await colAppliesWhen\(conn\)/);
 });
