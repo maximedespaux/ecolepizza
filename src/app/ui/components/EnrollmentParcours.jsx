@@ -39,6 +39,14 @@ function listSub(s) {
   /* UNE REMISE DE GROUPE se DÉPOSE puis s'ACCUSE (2026-09-28) : on compte les accusés de réception,
      pas des signatures ni des documents générés — elle n'en produit aucun. */
   if (isGroup(s) && s.remise) return s.total ? `${s.signed}/${s.total} réception(s) confirmée(s)` : "Sans objet pour ce groupe";
+  /* UNE PIÈCE (dépôt du stagiaire) se DÉPOSE puis se VALIDE : on compte les copies déposées (reçues) et
+     validées, jamais « reçu(s) » comme un document — la pièce est reçue DU stagiaire, pas envoyée À lui.
+     Son état vient de piece_depot (serveur), pas d'un document généré (elle n'en produit aucun). */
+  if (isGroup(s) && s.piece) {
+    if (!s.total) return "Aucun stagiaire concerné";
+    if (s.signed >= s.total) return s.total > 1 ? `${s.signed}/${s.total} validées` : "Validée";
+    return `${s.gen}/${s.total} déposée(s)`;
+  }
   if (isGroup(s) && s.company_level) {
     // Document de groupe = UNE signature (organisme + entreprise), pas par stagiaire.
     if (s.total > 1) return `${s.signed}/${s.total} document(s) signé(s)`; // plusieurs OPCO
@@ -66,6 +74,13 @@ function lineFor(s) {
         ? `${s.nb_fichiers}/${s.nb_documents * s.total} documents déposé(s)`
         : `${s.gen}/${s.total} déposé(s)`;
       return `${depose} · ${s.signed}/${s.total} réception(s) confirmée(s) ${qui}.`;
+    }
+    if (s.piece) {
+      if (!s.total) return "Aucune pièce attendue pour les stagiaires de ce groupe.";
+      const aVerifier = s.gen - s.signed; // déposées, pas encore validées
+      return `${s.signed}/${s.total} validée(s) · ${s.gen}/${s.total} déposée(s)`
+        + (aVerifier > 0 ? `, ${aVerifier} à vérifier` : "")
+        + " · déposée par chaque stagiaire, dans son espace, puis validée par l'école.";
     }
     if (s.company_level) {
       if (s.total > 1) return `Document de groupe (entreprise) · ${s.signed}/${s.total} document(s) signé(s).`;

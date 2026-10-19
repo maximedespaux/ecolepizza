@@ -605,7 +605,11 @@ export default function EntrepriseDetail() {
   function gestesStagiaire(s) {
     const stagiaires = s.stagiaires || [];
     if (!stagiaires.length) return null; // « Aucun stagiaire concerné » : la sous-ligne le dit déjà
-    const info = `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
+    /* LE MOT SUIT LE GESTE : une pièce se DÉPOSE et se VALIDE (panneau « Pièces justificatives » de la
+       fiche stagiaire, où l'on peut aussi la voir et la retirer) ; un document se PRÉPARE. */
+    const info = s.piece
+      ? `« ${s.label} » se dépose et se valide sur la fiche du stagiaire (panneau « Pièces justificatives »), où vous pouvez la voir et la retirer.`
+      : `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
     const lien = (st, label) => (
       <Link key={st.enrollment_id} className="btn ghost sm" to={lienDossier(st.learner_id, st.enrollment_id)} state={{ info }}
         title={`Ouvrir le parcours de ${st.name} sur sa fiche`}>

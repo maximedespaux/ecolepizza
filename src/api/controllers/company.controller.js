@@ -8,7 +8,7 @@ const db = require('../config/database.js');
 const { parcoursManquant } = require('../lib/parcoursRequis.js');
 /* La section « À l'arrivée via une entreprise » — la MÊME lecture que celle du parcours, pas
    une relecture du JSON écrite une seconde fois ici. */
-const { companyStepSlugs, compteRemiseGroupe, etatDeGroupe, pourcentFait, needsSignature, SENT } = require('../lib/parcours.js');
+const { companyStepSlugs, compteRemiseGroupe, comptePieceGroupe, etatDeGroupe, etatPieceGroupe, pourcentFait, needsSignature, SENT } = require('../lib/parcours.js');
 const { generatePassword } = require('../lib/crypto.js');
 // Même lacune que pour le stagiaire : l'entreprise, qui signe les conventions et reçoit les
 // factures, n'apparaissait nulle part dans le journal.
@@ -862,6 +862,7 @@ const getCompanyParcours = async (req, res) => {
             const signers = stepSigners(s);
             let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
             let remise = null; // l'état d'une REMISE pour le groupe (`compteRemiseGroupe`), sinon null
+            let piece = null;  // l'état d'une PIÈCE pour le groupe (`comptePieceGroupe`), sinon null
             let nbFichiersGroupe = 0; // fichiers déposés, tous dossiers concernés confondus (migration 203)
             if (s.company_level) {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
@@ -925,6 +926,26 @@ const getCompanyParcours = async (req, res) => {
                 remise = c;
                 // Fichiers déposés, dossiers « sans objet » exclus (ils sortent du compte, cf. compteRemiseGroupe).
                 nbFichiersGroupe = lignes.filter((l) => !Number(l.sans_objet)).reduce((n, l) => n + (Number(l.nb_fichiers) || 0), 0);
+            } else if (s.piece_id) {
+                /* UNE PIÈCE NE SE GÉNÈRE PAS (migration 127) : le stagiaire — ou l'école pour lui — la
+                   DÉPOSE, l'école la VALIDE. Son état vient de `piece_depot`, dossier par dossier
+                   (`comptePieceGroupe`, lib/parcours.js), exactement comme une remise — jamais de
+                   `generated_document` (il n'y en a aucun). Sans cette branche, la pièce tombait dans le
+                   `else` « document » ci-dessous, se cherchait sous un `template_slug` qui n'existe pas, et
+                   restait « 0/1 reçu(s) · À faire » alors qu'elle était validée sur la fiche du stagiaire. */
+                const ids = dossiersConcernes(s).map((e) => e.id);
+                let lignes = [];
+                if (ids.length) {
+                    try {
+                        [lignes] = await conn.query(
+                            `SELECT enrollment_id, statut FROM piece_depot
+                             WHERE organization_id = ? AND enrollment_id IN (?) AND piece_type_id = ?`,
+                            [orgId, ids, s.piece_id]);
+                    } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 127 non jouée
+                }
+                const c = comptePieceGroupe(ids, lignes);
+                total = c.total; gen = c.gen; signed = c.signed; recu = c.gen; // gen = déposées (reçues), signed = validées
+                piece = c;
             } else {
                 const applicable = dossiersConcernes(s);
                 total = applicable.length;
@@ -946,13 +967,15 @@ const getCompanyParcours = async (req, res) => {
                dossier d'un stagiaire, cf. lib/parcours.js `stepDone`). Sans ça, un CGV restait
                éternellement « 0/1 signés » et bloquait la complétion du groupe. */
             const attendSignature = !!s.quiz_id || needsSignature(s);
-            const done = remise ? remise.done : total > 0 && (attendSignature ? signed >= total : recu >= total);
+            const done = remise ? remise.done
+                : piece ? piece.done // une pièce est faite quand toutes les copies sont VALIDÉES (cf. comptePieceGroupe)
+                : total > 0 && (attendSignature ? signed >= total : recu >= total);
             // À QUI va la remise pour CE groupe : l'entreprise si elle a un espace, sinon chaque stagiaire.
             const remiseEntreprise = !!remise && s.destinataire === 'ENTREPRISE' && !!company.user_id;
             steps.push({
                 key: s.slug, label: s.label,
                 sub: remise ? (remiseEntreprise ? "Remis à l'entreprise" : 'Remis au stagiaire')
-                    : s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
+                    : piece ? 'Pièce à fournir' : s.quiz_id ? 'QCM' : signerSub(signers, s.company_level),
                 signers, company_level: !!s.company_level, doc_type: s.doc_type,
                 signable: s.quiz_id ? false : signers.some((r) => r !== 'ORG'), quiz: !!s.quiz_id,
                 gen, total, signed, docId,
@@ -964,6 +987,7 @@ const getCompanyParcours = async (req, res) => {
                 stagiaires: (!s.company_level && !s.quiz_id)
                     ? dossiersConcernes(s).map((e) => ({ enrollment_id: e.id, learner_id: e.learner_id, name: e.name }))
                     : undefined,
+                piece: !!piece, piece_id: s.piece_id || null, // étape « pièce » (dépôt du stagiaire), gérée sur sa fiche
                 remise: !!remise, remise_id: s.remise_id || null, remiseEntreprise,
                 // Nombre de documents (migration 203) : max du type, mode, et somme des fichiers du groupe.
                 nb_documents: s.nb_documents || 0, nb_mode: s.nb_mode || 'PLAFOND', nb_fichiers: nbFichiersGroupe,
@@ -986,7 +1010,10 @@ const getCompanyParcours = async (req, res) => {
         steps.forEach((s, i) => {
             s.status = i < currentIndex ? (s.facultatif && !s._done ? 'todo' : 'done') : i === currentIndex ? 'current' : 'todo';
             // Une remise écartée pour tout le groupe est FAITE (rien n'est dû), et se dit sans objet.
-            s.etat = s._sansObjet ? 'SANS_OBJET' : etatDeGroupe({ done: s._done, recu: s._recu, total: s.total });
+            // Une pièce a son état à part (déposée = reçue, à vérifier — jamais « envoyée »).
+            s.etat = s._sansObjet ? 'SANS_OBJET'
+                : s.piece ? etatPieceGroupe({ total: s.total, deposes: s.gen, valides: s.signed })
+                : etatDeGroupe({ done: s._done, recu: s._recu, total: s.total });
             delete s._done; delete s._sansObjet; delete s._recu;
         });
 

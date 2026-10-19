@@ -87,8 +87,9 @@ test('LE PARCOURS D\'UNE ENTREPRISE suit la même règle, d\'après ses compteur
     assert.strictEqual(etatDeGroupe({ done: false, recu: 0, total: 2 }), 'A_FAIRE', 'préparé ≠ envoyé');
     assert.strictEqual(etatDeGroupe({ done: false, recu: 0, total: 0 }), 'SANS_OBJET', 'aucun stagiaire concerné');
     const CO = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'company.controller.js'), 'utf8');
-    // Une remise écartée pour tout le groupe se dit « sans objet » ; sinon, la règle des compteurs (sur l'ENVOI).
-    assert.match(CO, /s\.etat = s\._sansObjet \? 'SANS_OBJET' : etatDeGroupe\(\{ done: s\._done, recu: s\._recu, total: s\.total \}\);/);
+    // Une remise écartée pour tout le groupe se dit « sans objet » ; une PIÈCE a son état à part
+    // (déposée = reçue, à vérifier — jamais « envoyée », cf. etatPieceGroupe) ; sinon, la règle des compteurs.
+    assert.match(CO, /s\.etat = s\._sansObjet \? 'SANS_OBJET'\s*:\s*s\.piece \? etatPieceGroupe\(\{ total: s\.total, deposes: s\.gen, valides: s\.signed \}\)\s*:\s*etatDeGroupe\(\{ done: s\._done, recu: s\._recu, total: s\.total \}\);/);
     /* Le « remis au destinataire » : les statuts d'ENVOI (recu) pour un document / un QCM ; le DÉPÔT
        (gen) pour une remise, qui est « remise » dès qu'elle est déposée, même pas encore accusée. */
     assert.match(CO, /_recu: remise \? gen : recu,/);
