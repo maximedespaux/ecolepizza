@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
-import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, repDocumentPdfUrl,
+import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, downloadRepDocumentPdf,
   getRepRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
 import { pingAcces } from "../lib/gamification.js";
 import Card from "../components/Card.jsx";
@@ -78,6 +78,13 @@ function RepresentantEspace({ embedded = false } = {}) {
 
   async function openPreview(doc) {
     try { const r = await previewRepDocument(doc.id); setPreview({ title: r.data.title, html: r.data.html }); }
+    catch (e) { setStatus({ type: "error", message: e.message }); }
+  }
+  /* TÉLÉCHARGER, SIGNÉ OU NON : le serveur sert le PDF signé figé (qui fait foi) ou, pour un
+     document pas encore signé, le rend à la volée — « voir, c'est pouvoir télécharger ». */
+  async function telecharger(doc) {
+    const nom = `${(doc.title || "document").replace(/[\\/:*?"<>|]/g, "")}.pdf`;
+    try { await downloadRepDocumentPdf(doc.id, nom); }
     catch (e) { setStatus({ type: "error", message: e.message }); }
   }
   async function doSign({ signer_name, signature_data }) {
@@ -171,9 +178,11 @@ function RepresentantEspace({ embedded = false } = {}) {
                   </span>
                   <Badge tone={tone}>{lbl}</Badge>
                   <button className="btn sm ghost" onClick={() => openPreview(d)}><Icon name="eye" size={15} /> Aperçu</button>
-                  {/* UNE FOIS SIGNÉ, l'entreprise récupère SON exemplaire (PDF signé, scellé + contre-
-                      signé par l'organisme) — le document qui fait foi. */}
-                  {signed && <button className="btn sm ghost" onClick={() => window.open(repDocumentPdfUrl(d.id), "_blank", "noopener")} title="Télécharger le PDF signé"><Icon name="download" size={15} /> Télécharger</button>}
+                  {/* TÉLÉCHARGER, SIGNÉ OU NON : signé, c'est l'exemplaire qui fait foi (PDF scellé +
+                      contre-signé par l'organisme) ; pas encore signé, une copie de ce qu'on demande
+                      de signer, rendue à la volée. Voir, c'est pouvoir télécharger : l'aperçu ci-dessus
+                      l'autorise déjà. */}
+                  <button className="btn sm ghost" onClick={() => telecharger(d)} title={signed ? "Télécharger le PDF signé" : "Télécharger le document"}><Icon name="download" size={15} /> Télécharger</button>
                   {!signed && stamp && <button className="btn sm primary" onClick={() => signWithStamp(d)} title="Signer avec le cachet enregistré"><Icon name="check" size={15} /> Signer</button>}
                   {!signed && <button className="btn sm ghost" onClick={() => setSigning(d)}><Icon name="pencil" size={15} /> {stamp ? "Dessiner" : "Signer"}</button>}
                 </div>
