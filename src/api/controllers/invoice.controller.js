@@ -9,8 +9,9 @@ const { renderTemplateHtml, avecPapierEnTete } = require('../lib/htmlfill.js');
 const { decrypt } = require('../lib/crypto.js'); // identifiant France Travail de l'acheteur (migration 170)
 const { findMissingTokens } = require('../lib/tokens.js');
 const { htmlToPdf } = require('../lib/docxpdf.js');
-const { loadEmitter, resolveEmitter, nextNumberForEmitter, rendreLeNumero } = require('../lib/emitter.js');
+const { loadEmitter, resolveEmitter, nextNumberForEmitter } = require('../lib/emitter.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+const { supprimerFactureParId } = require('../lib/suppressionFacture.js');
 const { DATE_SESSION, FACTURES_DU_DOSSIER, BROUILLONS_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
 /* Les montants arrivent TAPÉS, en français : « 315,93 ». `Number()` n'y voyait rien — une ligne
    ainsi saisie était refusée, un paiement aussi, et une part de règlement disparaissait (cf. le
@@ -685,47 +686,19 @@ const deleteInvoice = async (req, res) => {
     const orgId = req.user.organization_id;
     try {
         const conn = db.promise();
-        let inv;
-        try {
-            [[inv]] = await conn.query(
-                'SELECT id, number, status, billing_profile_id FROM invoice WHERE id = ? AND organization_id = ?',
-                [req.params.id, orgId]);
-        } catch (e) {
-            // Sans la migration 113, aucune entité émettrice : il n'y a pas de compteur à reculer.
-            if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e;
-            [[inv]] = await conn.query(
-                'SELECT id, number, status, NULL AS billing_profile_id FROM invoice WHERE id = ? AND organization_id = ?',
-                [req.params.id, orgId]);
-        }
-        if (!inv) return res.status(404).json({ message: 'Document introuvable.' });
-        await conn.query('DELETE FROM invoice WHERE id = ? AND organization_id = ?', [inv.id, orgId]);
-
-        // La facture d'une vente boutique/caisse est le PENDANT d'une ou plusieurs lignes de vente
-        // (material_sale), liées par `invoice_id` (migration 069). `invoice_line` et `payment`
-        // partent par cascade (schema.sql), mais material_sale n'a PAS de clé étrangère : sans ce
-        // nettoyage, son montant RESTE en comptabilité (« Ventes de matériel ») alors que la facture
-        // a disparu. On retire donc la vente liée. Le stock n'est PAS remonté, comme à la suppression
-        // d'une vente (deleteSale) : supprimer la facture corrige le chiffre, pas l'inventaire.
-        let ventesRetirees = 0;
-        if (await colonneExiste(conn, 'material_sale', 'invoice_id')) {
-            const [r] = await conn.query(
-                'DELETE FROM material_sale WHERE invoice_id = ? AND organization_id = ?', [inv.id, orgId]);
-            ventesRetirees = r.affectedRows || 0;
-        }
-
-        const brouillon = inv.status === 'BROUILLON';
-        const sort = brouillon
-            ? await rendreLeNumero(conn, orgId, inv.billing_profile_id, inv.number)
-            : { rendu: false, raison: 'emis' };
-        logAudit(req, 'invoice.delete', 'Invoice', inv.id, { libelle: inv.number });
+        // Cœur partagé avec la suppression d'une vente boutique (lib/suppressionFacture.js) : retire la
+        // facture, ses lignes de vente liées (material_sale, sinon leur montant resterait en
+        // comptabilité), règle le compteur et journalise.
+        const r = await supprimerFactureParId(conn, orgId, req.params.id, req);
+        if (!r.trouve) return res.status(404).json({ message: 'Document introuvable.' });
         const SUITE = {
-            emis: `Son numéro ${inv.number} ne sera pas repris : le document avait été émis.`,
-            pas_le_dernier: `Son numéro ${inv.number} ne sera pas repris : un numéro plus récent a déjà été donné.`,
-            autre_gabarit: `Son numéro ${inv.number} ne sera pas repris : il ne suit plus le format de numéro de son entité.`,
+            emis: `Son numéro ${r.number} ne sera pas repris : le document avait été émis.`,
+            pas_le_dernier: `Son numéro ${r.number} ne sera pas repris : un numéro plus récent a déjà été donné.`,
+            autre_gabarit: `Son numéro ${r.number} ne sera pas repris : il ne suit plus le format de numéro de son entité.`,
         };
-        const suite = sort.rendu ? `Le prochain document reprendra le numéro ${inv.number}.` : SUITE[sort.raison] || '';
-        const venteSuite = ventesRetirees ? ' La vente liée a été retirée de la comptabilité.' : '';
-        res.status(200).json({ success: true, numero_rendu: !!sort.rendu, ventes_retirees: ventesRetirees, message: `Document supprimé.${suite ? ` ${suite}` : ''}${venteSuite}` });
+        const suite = r.numero_rendu ? `Le prochain document reprendra le numéro ${r.number}.` : SUITE[r.raison] || '';
+        const venteSuite = r.ventes_retirees ? ' La vente liée a été retirée de la comptabilité.' : '';
+        res.status(200).json({ success: true, numero_rendu: r.numero_rendu, ventes_retirees: r.ventes_retirees, message: `Document supprimé.${suite ? ` ${suite}` : ''}${venteSuite}` });
     } catch (err) {
         console.error('Erreur suppression facture :', err);
         res.status(400).json({ message: 'Erreur suppression' });

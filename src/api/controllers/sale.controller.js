@@ -13,6 +13,7 @@ const { montantFr } = require('../lib/montants.js');
    caisse calcule le même : chacun arrondissait le sien, et un article à 1,00 € HT à 5,5 % coûtait
    1,06 € à l'écran, 1,05 € ici. */
 const { totalFacture } = require('../lib/ttc.js');
+const { supprimerFactureParId } = require('../lib/suppressionFacture.js');
 
 /** Une remise en % : vide → 0 (comme avant) ; illisible → `null`, que l'appelant REFUSE ; sinon
  *  bornée à [0, 100]. `Number(v) || 0` faisait d'une remise « 12,5 » une remise NULLE : la vente
@@ -124,20 +125,44 @@ const createSale = async (req, res) => {
 };
 
 /**
- * DELETE /api/ventes/:id
+ * DELETE /api/ventes/:id — supprime une ligne de vente, et la facture liée si c'était sa DERNIÈRE.
+ *
+ * Miroir de la suppression d'une facture (qui retire toutes ses ventes) : une facture boutique et ses
+ * lignes de vente sont une même transaction. On ne retire la facture QUE lorsqu'on vient de supprimer
+ * sa dernière ligne — une facture couvre parfois plusieurs articles, et elle reste la preuve des
+ * lignes encore présentes. Une vente directe (createSale) ou rapide (sellItem) n'a pas de facture :
+ * rien ne la suit alors.
  */
-const deleteSale = (req, res) => {
-    db.query(
-        'DELETE FROM material_sale WHERE id = ? AND organization_id = ?',
-        [req.params.id, req.user.organization_id],
-        (err) => {
-            if (err) {
-                console.error('Erreur suppression vente :', err);
-                return res.status(400).json({ message: 'Erreur suppression' });
-            }
-            res.status(200).json({ success: true, message: 'Vente supprimée' });
+const deleteSale = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        // Le lien vers la facture se lit AVANT la suppression (migration 069 ; absente → pas de lien).
+        let invoiceId = null;
+        if (await saleHasInvoiceLink(conn)) {
+            const [[v]] = await conn.query(
+                'SELECT invoice_id FROM material_sale WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+            invoiceId = v ? (v.invoice_id || null) : null;
         }
-    );
+        await conn.query('DELETE FROM material_sale WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
+
+        // Sa facture n'a plus de ligne de vente ? Alors elle n'a plus d'objet : on la retire (elle
+        // emporte ses invoice_line et paiements par cascade). Cœur partagé, lib/suppressionFacture.js.
+        let factureSupprimee = null;
+        if (invoiceId) {
+            const [[reste]] = await conn.query(
+                'SELECT COUNT(*) AS n FROM material_sale WHERE invoice_id = ? AND organization_id = ?', [invoiceId, orgId]);
+            if (Number(reste.n) === 0) {
+                const r = await supprimerFactureParId(conn, orgId, invoiceId, req);
+                if (r.trouve) factureSupprimee = r.number;
+            }
+        }
+        const suffixe = factureSupprimee ? ` La facture liée (${factureSupprimee}) a aussi été supprimée.` : '';
+        res.status(200).json({ success: true, facture_supprimee: factureSupprimee, message: `Vente supprimée.${suffixe}` });
+    } catch (err) {
+        console.error('Erreur suppression vente :', err);
+        res.status(400).json({ message: 'Erreur suppression' });
+    }
 };
 
 /**

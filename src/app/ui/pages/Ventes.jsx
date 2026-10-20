@@ -246,8 +246,22 @@ function Ventes() {
     } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
 
-  async function remove(id) {
-    try { await deleteSale(id); loadSales(); } catch (err) { setStatus({ type: "error", message: err.message }); }
+  // Supprimer une ligne de vente peut aussi supprimer sa FACTURE (quand c'est sa dernière ligne) :
+  // on prévient AVANT, et le message du serveur dit après ce qui est parti.
+  async function remove(s, g) {
+    const derniereLigne = g && g.lines.length === 1;
+    let question = `Supprimer « ${s.product} » (${euro(Number(s.amount) * (s.quantity || 1))}) ?`;
+    if (s.invoice_number) {
+      question += derniereLigne
+        ? `\n\nC'est la dernière ligne de la facture ${s.invoice_number} : la facture sera supprimée elle aussi.`
+        : `\n\nCette ligne appartient à la facture ${s.invoice_number}, qui est conservée (ses autres lignes restent).`;
+    }
+    if (!window.confirm(question)) return;
+    try {
+      const r = await deleteSale(s.id);
+      loadSales();
+      if (r && r.message) setStatus({ type: "success", message: r.message });
+    } catch (err) { setStatus({ type: "error", message: err.message }); }
   }
 
   return (
@@ -656,7 +670,7 @@ function SalesHistory({ sales, onRemove, onDownload }) {
                     <span className="prix mono">{euro(Number(s.amount) * (s.quantity || 1))}</span>
                     <button className="iconbtn del" title="Supprimer cette ligne"
                       aria-label={`Supprimer ${s.product}`}
-                      onClick={(e) => { e.stopPropagation(); onRemove(s.id); }}><Icon name="trash" size={14} /></button>
+                      onClick={(e) => { e.stopPropagation(); onRemove(s, g); }}><Icon name="trash" size={14} /></button>
                   </div>
                 ))}
               </div>
