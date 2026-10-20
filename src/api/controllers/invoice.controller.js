@@ -507,8 +507,20 @@ const createInvoice = async (req, res) => {
         // historique par type et par année.
         const emetteur = await resolveEmitter(conn, req.user.organization_id, req.body.billing_profile_id);
         const year = new Date().getFullYear();
+        /* NUMÉRO PERSONNALISÉ (optionnel, demandé le 2026-10-20, tous types). Rempli → on l'emploie TEL
+           QUEL et on NE TOUCHE PAS au compteur de la séquence (choix de l'école : le numéro perso vit
+           HORS séquence). Vide → numérotation automatique, comme avant. ⚠️ La loi impose une séquence
+           CONTINUE pour les factures émises ; un numéro perso reste à la charge de l'école (l'écran le
+           rappelle). `uq_invoice_number` porte sur le numéro SEUL (toutes entités) : on vérifie avant
+           d'écrire, et ER_DUP_ENTRY reste le dernier rempart (cf. le catch) contre une course. */
         let number;
-        if (emetteur) {
+        const numeroPerso = String(req.body.number || '').trim();
+        if (numeroPerso) {
+            if (numeroPerso.length > 40) return res.status(422).json({ error: 'Numéro trop long : 40 caractères au plus.' });
+            const [[dup]] = await conn.query('SELECT 1 AS x FROM invoice WHERE number = ? LIMIT 1', [numeroPerso]);
+            if (dup) return res.status(409).json({ error: `Le numéro « ${numeroPerso} » existe déjà.` });
+            number = numeroPerso;
+        } else if (emetteur) {
             number = await nextNumberForEmitter(conn, emetteur);
         } else {
             const [cnt] = await conn.query(
@@ -558,6 +570,8 @@ const createInvoice = async (req, res) => {
         logAudit(req, 'invoice.create', 'Invoice', invoiceId);
         res.status(201).json({ message: 'Document créé', number });
     } catch (err) {
+        // Course sur un numéro personnalisé : la contrainte uq_invoice_number a tranché.
+        if (err && err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ce numéro de document existe déjà.' });
         console.error('Erreur création facture :', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }

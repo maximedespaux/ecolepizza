@@ -38,7 +38,7 @@ const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" })
    illisible, il est signalé et bloque la création. */
 const montantDeLigne = (l) => (l.amount_net === "" || l.amount_net == null ? 0 : lireMontant(l.amount_net));
 const montantIllisible = (l) => !Number.isFinite(montantDeLigne(l));
-const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, invoice_date: "", due_date: "", template_slug: modele, lines: [] });
+const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, invoice_date: "", due_date: "", number: "", template_slug: modele, lines: [] });
 const periodeSession = (s) => (s.fin && s.fin !== s.debut ? `du ${dateFr(s.debut)} au ${dateFr(s.fin)}` : dateFr(s.debut));
 
 const MOYENS_DEFAUT = "Espèces,CB,Virement,Chèque";
@@ -196,6 +196,7 @@ function Factures() {
       const r = await createInvoice({
         type: form.type, company_id: form.company_id || null,
         tva_exoneree: form.tva_exoneree, invoice_date: form.invoice_date || null, due_date: form.due_date || null,
+        number: form.number ? form.number.trim() : null,
         // Le montant LU part, pas la saisie : la base garde le point (cf. lib/montantSaisi.js).
         lines: form.lines.map((l) => ({ ...l, amount_net: l.amount_net === "" ? "" : montantDeLigne(l) })),
         template_slug: form.template_slug || null,
@@ -345,6 +346,15 @@ function Factures() {
                   limite de paiement ({Échéance facture}). Date de facture vide → la date du jour. */}
               <Field label="Date de facture" type="date" value={form.invoice_date} onChange={set("invoice_date")} />
               <Field label="Échéance" type="date" value={form.due_date} onChange={set("due_date")} />
+            </div>
+            {/* NUMÉRO PERSONNALISÉ (optionnel) : vide = numérotation automatique. On rappelle que la
+                loi impose une séquence CONTINUE pour les factures émises — un numéro choisi à la main
+                reste à la charge de l'école. */}
+            <div className="field">
+              <label htmlFor="fac-numero">Numéro (optionnel)</label>
+              <input id="fac-numero" className="inp" value={form.number} onChange={set("number")} maxLength={40}
+                placeholder="Automatique si vide (ex. BTQ-2026-10-0001)" />
+              <span className="hint">Vide = numérotation automatique. Un numéro choisi est à votre charge : la loi impose une séquence continue pour les factures émises.</span>
             </div>
 
             {/* QUI FACTURER : les stagiaires d'une SEMAINE, session par session (demandé le 2026-09-30).
