@@ -38,7 +38,7 @@ const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" })
    illisible, il est signalé et bloque la création. */
 const montantDeLigne = (l) => (l.amount_net === "" || l.amount_net == null ? 0 : lireMontant(l.amount_net));
 const montantIllisible = (l) => !Number.isFinite(montantDeLigne(l));
-const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, invoice_date: "", due_date: "", template_slug: modele, lines: [] });
+const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, invoice_date: "", due_date: "", number: "", template_slug: modele, lines: [] });
 const periodeSession = (s) => (s.fin && s.fin !== s.debut ? `du ${dateFr(s.debut)} au ${dateFr(s.fin)}` : dateFr(s.debut));
 
 const MOYENS_DEFAUT = "Espèces,CB,Virement,Chèque";
@@ -169,6 +169,14 @@ function Factures() {
   }, [sessions]);
   const formTotal = form.lines.reduce((s, l) => s + (montantIllisible(l) ? 0 : montantDeLigne(l)), 0);
   const formTtc = ttcDe(formTotal, form.tva_exoneree);
+  /* LE TOTAL TTC DES FACTURES ÉMISES (carte « Émis ») = la SOMME des TTC PAR facture, avec le même
+     ttcDe que la liste, pour que la carte égale exactement la colonne. Même filtre que le total HT
+     du serveur (type FACTURE / ACOMPTE). On ne montrera le TTC que s'il DIFFÈRE du HT (TVA
+     applicable) : inutile de répéter le même nombre quand la TVA n'est pas applicable. */
+  const emisTtc = useMemo(() => (invoices || [])
+    .filter((i) => i.type === "FACTURE" || i.type === "ACOMPTE")
+    .reduce((s, i) => s + ttcDe(i.amount_net, i.tva_exoneree), 0), [invoices]);
+  const emisDiff = Math.round(emisTtc * 100) !== Math.round(Number(totals.emis) * 100);
   const modeleUnique = modeles.length === 1 ? modeles[0].slug : "";
 
   async function add(e) {
@@ -188,6 +196,7 @@ function Factures() {
       const r = await createInvoice({
         type: form.type, company_id: form.company_id || null,
         tva_exoneree: form.tva_exoneree, invoice_date: form.invoice_date || null, due_date: form.due_date || null,
+        number: form.number ? form.number.trim() : null,
         // Le montant LU part, pas la saisie : la base garde le point (cf. lib/montantSaisi.js).
         lines: form.lines.map((l) => ({ ...l, amount_net: l.amount_net === "" ? "" : montantDeLigne(l) })),
         template_slug: form.template_slug || null,
@@ -314,7 +323,10 @@ function Factures() {
         {/* Trois tons distincts : le filet coloré ne sert à rien s'il est le même partout.
             Bleu pour ce qui est ÉMIS (un fait), vert pour ce qui est ENTRÉ, ambre pour ce qui
             est ATTENDU — c'est la seule des trois qui appelle une action. */}
-        <Kpi label="Émis (factures)" value={euro(totals.emis)} icon="receipt" tone="blue" />
+        <Kpi label="Émis (factures)"
+          value={emisDiff ? `${euro(totals.emis)} HT` : euro(totals.emis)}
+          sub={emisDiff ? `${euro(emisTtc)} TTC` : undefined}
+          icon="receipt" tone="blue" />
         <Kpi label="Encaissé" value={euro(totals.paye)} icon="euro" tone="green" />
         <Kpi label="Reste dû" value={euro(totals.impaye)} icon="clock" tone="gold" />
       </div>
@@ -334,6 +346,15 @@ function Factures() {
                   limite de paiement ({Échéance facture}). Date de facture vide → la date du jour. */}
               <Field label="Date de facture" type="date" value={form.invoice_date} onChange={set("invoice_date")} />
               <Field label="Échéance" type="date" value={form.due_date} onChange={set("due_date")} />
+            </div>
+            {/* NUMÉRO PERSONNALISÉ (optionnel) : vide = numérotation automatique. On rappelle que la
+                loi impose une séquence CONTINUE pour les factures émises — un numéro choisi à la main
+                reste à la charge de l'école. */}
+            <div className="field">
+              <label htmlFor="fac-numero">Numéro (optionnel)</label>
+              <input id="fac-numero" className="inp" value={form.number} onChange={set("number")} maxLength={40}
+                placeholder="Automatique si vide (ex. BTQ-2026-10-0001)" />
+              <span className="hint">Vide = numérotation automatique. Un numéro choisi est à votre charge : la loi impose une séquence continue pour les factures émises.</span>
             </div>
 
             {/* QUI FACTURER : les stagiaires d'une SEMAINE, session par session (demandé le 2026-09-30).
