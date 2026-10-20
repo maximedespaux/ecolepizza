@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (363 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-20** : **2870 tests — 2863 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-20** : **2875 tests — 2868 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,21 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**211 est À JOUER** (`211_invoice_date.sql`, la DATE D'UNE FACTURE, distincte de l'échéance — demandé le 2026-10-20).
+Une colonne `invoice_date` (date, nullable) sur `invoice`. La date d'émission était la date de CRÉATION en base
+(`created_at`), que l'école ne choisit pas ; elle peut désormais la SAISIR à la création (champ « Date de facture »
+sur /factures), distincte de l'ÉCHÉANCE (`due_date`, la date limite de paiement). Le jeton {Date facture} (qui
+existait et lisait created_at) et la date Factur-X lisent désormais `COALESCE(invoice_date, created_at)` (sondé dans
+`loadInvoiceData`). NULL = pas de date choisie → created_at, comme avant. Pas de clé étrangère (une date pure). Sans
+la migration, rien ne casse : `createInvoice` ne l'écrit pas (sonde `colonneExiste`, colonne optionnelle de l'INSERT),
+et {Date facture} / la liste retombent sur created_at. **Elle se vérifie par l'API, sans SQL** : créer une facture
+avec une date d'émission choisie, puis son aperçu/PDF porte cette date (jeton {Date facture}) et non celle du jour. Ou
+une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='invoice' AND column_name='invoice_date';`
+⚠️ Son revert efface les dates saisies : {Date facture} retombe sur created_at. Tests : `facture-date.test.js`. (La
+liste /factures montre AUSSI HT ET TTC dans la même PR — front seul, sans migration.)
 
 **210 est À JOUER** (`210_compta_entite.sql`, la COMPTABILITÉ PAR ENTITÉ ÉMETTRICE — demandé le 2026-10-20).
 Une colonne `billing_profile_id` (nullable, FK ON DELETE SET NULL) sur `material_sale`, `revenue_extra`, `expense`
