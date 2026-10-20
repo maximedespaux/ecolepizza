@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (365 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-20** : **2889 tests — 2882 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (366 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-20** : **2897 tests — 2890 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,27 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**212 est À JOUER** (`212_billing_profile_compta.sql`, des PARAMÈTRES DE GESTION PAR ENTITÉ ÉMETTRICE lus par
+la Comptabilité — demandé le 2026-10-20). Cinq colonnes sur `billing_profile` : `revenue_inscriptions`,
+`revenue_materiel`, `revenue_divers` (tinyint(1), défaut 1) et `compta_targets` (texte JSON, nullable),
+`compta_dividende` (decimal, nullable). La Comptabilité se filtre par entité (210), mais deux choses restaient
+GLOBALES : les CIBLES (budgets de dépenses % + dividende) et l'idée qu'une entité a les trois sources de CA. Or
+une boutique ne fait QUE du matériel. On règle désormais, par entité dans Paramètres → Facturation : les SOURCES
+qu'elle a (sur la Comptabilité, une source non cochée est MASQUÉE quand cette entité est sélectionnée — jamais si
+elle porte un montant réel, `streamsAMontrer`), et des CIBLES propres, tout-ou-rien (`compta_targets`/`compta_dividende`
+NULL = cibles globales de l'organisme, comme avant). Règles pures dans `lib/compta.js` (streamsDeLentite,
+streamsAMontrer, ciblesDeLentite, ciblesPourBase) + liste front partagée `src/app/ui/lib/compta.js`. Sans la
+migration, rien ne casse : les colonnes optionnelles ne sont ni écrites ni lues (`colonneExiste` / `champs212Presents`),
+la Comptabilité reste globale et l'écran Facturation masque les nouveaux champs (`gestionDispo`). **Elle se vérifie
+par l'API, sans SQL** : enregistrer une entité « matériel seul » dans Facturation, puis `GET /api/emetteurs` rend
+`revenue_inscriptions: 0`, et `GET /api/comptabilite?annee=…&entite=<id>` rend `streams.inscriptions: false`. Ou une
+requête, qui doit rendre 5 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='billing_profile' AND column_name IN ('revenue_inscriptions','revenue_materiel','revenue_divers','compta_targets','compta_dividende');`
+⚠️ Son revert retire les cinq colonnes : les sources cochées et les cibles par entité sont perdues (la Comptabilité
+revient aux cibles globales et aux trois sources partout) ; les factures et écritures ne sont pas touchées. Tests :
+`compta-sources-cibles-entite.test.js`.
 
 **211 est À JOUER** (`211_invoice_date.sql`, la DATE D'UNE FACTURE, distincte de l'échéance — demandé le 2026-10-20).
 Une colonne `invoice_date` (date, nullable) sur `invoice`. La date d'émission était la date de CRÉATION en base

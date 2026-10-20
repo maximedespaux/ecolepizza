@@ -4,6 +4,7 @@ import Card from "./Card.jsx";
 import {
   getEmitters, createEmitter, updateEmitter, deleteEmitter, reprendreNumerotation,
 } from "../api/apiClient.js";
+import { CATS, CA_SOURCES } from "../lib/compta.js";
 
 /**
  * Gestion des ENTITÉS ÉMETTRICES — les identités de vendeur sous lesquelles l'organisme facture.
@@ -22,6 +23,9 @@ const VIDE = {
   naf_ape: "", nda: "", address: "", zip_code: "", town: "", email: "", phone: "",
   iban: "", bic: "", bank_name: "",
   number_format: "", tva_applies: 1, payment_methods: "", next_number: 1,
+  // Gestion par entité (migration 212). Trois sources par défaut (comme avant) ; pas de cibles propres.
+  revenue_inscriptions: 1, revenue_materiel: 1, revenue_divers: 1,
+  cibles_actives: false, compta_targets: {}, compta_dividende: "",
 };
 
 /**
@@ -101,8 +105,21 @@ const JETONS_NUMERO = [
   ["{DD}", "Jour"],
 ];
 
-function EmitterForm({ initial, onCancel, onSave, saving }) {
-  const [form, setForm] = useState(() => ({ ...VIDE, ...initial }));
+function EmitterForm({ initial, onCancel, onSave, saving, gestionDispo }) {
+  const [form, setForm] = useState(() => {
+    const f = { ...VIDE, ...initial };
+    // Sources de CA : 0/1, défaut 1 (une entité a tout, comme avant).
+    for (const s of CA_SOURCES) f[s.champ] = initial && initial[s.champ] != null ? (initial[s.champ] ? 1 : 0) : 1;
+    // Cibles : la base rend `compta_targets` en CHAÎNE JSON ; l'écran les veut en objet de chaînes.
+    const t = {};
+    if (initial && initial.compta_targets) {
+      try { const o = JSON.parse(initial.compta_targets); for (const c of CATS) if (o[c.v] != null) t[c.v] = String(o[c.v]); } catch { /* chaîne illisible : on repart de zéro */ }
+    }
+    f.compta_targets = t;
+    f.compta_dividende = initial && initial.compta_dividende != null ? String(initial.compta_dividende) : "";
+    f.cibles_actives = !!(initial && (initial.compta_targets || initial.compta_dividende != null));
+    return f;
+  });
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const formatOk = !form.number_format || /\{SEQ(?::\d+)?\}/.test(form.number_format);
 
@@ -173,6 +190,56 @@ function EmitterForm({ initial, onCancel, onSave, saving }) {
           <input type="checkbox" checked={!!form.tva_applies} onChange={(e) => set("tva_applies", e.target.checked ? 1 : 0)} />
           Appliquer la TVA (décochez pour une facturation exonérée)
         </label>
+
+        {/* GESTION PAR ENTITÉ (migration 212) : lue par la Comptabilité quand cette entité est
+            sélectionnée. Masquée tant que la migration n'est pas jouée (les champs seraient ignorés). */}
+        {gestionDispo && (
+          <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--border-soft)", paddingTop: 14, marginTop: 4 }}>
+            <label style={{ display: "block", fontWeight: 600, marginBottom: 2 }}>Sources de chiffre d'affaires (Comptabilité)</label>
+            <p className="hint" style={{ margin: "0 0 8px" }}>
+              Les sources que cette entité a. Sur la Comptabilité, quand on la sélectionne, les sources décochées sont
+              masquées (ex. une boutique ne fait que de la vente de matériel). Une source avec un montant réel reste
+              toujours affichée.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+              {CA_SOURCES.map((s) => (
+                <label key={s.champ} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form[s.champ]} onChange={(e) => set(s.champ, e.target.checked ? 1 : 0)} />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 16, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!form.cibles_actives} onChange={(e) => set("cibles_actives", e.target.checked)} />
+              <b>Cibles de gestion propres à cette entité</b>
+            </label>
+            <p className="hint" style={{ margin: "4px 0 0" }}>
+              Sinon, cette entité suit les cibles globales de l'organisme (réglées sur la page Comptabilité).
+            </p>
+            {form.cibles_actives && (
+              <div style={{ marginTop: 10, display: "grid", gap: 8, maxWidth: 420 }}>
+                {CATS.map((c) => (
+                  <div key={c.v} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13 }}>{c.label}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <input className="inp" style={{ width: 64, padding: "4px 6px" }} inputMode="decimal" aria-label={`Cible ${c.label}`}
+                        value={form.compta_targets[c.v] ?? ""}
+                        onChange={(e) => set("compta_targets", { ...form.compta_targets, [c.v]: e.target.value })} />%
+                    </span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
+                  <b style={{ fontSize: 13 }}>Dividendes visés</b>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <input className="inp" style={{ width: 64, padding: "4px 6px" }} inputMode="decimal" aria-label="Dividendes visés"
+                      value={form.compta_dividende} onChange={(e) => set("compta_dividende", e.target.value)} />% du CA
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <p className="sub" style={{ margin: "4px 0 0" }}>
         Prochain numéro : <span className="mono">{apercuNumero(form.number_format, form.next_number || 1)}</span>
@@ -274,6 +341,9 @@ export default function BillingProfiles({ onError }) {
         <EmitterForm
           initial={editing === "new" ? {} : editing}
           saving={saving}
+          /* Les champs de gestion par entité (212) ne s'affichent que si la colonne existe —
+             sinon ils seraient enregistrés dans le vide. On le déduit des lignes lues. */
+          gestionDispo={rows.length === 0 || rows.some((r) => "revenue_materiel" in r)}
           onCancel={() => setEditing(null)}
           onSave={save}
         />

@@ -16,7 +16,21 @@ const { colonneEntite } = require('../lib/entiteEcriture.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
     REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
+    streamsDeLentite, ciblesDeLentite,
 } = require('../lib/compta.js');
+
+/* Sources de CA et cibles PROPRES de l'entité sélectionnée (migration 212), pour la Comptabilité.
+ * « Toutes » (entite nul) ou 212 non jouée → trois sources, cibles globales : le comportement d'avant.
+ * Rend { streams, cibles } où cibles est null tant que l'entité n'a pas les siennes. Tolérant. */
+async function gestionDeLentite(conn, orgId, entite) {
+    if (!entite || !(await colonneExiste(conn, 'billing_profile', 'revenue_materiel'))) {
+        return { streams: streamsDeLentite(null), cibles: null };
+    }
+    const [[bp]] = await conn.query(
+        `SELECT revenue_inscriptions, revenue_materiel, revenue_divers, compta_targets, compta_dividende
+         FROM billing_profile WHERE id = ? AND organization_id = ?`, [entite, orgId]);
+    return { streams: streamsDeLentite(bp), cibles: ciblesDeLentite(bp) };
+}
 
 const num = (v) => (v == null ? 0 : Number(v));
 const currentYear = () => new Date().getFullYear();
@@ -269,10 +283,16 @@ const getGestion = async (req, res) => {
         const entite = parEntite ? (String(req.query.entite || '').trim() || null) : null;
         const clauseEnt = entite ? ' AND billing_profile_id = ?' : '';
         const paramEnt = entite ? [entite] : [];
-        const [year, settings] = await Promise.all([
+        const [year, settings, gestionEntite] = await Promise.all([
             computePeriode(conn, orgId, annee, mois, entite),
             loadSettings(conn, orgId),
+            gestionDeLentite(conn, orgId, entite),
         ]);
+        /* Cibles EFFECTIVES : celles de l'entité si elle en a (212), sinon les cibles GLOBALES de
+           l'organisme (accounting_settings) — comportement d'avant. */
+        const cEnt = gestionEntite.cibles;
+        const targetsEff = cEnt && cEnt.targets ? mergeTargets(cEnt.targets) : settings.targets;
+        const dividendeEff = cEnt && cEnt.dividende != null ? cEnt.dividende : settings.dividendeCible;
         /* LES LISTES SUIVENT LE MOIS, ELLES AUSSI. Elles restaient annuelles quand les totaux
            passaient au mois : on lisait « 2 300 € de dépenses en mars » au-dessus d'une liste de
            quarante lignes couvrant toute l'année, sans moyen de retrouver les trois qui font le
@@ -306,14 +326,14 @@ const getGestion = async (req, res) => {
         const postes = EXPENSE_CATEGORIES.map((cat) => {
             const total = year.postes[cat];
             const pct = ca > 0 ? Math.round((total / ca) * 1000) / 10 : 0;
-            const cible = settings.targets[cat];
+            const cible = targetsEff[cat];
             const statut = statutFor(pct, cible);
             return { categorie: cat, label: CATEGORY_LABELS[cat], total, pct, cible, statut, conseil: conseilFor(cat, statut, pct, cible) };
         });
 
         const marge = year.marge;
         const margePct = ca > 0 ? Math.round((marge / ca) * 1000) / 10 : 0;
-        const dividendeCible = settings.dividendeCible || DEFAULT_DIVIDENDE_CIBLE;
+        const dividendeCible = dividendeEff || DEFAULT_DIVIDENDE_CIBLE;
         const dividendeVise = Math.max(0, Math.round(ca * (dividendeCible / 100)));
         const dividendePossible = Math.max(0, Math.round(marge));
         const dividendeRealiste = Math.min(dividendeVise, dividendePossible);
@@ -335,6 +355,11 @@ const getGestion = async (req, res) => {
                 /* Comptabilité PAR ENTITÉ (migration 210) : `parEntite` dit si la colonne existe (sinon
                    l'écran masque le sélecteur) ; `entite` est l'entité en cours de consultation (null = toutes). */
                 parEntite, entite,
+                /* Gestion PAR ENTITÉ (migration 212) : `streams` = les sources de CA déclarées de
+                   l'entité sélectionnée (l'écran masque les autres, sauf montant réel) ; `ciblesEntite`
+                   dit que les cibles affichées sont propres à l'entité (réglées dans Facturation,
+                   donc en lecture seule ici). « Toutes » → trois sources, cibles globales. */
+                streams: gestionEntite.streams, ciblesEntite: !!gestionEntite.cibles,
                 ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
                 postes, totalDepenses: year.depensesTotal,
                 marge, margePct,
@@ -380,12 +405,14 @@ const getPerformance = async (req, res) => {
         /* Deux années entières : sans la liste des dossiers, qui porte des noms de stagiaires et
            que cet onglet n'affiche pas. */
         const sansListes = (periode) => { const reste = { ...periode }; delete reste.inscriptions; return reste; };
-        const [current, previous] = (await Promise.all([
+        const [current, previous, gestionEntite] = await Promise.all([
             computePeriode(conn, orgId, annee, 0, entite),
             computePeriode(conn, orgId, annee - 1, 0, entite),
-        ])).map(sansListes);
+            gestionDeLentite(conn, orgId, entite),
+        ]);
         const postesLabels = EXPENSE_CATEGORIES.map((c) => ({ categorie: c, label: CATEGORY_LABELS[c] }));
-        res.json({ data: { annee, anneePrec: annee - 1, parEntite, entite, current, previous, postesLabels } });
+        res.json({ data: { annee, anneePrec: annee - 1, parEntite, entite, streams: gestionEntite.streams,
+            current: sansListes(current), previous: sansListes(previous), postesLabels } });
     } catch (err) {
         console.error('Erreur comptabilité (performance) :', err);
         res.status(500).json({ error: 'Internal Server Error' });
