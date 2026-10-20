@@ -344,6 +344,9 @@ const checkout = async (req, res) => {
         const hasLineDiscount = await hasColumn(conn, 'invoice_line', 'discount_pct');
         const hasSaleCompany = await hasColumn(conn, 'material_sale', 'company_id');
         const hasInvEmitter = await hasColumn(conn, 'invoice', 'billing_profile_id');
+        // Même entité sur la VENTE que sur sa facture (migration 210) : la Comptabilité par entité
+        // compte le CA boutique par `material_sale.billing_profile_id`, pas en devinant l'activité.
+        const hasSaleEmitter = await hasColumn(conn, 'material_sale', 'billing_profile_id');
         /* TVA en centimes entiers (192) : sondée ICI, avant le total, pour que le total vérifié soit
            celui que la facture imprimera — elle naîtra avec `tva_centimes`, écrit plus bas par ce
            code, jamais par défaut (cf. ventilerTva). L'écran le sait par ses réglages. */
@@ -456,6 +459,7 @@ const checkout = async (req, res) => {
             const val = [crypto.randomUUID(), orgId, null /*date via CURDATE*/, it.name, it.category, ln._qty, ln._unitNet.toFixed(2), learner_id || null, note];
             if (hasSaleCompany) { col.push('company_id'); val.push(company_id || null); }
             if (hasInvLink) { col.push('invoice_id', 'invoice_number'); val.push(invoiceId, number); }
+            if (hasSaleEmitter) { col.push('billing_profile_id'); val.push(emetteur ? emetteur.id : null); }
             const ph = col.map((c) => (c === 'date' ? 'CURDATE()' : '?'));
             const args = val.filter((_, i) => col[i] !== 'date');
             await conn.query(

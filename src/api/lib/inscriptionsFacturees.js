@@ -19,15 +19,26 @@ const DATE_SESSION = 'COALESCE(s.start_date, DATE_ADD(MAKEDATE(s.year, 4), INTER
 
 /* Les numéros des factures et acomptes d'un STATUT donné qui désignent le dossier : sur la facture
    même, ou sur l'une de ses lignes (une facture d'entreprise en porte une par stagiaire). */
-const numerosDesFactures = (statuts) => `(SELECT GROUP_CONCAT(DISTINCT i.number ORDER BY i.number SEPARATOR ', ')
+const numerosDesFactures = (statuts, extra = '') => `(SELECT GROUP_CONCAT(DISTINCT i.number ORDER BY i.number SEPARATOR ', ')
        FROM invoice i
       WHERE i.organization_id = e.organization_id
-        AND i.type IN ('FACTURE', 'ACOMPTE') AND i.status IN (${statuts})
+        AND i.type IN ('FACTURE', 'ACOMPTE') AND i.status IN (${statuts})${extra}
         AND (i.enrollment_id = e.id OR i.id IN (SELECT il.invoice_id FROM invoice_line il WHERE il.enrollment_id = e.id)))`;
 
 /* CE QUI FAIT COMPTER UN DOSSIER : une facture ou un acompte ÉMIS. Un brouillon n'est pas encore
    une facture, un devis n'en est pas une, une facture annulée non plus. */
 const FACTURES_DU_DOSSIER = numerosDesFactures("'EMISE', 'PAYEE', 'IMPAYEE'");
+
+/* LES FACTURES DU DOSSIER, BORNÉES À UNE ENTITÉ ÉMETTRICE (billing_profile) — pour la Comptabilité
+   PAR ENTITÉ (migration 210) : seules les factures émises SOUS cette entité font compter le dossier
+   dans SON chiffre d'affaires. Rend le fragment SQL et ses paramètres (un `?` à lier à l'id de
+   l'entité ; il vit dans le SELECT, donc AVANT les paramètres du WHERE de la requête appelante).
+   Sans entité, le fragment d'origine, sans paramètre. `invoice.billing_profile_id` existe depuis la
+   113 : cette variante ne dépend donc pas de la 210. */
+function facturesDuDossierEntite(entite) {
+    if (!entite) return { sql: FACTURES_DU_DOSSIER, params: [] };
+    return { sql: numerosDesFactures("'EMISE', 'PAYEE', 'IMPAYEE'", ' AND i.billing_profile_id = ?'), params: [entite] };
+}
 /* Les BROUILLONS, pour prévenir seulement : un stagiaire déjà sur un brouillon le sera deux fois si
    on le coche encore, et le brouillon émis le fera compter. */
 const BROUILLONS_DU_DOSSIER = numerosDesFactures("'BROUILLON'");
@@ -42,4 +53,4 @@ function montantDuDossier(prixDossier, tarif) {
     return prix > 0 ? { montant: prix, source: 'dossier' } : { montant: Number(tarif) || 0, source: 'formation' };
 }
 
-module.exports = { DATE_SESSION, FACTURES_DU_DOSSIER, BROUILLONS_DU_DOSSIER, montantDuDossier };
+module.exports = { DATE_SESSION, FACTURES_DU_DOSSIER, facturesDuDossierEntite, BROUILLONS_DU_DOSSIER, montantDuDossier };

@@ -369,14 +369,17 @@ export function geocodeCarte(limit = 80, sinceId = null) {
 }
 
 // --- Comptabilité / Gestion ---
-export function getComptabilite(annee, mois) {
+export function getComptabilite(annee, mois, entite) {
   // `mois` : 1-12 pour un mois, 0 pour l'année entière. On envoie même 0 (sinon le serveur
   // retomberait sur le mois courant) ; seul `undefined` laisse le serveur choisir le défaut.
   const m = Number.isFinite(mois) ? `&mois=${mois}` : "";
-  return request(`/comptabilite?annee=${annee}${m}`);
+  // `entite` : l'id d'une entité émettrice (billing_profile), ou vide = toutes (migration 210).
+  const e = entite ? `&entite=${encodeURIComponent(entite)}` : "";
+  return request(`/comptabilite?annee=${annee}${m}${e}`);
 }
-export function getComptaPerformance(annee) {
-  return request(`/comptabilite/performance?annee=${annee}`);
+export function getComptaPerformance(annee, entite) {
+  const e = entite ? `&entite=${encodeURIComponent(entite)}` : "";
+  return request(`/comptabilite/performance?annee=${annee}${e}`);
 }
 export function createExpense(payload) {
   return request("/comptabilite/depenses", { method: "POST", body: JSON.stringify(payload) });

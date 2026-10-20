@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Card from "./Card.jsx";
 import { Icon } from "./Icon.jsx";
-import { createRevenue, createContribution } from "../api/apiClient.js";
+import { createRevenue, createContribution, getEmitters } from "../api/apiClient.js";
 import { APPORT_TYPES, apportType, moisDeLApport } from "../lib/apports.js";
 import { lireMontant } from "../lib/montantSaisi.js";
 
@@ -18,11 +18,22 @@ const today = () => new Date().toISOString().slice(0, 10);
  * courant. La formule « suivi seul » ne disait ni l'un ni l'autre.
  */
 export default function ApportForm({ partners = [], onSaved }) {
-  const [form, setForm] = useState({ partner_id: "", type: "COMMISSION", label: "", value: "", date: today() });
+  const [form, setForm] = useState({ partner_id: "", type: "COMMISSION", label: "", value: "", date: today(), billing_profile_id: "" });
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [saving, setSaving] = useState(false);
   const isCash = apportType(form.type).cash;
+  /* LES ENTITÉS ÉMETTRICES (migration 210) : un apport se rattache à l'organisme OU à la boutique —
+     « pas le même but » —, par défaut à l'entité par défaut, à changer selon le cas. Le sélecteur ne
+     paraît que s'il y en a au moins deux. Sans la 210, le rattachement est ignoré côté serveur. */
+  const [emitters, setEmitters] = useState([]);
+  useEffect(() => {
+    getEmitters().then((r) => {
+      const list = r.data || [];
+      setEmitters(list);
+      setForm((f) => ({ ...f, billing_profile_id: f.billing_profile_id || (list.find((e) => e.is_default) || {}).id || "" }));
+    }).catch(() => {});
+  }, []);
 
   async function submit() {
     if (!form.partner_id) return setError("Choisissez le partenaire.");
@@ -34,9 +45,9 @@ export default function ApportForm({ partners = [], onSaved }) {
     setError(""); setOk(""); setSaving(true);
     try {
       if (isCash) {
-        await createRevenue({ label: form.label, categorie: form.type, montant: valeur, date: form.date, partner_id: form.partner_id });
+        await createRevenue({ label: form.label, categorie: form.type, montant: valeur, date: form.date, partner_id: form.partner_id, billing_profile_id: form.billing_profile_id });
       } else {
-        await createContribution({ partner_id: form.partner_id, type: form.type, label: form.label, value: valeur, date: form.date });
+        await createContribution({ partner_id: form.partner_id, type: form.type, label: form.label, value: valeur, date: form.date, billing_profile_id: form.billing_profile_id });
       }
       // Sans date, le serveur date du jour : le message aussi.
       const mois = moisDeLApport(form.date || today());
@@ -88,6 +99,15 @@ export default function ApportForm({ partners = [], onSaved }) {
         <div className="field"><label htmlFor="ap-date">Date</label>
           <input id="ap-date" className="inp" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
       </div>
+      {emitters.length > 1 && (
+        <div className="row3" style={{ alignItems: "end" }}>
+          <div className="field"><label htmlFor="ap-entite">Entité (à qui rattacher)</label>
+            <select id="ap-entite" value={form.billing_profile_id} onChange={(e) => setForm({ ...form, billing_profile_id: e.target.value })}>
+              <option value="">Non rattachée</option>
+              {emitters.map((em) => <option key={em.id} value={em.id}>{em.label || em.legal_name}</option>)}
+            </select></div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <button className="btn primary" onClick={submit} disabled={saving}><Icon name="plus" size={15} /> {saving ? "Enregistrement…" : "Ajouter l'apport"}</button>
         <span className="hint">{isCash

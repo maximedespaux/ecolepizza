@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (363 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-19** : **2853 tests — 2846 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-20** : **2870 tests — 2863 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,27 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**210 est À JOUER** (`210_compta_entite.sql`, la COMPTABILITÉ PAR ENTITÉ ÉMETTRICE — demandé le 2026-10-20).
+Une colonne `billing_profile_id` (nullable, FK ON DELETE SET NULL) sur `material_sale`, `revenue_extra`, `expense`
+ET `partner_contribution`, à l'image d'`invoice` (113). La page Comptabilité additionnait tout l'organisme ; elle
+se filtre désormais PAR ENTITÉ (sélecteur « Toutes / Organisme / Boutique » en tête) — les FORMATIONS par la facture
+du dossier (`invoice.billing_profile_id`, 113, via `facturesDuDossierEntite`), les ventes / produits divers /
+dépenses / apports par la nouvelle colonne. La CAISSE écrit l'entité de la facture sur la vente (`hasSaleEmitter`) ;
+les dépenses, produits divers et apports de partenaires (les « cadeaux ») se rattachent À LA MAIN, par un sélecteur
+à la saisie — « pas le même but » (règle unique `colonneEntite`, lib/entiteEcriture.js, tolérante + cloisonnée par
+`belongsToOrg`). NULL = non rattachée : comptée dans « Toutes » seulement. Le filtre complet (y compris les
+formations) n'est actif qu'une fois la 210 jouée : le serveur sonde `material_sale.billing_profile_id`
+(`colonneExiste`) et, absente, IGNORE l'entité et masque le sélecteur (`parEntite: false`). ⚠️ Les ventes de caisse
+MANUELLES (`createSale`) et les ventes rapides d'inventaire (`sellItem`) ne choisissent pas d'entité : elles restent
+NON RATTACHÉES (visibles seulement dans « Toutes »). Sans la migration, rien ne casse : les saisies n'écrivent pas
+l'entité (colonne absente → non ajoutée à l'INSERT), et la page reste un total unique. **Elle se vérifie par l'API,
+sans SQL** : `GET /api/comptabilite?annee=…` rend `parEntite: true` (et non false), et choisir une entité filtre les
+chiffres. Ou une requête, qui doit rendre 4 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND column_name='billing_profile_id' AND table_name IN ('material_sale','revenue_extra','expense','partner_contribution');`
+⚠️ Son revert retire les quatre colonnes : les rattachements d'écritures aux entités sont perdus (les écritures
+restent) ; la Comptabilité revient à un total unique. Les factures gardent le leur (113). Tests : `compta-par-entite.test.js`.
 
 **209 est À JOUER** (`209_piece_remise_conditions.sql`, une CONDITION d'application sur les PIÈCES à fournir et
 les DOCUMENTS REMIS — demandé le 2026-10-19). Deux colonnes `applies_when` (longtext JSON), une sur `piece_type`,
