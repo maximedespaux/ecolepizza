@@ -55,6 +55,21 @@ function jourDe(v) {
 }
 
 /**
+ * AAAA-MM-JJ (ou une Date) → JJ/MM/AAAA, le format FRANÇAIS. Vide / méconnaissable → vide.
+ * ON DÉCOUPE LA CHAÎNE (via `jourDe`), jamais `new Date(v).getDate()` : ce dernier lit une date SANS
+ * heure comme minuit UTC puis la rend dans le fuseau local — un 16 devient un 15 à l'ouest de
+ * Greenwich. Les e-mails programmés affichaient les dates en AAAA-MM-JJ, telles que les rend
+ * `DATE_FORMAT` ; cette fonction les met en français À L'AFFICHAGE, sans toucher à la valeur qui
+ * sert au calcul de `dateCible`.
+ */
+function dateFr(v) {
+    const j = jourDe(v);
+    if (!j) return '';
+    const [a, m, d] = j.split('-');
+    return `${d}/${m}/${a}`;
+}
+
+/**
  * La date d'envoi : la date de départ, décalée.
  *
  * LES MOIS ET LES ANNÉES SE COMPTENT EN MOIS, PAS EN JOURS — « trois mois après le 30 novembre »
@@ -158,7 +173,27 @@ function lireRegle(b = {}, { jetons = [] } = {}) {
     } };
 }
 
+/**
+ * LES VALEURS DES JETONS D'UNE RÈGLE — une seule fois pour les TROIS points d'envoi : le passage des
+ * règles de DATE, le crochet des DOCUMENTS et le crochet des REMISES. Chacun recopiait cette liste,
+ * et c'est ainsi que {Civilité} manquait partout (il n'existait qu'« Écrire à un groupe ») et que les
+ * dates sortaient en AAAA-MM-JJ : trois copies à corriger, dont deux qu'on oubliait. Les dates
+ * arrivent en AAAA-MM-JJ (`DATE_FORMAT`) et servent AUSSI au calcul de `dateCible` : on ne les met au
+ * format français qu'ICI. {Document} ne vaut que pour une règle d'événement ; une règle de date le
+ * laisse vide (son appelant ne le passe pas).
+ */
+function valeursRegle({ civility, first_name, last_name, formation, code, debut, fin, document } = {}, orgName) {
+    return {
+        'Civilité': civility || '', 'Prénom': first_name || '', Nom: last_name || '',
+        Organisme: orgName || 'École Pizza',
+        Formation: formation || code || '',
+        Session: [code, dateFr(debut)].filter(Boolean).join(' du '),
+        'Date de fin': dateFr(fin), 'Date de début': dateFr(debut),
+        Document: document || '',
+    };
+}
+
 module.exports = {
     DECLENCHEURS, UNITES, SENS, MAX_DECALAGE, MAX_PAR_PASSAGE,
-    jourDe, dateCible, phraseRegle, lireRegle,
+    jourDe, dateFr, dateCible, phraseRegle, lireRegle, valeursRegle,
 };

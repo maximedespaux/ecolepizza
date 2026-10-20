@@ -13,6 +13,7 @@
  */
 const { estDeclencheurDoc, regleViseDocument, regleViseRemise, destinatairesDe } = require('./reglesDocument.js');
 const { rendre } = require('./mailsPersonnalises.js');
+const { valeursRegle } = require('./mailsProgrammes.js');
 const { colonneExiste, tableExiste } = require('./colonnes.js');
 
 /**
@@ -49,7 +50,7 @@ async function declencherReglesDocument(conn, { orgId, documentId, evenement, en
     // Le document et son stagiaire.
     const [docs] = await conn.query(
         `SELECT gd.id, gd.learner_id, gd.template_slug, gd.title,
-                l.email AS stagiaire_email, l.first_name, l.last_name
+                l.email AS stagiaire_email, l.first_name, l.last_name, l.civility
            FROM generated_document gd
            LEFT JOIN learner l ON l.id = gd.learner_id
           WHERE gd.id = ? AND gd.organization_id = ?`,
@@ -95,13 +96,11 @@ async function declencherReglesDocument(conn, { orgId, documentId, evenement, en
                 'SELECT 1 AS x FROM mail_regle_doc WHERE regle_id = ? AND document_id = ? AND destinataire = ?',
                 [r.id, documentId, cible.type]);
             if (deja.length) continue;
-            const valeurs = {
-                'Prénom': doc.first_name || '', Nom: doc.last_name || '', Organisme: orgName || 'École Pizza',
-                Formation: (ctx && (ctx.formation || ctx.code)) || '',
-                Session: [ctx && ctx.code, ctx && ctx.debut].filter(Boolean).join(' du '),
-                'Date de fin': (ctx && ctx.fin) || '', 'Date de début': (ctx && ctx.debut) || '',
-                Document: doc.title || '',
-            };
+            const valeurs = valeursRegle({
+                civility: doc.civility, first_name: doc.first_name, last_name: doc.last_name,
+                formation: ctx && ctx.formation, code: ctx && ctx.code,
+                debut: ctx && ctx.debut, fin: ctx && ctx.fin, document: doc.title,
+            }, orgName);
             const res = await envoyer({
                 to: cible.email, objet: rendre(r.objet, valeurs), corps: rendre(r.corps, valeurs), orgId,
             });
@@ -142,7 +141,7 @@ async function declencherReglesRemise(conn, { orgId, remiseDocumentId, envoyer, 
     const [rows] = await conn.query(
         `SELECT rd.id, rd.remise_type_id, rt.label AS remise_label,
                 e.company_id, e.learner_id, s.program_id, p.title AS formation, p.code,
-                l.email AS stagiaire_email, l.first_name, l.last_name,
+                l.email AS stagiaire_email, l.first_name, l.last_name, l.civility,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin
            FROM remise_document rd
            JOIN remise_type rt ON rt.id = rd.remise_type_id
@@ -172,13 +171,11 @@ async function declencherReglesRemise(conn, { orgId, remiseDocumentId, envoyer, 
                 'SELECT 1 AS x FROM mail_regle_doc WHERE regle_id = ? AND document_id = ? AND destinataire = ?',
                 [r.id, remiseDocumentId, cible.type]);
             if (deja.length) continue;
-            const valeurs = {
-                'Prénom': rem.first_name || '', Nom: rem.last_name || '', Organisme: orgName || 'École Pizza',
-                Formation: rem.formation || rem.code || '',
-                Session: [rem.code, rem.debut].filter(Boolean).join(' du '),
-                'Date de fin': rem.fin || '', 'Date de début': rem.debut || '',
-                Document: rem.remise_label || '',
-            };
+            const valeurs = valeursRegle({
+                civility: rem.civility, first_name: rem.first_name, last_name: rem.last_name,
+                formation: rem.formation, code: rem.code, debut: rem.debut, fin: rem.fin,
+                document: rem.remise_label,
+            }, orgName);
             const res = await envoyer({ to: cible.email, objet: rendre(r.objet, valeurs), corps: rendre(r.corps, valeurs), orgId });
             const statut = res && res.sent ? 'envoye' : 'echec';
             if (statut === 'envoye') envoyes += 1; else echecs += 1;

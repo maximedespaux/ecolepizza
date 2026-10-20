@@ -22,7 +22,7 @@
  * la même tolérance que partout ailleurs — le code marche avant comme après la migration.
  */
 const { FUSEAU } = require('./fuseau.js');
-const { DECLENCHEURS, MAX_PAR_PASSAGE, dateCible, jourDe } = require('./mailsProgrammes.js');
+const { DECLENCHEURS, MAX_PAR_PASSAGE, dateCible, jourDe, valeursRegle } = require('./mailsProgrammes.js');
 const { rendre } = require('./mailsPersonnalises.js');
 const { formationsDeRegle } = require('./reglesDocument.js');
 const { colonneExiste, tableExiste } = require('./colonnes.js');
@@ -40,9 +40,11 @@ const JOURS_MAX = { jour: 1, mois: 31, annee: 366 };
 const decale = (jour, n) => new Date(Date.UTC(...jour.split('-').map(Number).map((v, i) => (i === 1 ? v - 1 : v))) + n * 86400000)
     .toISOString().slice(0, 10);
 
-/** Les jetons qu'un message programmé peut porter. L'écran propose exactement ceux-là. {Document}
-   ne se remplit que pour une règle d'événement (le titre du document) ; ailleurs il sort vide. */
-const JETONS_REGLE = ['Prénom', 'Nom', 'Organisme', 'Formation', 'Session', 'Date de fin', 'Date de début', 'Document'];
+/** Les jetons qu'un message programmé peut porter = EXACTEMENT les clés que `valeursRegle` sait
+   remplir, dérivés d'elle pour qu'un jeton ajouté à l'une le soit à l'autre (l'écran propose cette
+   liste, le passage la remplit). {Document} ne se remplit que pour une règle d'événement (le titre
+   du document) ; ailleurs il sort vide. */
+const JETONS_REGLE = Object.keys(valeursRegle());
 
 /**
  * Un passage. `envoyer` et `notifierEchec` sont injectés : le test n'ouvre ni base ni SMTP.
@@ -98,7 +100,7 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
         if (aCible && r.learner_id) params.push(r.learner_id);
         if (aCible && r.company_id) params.push(r.company_id);
         const [lignes] = await conn.query(
-            `SELECT e.id AS enrollment_id, l.id AS learner_id, l.first_name, l.last_name, l.email,
+            `SELECT e.id AS enrollment_id, l.id AS learner_id, l.first_name, l.last_name, l.email, l.civility,
                     p.title AS formation, p.code AS code,
                     DATE_FORMAT(s.start_date, '%Y-%m-%d') AS debut,
                     DATE_FORMAT(s.end_date, '%Y-%m-%d') AS fin,
@@ -131,13 +133,7 @@ async function passerLesReglesMail({ conn, envoyer, orgName, zone = FUSEAU, inst
                le message partira au passage suivant. */
             if (!ligne.email) continue;
 
-            const valeurs = {
-                'Prénom': ligne.first_name || '', Nom: ligne.last_name || '',
-                Organisme: orgName || 'École Pizza',
-                Formation: ligne.formation || ligne.code || '',
-                Session: [ligne.code, ligne.debut].filter(Boolean).join(' du '),
-                'Date de fin': ligne.fin || '', 'Date de début': ligne.debut || '',
-            };
+            const valeurs = valeursRegle(ligne, orgName);
             const r2 = await envoyer({
                 to: ligne.email,
                 objet: rendre(r.objet, valeurs),
