@@ -110,8 +110,12 @@ async function ecrireModeleEtReglement(conn, orgId, id, { modele, reglement }) {
 
 // Assemble les données de facturation (vendeur, client, ligne) pour Factur-X.
 async function loadInvoiceData(conn, orgId, invoiceId) {
+    /* LA DATE D'ÉMISSION = la date SAISIE (`invoice_date`, migration 211) si elle est remplie, sinon la
+       date de création en base — pour {Date facture} comme pour la date Factur-X. Sondée pour rester
+       tolérante à la migration non jouée : sans la colonne, on garde `created_at`, comme avant. */
+    const emission = await colonneExiste(conn, 'invoice', 'invoice_date') ? 'COALESCE(i.invoice_date, i.created_at)' : 'i.created_at';
     const [rows] = await conn.query(
-        `SELECT i.*, DATE_FORMAT(i.created_at, '%Y%m%d') AS issue_ymd, DATE_FORMAT(i.due_date, '%Y%m%d') AS due_ymd,
+        `SELECT i.*, DATE_FORMAT(${emission}, '%Y%m%d') AS issue_ymd, DATE_FORMAT(i.due_date, '%Y%m%d') AS due_ymd,
                 p.title AS program_title
          FROM invoice i
          LEFT JOIN enrollment e ON e.id = i.enrollment_id
@@ -442,7 +446,7 @@ const sessionsAFacturer = async (req, res) => {
  * POST /api/factures — crée un document de facturation (numéro auto).
  */
 const createInvoice = async (req, res) => {
-    const { type, enrollment_id, company_id, buyer_name, amount_net, tva_exoneree = 1, due_date, lines } = req.body;
+    const { type, enrollment_id, company_id, buyer_name, amount_net, tva_exoneree = 1, due_date, invoice_date, lines } = req.body;
     if (!type || !PREFIX[type]) return res.status(422).json({ error: 'Type requis' });
 
     // Lignes multiples (plusieurs dossiers) ou montant unique (rétro-compatible).
@@ -476,6 +480,10 @@ const createInvoice = async (req, res) => {
            `ventilerTva`, comme sur le PDF (TVA à 20 % sauf exonération, cf. tax_rate NULL) — et par
            le calcul que CE document emploiera : en centimes entiers dès que la 192 est jouée. */
         const tvaCentimes = await colonneExiste(conn, 'invoice', 'tva_centimes');
+        /* LA DATE DE FACTURE (migration 211), DISTINCTE de l'échéance. Format strict AAAA-MM-JJ (ce que
+           rend un champ date), sinon NULL → la facture retombe sur created_at. Colonne optionnelle. */
+        const hasInvDate = await colonneExiste(conn, 'invoice', 'invoice_date');
+        const invoiceDate = /^\d{4}-\d{2}-\d{2}$/.test(String(invoice_date || '')) ? invoice_date : null;
         const ttc = ventilerTva({
             amountNet: total, tvaExoneree: !!tva_exoneree, taxRate: null, tvaCentimes,
             lines: hasLines ? cleanLines.map((l) => ({ amount: l.amount_net })) : [],
@@ -520,18 +528,20 @@ const createInvoice = async (req, res) => {
         // La TVA en centimes entiers (192) naît avec le document, écrite ici, jamais par défaut :
         // un document créé avant la migration garde l'ancien calcul (cf. ventilerTva).
         const tva = tvaCentimes ? { colonne: ', tva_centimes', place: ', ?', valeurs: [1] } : { colonne: '', place: '', valeurs: [] };
+        // La date de facture rejoint l'INSERT seulement si la colonne existe (migration 211).
+        const dateCol = hasInvDate ? { colonne: ', invoice_date', place: ', ?', valeurs: [invoiceDate] } : { colonne: '', place: '', valeurs: [] };
         try {
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id${tva.colonne})
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?, ?${tva.place})`,
-                [...base, emetteur ? emetteur.id : null, ...tva.valeurs]
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date, billing_profile_id${tva.colonne}${dateCol.colonne})
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?, ?${tva.place}${dateCol.place})`,
+                [...base, emetteur ? emetteur.id : null, ...tva.valeurs, ...dateCol.valeurs]
             );
         } catch (e) {
             if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.code === 'ER_NO_SUCH_TABLE'))) throw e;
             await conn.query(
-                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date${tva.colonne})
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?${tva.place})`,
-                [...base, ...tva.valeurs]
+                `INSERT INTO invoice (id, organization_id, enrollment_id, company_id, buyer_name, type, number, amount_net, tva_exoneree, status, due_date${tva.colonne}${dateCol.colonne})
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?${tva.place}${dateCol.place})`,
+                [...base, ...tva.valeurs, ...dateCol.valeurs]
             );
         }
         if (hasLines) {

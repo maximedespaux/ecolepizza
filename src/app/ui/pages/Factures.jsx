@@ -38,7 +38,7 @@ const emptyLine = () => ({ enrollment_id: "", description: "", amount_net: "" })
    illisible, il est signalé et bloque la création. */
 const montantDeLigne = (l) => (l.amount_net === "" || l.amount_net == null ? 0 : lireMontant(l.amount_net));
 const montantIllisible = (l) => !Number.isFinite(montantDeLigne(l));
-const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, due_date: "", template_slug: modele, lines: [] });
+const makeEmpty = (modele = "") => ({ type: "FACTURE", company_id: "", tva_exoneree: 1, invoice_date: "", due_date: "", template_slug: modele, lines: [] });
 const periodeSession = (s) => (s.fin && s.fin !== s.debut ? `du ${dateFr(s.debut)} au ${dateFr(s.fin)}` : dateFr(s.debut));
 
 const MOYENS_DEFAUT = "Espèces,CB,Virement,Chèque";
@@ -187,7 +187,7 @@ function Factures() {
     try {
       const r = await createInvoice({
         type: form.type, company_id: form.company_id || null,
-        tva_exoneree: form.tva_exoneree, due_date: form.due_date || null,
+        tva_exoneree: form.tva_exoneree, invoice_date: form.invoice_date || null, due_date: form.due_date || null,
         // Le montant LU part, pas la saisie : la base garde le point (cf. lib/montantSaisi.js).
         lines: form.lines.map((l) => ({ ...l, amount_net: l.amount_net === "" ? "" : montantDeLigne(l) })),
         template_slug: form.template_slug || null,
@@ -330,6 +330,9 @@ function Factures() {
                 <option value="">Aucune</option>
                 {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectField>
+              {/* DEUX dates DISTINCTES : la date d'émission (jeton {Date facture}) et l'échéance, date
+                  limite de paiement ({Échéance facture}). Date de facture vide → la date du jour. */}
+              <Field label="Date de facture" type="date" value={form.invoice_date} onChange={set("invoice_date")} />
               <Field label="Échéance" type="date" value={form.due_date} onChange={set("due_date")} />
             </div>
 
@@ -491,9 +494,13 @@ function Factures() {
                 } },
               { k: "type", t: "Type", cell: (i) => i.type },
               { k: "amount", t: "Montant", th: { className: "ta-r" }, td: { textAlign: "right" },
+                /* HT ET TTC (demandé le 2026-10-20) : le montant net (HT) et le total à régler (TTC —
+                   ttcDe = 20 % sauf exonération, comme le formulaire et le PDF). Égaux quand la TVA
+                   n'est pas applicable ; on les montre quand même, pour la lecture. */
                 cell: (i) => (
                   <span className="mono tnum">
-                    {euro(i.amount_net)}
+                    {euro(i.amount_net)} <span style={{ fontSize: 11, color: "var(--muted)" }}>HT</span>
+                    <span style={{ display: "block" }}>{euro(ttcDe(i.amount_net, i.tva_exoneree))} <span style={{ fontSize: 11, color: "var(--muted)" }}>TTC</span></span>
                     {Number(i.paid) > 0 && <span style={{ display: "block", fontSize: 11, color: "var(--green)" }}>payé {euro(i.paid)}</span>}
                   </span>
                 ) },
