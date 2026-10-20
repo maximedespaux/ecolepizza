@@ -200,7 +200,7 @@ test('l\'entité organisme est garantie et devient le défaut, même avec d\'aut
     assert.match(ens, /insertOrgProfile\(conn, orgId, org, true\)/, 'l\'entité organisme n\'est pas semée en défaut');
     // Et la liste garantit l'entité AVANT de lire.
     const list = src.slice(src.indexOf('const list ='));
-    assert.match(list.slice(0, 400), /ensureOrgProfile\(conn, orgId\)/, 'la liste ne garantit pas l\'entité organisme');
+    assert.match(list.slice(0, 700), /ensureOrgProfile\(conn, orgId\)/, 'la liste ne garantit pas l\'entité organisme');
 });
 
 test('l\'entité organisme ne peut pas être supprimée', () => {

@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { loadEmitter, formatNumber, dernieresSequences } = require('../lib/emitter.js');
+const { colonneExiste } = require('../lib/colonnes.js');
+const { ciblesPourBase } = require('../lib/compta.js');
 
 /**
  * Entités émettrices : les identités de vendeur sous lesquelles un organisme facture.
@@ -31,6 +33,11 @@ const COLS = `id, label, legal_name, legal_status, capital, rcs, siret, vat_numb
     nda, address, zip_code, town, country, phone, email, iban, bic, bank_name,
     invoice_prefix, next_number, is_default,
     number_format, tva_applies, payment_methods, is_organization`;
+
+/* Colonnes de GESTION PAR ENTITÉ (migration 212) : sources de CA + cibles propres. Optionnelles —
+ * ajoutées aux requêtes seulement si la colonne existe (`colonneExiste`), pour que le code marche
+ * avant comme après la migration. Séparées de CHAMPS, qui suppose ses colonnes toujours présentes. */
+const CHAMPS_212 = ['revenue_inscriptions', 'revenue_materiel', 'revenue_divers', 'compta_targets', 'compta_dividende'];
 
 /** L'INSERT qui recopie l'organisme dans une entité. `asOrg` la marque comme l'entité organisme
  *  et défaut ; sinon (117 non jouée) c'est une entité ordinaire. */
@@ -83,8 +90,10 @@ async function ensureOrgProfile(conn, orgId) {
 const list = async (req, res) => {
     const conn = db.promise();
     const orgId = req.user.organization_id;
+    // Colonnes de gestion par entité (212) ajoutées à la lecture seulement si elles existent.
+    const extra = (await champs212Presents(conn)).map((c) => `, ${c}`).join('');
     const requete = () => conn.query(
-        `SELECT ${COLS} FROM billing_profile WHERE organization_id = ? ORDER BY is_organization DESC, is_default DESC, label`, [orgId]);
+        `SELECT ${COLS}${extra} FROM billing_profile WHERE organization_id = ? ORDER BY is_organization DESC, is_default DESC, label`, [orgId]);
     try {
         // L'entité organisme est garantie AVANT la lecture : elle doit toujours être là, défaut.
         try { await ensureOrgProfile(conn, orgId); } catch (e) { if (!isMissingSchema(e)) console.error('semis émetteur :', e.message); }
@@ -102,7 +111,7 @@ const list = async (req, res) => {
         if (isMissingSchema(e)) {
             try {
                 const [rows] = await conn.query(
-                    `SELECT ${COLS.replace(', is_organization', '')} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
+                    `SELECT ${COLS.replace(', is_organization', '')}${extra} FROM billing_profile WHERE organization_id = ? ORDER BY is_default DESC, label`, [orgId]);
                 return res.json({ data: rows.map((r) => ({ ...r, is_organization: 0 })) });
             } catch (e2) {
                 if (isMissingSchema(e2)) return res.json({ data: [] }); // table absente (113 non jouée)
@@ -135,7 +144,22 @@ function preparer(body) {
     v.number_format = fmt || null;
     v.tva_applies = body.tva_applies == null ? 1 : (body.tva_applies ? 1 : 0); // 1 par défaut
     v.payment_methods = String(body.payment_methods || '').trim() || null;
+    // Gestion par entité (212) : sources de CA (défaut 1 — une entité a tout, comme avant) et
+    // cibles propres, tout-ou-rien (`cibles_actives` faux → null, retour aux cibles globales).
+    v.revenue_inscriptions = body.revenue_inscriptions == null ? 1 : (body.revenue_inscriptions ? 1 : 0);
+    v.revenue_materiel = body.revenue_materiel == null ? 1 : (body.revenue_materiel ? 1 : 0);
+    v.revenue_divers = body.revenue_divers == null ? 1 : (body.revenue_divers ? 1 : 0);
+    const cibles = ciblesPourBase(body.cibles_actives, body.compta_targets, body.compta_dividende);
+    v.compta_targets = cibles.targets;
+    v.compta_dividende = cibles.dividende;
     return { valeurs: v };
+}
+
+/** Les colonnes 212 réellement présentes en base (migration jouée ou non). */
+async function champs212Presents(conn) {
+    const out = [];
+    for (const c of CHAMPS_212) { if (await colonneExiste(conn, 'billing_profile', c)) out.push(c); }
+    return out;
 }
 
 /** POST /api/emetteurs */
@@ -148,9 +172,10 @@ const create = async (req, res) => {
         // La toute première entité devient le défaut : sans défaut, une facture ne saurait pas
         // sous quel nom sortir, et exiger un choix dès la première serait un piège.
         const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM billing_profile WHERE organization_id = ?', [orgId]);
+        const champsOpt = await champs212Presents(conn);
         const id = crypto.randomUUID();
-        const cols = ['id', 'organization_id', ...CHAMPS, 'is_default'];
-        const vals = [id, orgId, ...CHAMPS.map((c) => valeurs[c]), n === 0 ? 1 : 0];
+        const cols = ['id', 'organization_id', ...CHAMPS, ...champsOpt, 'is_default'];
+        const vals = [id, orgId, ...CHAMPS.map((c) => valeurs[c]), ...champsOpt.map((c) => valeurs[c]), n === 0 ? 1 : 0];
         await conn.query(
             `INSERT INTO billing_profile (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         logAudit(req, 'billing_profile.create', 'BillingProfile', id);
@@ -168,10 +193,11 @@ const update = async (req, res) => {
     if (erreur) return res.status(422).json({ message: erreur });
     const conn = db.promise();
     try {
+        const tous = [...CHAMPS, ...(await champs212Presents(conn))];
         const [r] = await conn.query(
-            `UPDATE billing_profile SET ${CHAMPS.map((c) => `${c} = ?`).join(', ')}
+            `UPDATE billing_profile SET ${tous.map((c) => `${c} = ?`).join(', ')}
              WHERE id = ? AND organization_id = ?`,
-            [...CHAMPS.map((c) => valeurs[c]), req.params.id, req.user.organization_id]
+            [...tous.map((c) => valeurs[c]), req.params.id, req.user.organization_id]
         );
         if (!r.affectedRows) return res.status(404).json({ message: 'Entité introuvable.' });
         logAudit(req, 'billing_profile.update', 'BillingProfile', req.params.id);

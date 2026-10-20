@@ -13,16 +13,9 @@ import MoneyToggle from "../components/MoneyToggle.jsx";
 import { dateFr } from "../lib/format.js";
 import { apportType } from "../lib/apports.js";
 import { lireMontant } from "../lib/montantSaisi.js";
+import { CATS } from "../lib/compta.js";
 
 const REV_LABEL = { COMMISSION: "Commission partenaire", SUBVENTION: "Subvention", AUTRE: "Autre produit" };
-const CATS = [
-  { v: "MATIERES_PREMIERES", label: "Matières premières" },
-  { v: "SALAIRES", label: "Salaires & charges" },
-  { v: "LOYER", label: "Loyer & locaux" },
-  { v: "MARKETING", label: "Marketing & envois" },
-  { v: "ENERGIE", label: "Énergie" },
-  { v: "DIVERS", label: "Divers" },
-];
 // Palette validée daltonisme (Okabe-Ito) définie en variables CSS (clair + sombre)
 // dans app.css : voir --cat-* et --ca-*.
 const POSTE_COLOR = {
@@ -125,6 +118,18 @@ function Comptabilite() {
     return Math.max(1, ...data.postes.map((p) => Math.max(p.pct, p.cible))) * 1.15;
   }, [data]);
 
+  /* SOURCES DE CA MASQUÉES (migration 212) : quand une entité est sélectionnée, on n'affiche que les
+     sources qu'elle a — mais JAMAIS une source qui porte un montant réel (on ne cache pas d'argent).
+     « Toutes » ou serveur ancien → tout affiché. `perEntite` : une entité précise est sélectionnée,
+     ses cibles sont réglées dans Facturation (lecture seule ici). */
+  const streams = data?.streams || { inscriptions: true, materiel: true, divers: true };
+  const montre = {
+    inscriptions: streams.inscriptions || (data?.ca?.inscriptions || 0) !== 0,
+    materiel: streams.materiel || (data?.ca?.materiel || 0) !== 0,
+    divers: streams.divers || (data?.ca?.extra || 0) !== 0,
+  };
+  const perEntite = !!entite;
+
   return (
     <>
       <PageHead
@@ -220,9 +225,9 @@ function Comptabilite() {
           {/* Composition du CA (3 cartes %) */}
           <Card title={T("calculator", "Composition du chiffre d'affaires")}>
             <div className="grid cols-3">
-              <CaPart label="Inscriptions" value={data.ca.inscriptions} total={data.ca.total} color={CA_COLORS.insc} />
-              <CaPart label="Ventes de matériel" value={data.ca.materiel} total={data.ca.total} color={CA_COLORS.mat} />
-              <CaPart label="Produits divers" value={data.ca.extra} total={data.ca.total} color={CA_COLORS.extra} />
+              {montre.inscriptions && <CaPart label="Inscriptions" value={data.ca.inscriptions} total={data.ca.total} color={CA_COLORS.insc} />}
+              {montre.materiel && <CaPart label="Ventes de matériel" value={data.ca.materiel} total={data.ca.total} color={CA_COLORS.mat} />}
+              {montre.divers && <CaPart label="Produits divers" value={data.ca.extra} total={data.ca.total} color={CA_COLORS.extra} />}
             </div>
           </Card>
 
@@ -232,10 +237,10 @@ function Comptabilite() {
               <DonutBlock
                 centerLabel="CA total" centerValue={euro(data.ca.total)}
                 segments={[
-                  { label: "Inscriptions", value: data.ca.inscriptions, color: CA_COLORS.insc },
-                  { label: "Ventes de matériel", value: data.ca.materiel, color: CA_COLORS.mat },
-                  { label: "Produits divers", value: data.ca.extra, color: CA_COLORS.extra },
-                ]}
+                  montre.inscriptions && { label: "Inscriptions", value: data.ca.inscriptions, color: CA_COLORS.insc },
+                  montre.materiel && { label: "Ventes de matériel", value: data.ca.materiel, color: CA_COLORS.mat },
+                  montre.divers && { label: "Produits divers", value: data.ca.extra, color: CA_COLORS.extra },
+                ].filter(Boolean)}
               />
             </Card>
             <Card title={T("receipt", "Dépenses par poste")}>
@@ -250,12 +255,16 @@ function Comptabilite() {
           <Card title={T("help", "Comment se calcule le chiffre d'affaires ?")}>
             <p className="lead" style={{ marginTop: 0 }}>Le CA ne se saisit pas à la main : il s'additionne automatiquement à partir de trois sources.</p>
             <div className="grid cols-3">
-              <SourceCA n={1} color={CA_COLORS.insc} titre="Inscriptions" montant={euro(data.ca.inscriptions)}
-                desc="Les stagiaires venus dans la période et facturés (facture ou acompte émis), au prix du dossier, sinon au tarif de la formation." href="/factures" lien="Émettre une facture →" />
-              <SourceCA n={2} color={CA_COLORS.mat} titre="Ventes de matériel" montant={euro(data.ca.materiel)}
-                desc="Fours, pétrins, matières premières… vendus aux stagiaires." href="/ventes" lien="Enregistrer une vente →" />
-              <SourceCA n={3} color={CA_COLORS.extra} titre="Produits divers" montant={euro(data.ca.extra)}
-                desc="Commissions, subventions, remboursements, saisis sur la page Partenaires. Les apports en nature n'y entrent pas : ils sont listés à part." href="/partenaires" lien="Enregistrer une commission →" />
+              {[
+                montre.inscriptions && { color: CA_COLORS.insc, titre: "Inscriptions", montant: euro(data.ca.inscriptions),
+                  desc: "Les stagiaires venus dans la période et facturés (facture ou acompte émis), au prix du dossier, sinon au tarif de la formation.", href: "/factures", lien: "Émettre une facture →" },
+                montre.materiel && { color: CA_COLORS.mat, titre: "Ventes de matériel", montant: euro(data.ca.materiel),
+                  desc: "Fours, pétrins, matières premières… vendus aux stagiaires.", href: "/ventes", lien: "Enregistrer une vente →" },
+                montre.divers && { color: CA_COLORS.extra, titre: "Produits divers", montant: euro(data.ca.extra),
+                  desc: "Commissions, subventions, remboursements, saisis sur la page Partenaires. Les apports en nature n'y entrent pas : ils sont listés à part.", href: "/partenaires", lien: "Enregistrer une commission →" },
+              ].filter(Boolean).map((s, i) => (
+                <SourceCA key={s.titre} n={i + 1} color={s.color} titre={s.titre} montant={s.montant} desc={s.desc} href={s.href} lien={s.lien} />
+              ))}
             </div>
           </Card>
 
@@ -265,7 +274,11 @@ function Comptabilite() {
           {/* Postes vs cible */}
           <Card
             title="Postes de dépense (% du CA vs cible)"
-            more={editCibles ? (
+            more={perEntite ? (
+              <Link to="/reglages-facturation" className="btn ghost sm" title="Les cibles de cette entité se règlent dans Paramètres → Facturation">
+                <Icon name="settings" size={13} /> Cibles dans Facturation
+              </Link>
+            ) : editCibles ? (
               <span style={{ display: "flex", gap: 8 }}>
                 <button className="btn primary sm" onClick={saveCibles}>Enregistrer</button>
                 <button className="btn ghost sm" onClick={() => setEditCibles(false)}>Annuler</button>
@@ -274,6 +287,13 @@ function Comptabilite() {
               <button className="btn ghost sm" onClick={() => setEditCibles(true)}>Modifier les cibles</button>
             )}
           >
+            {perEntite && (
+              <p className="hint" style={{ marginTop: 0 }}>
+                {data.ciblesEntite
+                  ? "Cibles propres à cette entité — réglées dans Paramètres → Facturation."
+                  : "Cette entité suit les cibles globales de l'organisme (elle n'a pas les siennes)."}
+              </p>
+            )}
             <div className="grid" style={{ gap: 14 }}>
               {data.postes.map((p) => (
                 <div key={p.categorie}>
@@ -285,7 +305,7 @@ function Comptabilite() {
                     </span>
                     <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <b className="tnum" style={{ color: STATUT_COLOR[p.statut] }}>{p.pct}%</b>
-                      {editCibles ? (
+                      {editCibles && !perEntite ? (
                         <span className="sub" style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           cible
                           <input className="inp" style={{ width: 56, padding: "4px 6px" }} inputMode="decimal"
@@ -304,7 +324,7 @@ function Comptabilite() {
                 </div>
               ))}
             </div>
-            {editCibles && (
+            {editCibles && !perEntite && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border-soft)", paddingTop: 14, marginTop: 14 }}>
                 <b>Dividendes visés</b>
                 <input className="inp" style={{ width: 64, padding: "4px 6px" }} inputMode="decimal"
@@ -351,6 +371,7 @@ function Comptabilite() {
               côté. Le total ne se vérifiait pas — il portait sur un prix que rien n'écrivait, et
               comptait 0 € pour des stagiaires bien venus (relevé le 2026-09-29). Les dossiers sans
               facture sont nommés à côté : c'est la liste de ce qui reste à facturer. */}
+          {montre.inscriptions && (
           <Card title={T("user-plus", <span>Inscriptions {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.ca.inscriptions)}</span></span>)}>
             <p className="sub" style={{ margin: "-4px 0 12px", color: "var(--dim)" }}>
               Un stagiaire compte le mois où commence sa session, dès qu'une facture ou un acompte émis le désigne : au prix de son dossier, sinon au tarif de la formation.
@@ -385,6 +406,7 @@ function Comptabilite() {
               </div>
             )}
           </Card>
+          )}
 
           {/* Listes : dépenses à gauche ; à droite, ce qui vient des partenaires — les produits
               divers (dans le CA) puis les apports en nature (hors CA), l'un sous l'autre. */}
@@ -404,6 +426,7 @@ function Comptabilite() {
               {/* Les montants des titres passent par `.tnum` : écrits en texte, ils restaient
                   lisibles sous le masque des montants, seuls de la page. Le titre tient dans UN
                   <span> : `.card-ttl` est un flex, et le montant seul y devenait une colonne. */}
+              {montre.divers && (
               <Card title={T("coins", <span>Produits divers {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.ca.extra)}</span></span>)}>
                 {(!data.revenus || data.revenus.length === 0) ? (
                   <EmptyState icon="handshake" title="Aucun produit divers"
@@ -417,6 +440,7 @@ function Comptabilite() {
                 )}
                 <Ailleurs liste={data.autresMois?.revenus} annee={annee} onMois={setMois} />
               </Card>
+              )}
               <Card title={T("handshake", <span>Apports en nature {periode} · <span className="tnum" style={{ whiteSpace: "nowrap" }}>{euro(data.totalEnNature ?? 0)}</span></span>)}>
                 {(!data.enNature || data.enNature.length === 0) ? (
                   <EmptyState icon="handshake" title="Aucun apport en nature"
@@ -654,17 +678,19 @@ function Performance({ annee, entite }) {
   if (loading || !d) return <p className="lead">Chargement…</p>;
   const c = d.current, p = d.previous;
   const nb = (n) => n.toLocaleString("fr-FR");
+  // Métriques de formation masquées pour une entité sans inscriptions (212) — sauf si un chiffre réel subsiste.
+  const montreInsc = d.streams ? !!(d.streams.inscriptions || c.nbInscriptions || p.nbInscriptions || c.nbSessions || p.nbSessions) : true;
 
   return (
     <div className="grid" style={{ gap: 16 }}>
       <p className="lead" style={{ margin: 0 }}>Récapitulatif <b>{d.annee}</b> comparé à <b>{d.anneePrec}</b>. Un écart en vert est favorable.</p>
       <div className="grid cols-4">
         <PerfCard label="Chiffre d'affaires" icon="euro" tone="blue" cur={euro(c.caTotal)} prev={euro(p.caTotal)} rc={c.caTotal} rp={p.caTotal} an={d.anneePrec} />
-        <PerfCard label="Stagiaires (distincts)" icon="users" tone="green" cur={nb(c.nbStagiaires)} prev={nb(p.nbStagiaires)} rc={c.nbStagiaires} rp={p.nbStagiaires} an={d.anneePrec} />
-        <PerfCard label="Inscriptions" icon="user-plus" tone="orange" cur={nb(c.nbInscriptions)} prev={nb(p.nbInscriptions)} rc={c.nbInscriptions} rp={p.nbInscriptions} an={d.anneePrec} />
-        <PerfCard label="Ticket moyen" icon="coins" tone="ember" cur={euro(c.ticketMoyen)} prev={euro(p.ticketMoyen)} rc={c.ticketMoyen} rp={p.ticketMoyen} an={d.anneePrec} />
-        <PerfCard label="Stagiaires moyens / session" icon="users" tone="blue" cur={String(c.stagiairesMoyens)} prev={String(p.stagiairesMoyens)} rc={c.stagiairesMoyens} rp={p.stagiairesMoyens} an={d.anneePrec} />
-        <PerfCard label="Sessions" icon="calendar" tone="orange" cur={nb(c.nbSessions)} prev={nb(p.nbSessions)} rc={c.nbSessions} rp={p.nbSessions} an={d.anneePrec} />
+        {montreInsc && <PerfCard label="Stagiaires (distincts)" icon="users" tone="green" cur={nb(c.nbStagiaires)} prev={nb(p.nbStagiaires)} rc={c.nbStagiaires} rp={p.nbStagiaires} an={d.anneePrec} />}
+        {montreInsc && <PerfCard label="Inscriptions" icon="user-plus" tone="orange" cur={nb(c.nbInscriptions)} prev={nb(p.nbInscriptions)} rc={c.nbInscriptions} rp={p.nbInscriptions} an={d.anneePrec} />}
+        {montreInsc && <PerfCard label="Ticket moyen" icon="coins" tone="ember" cur={euro(c.ticketMoyen)} prev={euro(p.ticketMoyen)} rc={c.ticketMoyen} rp={p.ticketMoyen} an={d.anneePrec} />}
+        {montreInsc && <PerfCard label="Stagiaires moyens / session" icon="users" tone="blue" cur={String(c.stagiairesMoyens)} prev={String(p.stagiairesMoyens)} rc={c.stagiairesMoyens} rp={p.stagiairesMoyens} an={d.anneePrec} />}
+        {montreInsc && <PerfCard label="Sessions" icon="calendar" tone="orange" cur={nb(c.nbSessions)} prev={nb(p.nbSessions)} rc={c.nbSessions} rp={p.nbSessions} an={d.anneePrec} />}
         <PerfCard label="Dépenses" icon="receipt" tone="ember" cur={euro(c.depensesTotal)} prev={euro(p.depensesTotal)} rc={c.depensesTotal} rp={p.depensesTotal} an={d.anneePrec} invert />
         <PerfCard label="Marge" icon="target" tone="green" cur={euro(c.marge)} prev={euro(p.marge)} rc={c.marge} rp={p.marge} an={d.anneePrec} />
       </div>
