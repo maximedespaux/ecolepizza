@@ -126,14 +126,20 @@ test('la caisse écrit l\'entité de la facture sur la vente ; les saisies manue
 
 /* ─── La migration tague les QUATRE tables d'écritures ──────────────────────────────────────────── */
 
-test('migration 210 : billing_profile_id sur les quatre tables, FK ON DELETE SET NULL', () => {
+test('migration 210 : billing_profile_id sur les quatre tables, SANS clé étrangère (rejeu silencieux)', () => {
     const mig = lireRacine('database/migrations/210_compta_entite.sql');
     for (const t of ['material_sale', 'revenue_extra', 'expense', 'partner_contribution']) {
         assert.match(mig, new RegExp(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS billing_profile_id uuid DEFAULT NULL;`), `${t} taguée`);
-        assert.match(mig, new RegExp(`REFERENCES billing_profile \\(id\\) ON DELETE SET NULL`), 'FK comme invoice');
     }
-    // Rejouable : on retire la FK avant de la (re)poser.
-    assert.match(mig, /DROP FOREIGN KEY IF EXISTS fk_material_sale_billing;/);
+    /* PAS de FK dans l'aller : sous MariaDB, un DROP/ADD FK autour de l'ADD COLUMN crachait un
+       avertissement à chaque rejeu (IF EXISTS devient un warning, pas une erreur). Le code ne compte
+       pas sur la clé étrangère — une entité supprimée disparaît simplement du filtre. On vérifie les
+       INSTRUCTIONS (pas les commentaires, qui expliquent justement pourquoi il n'y en a pas). */
+    const alters = mig.split('\n').filter((l) => l.trim().startsWith('ALTER TABLE'));
+    assert.strictEqual(alters.length, 4, 'quatre ALTER, un par table');
+    for (const a of alters) assert.match(a, /ADD COLUMN IF NOT EXISTS billing_profile_id uuid DEFAULT NULL;$/, 'uniquement des ADD COLUMN, aucune FK');
+    // Le revert retire la colonne, et une FK éventuelle d'un ancien essai (par prudence).
     const revert = lireRacine('database/migrations/210_revert_compta_entite.sql');
     assert.match(revert, /ALTER TABLE partner_contribution DROP COLUMN IF EXISTS billing_profile_id;/);
+    assert.match(revert, /DROP FOREIGN KEY IF EXISTS fk_pcontrib_billing;/);
 });

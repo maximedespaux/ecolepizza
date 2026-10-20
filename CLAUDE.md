@@ -265,8 +265,10 @@ le drapeau.
 ## 4. Migrations — **la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
 
 **210 est À JOUER** (`210_compta_entite.sql`, la COMPTABILITÉ PAR ENTITÉ ÉMETTRICE — demandé le 2026-10-20).
-Une colonne `billing_profile_id` (nullable, FK ON DELETE SET NULL) sur `material_sale`, `revenue_extra`, `expense`
-ET `partner_contribution`, à l'image d'`invoice` (113). La page Comptabilité additionnait tout l'organisme ; elle
+Une colonne `billing_profile_id` (nullable, SANS clé étrangère — une FK rendait le rejeu bruyant sous MariaDB, qui
+transforme `IF EXISTS` en avertissement ; l'app n'a pas besoin de l'intégrité référentielle, cf. l'en-tête du
+fichier) sur `material_sale`, `revenue_extra`, `expense` ET `partner_contribution`. La page Comptabilité
+additionnait tout l'organisme ; elle
 se filtre désormais PAR ENTITÉ (sélecteur « Toutes / Organisme / Boutique » en tête) — les FORMATIONS par la facture
 du dossier (`invoice.billing_profile_id`, 113, via `facturesDuDossierEntite`), les ventes / produits divers /
 dépenses / apports par la nouvelle colonne. La CAISSE écrit l'entité de la facture sur la vente (`hasSaleEmitter`) ;
