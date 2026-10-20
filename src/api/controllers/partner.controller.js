@@ -5,6 +5,9 @@ const { belongsToOrg } = require('../lib/tenancy.js');
 const { lireMontant } = require('../lib/montantSaisi.js');
 const { CONTRAT_FIN } = require('../lib/contratPartenaire.js');
 const { colonneExiste } = require('../lib/colonnes.js');
+/* L'entité émettrice (billing_profile) d'un apport : rattaché à la main à l'organisme ou à la
+   boutique (migration 210), colonne optionnelle. */
+const { colonneEntite } = require('../lib/entiteEcriture.js');
 const { validerImage } = require('../lib/imageDistante.js');
 
 const isMissingSchema = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR');
@@ -338,15 +341,18 @@ const createContribution = async (req, res) => {
     if (!Number.isFinite(valeur) || valeur < 0) return res.status(422).json({ error: 'Valeur illisible : écrivez-la par exemple 1250,50.' });
     const id = crypto.randomUUID();
     try {
-        if (!await belongsToOrg(db.promise(), 'partner', b.partner_id, req.user.organization_id)) {
+        const conn = db.promise();
+        if (!await belongsToOrg(conn, 'partner', b.partner_id, req.user.organization_id)) {
             return res.status(422).json({ error: 'Partenaire inconnu.' });
         }
-        await db.promise().query(
-            `INSERT INTO partner_contribution (id, organization_id, partner_id, date, type, label, value, note)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
-             b.type || 'MATERIEL', b.label, valeur.toFixed(2), b.note || null]
-        );
+        // Rattachement à une entité émettrice (migration 210), en colonne optionnelle de l'INSERT.
+        const ent = await colonneEntite(conn, req.user.organization_id, 'partner_contribution', b.billing_profile_id);
+        const col = ['id', 'organization_id', 'partner_id', 'date', 'type', 'label', 'value', 'note'];
+        const val = [id, req.user.organization_id, b.partner_id, b.date || new Date().toISOString().slice(0, 10),
+            b.type || 'MATERIEL', b.label, valeur.toFixed(2), b.note || null];
+        if (ent.exists) { col.push('billing_profile_id'); val.push(ent.value); }
+        await conn.query(
+            `INSERT INTO partner_contribution (${col.join(', ')}) VALUES (${col.map(() => '?').join(', ')})`, val);
         logAudit(req, 'partner.contribution.create', 'PartnerContribution', id);
         res.status(201).json({ message: 'Contribution enregistrée', id });
     } catch (err) {

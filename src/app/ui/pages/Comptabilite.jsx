@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/Icon.jsx";
 import { Link } from "react-router-dom";
 import {
-  getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets, deleteRevenue,
+  getComptabilite, getComptaPerformance, createExpense, deleteExpense, saveComptaTargets, deleteRevenue, getEmitters,
 } from "../api/apiClient.js";
 import PageHead from "../components/PageHead.jsx";
 import Card from "../components/Card.jsx";
@@ -47,18 +47,22 @@ function Comptabilite() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(null);
+  // Comptabilité PAR ENTITÉ (migration 210) : la liste des entités émettrices, et celle consultée
+  // (« » = toutes). Le sélecteur ne paraît que si la 210 est jouée (data.parEntite) et ≥ 2 entités.
+  const [emitters, setEmitters] = useState([]);
+  const [entite, setEntite] = useState("");
 
-  const [dep, setDep] = useState({ label: "", categorie: "MATIERES_PREMIERES", montantHT: "", date: today() });
+  const [dep, setDep] = useState({ label: "", categorie: "MATIERES_PREMIERES", montantHT: "", date: today(), billing_profile_id: "" });
   const [savingDep, setSavingDep] = useState(false);
 
   const [editCibles, setEditCibles] = useState(false);
   const [cibleForm, setCibleForm] = useState({});
   const [dividendeForm, setDividendeForm] = useState("10");
 
-  const load = useCallback(async (an, mo, { silent = false } = {}) => {
+  const load = useCallback(async (an, mo, ent, { silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const { data: d } = await getComptabilite(an, mo);
+      const { data: d } = await getComptabilite(an, mo, ent);
       setData(d);
       const t = {};
       for (const c of CATS) t[c.v] = String(d.targets[c.v] ?? "");
@@ -70,7 +74,10 @@ function Comptabilite() {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(annee, mois); }, [annee, mois, load]);
+  useEffect(() => { load(annee, mois, entite); }, [annee, mois, entite, load]);
+  useEffect(() => { getEmitters().then((r) => setEmitters(r.data || [])).catch(() => {}); }, []);
+  // La dépense se rattache PAR DÉFAUT à l'entité consultée (on peut la changer à la saisie).
+  useEffect(() => { setDep((d) => ({ ...d, billing_profile_id: entite })); }, [entite]);
 
   async function submitDep() {
     if (!dep.label.trim() || !dep.montantHT) { setStatus({ type: "error", message: "Libellé et montant requis." }); return; }
@@ -80,9 +87,9 @@ function Comptabilite() {
     setSavingDep(true);
     try {
       await createExpense({ ...dep, montantHT: montant });
-      setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today() });
+      setDep({ label: "", categorie: dep.categorie, montantHT: "", date: today(), billing_profile_id: dep.billing_profile_id });
       setStatus({ type: "success", message: "Dépense enregistrée." });
-      load(annee, mois, { silent: true });
+      load(annee, mois, entite, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
     finally { setSavingDep(false); }
   }
@@ -104,7 +111,7 @@ function Comptabilite() {
       await saveComptaTargets({ targets, dividendeCible: lireMontant(dividendeForm) });
       setEditCibles(false);
       setStatus({ type: "success", message: "Cibles enregistrées." });
-      load(annee, mois, { silent: true });
+      load(annee, mois, entite, { silent: true });
     } catch (e) { setStatus({ type: "error", message: e.message }); }
   }
 
@@ -129,6 +136,15 @@ function Comptabilite() {
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <MoneyToggle />
+            {/* ENTITÉ ÉMETTRICE (migration 210) : organisme / boutique, ou toutes. Caché s'il n'y a
+                qu'une entité, ou si la 210 n'est pas jouée (`data.parEntite`) — le filtre serait sinon
+                sans effet sur les ventes, produits divers, dépenses et apports. */}
+            {data?.parEntite && emitters.length > 1 && (
+              <select className="inp" style={{ width: "auto" }} value={entite} onChange={(e) => setEntite(e.target.value)} aria-label="Entité émettrice">
+                <option value="">Toutes les entités</option>
+                {emitters.map((em) => <option key={em.id} value={em.id}>{em.label || em.legal_name}</option>)}
+              </select>
+            )}
             {/* `.inp` impose width:100% aux <select> ; dans cette barre horizontale, deux selects
                 pleine largeur écrasaient le bouton Masquer voisin. On les laisse tenir la largeur
                 de leur contenu — width:auto — pour que la rangée reste alignée. */}
@@ -153,7 +169,7 @@ function Comptabilite() {
       </div>
 
       {tab === "performance" ? (
-        <Performance annee={annee} />
+        <Performance annee={annee} entite={entite} />
       ) : !data ? (
         <p className="lead">Chargement…</p>
       ) : (
@@ -316,6 +332,15 @@ function Comptabilite() {
               </div>
               <div className="field"><label htmlFor="dep-date">Date</label>
                 <input id="dep-date" className="inp" type="date" value={dep.date} onChange={(e) => setDep({ ...dep, date: e.target.value })} /></div>
+              {/* À QUELLE ENTITÉ cette dépense se rattache (migration 210). Pré-remplie avec l'entité
+                  consultée. « Non rattachée » = comptée seulement dans « Toutes les entités ». */}
+              {data?.parEntite && emitters.length > 1 && (
+                <div className="field"><label htmlFor="dep-entite">Entité</label>
+                  <select id="dep-entite" value={dep.billing_profile_id} onChange={(e) => setDep({ ...dep, billing_profile_id: e.target.value })}>
+                    <option value="">Non rattachée</option>
+                    {emitters.map((em) => <option key={em.id} value={em.id}>{em.label || em.legal_name}</option>)}
+                  </select></div>
+              )}
               <button className="btn primary" style={{ width: "100%" }} disabled={savingDep} onClick={submitDep}>
                 {savingDep ? "Enregistrement…" : "+ Ajouter la dépense"}
               </button>
@@ -613,18 +638,18 @@ function Mini({ label, value, tone }) {
 
 /* ---------- Sous-onglet Performance ---------- */
 
-function Performance({ annee }) {
+function Performance({ annee, entite }) {
   const [d, setD] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    getComptaPerformance(annee)
+    getComptaPerformance(annee, entite)
       .then((r) => { if (!cancel) setD(r.data); })
       .catch(() => {})
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [annee]);
+  }, [annee, entite]);
 
   if (loading || !d) return <p className="lead">Chargement…</p>;
   const c = d.current, p = d.previous;

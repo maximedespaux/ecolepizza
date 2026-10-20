@@ -51,8 +51,8 @@ test('un seul calcul sert le mois ET l\'année', () => {
     assert.doesNotMatch(SRC, /async function computeMonth/,
         'Un second calcul mensuel rouvrirait la porte à deux règles divergentes.');
     assert.doesNotMatch(SRC, /async function computeYear/, 'idem pour un calcul annuel séparé');
-    assert.match(SRC, /async function computePeriode\(conn, orgId, annee, mois = 0\)/,
-        'Une seule fonction, paramétrée par le mois — 0 valant l\'année entière.');
+    assert.match(SRC, /async function computePeriode\(conn, orgId, annee, mois = 0/,
+        'Une seule fonction, paramétrée par le mois — 0 valant l\'année entière (plus l\'entité, migration 210).');
 });
 
 test('le CA des inscriptions est daté au mois où le stagiaire VIENT, sur le mois comme sur l\'année', () => {
@@ -110,11 +110,11 @@ test('le mois réel reste borné, le défaut est le mois courant, 0 vaut l\'ann�
 
 test("l'onglet Performance compare deux ANNÉES, pas deux mois", () => {
     /* Il met 2026 en face de 2025 : lui passer le mois transformerait la comparaison en
-       « mars contre mars » sans que rien ne le dise à l'écran. L'appel omet donc le paramètre,
-       et le défaut de `computePeriode` (0) vaut l'année entière. */
-    const perf = SRC.slice(SRC.indexOf('computePeriode(conn, orgId, annee),'));
-    assert.match(perf.slice(0, 140), /computePeriode\(conn, orgId, annee - 1\)/);
-    assert.doesNotMatch(perf.slice(0, 140), /annee, mois/, 'la comparaison annuelle ne doit pas suivre le mois');
+       « mars contre mars » sans que rien ne le dise à l'écran. Il force donc mois = 0 (année
+       entière), et suit l'entité consultée comme le reste de la page (migration 210). */
+    const perf = SRC.slice(SRC.indexOf('computePeriode(conn, orgId, annee, 0, entite),'));
+    assert.match(perf.slice(0, 160), /computePeriode\(conn, orgId, annee - 1, 0, entite\)/);
+    assert.doesNotMatch(perf.slice(0, 160), /annee, mois/, 'la comparaison annuelle ne doit pas suivre le mois');
 });
 
 test("l'écran nomme la période au lieu d'annoncer l'année", () => {

@@ -7,7 +7,12 @@ const { logAudit } = require('../lib/audit.js');
 const { lireMontant } = require('../lib/montantSaisi.js');
 /* QUAND UN STAGIAIRE EST FACTURÉ, et à quel prix : la règle vit à part, la Facturation dit « déjà
    facturé » avec elle (cf. le fichier). */
-const { DATE_SESSION, FACTURES_DU_DOSSIER, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
+const { DATE_SESSION, facturesDuDossierEntite, montantDuDossier } = require('../lib/inscriptionsFacturees.js');
+/* La colonne `billing_profile_id` des écritures (migration 210) est OPTIONNELLE : on sonde avant de
+   filtrer par entité, pour que la page marche avant comme après la migration (sinon ER_BAD_FIELD_ERROR). */
+const { colonneExiste } = require('../lib/colonnes.js');
+/* L'entité d'une écriture manuelle (dépense, produit divers, apport) — une seule règle partagée. */
+const { colonneEntite } = require('../lib/entiteEcriture.js');
 const {
     EXPENSE_CATEGORIES, CATEGORY_LABELS, DEFAULT_DIVIDENDE_CIBLE,
     REVENU_CATEGORIES, statutFor, conseilFor, mergeTargets,
@@ -51,15 +56,23 @@ const currentYear = () => new Date().getFullYear();
  * `nbSessions` reste compté sur l'ANNÉE DE SESSION (`training_session.year`), pour le « stagiaires
  * moyens par session » de l'onglet Performance, qui est annuel.
  */
-async function computePeriode(conn, orgId, annee, mois = 0) {
+async function computePeriode(conn, orgId, annee, mois = 0, entite = null) {
     // Le filtre de mois n'existe que pour un vrai mois ; à 0 il disparaît de toutes les requêtes
     // d'un coup — une seule condition, pas deux variantes de chaque requête à garder synchrones.
     const parMois = (col) => (mois ? ` AND MONTH(${col}) = ?` : '');
     const arg = () => (mois ? [orgId, annee, mois] : [orgId, annee]);
+    /* FILTRE PAR ENTITÉ (migration 210). Les FORMATIONS se rattachent par la facture du dossier
+       (`facturesDuDossierEntite` — son `?` vit dans le SELECT, donc en TÊTE des paramètres) ; les
+       ventes, produits divers et dépenses par leur colonne `billing_profile_id` (clause en QUEUE du
+       WHERE). Sans entité, aucune clause ni paramètre : tout l'organisme, comme avant. L'appelant ne
+       passe une entité QUE s'il a sondé la colonne. */
+    const fe = facturesDuDossierEntite(entite);
+    const clauseEnt = entite ? ' AND billing_profile_id = ?' : '';
+    const paramEnt = entite ? [entite] : [];
     const [dossiers] = await conn.query(
         `SELECT e.id, e.learner_id, l.last_name, l.first_name, p.code AS program_code,
                 DATE_FORMAT(${DATE_SESSION}, '%Y-%m-%d') AS debut,
-                e.price AS prix_dossier, p.price AS tarif, ${FACTURES_DU_DOSSIER} AS factures
+                e.price AS prix_dossier, p.price AS tarif, ${fe.sql} AS factures
          FROM enrollment e
          JOIN training_session s ON s.id = e.session_id AND s.organization_id = e.organization_id
          JOIN training_program p ON p.id = s.program_id
@@ -67,7 +80,7 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
          WHERE e.organization_id = ? AND s.status <> 'ANNULEE'
            AND YEAR(${DATE_SESSION}) = ?${parMois(DATE_SESSION)}
          ORDER BY debut, l.last_name, l.first_name`,
-        arg()
+        [...fe.params, ...arg()]
     );
     const inscriptions = dossiers.map((d) => ({
         id: d.id, learner_id: d.learner_id, nom: d.last_name, prenom: d.first_name,
@@ -83,14 +96,14 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
     const [[mat]] = await conn.query(
         `SELECT COALESCE(SUM(amount * quantity), 0) AS ca
          FROM material_sale
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
-        arg()
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}${clauseEnt}`,
+        [...arg(), ...paramEnt]
     );
     const [[extra]] = await conn.query(
         `SELECT COALESCE(SUM(amount), 0) AS ca
          FROM revenue_extra
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}`,
-        arg()
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}${clauseEnt}`,
+        [...arg(), ...paramEnt]
     );
     /* Le NOMBRE de sessions reste annuel : il ne sert qu'au « stagiaires moyens par session » de
        l'onglet Performance, qui compare deux années entières. */
@@ -101,9 +114,9 @@ async function computePeriode(conn, orgId, annee, mois = 0) {
     const [postesRows] = await conn.query(
         `SELECT category, COALESCE(SUM(amount_ht), 0) AS total
          FROM expense
-         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
+         WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}${clauseEnt}
          GROUP BY category`,
-        arg()
+        [...arg(), ...paramEnt]
     );
 
     const postes = {};
@@ -165,15 +178,15 @@ const sansTable = (e) => e && e.code === 'ER_NO_SUCH_TABLE';
  * Le nom du partenaire est joint DANS l'organisme : `createContribution` ne vérifiait pas le
  * partenaire reçu, et une ligne d'avant ce contrôle pourrait en désigner un d'ailleurs.
  */
-async function apportsEnNature(conn, orgId, annee, mois) {
+async function apportsEnNature(conn, orgId, annee, mois, entite = null) {
     try {
         const [rows] = await conn.query(
             `SELECT c.id, DATE_FORMAT(c.date, '%Y-%m-%d') AS date, c.type, c.label, c.value, p.name AS partner_name
              FROM partner_contribution c
              LEFT JOIN partner p ON p.id = c.partner_id AND p.organization_id = c.organization_id
-             WHERE c.organization_id = ? AND YEAR(c.date) = ?${mois ? ' AND MONTH(c.date) = ?' : ''}
+             WHERE c.organization_id = ? AND YEAR(c.date) = ?${mois ? ' AND MONTH(c.date) = ?' : ''}${entite ? ' AND c.billing_profile_id = ?' : ''}
              ORDER BY c.date DESC, c.created_at DESC`,
-            mois ? [orgId, annee, mois] : [orgId, annee]
+            [...(mois ? [orgId, annee, mois] : [orgId, annee]), ...(entite ? [entite] : [])]
         );
         return rows.map((r) => ({ ...r, value: num(r.value) }));
     } catch (e) {
@@ -249,8 +262,15 @@ const getGestion = async (req, res) => {
     else mois = Math.min(12, Math.max(1, Number(rawMois)));
     try {
         const conn = db.promise();
+        /* La Comptabilité PAR ENTITÉ n'est possible qu'une fois la 210 jouée (colonne `billing_profile_id`
+           sur les écritures). Sans elle, on IGNORE le filtre — tout reste « toutes entités » — et on le
+           dit à l'écran (`parEntite: false` → il masque le sélecteur). `entite` = l'id d'un billing_profile. */
+        const parEntite = await colonneExiste(conn, 'material_sale', 'billing_profile_id');
+        const entite = parEntite ? (String(req.query.entite || '').trim() || null) : null;
+        const clauseEnt = entite ? ' AND billing_profile_id = ?' : '';
+        const paramEnt = entite ? [entite] : [];
         const [year, settings] = await Promise.all([
-            computePeriode(conn, orgId, annee, mois),
+            computePeriode(conn, orgId, annee, mois, entite),
             loadSettings(conn, orgId),
         ]);
         /* LES LISTES SUIVENT LE MOIS, ELLES AUSSI. Elles restaient annuelles quand les totaux
@@ -261,9 +281,9 @@ const getGestion = async (req, res) => {
         const argListe = mois ? [orgId, annee, mois] : [orgId, annee];
         const [depenses] = await conn.query(
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount_ht, note
-             FROM expense WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
+             FROM expense WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}${clauseEnt}
              ORDER BY date DESC, created_at DESC`,
-            argListe
+            [...argListe, ...paramEnt]
         );
         /* Le partenaire d'un produit divers est nommé dans la liste : « Commission partenaire »
            ne disait pas LEQUEL. Sous-requête bornée à l'organisme, comme la jointure des apports. */
@@ -271,12 +291,12 @@ const getGestion = async (req, res) => {
             `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') AS date, label, category, amount, note,
                     (SELECT p.name FROM partner p
                       WHERE p.id = revenue_extra.partner_id AND p.organization_id = revenue_extra.organization_id) AS partner_name
-             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}
+             FROM revenue_extra WHERE organization_id = ? AND YEAR(date) = ?${parMois('date')}${clauseEnt}
              ORDER BY date DESC, created_at DESC`,
-            argListe
+            [...argListe, ...paramEnt]
         );
         const [enNature, ailleurs, [yearsRows], saisies] = await Promise.all([
-            apportsEnNature(conn, orgId, annee, mois),
+            apportsEnNature(conn, orgId, annee, mois, entite),
             autresMois(conn, orgId, annee, mois),
             conn.query('SELECT DISTINCT year FROM training_session WHERE organization_id = ? ORDER BY year DESC', [orgId]),
             anneesSaisies(conn, orgId),
@@ -312,6 +332,9 @@ const getGestion = async (req, res) => {
         res.json({
             data: {
                 annee,
+                /* Comptabilité PAR ENTITÉ (migration 210) : `parEntite` dit si la colonne existe (sinon
+                   l'écran masque le sélecteur) ; `entite` est l'entité en cours de consultation (null = toutes). */
+                parEntite, entite,
                 ca: { total: ca, inscriptions: year.caInscriptions, materiel: year.caMateriel, extra: year.caExtra },
                 postes, totalDepenses: year.depensesTotal,
                 marge, margePct,
@@ -351,15 +374,18 @@ const getPerformance = async (req, res) => {
     const annee = Number(req.query.annee) || currentYear();
     try {
         const conn = db.promise();
+        // Même filtre par entité que la gestion (migration 210) : la performance se compare aussi par entité.
+        const parEntite = await colonneExiste(conn, 'material_sale', 'billing_profile_id');
+        const entite = parEntite ? (String(req.query.entite || '').trim() || null) : null;
         /* Deux années entières : sans la liste des dossiers, qui porte des noms de stagiaires et
            que cet onglet n'affiche pas. */
         const sansListes = (periode) => { const reste = { ...periode }; delete reste.inscriptions; return reste; };
         const [current, previous] = (await Promise.all([
-            computePeriode(conn, orgId, annee),
-            computePeriode(conn, orgId, annee - 1),
+            computePeriode(conn, orgId, annee, 0, entite),
+            computePeriode(conn, orgId, annee - 1, 0, entite),
         ])).map(sansListes);
         const postesLabels = EXPENSE_CATEGORIES.map((c) => ({ categorie: c, label: CATEGORY_LABELS[c] }));
-        res.json({ data: { annee, anneePrec: annee - 1, current, previous, postesLabels } });
+        res.json({ data: { annee, anneePrec: annee - 1, parEntite, entite, current, previous, postesLabels } });
     } catch (err) {
         console.error('Erreur comptabilité (performance) :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -377,13 +403,16 @@ const createExpense = async (req, res) => {
         return res.status(422).json({ error: 'Libellé et montant valides requis.' });
     }
     try {
+        const conn = db.promise();
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO expense (id, organization_id, date, category, label, amount_ht, note)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
-             cat, String(label).trim().slice(0, 255), amount.toFixed(2), note ? String(note).slice(0, 255) : null]
-        );
+        // Rattachement à une entité (migration 210), en colonne optionnelle de l'INSERT.
+        const ent = await colonneEntite(conn, req.user.organization_id, 'expense', req.body.billing_profile_id);
+        const col = ['id', 'organization_id', 'date', 'category', 'label', 'amount_ht', 'note'];
+        const val = [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
+            cat, String(label).trim().slice(0, 255), amount.toFixed(2), note ? String(note).slice(0, 255) : null];
+        if (ent.exists) { col.push('billing_profile_id'); val.push(ent.value); }
+        await conn.query(
+            `INSERT INTO expense (${col.join(', ')}) VALUES (${col.map(() => '?').join(', ')})`, val);
         logAudit(req, 'expense.create', 'Expense', id);
         res.status(201).json({ message: 'Dépense enregistrée', id });
     } catch (err) {
@@ -456,13 +485,16 @@ const createRevenue = async (req, res) => {
         if (!await belongsToOrg(db.promise(), 'partner', partner_id, req.user.organization_id)) {
             return res.status(422).json({ error: 'Partenaire inconnu.' });
         }
+        const conn = db.promise();
         const id = crypto.randomUUID();
-        await db.promise().query(
-            `INSERT INTO revenue_extra (id, organization_id, date, label, category, partner_id, amount, note)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
-             String(label).trim().slice(0, 255), cat, partner_id || null, amount.toFixed(2), note ? String(note).slice(0, 255) : null]
-        );
+        // Rattachement à une entité (migration 210), en colonne optionnelle de l'INSERT.
+        const ent = await colonneEntite(conn, req.user.organization_id, 'revenue_extra', req.body.billing_profile_id);
+        const col = ['id', 'organization_id', 'date', 'label', 'category', 'partner_id', 'amount', 'note'];
+        const val = [id, req.user.organization_id, date || new Date().toISOString().slice(0, 10),
+            String(label).trim().slice(0, 255), cat, partner_id || null, amount.toFixed(2), note ? String(note).slice(0, 255) : null];
+        if (ent.exists) { col.push('billing_profile_id'); val.push(ent.value); }
+        await conn.query(
+            `INSERT INTO revenue_extra (${col.join(', ')}) VALUES (${col.map(() => '?').join(', ')})`, val);
         logAudit(req, 'revenueextra.create', 'RevenueExtra', id);
         res.status(201).json({ message: 'Produit enregistré', id });
     } catch (err) {
