@@ -169,6 +169,14 @@ function Factures() {
   }, [sessions]);
   const formTotal = form.lines.reduce((s, l) => s + (montantIllisible(l) ? 0 : montantDeLigne(l)), 0);
   const formTtc = ttcDe(formTotal, form.tva_exoneree);
+  /* LE TOTAL TTC DES FACTURES ÉMISES (carte « Émis ») = la SOMME des TTC PAR facture, avec le même
+     ttcDe que la liste, pour que la carte égale exactement la colonne. Même filtre que le total HT
+     du serveur (type FACTURE / ACOMPTE). On ne montrera le TTC que s'il DIFFÈRE du HT (TVA
+     applicable) : inutile de répéter le même nombre quand la TVA n'est pas applicable. */
+  const emisTtc = useMemo(() => (invoices || [])
+    .filter((i) => i.type === "FACTURE" || i.type === "ACOMPTE")
+    .reduce((s, i) => s + ttcDe(i.amount_net, i.tva_exoneree), 0), [invoices]);
+  const emisDiff = Math.round(emisTtc * 100) !== Math.round(Number(totals.emis) * 100);
   const modeleUnique = modeles.length === 1 ? modeles[0].slug : "";
 
   async function add(e) {
@@ -314,7 +322,10 @@ function Factures() {
         {/* Trois tons distincts : le filet coloré ne sert à rien s'il est le même partout.
             Bleu pour ce qui est ÉMIS (un fait), vert pour ce qui est ENTRÉ, ambre pour ce qui
             est ATTENDU — c'est la seule des trois qui appelle une action. */}
-        <Kpi label="Émis (factures)" value={euro(totals.emis)} icon="receipt" tone="blue" />
+        <Kpi label="Émis (factures)"
+          value={emisDiff ? `${euro(totals.emis)} HT` : euro(totals.emis)}
+          sub={emisDiff ? `${euro(emisTtc)} TTC` : undefined}
+          icon="receipt" tone="blue" />
         <Kpi label="Encaissé" value={euro(totals.paye)} icon="euro" tone="green" />
         <Kpi label="Reste dû" value={euro(totals.impaye)} icon="clock" tone="gold" />
       </div>
