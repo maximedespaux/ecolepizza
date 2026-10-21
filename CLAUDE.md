@@ -262,7 +262,24 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**214 est À JOUER mais FACULTATIVE** (`214_titres_documents_sans_opco.sql`, migration de DONNÉES — le TITRE d'un
+document de groupe ne porte PLUS l'OPCO, demandé le 2026-10-21). Un document d'entreprise se génère UN PAR OPCO
+(`groupesParOpco`), et son titre portait l'OPCO en suffixe (« OP programme de formation — FAFCEA », « CGV — FAFCEA »).
+L'école l'a jugé redondant dans l'espace du stagiaire / du représentant : le bloc {OPCO} du document et la carte
+« Documents remis » le disent déjà. Le CODE ne l'ajoute plus aux NOUVEAUX documents (`company.controller.js`,
+`const title = step.label;` — l'OPCO reste STOCKÉ dans la colonne `generated_document.opco`, qui regroupe et alimente
+le jeton {OPCO}). La 214 retire le suffixe des documents DÉJÀ en base, EXACTEMENT (« espace, tiret cadratin, espace,
+OPCO », longueur en CARACTÈRES) et seulement quand le titre finit par lui — l'OPCO stocké dit quoi retirer. Sans la
+migration, rien ne casse : les nouveaux documents sont déjà sans suffixe, les anciens gardent le leur jusqu'à ce
+qu'elle soit jouée (ou qu'ils soient régénérés). Migration de DONNÉES, invisible à tout contrôle de schéma : elle se
+vérifie sur le contenu — doit rendre 0 :
+`SELECT COUNT(*) FROM generated_document WHERE scope='COMPANY' AND opco IS NOT NULL AND opco<>'' AND RIGHT(title, CHAR_LENGTH(CONCAT(' — ', opco))) = CONCAT(' — ', opco);`
+⚠️ CONSÉQUENCE ASSUMÉE : une entreprise dont les stagiaires relèvent de PLUSIEURS OPCO aura deux documents de même
+titre (le bloc « par stagiaire » et la carte les distinguent). Son revert ré-ajoute « — OPCO » (réversible, l'OPCO
+est stocké ; un document créé depuis sans suffixe le recevra aussi — comportement d'avant la 214). Tests :
+`documents-titre-sans-opco.test.js`, `generation-entreprise-sans-type.test.js`.
 
 **213 est À JOUER** (`213_intervenant_plages_extra.sql`, un INTERVENANT AVEC DES PAUSES + ses heures qui comptent
 dans le TOTAL — demandé le 2026-10-21, feuille d'émargement NIV1H, hygiène PENE). Deux colonnes : `plages` (text

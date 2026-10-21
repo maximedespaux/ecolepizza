@@ -706,7 +706,14 @@ const createCompanyDocument = async (req, res) => {
             if (signedOpcos.has(cleOpco(g.opco))) continue; // déjà signé → conservé
 
             const id = crypto.randomUUID();
-            const title = step.label + (g.opco ? ` — ${g.opco}` : '');
+            /* Le titre d'un document de groupe ne porte PLUS l'OPCO (« — FAFCEA », demandé le
+               2026-10-21) : l'école l'a jugé redondant dans l'espace du stagiaire / du représentant,
+               où le bloc {OPCO} du document et la carte « Documents remis » le disent déjà. L'OPCO
+               reste STOCKÉ (colonne `opco`, INSERT ci-dessous) — c'est lui, jamais le titre, qui
+               regroupe les documents par OPCO et alimente le jeton {OPCO}. ⚠️ Conséquence assumée :
+               une entreprise dont les stagiaires relèvent de PLUSIEURS OPCO aura deux documents de
+               même titre (le bloc « par stagiaire » les distingue). */
+            const title = step.label;
             const ancre = sessionOf.get(g.ids[0]) || sessions[0]; // session d'ancrage (1re du groupe)
             try {
                 if (opcoSupported) {

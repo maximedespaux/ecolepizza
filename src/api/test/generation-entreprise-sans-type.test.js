@@ -105,7 +105,9 @@ async function appeler(fn, body) {
 test('document de groupe d\'un modèle « entreprise » sans type : créé, avec le type du slug', async () => {
     const { code, corps } = await appeler(createCompanyDocument, { session_id: 's1', template_slug: 'accord-opco' });
     assert.strictEqual(code, 201, JSON.stringify(corps));
-    assert.deepStrictEqual(inserts, [{ type: 'ACCORD_OPCO', slug: 'accord-opco', titre: 'Accord de prise en charge — OCAPIAT' }]);
+    /* Le titre ne porte PLUS l'OPCO (« — OCAPIAT ») depuis le 2026-10-21 : le libellé nu, l'OPCO
+       restant stocké à part (colonne `opco`). Cf. documents-titre-sans-opco.test.js. */
+    assert.deepStrictEqual(inserts, [{ type: 'ACCORD_OPCO', slug: 'accord-opco', titre: 'Accord de prise en charge' }]);
 });
 
 test('documents des stagiaires du groupe d\'un modèle sans type : créés, avec le même type', async () => {
