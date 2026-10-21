@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, downloadRepDocumentPdf,
   getRepRemises, remiseFichierUrl, downloadRemiseFichier, accuserRemise } from "../api/apiClient.js";
@@ -211,25 +211,33 @@ function RepresentantEspace({ embedded = false } = {}) {
                     {(nom || r.formation) && <span className="rep-sub">{[nom, r.formation].filter(Boolean).join(" · ")}</span>}
                     {r.consigne && <span className="rep-sub">{r.consigne}</span>}
                     {r.accuse_le && <span className="rep-sub" style={{ color: "var(--green)" }}>Réception confirmée le {dateHeure(r.accuse_le)}.</span>}
+                    {/* Un fichier PAR LIGNE : son NOM (et non un numéro), puis Voir / Télécharger. */}
+                    {(r.fichiers || []).length > 0 && (
+                      <span className="remise-fichiers">
+                        {(r.fichiers || []).map((f, k) => {
+                          const nomFichier = f.nom || `Document ${k + 1}`;
+                          return (
+                            <span key={f.id} className="remise-fichier">
+                              <Icon name="file-text" size={14} />
+                              <span className="remise-fichier-nom" title={nomFichier}>{nomFichier}</span>
+                              <button className="btn sm ghost" aria-label={`Voir ${nomFichier}, ${r.label}`}
+                                onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                                <Icon name="eye" size={14} /> Voir
+                              </button>
+                              {/* Une fois la réception confirmée, GARDER une copie du document remis. */}
+                              {recue && (
+                                <button className="btn sm ghost" aria-label={`Télécharger ${nomFichier}, ${r.label}`}
+                                  onClick={() => downloadRemiseFichier(f.id, nomFichier)}>
+                                  <Icon name="download" size={14} /> Télécharger
+                                </button>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
                   </span>
                   <Badge tone={recue ? "g" : "b"}>{recue ? "Reçu" : "À confirmer"}</Badge>
-                  {(r.fichiers || []).map((f, k) => (
-                    <Fragment key={f.id}>
-                      <button className="btn sm ghost"
-                        aria-label={`Voir ${f.nom || `le document ${k + 1}`}, ${r.label}`}
-                        onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
-                        <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
-                      </button>
-                      {/* Une fois la réception confirmée, un bouton pour GARDER une copie du document remis. */}
-                      {recue && (
-                        <button className="btn sm ghost"
-                          aria-label={`Télécharger ${f.nom || `le document ${k + 1}`}, ${r.label}`}
-                          onClick={() => downloadRemiseFichier(f.id, f.nom || `${r.label}${r.fichiers.length > 1 ? ` (${k + 1})` : ""}`)}>
-                          <Icon name="download" size={15} /> Télécharger{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
-                        </button>
-                      )}
-                    </Fragment>
-                  ))}
                   {r.statut === "REMISE" && (manque > 0 ? (
                     /* Type « requis » (migration 203) : on ne confirme qu'une fois tous les documents là. */
                     <span className="hint">En attente de {manque} document(s) de plus.</span>
