@@ -54,25 +54,29 @@ test('sans condition de type (cond_type absent ou vide), rien ne change — comp
     assert.deepStrictEqual(slugsOf(resoudreVariantes([condVide], { financing: 'X' }, conds, EQ)), ['remise:b']);
 });
 
-test('ENTREPRISE : une remise ISOLÉE est filtrée par sa condition, un DOCUMENT reste (le vrai bug DBM)', () => {
-    /* LE DÉFAUT (constaté le 2026-10-19, entreprise DBM) : le parcours d'un dossier arrivé PAR UNE
-       ENTREPRISE passe par `resoudreVariantesEntreprise`, qui ne filtrait PAS les étapes isolées par
-       leur condition (et court-circuitait même tout quand l'organisme n'a aucune équivalence). Les
-       remises ne sont jamais en groupe « OU » → toujours isolées → les deux variantes AGEFICE et
-       FAFCEA restaient présentes. Un DOCUMENT, lui, doit rester (la section entreprise est une liste
-       explicite) — c'est la nuance à préserver. */
+test('ENTREPRISE : une étape ISOLÉE conditionnée est filtrée — pièce, remise ET document ; un document SANS condition reste', () => {
+    /* 2026-10-19 (entreprise DBM) : `resoudreVariantesEntreprise` ne filtrait PAS les étapes isolées,
+       d'où les variantes AGEFICE ET FAFCEA d'une remise toutes présentes. Corrigé pour les pièces/remises.
+       2026-10-21 (B. LANNUZEL via LA TOSC) : un DOCUMENT « OPCO » (programme de formation) restait aussi,
+       malgré sa condition `company.opco`/`learner.opco` non vide, sur un dossier SANS OPCO — la condition
+       d'un document était ignorée. Désormais un document CONDITIONNÉ est filtré comme une pièce/remise ;
+       un document SANS condition reste (la section entreprise est une liste explicite). */
     const condsOpco = new Map([
         ['opco-agefice', { field: 'company.opco', op: 'eq', value: 'AGEFICE' }],
         ['opco-fafcea', { field: 'company.opco', op: 'eq', value: 'FAFCEA' }],
     ]);
     const remiseAgefice = { slug: 'remise:ag', doc_type: 'REMISE', applies_when: {}, cond_type: { conditions: ['opco-agefice'] } };
     const remiseFafcea = { slug: 'remise:fa', doc_type: 'REMISE', applies_when: {}, cond_type: { conditions: ['opco-fafcea'] } };
-    const doc = { slug: 'convention', doc_type: 'CONVENTION', applies_when: { conditions: ['opco-fafcea'] } };
-    const EQ = new Map(); // aucune équivalence, comme chez DBM — avant, ça court-circuitait tout le filtrage
+    const docOpco = { slug: 'programme', doc_type: 'PROGRAMME', applies_when: { conditions: ['opco-fafcea'] } }; // condition non remplie
+    const docLibre = { slug: 'convention', doc_type: 'CONVENTION', applies_when: {} };                           // sans condition
+    const EQ = new Map(); // aucune équivalence — avant, ça court-circuitait tout le filtrage
 
-    const out = resoudreVariantesEntreprise([remiseAgefice, remiseFafcea, doc], { 'company.opco': 'AGEFICE' }, condsOpco, EQ);
+    const out = resoudreVariantesEntreprise([remiseAgefice, remiseFafcea, docOpco, docLibre], { 'company.opco': 'AGEFICE' }, condsOpco, EQ);
     assert.deepStrictEqual(out.map((s) => s.slug), ['remise:ag', 'convention'],
-        'remise FAFCEA écartée (condition non remplie) ; remise AGEFICE gardée ; document gardé malgré sa condition (liste explicite)');
+        'remise FAFCEA écartée, remise AGEFICE gardée ; document OPCO écarté (condition non remplie) ; document sans condition gardé');
+    // Condition remplie (l'entreprise a bien cet OPCO) → le document conditionné revient.
+    const out2 = resoudreVariantesEntreprise([docOpco, docLibre], { 'company.opco': 'FAFCEA' }, condsOpco, EQ);
+    assert.deepStrictEqual(out2.map((s) => s.slug), ['programme', 'convention'], 'avec l\'OPCO, le document conditionné est de nouveau exigé');
 });
 
 test('appliesWhenConditions : ce que le contrôleur STOCKE — {conditions:[…]} dédoublonné, ou null si vide', () => {
@@ -102,13 +106,13 @@ test('le parcours lit la condition DE TYPE (cond_type) pour les pièces ET les r
     assert.match(fp, /matchCustom\(s\.cond_type, ctx, conds\)/, 'le passes() évalue la condition de type');
 });
 
-test('ENTREPRISE : resoudreVariantesEntreprise filtre les pièces/remises isolées, PAS les documents', () => {
+test('ENTREPRISE : resoudreVariantesEntreprise filtre les pièces/remises ET les documents CONDITIONNÉS, garde les documents sans condition', () => {
     const fp = lireSrc('controllers/formationProgram.controller.js');
     // Le court-circuit « aucune équivalence → tout passe » est retiré (il sautait tout le filtrage).
-    const fn = fp.slice(fp.indexOf('function resoudreVariantesEntreprise'), fp.indexOf('function resoudreVariantesEntreprise') + 2800);
+    const fn = fp.slice(fp.indexOf('function resoudreVariantesEntreprise'), fp.indexOf('function resoudreVariantesEntreprise') + 3400);
     assert.doesNotMatch(fn, /if \(!eq \|\| !eq\.size\) return steps;/, 'plus de court-circuit qui sautait le filtrage');
-    assert.match(fn, /doc_type !== 'PIECE' && s\.doc_type !== 'REMISE'/, 'un document reste (liste explicite), une pièce/remise est filtrée');
-    assert.match(fn, /if \(gardee\(s\)\) out\.push\(s\)/, 'une étape isolée n\'est gardée que si sa condition passe (hors document)');
+    assert.match(fn, /aUneConditionPerso/, 'un document CONDITIONNÉ est filtré ; un document sans condition reste (liste explicite)');
+    assert.match(fn, /if \(gardee\(s\)\) out\.push\(s\)/, 'une étape isolée n\'est gardée que selon gardee()');
 });
 
 test('la liste « Documents remis » (remisesDuDossier) filtre par condition, garde les remises commencées, échoue OUVERT', () => {
