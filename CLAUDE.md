@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (367 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-21** : **2900 tests — 2893 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (368 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-21** : **2905 tests — 2898 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,27 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**213 est À JOUER** (`213_intervenant_plages_extra.sql`, un INTERVENANT AVEC DES PAUSES + ses heures qui comptent
+dans le TOTAL — demandé le 2026-10-21, feuille d'émargement NIV1H, hygiène PENE). Deux colonnes : `plages` (text
+JSON) sur `session_intervenant_slot`, et `extra` (tinyint, 0 par défaut) sur `session_intervenant`. Depuis la 181,
+un intervenant externe a UNE plage continue par demi-journée ; l'expert hygiène fait « 16h15-16h30, pause,
+16h45-18h15 » (plusieurs créneaux). `plages` = la LISTE des créneaux d'une demi-journée (pauses comprises) ; NULL =
+on retombe sur la plage unique heure_debut/heure_fin (181). Les heures NETTES d'une demi-journée = la somme des
+créneaux, pauses exclues (`lirePlages`/`minutesPlages`, lib/plageHoraire.js). `extra` = cet intervenant enseigne-t-il
+un temps EN PLUS des demi-journées du stagiaire (l'hygiène d'un NIV1H : 37 h de pizza + l'hygiène = 44 h) ? À 1, ses
+heures nettes s'AJOUTENT au total de la feuille (`totalPrevu` + le total du stagiaire, lib/emargement.js) ; à 0
+(défaut), rien ne s'ajoute, comme avant. L'écran (SessionIntervenants) ajoute « ＋ plage » par demi-journée et une
+case « Heures en plus » par intervenant. Tout est TOLÉRANT (colonneExiste) : sans la 213, un intervenant garde sa
+plage unique et ne compte pas en plus — rien ne casse, et une saisie de pauses répond « migration 213 non jouée »
+dans le message (les demi-journées et la 1re plage sont gardées). **Elle se vérifie par l'API, sans SQL** : saisir
+deux créneaux + cocher « Heures en plus » sur un intervenant, puis `GET /api/sessions/:id/intervenants` rend
+`multi: true`, l'intervenant `extra: true` et sa demi-journée avec `plages: [..2..]`. Ou une requête, qui doit rendre 2 :
+`SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='session_intervenant_slot' AND column_name='plages') + (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND table_name='session_intervenant' AND column_name='extra');`
+⚠️ Son revert retire les deux colonnes : les créneaux multiples reviennent à la plage unique (181, la 1re gardée en
+parallèle ; les pauses perdues), et les intervenants « extra » cessent de compter dans le total. Les demi-journées et
+signatures ne sont pas touchées. Tests : `intervenant-plages-extra.test.js` (+ `intervenant-heures.test.js` mis à jour).
 
 **212 est À JOUER** (`212_billing_profile_compta.sql`, des PARAMÈTRES DE GESTION PAR ENTITÉ ÉMETTRICE lus par
 la Comptabilité — demandé le 2026-10-20). Cinq colonnes sur `billing_profile` : `revenue_inscriptions`,

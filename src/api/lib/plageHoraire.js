@@ -52,4 +52,34 @@ function plageFr(debut, fin) {
     return `${hm(p.debut)} - ${hm(p.fin)}`;
 }
 
-module.exports = { lirePlage, plageFr, enMinutes };
+/* ── PLUSIEURS CRÉNEAUX AVEC PAUSES (migration 213) ───────────────────────────────────────────────
+ * Un intervenant peut faire « 16h15 - 16h30, pause, 16h45 - 18h15 » : une LISTE de plages par
+ * demi-journée. Chaque entrée invalide ou à l'envers est écartée (comme une plage à moitié saisie,
+ * cf. lirePlage) ; les valides sont triées par heure de début. Les heures nettes = somme des
+ * créneaux, pauses exclues. */
+
+/** Une liste brute [{debut, fin}, …] → les plages valides, triées par début. `[]` si aucune. */
+function lirePlages(arr) {
+    if (!Array.isArray(arr)) return [];
+    const out = [];
+    for (const p of arr) {
+        const v = lirePlage(p && p.debut, p && p.fin);
+        if (v) out.push(v);
+    }
+    return out.sort((a, b) => enMinutes(a.debut) - enMinutes(b.debut));
+}
+
+/** Les plages telles qu'elles s'impriment : ["16h15 - 16h30", "16h45 - 18h15"]. Les invalides sautent. */
+function plagesFr(plages) {
+    return (plages || []).map((p) => plageFr(p.debut, p.fin)).filter(Boolean);
+}
+
+/** Minutes NETTES d'une liste de plages — la somme des (fin − début), pauses exclues. */
+function minutesPlages(plages) {
+    return (plages || []).reduce((t, p) => {
+        const d = enMinutes(p.debut), f = enMinutes(p.fin);
+        return t + (d != null && f != null && f > d ? f - d : 0);
+    }, 0);
+}
+
+module.exports = { lirePlage, plageFr, enMinutes, lirePlages, plagesFr, minutesPlages };
