@@ -214,8 +214,9 @@ test('LA ROUTE, et l\'écran qui l\'appelle', () => {
     // Une pièce ou un document remis s'ouvre d'ici, mais ne s'efface que depuis le dossier.
     assert.match(page, /const duDossier = \(d\) => d\.source === "piece" \|\| d\.source === "remise";/);
     assert.match(page, /d\.source === "remise" \? window\.open\(remiseFichierUrl\(d\.doc_id\), "_blank", "noopener"\)/);
-    // La suppression saute AUSSI un QCM : son résultat importé se montre, mais ne s'efface pas d'ici.
-    assert.match(page, /\{peutModifier && !duDossier\(d\) && !d\.quiz_id && \(/);
+    // La suppression saute un QCM de dossier VIVANT, mais laisse retirer un QCM ORPHELIN (sans
+    // enrollment_id) : son résultat importé se montre, et peut enfin s'effacer d'ici.
+    assert.match(page, /\{peutModifier && !duDossier\(d\) && \(!d\.quiz_id \|\| !d\.enrollment_id\) && \(/);
     const client = lireUi('api/apiClient.js');
     assert.match(client, /for \(const \{ fichier, nom \} of fichiers\) fd\.append\("files", fichier, nom\);/);
     assert.match(client, /\/suivi\/archives\/dossier\/\$\{enrollmentId\}/);

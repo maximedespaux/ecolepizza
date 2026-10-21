@@ -266,8 +266,11 @@ test('l\'archive a UNE route, sous la garde du coffre, et la liste même de l\'�
        (2026-10-06) : il a alors un vrai PDF, et se montre comme les autres documents importés. */
     assert.match(SUIVI, /gd\.quiz_id IS NULL OR EXISTS \(SELECT 1 FROM document_fichier f WHERE f\.document_id = gd\.id\)/);
     assert.match(SUIVI, /WHERE gd\.organization_id = \? AND gd\.status IN \(\?\) AND \$\{condQcm\}`/);
-    // La CORBEILLE, elle, protège toujours le QCM : son résultat se gère sur la fiche, pas depuis le coffre.
-    assert.match(SUIVI, /'DELETE FROM generated_document WHERE organization_id = \? AND id IN \(\?\) AND quiz_id IS NULL'/);
+    // La CORBEILLE protège un QCM de dossier VIVANT, mais laisse supprimer un QCM ORPHELIN (plus
+    // aucune inscription derrière lui), en emportant sa réponse éventuelle (2026-10-21).
+    assert.match(SUIVI, /NOT EXISTS \(SELECT 1 FROM document_formation df JOIN enrollment e ON e\.id = df\.enrollment_id WHERE df\.document_id = \$\{col\}\)/);
+    assert.match(SUIVI, /DELETE FROM generated_document WHERE organization_id = \? AND id IN \(\?\) AND \(quiz_id IS NULL OR \$\{orphelin\('generated_document\.id'\)\}\)/);
+    assert.match(SUIVI, /DELETE qr FROM quiz_response qr JOIN generated_document gd ON gd\.id = qr\.document_id/, 'la réponse d\'un QCM orphelin part avec lui');
     assert.doesNotMatch(SUIVI, /QCM envoyé, pas encore rempli|LEFT JOIN quiz qz/);
 });
 

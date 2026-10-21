@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (366 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-20** : **2897 tests — 2890 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (367 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-21** : **2900 tests — 2893 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -859,8 +859,14 @@ l'archive : ce ne sont pas des documents (aucun PDF), leurs réponses vivent dan
 `lib/arborescenceArchive.js` (serveur) et `lib/arborescence.js` (écran), tenues d'accord par un test.
 ⚠️ **AFFINÉ le 2026-10-06** : un QCM dont le RÉSULTAT a été IMPORTÉ (un `document_fichier` — le PDF d'un Google Form,
 un scan) REVIENT dans le coffre et l'archive, comme les autres documents importés (`condQcm`, suivi.controller.js) : il a
-un vrai PDF à montrer. Un QCM répondu DANS l'app (sans fichier) reste exclu. La corbeille du coffre, elle, protège toujours
-le QCM (`quiz_id IS NULL` au DELETE) : son résultat se gère sur la fiche, pas depuis le coffre. **Même jour**, le coffre
+un vrai PDF à montrer. Un QCM répondu DANS l'app (sans fichier) reste exclu. La corbeille du coffre protège un QCM de
+dossier VIVANT (`quiz_id IS NULL` au DELETE) : son résultat se gère sur la fiche, pas depuis le coffre. **AFFINÉ le
+2026-10-21** : un QCM ORPHELIN — plus aucune inscription derrière lui (son dossier supprimé, `document_formation` parti
+par cascade ; `enrollment_id` absent dans le coffre) — peut enfin être retiré, car il n'a plus de dossier à
+désynchroniser ; `bulkDeleteArchive` l'autorise (`quiz_id IS NULL OR NOT EXISTS(document_formation→enrollment)`) et
+emporte sa réponse à la main (`quiz_response.document_id` n'a PAS de cascade), les fichiers importés/signatures partant
+par cascade. L'écran montre alors le bouton de suppression (`!d.quiz_id || !d.enrollment_id`). Relevé : 5 évaluations
+orphelines de CHARLET Adeline, hors date (« (undefined) »). Tests : `coffre-qcm-orphelin.test.js`. **Même jour (2026-10-06)**, le coffre
 gagne un « + » pour ajouter des fichiers au dossier d'une ENTREPRISE (ref `fichier-co:<id>`), comme le « + » du stagiaire
 (migration aucune — `archive_document` existe déjà).
 Sans la migration, rien ne casse : l'éditeur commun (Formations → Arborescence d'archivage) le dit et ne propose
