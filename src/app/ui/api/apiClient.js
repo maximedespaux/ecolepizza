@@ -1375,6 +1375,9 @@ export async function deposerRemise(enrollmentId, remiseTypeId, file) {
 // URL directe du fichier (déchiffré à la volée côté serveur). La consulter NE VAUT PAS
 // réception : le serveur ne touche ni au statut ni à la date. Cf. remise.controller.js.
 export function remiseFichierUrl(fichierId) { return `${API_BASE_URL}/remises/fichier/${fichierId}`; }
+// Télécharge (et non « voir ») un fichier remis par l'école — le serveur le sert en `inline`, le
+// blob est récupéré puis enregistré sous son nom. Ni le statut ni la date ne sont touchés.
+export function downloadRemiseFichier(fichierId, filename) { return download(`/remises/fichier/${fichierId}`, filename || "document"); }
 export function supprimerRemiseFichier(fichierId) { return request(`/remises/fichier/${fichierId}`, { method: "DELETE" }); }
 // Le STAGIAIRE confirme avoir reçu. Le serveur refuse quiconque n'est pas le stagiaire du dossier.
 export function accuserRemise(remiseId) { return request(`/remises/${remiseId}/accuser`, { method: "POST" }); }

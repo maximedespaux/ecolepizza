@@ -1,7 +1,7 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../context/UserContext.jsx";
 import { getRepDocuments, previewRepDocument, signRepDocument, setRepStamp, downloadRepDocumentPdf,
-  getRepRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
+  getRepRemises, remiseFichierUrl, downloadRemiseFichier, accuserRemise } from "../api/apiClient.js";
 import { pingAcces } from "../lib/gamification.js";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -214,11 +214,21 @@ function RepresentantEspace({ embedded = false } = {}) {
                   </span>
                   <Badge tone={recue ? "g" : "b"}>{recue ? "Reçu" : "À confirmer"}</Badge>
                   {(r.fichiers || []).map((f, k) => (
-                    <button key={f.id} className="btn sm ghost"
-                      aria-label={`Voir ${f.nom || `le document ${k + 1}`}, ${r.label}`}
-                      onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
-                      <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
-                    </button>
+                    <Fragment key={f.id}>
+                      <button className="btn sm ghost"
+                        aria-label={`Voir ${f.nom || `le document ${k + 1}`}, ${r.label}`}
+                        onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                        <Icon name="eye" size={15} /> Voir{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
+                      </button>
+                      {/* Une fois la réception confirmée, un bouton pour GARDER une copie du document remis. */}
+                      {recue && (
+                        <button className="btn sm ghost"
+                          aria-label={`Télécharger ${f.nom || `le document ${k + 1}`}, ${r.label}`}
+                          onClick={() => downloadRemiseFichier(f.id, f.nom || `${r.label}${r.fichiers.length > 1 ? ` (${k + 1})` : ""}`)}>
+                          <Icon name="download" size={15} /> Télécharger{r.fichiers.length > 1 ? ` (${k + 1})` : ""}
+                        </button>
+                      )}
+                    </Fragment>
                   ))}
                   {r.statut === "REMISE" && (manque > 0 ? (
                     /* Type « requis » (migration 203) : on ne confirme qu'une fois tous les documents là. */
