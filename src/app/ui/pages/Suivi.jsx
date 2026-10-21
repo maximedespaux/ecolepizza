@@ -700,9 +700,11 @@ function ArchivesView({ onError, onInfo }) {
           <button className="iconbtn" title="Télécharger" aria-label={`Télécharger ${d.title}`}
             onClick={() => d.source === "archive" ? downloadArchiveFile(d.doc_id, `${d.title}${extensionDuCoffre(d.mime)}`) : downloadDocumentPdf(d.doc_id, `${d.title}.pdf`)}><Icon name="download" size={16} /></button>
         )}
-        {/* Un QCM ne se supprime pas depuis le coffre (le serveur le protège, `quiz_id IS NULL`) : son
-            résultat se gère sur la fiche / dans Résultats QCM. On n'affiche donc pas de bouton mort. */}
-        {peutModifier && !duDossier(d) && !d.quiz_id && (
+        {/* Un QCM de dossier VIVANT ne se supprime pas depuis le coffre (le serveur le protège) : son
+            résultat se gère sur la fiche / dans Résultats QCM. Mais un QCM ORPHELIN (plus aucune
+            inscription derrière lui — `enrollment_id` absent) peut être retiré : plus de dossier à
+            désynchroniser. On montre donc le bouton pour un document non-QCM, ou un QCM orphelin. */}
+        {peutModifier && !duDossier(d) && (!d.quiz_id || !d.enrollment_id) && (
           <button className="iconbtn del" title="Supprimer ce document" aria-label={`Supprimer ${d.title}`} onClick={() => deleteDocs([d], d.title)}><Icon name="trash" size={15} /></button>
         )}
       </div>

@@ -784,10 +784,22 @@ const bulkDeleteArchive = async (req, res) => {
             deleted += r.affectedRows || 0;
         }
         if (documentIds.length) {
-            /* JAMAIS UNE ÉVALUATION : supprimée d'ici, elle laissait sa réponse dans Résultats QCM
-               (`quiz_response` ne tient pas au document), et l'espace du stagiaire la renvoyait,
-               comme jamais faite. Le coffre ne les liste plus ; cette route les refuse aussi. */
-            const [r] = await conn.query('DELETE FROM generated_document WHERE organization_id = ? AND id IN (?) AND quiz_id IS NULL',
+            /* UN QCM DE DOSSIER VIVANT RESTE PROTÉGÉ : supprimé d'ici, il laissait sa réponse dans
+               Résultats QCM (`quiz_response.document_id` n'a pas de cascade) et l'espace du stagiaire
+               l'affichait « jamais faite ». MAIS un QCM ORPHELIN — plus aucune inscription derrière
+               lui (son dossier a été supprimé, `document_formation` parti par cascade) — n'a plus de
+               dossier à désynchroniser : on l'autorise, et on emporte sa réponse éventuelle à la main
+               (sinon elle resterait, pointant un document disparu). Fichiers importés, signatures et
+               liens du document partent, eux, par cascade. Relevé le 2026-10-21 : cinq évaluations
+               orphelines de CHARLET Adeline, hors date, bloquées dans le coffre. */
+            const orphelin = (col) => `NOT EXISTS (SELECT 1 FROM document_formation df JOIN enrollment e ON e.id = df.enrollment_id WHERE df.document_id = ${col})`;
+            // La réponse d'un QCM orphelin qu'on va supprimer (pas de cascade sur document_id).
+            await conn.query(
+                `DELETE qr FROM quiz_response qr JOIN generated_document gd ON gd.id = qr.document_id
+                 WHERE gd.organization_id = ? AND gd.id IN (?) AND gd.quiz_id IS NOT NULL AND ${orphelin('gd.id')}`,
+                [orgId, documentIds]);
+            const [r] = await conn.query(
+                `DELETE FROM generated_document WHERE organization_id = ? AND id IN (?) AND (quiz_id IS NULL OR ${orphelin('generated_document.id')})`,
                 [orgId, documentIds]);
             deleted += r.affectedRows || 0;
         }
