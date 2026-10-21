@@ -337,15 +337,24 @@ function resoudreVariantesEntreprise(steps, ctx, conds, eq) {
         return n;
     };
     const groupOf = (s) => { const e = eq && eq.get(s.slug); return e ? e.group : null; };
-    /* UN DOCUMENT de la section entreprise reste une liste EXPLICITE : choisi à la main, il y reste
-       quoi qu'il arrive (c'est le sens de cette fonction). MAIS une PIÈCE / REMISE porte une CONDITION
-       — type (migration 209) et/ou formation — qui DOIT filtrer : sinon ses variantes conditionnées
-       (« remise AGEFICE » / « remise FAFCEA ») restaient TOUTES présentes alors qu'une seule s'applique
-       au dossier (constaté le 2026-10-19, entreprise DBM, qui passe par CE collapse et pas par
-       `resoudreVariantes`). On filtre donc les pièces/remises ISOLÉES par leur condition, comme le
-       parcours du dossier le fait. (Avant, un `return steps` si aucune équivalence court-circuitait
-       TOUT le filtrage ; on boucle désormais toujours, groupOf rendant null quand eq est vide.) */
-    const gardee = (s) => (s.doc_type !== 'PIECE' && s.doc_type !== 'REMISE') || passes(s);
+    /* UN DOCUMENT de la section entreprise est une liste EXPLICITE : choisi à la main, il reste —
+       SAUF s'il porte une CONDITION PERSO (Modèles → Conditions), qui doit alors FILTRER, exactement
+       comme une PIÈCE / REMISE. Sans ça, un document « OPCO » (programme de formation) restait sur un
+       dossier entreprise SANS OPCO (relevé le 2026-10-21, B. LANNUZEL via LA TOSC — ni lui ni
+       l'entreprise n'a d'OPCO, et sa condition `company.opco`/`learner.opco` non vide était ignorée).
+       Un document SANS condition reste toujours montré. La condition est évaluée avec les faits DU
+       DOSSIER (`ctx`) — donc l'OPCO de CE stagiaire et de SON entreprise.
+       Les pièces/remises, elles, sont filtrées par leur condition de type et de formation depuis le
+       2026-10-19 (variantes AGEFICE/FAFCEA qui restaient toutes). Le court-circuit « aucune équivalence
+       → tout passe » a été retiré à cette occasion : on boucle toujours, groupOf rendant null si eq vide. */
+    const aUneConditionPerso = (s) => {
+        const c = (s.applies_when || {}).conditions;
+        return Array.isArray(c) && c.length > 0;
+    };
+    const gardee = (s) => {
+        if (s.doc_type === 'PIECE' || s.doc_type === 'REMISE') return passes(s);
+        return !aUneConditionPerso(s) || passes(s); // document : filtré seulement s'il a une condition
+    };
     const out = [];
     const seen = new Set();
     for (const s of steps) {

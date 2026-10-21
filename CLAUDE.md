@@ -327,10 +327,17 @@ se CUMULE avec la condition PAR FORMATION qui existait déjà (`program_step.app
 parcours lit les DEUX (`cond_type` dans `formationSteps`, évalué par le `passes()` de `resoudreVariantes` en plus de
 `applies_when`).
 ⚠️ **Un dossier arrivé PAR UNE ENTREPRISE passe par un AUTRE résolveur, `resoudreVariantesEntreprise`** (section
-« à l'arrivée via une entreprise »), qui — exprès — garde les DOCUMENTS isolés sans les filtrer (liste explicite),
-mais ne filtrait PAS non plus les pièces/remises : les deux remises AGEFICE **et** FAFCEA de DBM restaient toutes
-les deux. **Corrigé le 2026-10-19** : il filtre désormais les pièces/remises ISOLÉES par leur condition (`gardee`),
-les documents restant intacts ; son court-circuit « aucune équivalence → tout passe » a été retiré. La liste
+« à l'arrivée via une entreprise »), une liste EXPLICITE : un document choisi à la main y reste. Il ne filtrait
+PAS non plus les pièces/remises : les deux remises AGEFICE **et** FAFCEA de DBM restaient toutes les deux.
+**Corrigé le 2026-10-19** : il filtre les pièces/remises ISOLÉES par leur condition (`gardee`) ; son court-circuit
+« aucune équivalence → tout passe » a été retiré. **Étendu le 2026-10-21 aux DOCUMENTS CONDITIONNÉS** : un document
+qui porte une condition PERSO (`applies_when.conditions`, réglée dans Modèles → Conditions) est désormais filtré
+comme une pièce/remise, un document SANS condition restant toujours montré (`aUneConditionPerso`, `gardee`). Sans
+ça, « OP programme de formation » (condition `company.opco`/`learner.opco` non vide) restait sur un dossier
+entreprise SANS OPCO (relevé : B. LANNUZEL via LA TOSC). La condition est évaluée avec les faits DU DOSSIER — le
+parcours (`getParcours`) ré-résout les étapes entreprise avec le `ctx` du stagiaire, donc son OPCO et celui de son
+entreprise. Un document company_level n'apparaissant QUE pour un dossier entreprise, sa condition n'était jamais
+prise en compte avant. La liste
 « Documents remis » (`remisesDuDossier`) applique la même condition (`filtrerParCondition`), mais garde toujours une
 remise DÉJÀ commencée — la preuve reste.
 Sans la migration, rien ne casse : une pièce / remise sans condition reste proposée comme avant
