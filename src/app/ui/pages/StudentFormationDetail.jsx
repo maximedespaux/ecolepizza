@@ -1,7 +1,7 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl,
-  getDossierRemises, remiseFichierUrl, accuserRemise } from "../api/apiClient.js";
+  getDossierRemises, remiseFichierUrl, downloadRemiseFichier, accuserRemise } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import Card from "../components/Card.jsx";
 import Badge from "../components/Badge.jsx";
@@ -343,11 +343,21 @@ function StudentFormationDetail({ enrollmentId, embedded = false, formations, on
                               {REMISE_LABEL[etat] || REMISE_LABEL.wait}
                             </Badge>
                             {(e.r.fichiers || []).map((f, k) => (
-                              <button key={f.id} className="btn sm ghost"
-                                aria-label={`Voir ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
-                                onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
-                                <Icon name="eye" size={14} /> Voir{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
-                              </button>
+                              <Fragment key={f.id}>
+                                <button className="btn sm ghost"
+                                  aria-label={`Voir ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
+                                  onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                                  <Icon name="eye" size={14} /> Voir{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
+                                </button>
+                                {/* Une fois la réception confirmée, garder une copie du document remis. */}
+                                {e.r.statut === "RECUE" && (
+                                  <button className="btn sm ghost"
+                                    aria-label={`Télécharger ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
+                                    onClick={() => downloadRemiseFichier(f.id, f.nom || `${e.r.label}${e.r.fichiers.length > 1 ? ` (${k + 1})` : ""}`)}>
+                                    <Icon name="download" size={14} /> Télécharger{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
+                                  </button>
+                                )}
+                              </Fragment>
                             ))}
                             {/* LE BOUTON N'APPARAÎT QU'UNE FOIS LE DOCUMENT DÉPOSÉ. Confirmer la
                                 réception de ce qui n'existe pas encore n'a pas de sens, et le
