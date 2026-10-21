@@ -36,22 +36,37 @@ test('apiClient : downloadRemiseFichier ENREGISTRE le fichier (et ne l\'ouvre pa
     assert.match(api, /export function remiseFichierUrl\(fichierId\) \{ return `\$\{API_BASE_URL\}\/remises\/fichier\/\$\{fichierId\}`; \}/);
 });
 
-test('espace ENTREPRISE : « Télécharger » n\'apparaît qu\'une fois la remise RECUE, à côté de « Voir »', () => {
+test('espace ENTREPRISE : un fichier PAR LIGNE (son NOM, non un numéro), « Télécharger » gardé par la réception', () => {
     const ui = lireUi('pages/RepresentantEspace.jsx');
-    assert.match(ui, /import \{ Fragment, /, 'les deux boutons par fichier tiennent dans un Fragment');
-    assert.match(ui, /downloadRemiseFichier/, 'la fonction est importée');
-    /* « Voir » toujours là ; « Télécharger » SOUS condition de réception (recue = statut RECUE). */
+    assert.match(ui, /downloadRemiseFichier/, 'la fonction est importée et appelée');
     assert.match(ui, /const recue = r\.statut === "RECUE";/);
-    assert.match(ui, /\{recue && \(\s*<button className="btn sm ghost"[\s\S]*?onClick=\{\(\) => downloadRemiseFichier\(f\.id,/);
-    assert.match(ui, /Télécharger\{r\.fichiers\.length > 1/);
+    /* Un fichier PAR LIGNE : le NOM du document (et non un numéro « (1) »). */
+    assert.match(ui, /<span className="remise-fichiers">/, 'la liste des fichiers est une colonne de lignes');
+    assert.match(ui, /const nomFichier = f\.nom \|\| `Document \$\{k \+ 1\}`;/);
+    assert.match(ui, /<span className="remise-fichier-nom" title=\{nomFichier\}>\{nomFichier\}<\/span>/, 'le nom du fichier est affiché');
+    /* « Voir » toujours là ; « Télécharger » SOUS condition de réception, enregistré sous le nom du fichier. */
+    assert.match(ui, /\{recue && \(\s*<button className="btn sm ghost"[\s\S]*?onClick=\{\(\) => downloadRemiseFichier\(f\.id, nomFichier\)\}/);
+    /* Plus de numéro « (k+1) » collé au libellé des boutons — c'est le nom qui distingue les fichiers. */
+    assert.doesNotMatch(ui, /Télécharger\{r\.fichiers\.length/);
 });
 
-test('espace STAGIAIRE : même bouton « Télécharger », gardé lui aussi par la réception', () => {
+test('espace STAGIAIRE : même disposition — un fichier par ligne (son nom), « Télécharger » gardé par la réception', () => {
     const ui = lireUi('pages/StudentFormationDetail.jsx');
-    assert.match(ui, /import \{ Fragment, /);
     assert.match(ui, /downloadRemiseFichier/);
-    assert.match(ui, /\{e\.r\.statut === "RECUE" && \(\s*<button className="btn sm ghost"[\s\S]*?onClick=\{\(\) => downloadRemiseFichier\(f\.id,/);
-    assert.match(ui, /Télécharger\{\(e\.r\.fichiers\.length > 1\)/);
+    assert.match(ui, /<span className="remise-fichiers">/);
+    assert.match(ui, /const nomFichier = f\.nom \|\| `Document \$\{k \+ 1\}`;/);
+    assert.match(ui, /<span className="remise-fichier-nom" title=\{nomFichier\}>\{nomFichier\}<\/span>/);
+    assert.match(ui, /\{e\.r\.statut === "RECUE" && \(\s*<button className="btn sm ghost"[\s\S]*?onClick=\{\(\) => downloadRemiseFichier\(f\.id, nomFichier\)\}/);
+    assert.doesNotMatch(ui, /Télécharger\{\(e\.r\.fichiers\.length/);
+});
+
+test('un fichier par ligne : la colonne et le nom tronqué (CSS)', () => {
+    const css = lireUi('styles/app.css');
+    /* « En lignes » : les fichiers s'empilent (colonne), chaque ligne portant le nom puis les boutons. */
+    assert.match(css, /\.remise-fichiers\{display:flex;flex-direction:column;/);
+    assert.match(css, /\.remise-fichier\{display:flex;align-items:center;[^}]*flex-wrap:wrap\}/);
+    /* Un nom long ne pousse pas les boutons hors de la carte : il se tronque (ellipsis). */
+    assert.match(css, /\.remise-fichier-nom\{[^}]*text-overflow:ellipsis;white-space:nowrap[^}]*\}/);
 });
 
 test('le serveur sert le fichier à SON DESTINATAIRE (représentant pour l\'entreprise, stagiaire sinon)', () => {

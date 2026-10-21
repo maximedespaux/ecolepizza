@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getMyFormation, signMyEmargement, getDossierPieces, deposerPiece, pieceFichierUrl,
   getDossierRemises, remiseFichierUrl, downloadRemiseFichier, accuserRemise } from "../api/apiClient.js";
@@ -342,23 +342,6 @@ function StudentFormationDetail({ enrollmentId, embedded = false, formations, on
                             <Badge tone={{ done: "g", wait: "n", todo: "b", current: "b" }[etat] || "n"}>
                               {REMISE_LABEL[etat] || REMISE_LABEL.wait}
                             </Badge>
-                            {(e.r.fichiers || []).map((f, k) => (
-                              <Fragment key={f.id}>
-                                <button className="btn sm ghost"
-                                  aria-label={`Voir ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
-                                  onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
-                                  <Icon name="eye" size={14} /> Voir{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
-                                </button>
-                                {/* Une fois la réception confirmée, garder une copie du document remis. */}
-                                {e.r.statut === "RECUE" && (
-                                  <button className="btn sm ghost"
-                                    aria-label={`Télécharger ${f.nom || `le document ${k + 1}`} — ${e.r.label}`}
-                                    onClick={() => downloadRemiseFichier(f.id, f.nom || `${e.r.label}${e.r.fichiers.length > 1 ? ` (${k + 1})` : ""}`)}>
-                                    <Icon name="download" size={14} /> Télécharger{(e.r.fichiers.length > 1) ? ` (${k + 1})` : ""}
-                                  </button>
-                                )}
-                              </Fragment>
-                            ))}
                             {/* LE BOUTON N'APPARAÎT QU'UNE FOIS LE DOCUMENT DÉPOSÉ. Confirmer la
                                 réception de ce qui n'existe pas encore n'a pas de sens, et le
                                 serveur refuserait (422) — un bouton qui répond par une erreur est
@@ -375,6 +358,31 @@ function StudentFormationDetail({ enrollmentId, embedded = false, formations, on
                               </button>
                             ))}
                           </div>
+                          {/* Un fichier PAR LIGNE : son NOM (et non un numéro), puis Voir / Télécharger. */}
+                          {(e.r.fichiers || []).length > 0 && (
+                            <span className="remise-fichiers">
+                              {(e.r.fichiers || []).map((f, k) => {
+                                const nomFichier = f.nom || `Document ${k + 1}`;
+                                return (
+                                  <span key={f.id} className="remise-fichier">
+                                    <Icon name="file-text" size={14} />
+                                    <span className="remise-fichier-nom" title={nomFichier}>{nomFichier}</span>
+                                    <button className="btn sm ghost" aria-label={`Voir ${nomFichier} — ${e.r.label}`}
+                                      onClick={() => window.open(remiseFichierUrl(f.id), "_blank", "noopener")}>
+                                      <Icon name="eye" size={14} /> Voir
+                                    </button>
+                                    {/* Une fois la réception confirmée, garder une copie du document remis. */}
+                                    {e.r.statut === "RECUE" && (
+                                      <button className="btn sm ghost" aria-label={`Télécharger ${nomFichier} — ${e.r.label}`}
+                                        onClick={() => downloadRemiseFichier(f.id, nomFichier)}>
+                                        <Icon name="download" size={14} /> Télécharger
+                                      </button>
+                                    )}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          )}
                           {e.r.consigne && <p className="hint" style={{ margin: "2px 0 0" }}>{e.r.consigne}</p>}
                           {e.r.statut === "ATTENDUE" && (
                             <p className="hint" style={{ margin: "2px 0 0" }}>L'école ne l'a pas encore déposé.</p>
