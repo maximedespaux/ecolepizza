@@ -1004,8 +1004,8 @@ export function getSessionIntervenants(sessionId) {
 export function addSessionIntervenant(sessionId, payload) {
   return request(`/sessions/${sessionId}/intervenants`, { method: "POST", body: JSON.stringify(payload) });
 }
-export function setIntervenantSlots(sessionId, siId, slots) {
-  return request(`/sessions/${sessionId}/intervenants/${siId}/slots`, { method: "PUT", body: JSON.stringify({ slots }) });
+export function setIntervenantSlots(sessionId, siId, slots, extra) {
+  return request(`/sessions/${sessionId}/intervenants/${siId}/slots`, { method: "PUT", body: JSON.stringify({ slots, extra }) });
 }
 export function removeSessionIntervenant(sessionId, siId) {
   return request(`/sessions/${sessionId}/intervenants/${siId}`, { method: "DELETE" });

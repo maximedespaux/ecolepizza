@@ -52,13 +52,14 @@ test('une plage se lit en entier, ou pas du tout', () => {
 test('la feuille imprime les heures AU-DESSUS de la signature, et l\'aperçu fait pareil', () => {
     const E = lire('lib/emargement.js');
     assert.match(E, /const cell = \(dataUrl, applies, heures, etat = \{\}\) =>/);
-    assert.match(E, /const h = heures \? `<div class="hr">\$\{esc\(heures\)\}<\/div>` : '';/);
+    // Plusieurs créneaux (pauses, 213) arrivent séparés par des sauts de ligne → empilés (<br/>).
+    assert.match(E, /const h = heures \? `<div class="hr">\$\{esc\(heures\)\.replace\(/);
     /* AU-DESSUS, PAS À CÔTÉ : une colonne de demi-journée fait 12 à 20 mm, deux informations
        côte à côte n'y tiendraient pas. */
     assert.match(E, /\$\{h\}<img src="\$\{attr\(v\)\}"/, 'les heures précèdent l’image de signature');
-    /* ET LA CASE NE GRANDIT PAS : LibreOffice n'honore aucune hauteur de tableau, c'est le
-       CONTENU qui la fait — une ligne de plus et la feuille passe sur deux pages. */
-    assert.match(E, /const imgH = heures \? Math\.max\(4, sigH - dens\.sub \* 0\.4\) : sigH;/);
+    /* ET LA CASE NE GRANDIT PAS : LibreOffice n'honore aucune hauteur de tableau, c'est le CONTENU qui
+       la fait — on rogne l'image d'AUTANT de lignes d'heures (plusieurs créneaux = plusieurs lignes). */
+    assert.match(E, /const imgH = heures \? Math\.max\(4, sigH - dens\.sub \* 0\.4 \* nbLignesH\) : sigH;/);
 
     /* UNE SEULE REQUÊTE POUR LES DEUX CHEMINS. Elle vivait en double — la feuille archivée et son
        aperçu — et n'ajouter les heures qu'à l'une aurait donné un aperçu qui ne ressemble pas au
@@ -70,22 +71,24 @@ test('la feuille imprime les heures AU-DESSUS de la signature, et l\'aperçu fai
         'la feuille archivée ET le document signé lisent la même feuille');
     assert.strictEqual((E.match(/JOIN session_intervenant_slot sis ON sis\.session_intervenant_id = si\.id/g) || []).length, 1,
         'la requête des intervenants ne doit plus exister qu’en un exemplaire');
-    assert.match(E, /heuresDe: \(k\) => iv\.heures\[k\] \|\| '',/);
+    // heuresDe empile les créneaux et ajoute un TOTAL net sous eux dès qu'il y a une pause (213).
+    assert.match(E, /return h\.lignes\.length > 1 \? \[\.\.\.h\.lignes, fmtDur\(h\.minutes\)\]\.join\('\\n'\) : h\.lignes\[0\];/);
     assert.match(E, /p\.heuresDe \? p\.heuresDe\(k\) : ''/);
 });
 
 test('sans la 181, les demi-journées marchent — et on le DIT', () => {
     const C = lire('controllers/intervenant.controller.js');
-    /* CASCADE SUR ER_BAD_FIELD_ERROR des deux côtés : le code doit rendre la même forme AVANT et
-       APRÈS la migration, les heures en moins. */
-    assert.match(C, /if \(e && e\.code !== 'ER_BAD_FIELD_ERROR'\) throw e;/);
-    assert.match(lire('lib/emargement.js'), /if \(err && err\.code !== 'ER_BAD_FIELD_ERROR'\) throw err;/);
+    /* COLONNES SONDÉES (colonnesHoraires / colonneExiste) des deux côtés : le code rend la même forme
+       AVANT et APRÈS les migrations 181 (heures) et 213 (créneaux multiples), ce qui manque en moins. */
+    assert.match(C, /const horaires = await colonnesHoraires\(conn\);/);
+    assert.match(C, /colonneExiste\(conn, 'session_intervenant_slot', 'plages'\)/);
+    assert.match(lire('lib/emargement.js'), /colonneExiste\(conn, 'session_intervenant_slot', 'plages'\)/);
     /* LA DEMI-JOURNÉE EST ENREGISTRÉE QUOI QU'IL ARRIVE : ce qui compte d'abord, c'est qu'il
        était là. Un 503 aurait fait croire que rien n'était passé, et l'école aurait tout
        ressaisi — d'où un message, pas un refus. */
     assert.match(C, /migration 181 n’est pas jouée/);
     assert.match(C, /res\.json\(\{\s*success: true, horaires,/);
-    assert.match(C, /const p = lirePlage\(s\.debut, s\.fin\);/, 'la règle vient du lib partagé, pas d’une regex écrite ici');
+    assert.match(C, /const plages = lirePlages\(brut\);/, 'la règle vient du lib partagé, pas d’une regex écrite ici');
 
     /* L'ÉCRAN NE PROPOSE PAS UNE SAISIE QUE L'ENREGISTREMENT JETTERAIT. */
     const UI = lireUi('components/SessionIntervenants.jsx');
@@ -99,14 +102,14 @@ test('les heures se saisissent SOUS la case cochée, et seulement là', () => {
     /* DEUX CHAMPS `time`, pas un texte libre : le clavier d'un téléphone propose alors des
        heures, et le navigateur refuse « 25:00 » avant même l'envoi. */
     assert.strictEqual((UI.match(/<input type="time"/g) || []).length, 2);
-    assert.match(UI, /onChange=\{\(e\) => changerHeure\(si, d, h\.slot, "debut", e\.target\.value\)\}/);
-    assert.match(UI, /onChange=\{\(e\) => changerHeure\(si, d, h\.slot, "fin", e\.target\.value\)\}/);
-    /* COCHER OUVRE LA LIGNE AVEC SES DEUX CHAMPS VIDES : quarante paires de champs sur les
-       demi-journées non assurées feraient un mur à ne pas remplir. */
-    assert.match(UI, /: \[\.\.\.\(si\.slots \|\| \[\]\), \{ date, slot, debut: "", fin: "" \}\]/);
-    /* UN ALLER-RETOUR PAR FRAPPE ferait clignoter la ligne sans rien garder : on écrit quand la
-       paire est complète, ou à la sortie du champ. */
-    assert.match(UI, /if \(ligne && ligne\.debut && ligne\.fin\) enregistrer/);
+    assert.match(UI, /onChange=\{\(e\) => changerPlage\(si, d, h\.slot, i, "debut", e\.target\.value\)\}/);
+    assert.match(UI, /onChange=\{\(e\) => changerPlage\(si, d, h\.slot, i, "fin", e\.target\.value\)\}/);
+    /* COCHER OUVRE LA LIGNE AVEC UN CRÉNEAU VIDE : quarante paires de champs sur les demi-journées
+       non assurées feraient un mur à ne pas remplir. */
+    assert.match(UI, /: \[\.\.\.\(si\.slots \|\| \[\]\), \{ date, slot, plages: \[\{ debut: "", fin: "" \}\] \}\]/);
+    /* UN ALLER-RETOUR PAR FRAPPE ferait clignoter la ligne sans rien garder : on écrit quand TOUTES
+       les plages de la demi-journée sont complètes, ou à la sortie du champ. */
+    assert.match(UI, /if \(s && plagesDe\(s\)\.every\(\(p\) => p\.debut && p\.fin\)\) enregistrer/);
     assert.match(UI, /onBlur=\{\(\) => poserHeures\(si\)\}/);
     /* LES DEUX CHAMPS SOUS LA CASE, jamais à côté : la colonne fait la largeur de son intitulé. */
     assert.match(lireUi('styles/app.css'), /\.interv-heures\{display:flex;[^}]*margin-top:3px\}/);

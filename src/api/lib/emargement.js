@@ -4,10 +4,10 @@
 const crypto = require('crypto');
 const { htmlToPdf } = require('./docxpdf.js');
 const { decrypt } = require('./crypto.js');
-const { plageFr } = require('./plageHoraire.js');
+const { lirePlage, lirePlages, plagesFr, minutesPlages } = require('./plageHoraire.js');
 const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est chiffré au repos
 const { FUSEAU, maintenantA } = require('./fuseau.js');
-const { colonneOuNull } = require('./colonnes.js');
+const { colonneOuNull, colonneExiste } = require('./colonnes.js');
 const { rognerSignature } = require('./rognerSignature.js');
 /* Les proportions d'une image : lues par lib/imagesPdf.js, partagé avec les cadres de signature des
    documents (lib/tokens.js). Réexportées plus bas, pour les tests qui les lisent ici. */
@@ -218,39 +218,51 @@ const MM = 3.7795;
  * exactement comme avant.
  */
 async function chargerIntervenants(conn, sessionId) {
-    const base = `SELECT si.user_id, si.specialty, u.first_name, u.last_name,
-                         DATE_FORMAT(sis.date, '%Y-%m-%d') AS date, sis.slot`;
-    const suite = ` FROM session_intervenant si
-             JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
-             LEFT JOIN user u ON u.id = si.user_id
-             WHERE si.session_id = ?`;
-    let lignes;
-    try {
-        [lignes] = await conn.query(`${base}, sis.heure_debut AS hd, sis.heure_fin AS hf${suite}`, [sessionId]);
-    } catch (err) {
-        if (err && err.code !== 'ER_BAD_FIELD_ERROR') throw err;
-        [lignes] = await conn.query(base + suite, [sessionId]);
-    }
+    const aHoraires = await colonneExiste(conn, 'session_intervenant_slot', 'heure_debut'); // 181
+    const aPlages = await colonneExiste(conn, 'session_intervenant_slot', 'plages');        // 213 : créneaux multiples
+    const aExtra = await colonneExiste(conn, 'session_intervenant', 'extra');               // 213 : « heures en plus »
+    const sel = ['si.user_id', 'si.specialty', aExtra ? 'si.extra' : '0 AS extra',
+        'u.first_name', 'u.last_name', "DATE_FORMAT(sis.date, '%Y-%m-%d') AS date", 'sis.slot'];
+    if (aHoraires) sel.push('sis.heure_debut AS hd', 'sis.heure_fin AS hf');
+    if (aPlages) sel.push('sis.plages AS plages');
+    const [lignes] = await conn.query(
+        `SELECT ${sel.join(', ')}
+         FROM session_intervenant si
+         JOIN session_intervenant_slot sis ON sis.session_intervenant_id = si.id
+         LEFT JOIN user u ON u.id = si.user_id
+         WHERE si.session_id = ?`, [sessionId]);
     const parUtilisateur = {};
     for (const a of lignes) {
         const iv = parUtilisateur[a.user_id] || (parUtilisateur[a.user_id] = {
             user_id: a.user_id, name: `${a.last_name || ''} ${a.first_name || ''}`.trim(),
-            specialty: a.specialty, assigned: new Set(), heures: {},
+            specialty: a.specialty, extra: !!Number(a.extra), assigned: new Set(), heures: {},
         });
         const cle = `${a.date}|${a.slot}`;
         iv.assigned.add(cle);
-        const plage = plageFr(a.hd, a.hf);
-        if (plage) iv.heures[cle] = plage;
+        // Créneaux : la liste `plages` (213) si elle est là, sinon la plage unique heure_debut/fin (181).
+        let plages = [];
+        if (a.plages) { try { plages = lirePlages(JSON.parse(a.plages)); } catch { plages = []; } }
+        if (!plages.length) { const p = lirePlage(a.hd, a.hf); if (p) plages = [p]; }
+        if (plages.length) iv.heures[cle] = { lignes: plagesFr(plages), minutes: minutesPlages(plages) };
     }
     return parUtilisateur;
 }
 
 /** Les intervenants en ligne de feuille : ils ne signent QUE les demi-journées qu'ils assurent. */
 const lignesIntervenants = (parUtilisateur, ivSig) => Object.values(parUtilisateur).map((iv) => ({
-    role: 'intervenant', name: iv.name, specialty: iv.specialty,
+    role: 'intervenant', name: iv.name, specialty: iv.specialty, extra: !!iv.extra,
     sigOf: (k) => ivSig[`${iv.user_id}|${k}`] || null,
     appliesTo: (k) => iv.assigned.has(k),
-    heuresDe: (k) => iv.heures[k] || '',
+    /* Les créneaux EMPILÉS, avec un total net SOUS eux dès qu'il y a une pause (plusieurs créneaux) —
+       « 16h15 - 16h30 / 16h45 - 18h15 / 1h45 », comme la feuille manuelle. Un créneau unique s'imprime
+       seul : la plage EST le total. */
+    heuresDe: (k) => {
+        const h = iv.heures[k];
+        if (!h || !h.lignes.length) return '';
+        return h.lignes.length > 1 ? [...h.lignes, fmtDur(h.minutes)].join('\n') : h.lignes[0];
+    },
+    /** Minutes NETTES de toutes ses demi-journées — pour le total « en plus » quand il est extra. */
+    minutesTotales: () => Object.values(iv.heures).reduce((t, h) => t + (h.minutes || 0), 0),
 }));
 
 /**
@@ -288,16 +300,25 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const rangeFor = (c) => (cfg.show_hours ? plageDe(c) : null);
     const hasSched = cfg.show_hours && cols.some((c) => rangeFor(c));
 
+    /* HEURES « EN PLUS » DES INTERVENANTS (migration 213) : un intervenant marqué « extra » enseigne un
+       temps qui n'est PAS dans les demi-journées du stagiaire (l'hygiène d'un NIV1H, p.ex.) ; le stagiaire
+       suit aussi ces sessions, donc ses heures nettes s'AJOUTENT au total. Seulement quand les intervenants
+       sont montrés (sinon personne ne les atteste ici) et que la feuille est en HEURES (sans horaires, le
+       total est en demi-journées — rien à y ajouter). */
+    const extraMinutes = cfg.show_intervenants
+        ? participants.filter((p) => p.role === 'intervenant' && p.extra && p.minutesTotales).reduce((t, p) => t + p.minutesTotales(), 0)
+        : 0;
+
     /* LE TOTAL : les heures émargées par le stagiaire — le chiffre que demandent le certificat de
        réalisation et le financeur. En heures quand chaque demi-journée a sa plage ; sinon en
        demi-journées (« 9/10 »). Une présence RATTRAPÉE par l'école compte : elle est attestée. */
     const durees = cols.map((c) => { const r = plageDe(c); return r ? r[1] - r[0] : null; });
     const dureesConnues = cols.length > 0 && durees.every((x) => x != null);
-    const totalPrevu = dureesConnues ? durees.reduce((a, b) => a + b, 0) : null;
+    const totalPrevu = dureesConnues ? durees.reduce((a, b) => a + b, 0) + extraMinutes : null;
     const totalDe = (p) => {
         if (p.role !== 'stagiaire' || !p.presentDe) return '';
         const presents = cols.map((c, i) => (p.presentDe(`${c.date}|${c.slot}`) ? i : -1)).filter((i) => i >= 0);
-        return dureesConnues ? (fmtDur(presents.reduce((t, i) => t + durees[i], 0)) || '0h00') : `${presents.length}/${cols.length}`;
+        return dureesConnues ? (fmtDur(presents.reduce((t, i) => t + durees[i], 0) + extraMinutes) || '0h00') : `${presents.length}/${cols.length}`;
     };
     const close = (c) => !!aujourdHui && c.date < aujourdHui;
 
@@ -404,13 +425,15 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
         const deco = c ? ` style="${styleCol(c)}"` : '';
         if (!applies) return `<td width="${colWpx}" height="${rowHpx}" bgcolor="${T.nc}"${deco}></td>`;
         const att = `width="${colWpx}" height="${rowHpx}" align="center"${c && pair(c.date) ? ` bgcolor="${T.teinte}"` : ''}${deco}`;
-        const h = heures ? `<div class="hr">${esc(heures)}</div>` : '';
+        // Plusieurs créneaux (pauses, 213) arrivent séparés par des sauts de ligne → empilés dans la case.
+        const h = heures ? `<div class="hr">${esc(heures).replace(/\n/g, '<br/>')}</div>` : '';
         const note = etat.note ? `<div class="nt">${esc(etat.note).replace(/\n/g, '<br/>')}</div>` : '';
         const v = rogner(decrypt(dataUrl)); // le vide autour du trait retiré (lib/rognerSignature.js)
-        /* L'IMAGE PERD LA HAUTEUR DE LA LIGNE D'HEURES, sinon la case grandit et la feuille ne
-           tient plus sur une page — LibreOffice n'honore aucune hauteur de tableau (CLAUDE.md § 3),
-           c'est le CONTENU qui la fait. */
-        const imgH = heures ? Math.max(4, sigH - dens.sub * 0.4) : sigH;
+        /* L'IMAGE PERD LA HAUTEUR DES LIGNES D'HEURES, sinon la case grandit et la feuille ne tient
+           plus sur une page — LibreOffice n'honore aucune hauteur de tableau (CLAUDE.md § 3), c'est le
+           CONTENU qui la fait. Plusieurs créneaux (pauses, 213) ⇒ plusieurs lignes : on rogne d'autant. */
+        const nbLignesH = heures ? heures.split('\n').length : 0;
+        const imgH = heures ? Math.max(4, sigH - dens.sub * 0.4 * nbLignesH) : sigH;
         const imgHNote = etat.note ? Math.max(4, imgH - dens.sub * 0.8) : imgH; // …et celle du motif
         const boite = ajuster(v, sigW, imgHNote); // les proportions de la signature, pas celles de la case
         if (v) return `<td ${att}>${h}<img src="${attr(v)}" width="${px(boite.largeur)}" height="${px(boite.hauteur)}" style="object-fit:contain"/>${note}</td>`;

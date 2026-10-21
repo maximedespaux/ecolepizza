@@ -4,7 +4,8 @@ const { logAudit } = require('../lib/audit.js');
 const { encrypt, decrypt } = require('../lib/crypto.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 const { getNotesSession, saveNote, saveVerdict, cloturerCandidat } = require('./evaluation.controller.js');
-const { lirePlage } = require('../lib/plageHoraire.js');
+const { lirePlages } = require('../lib/plageHoraire.js');
+const { colonneExiste } = require('../lib/colonnes.js');
 
 const SLOTS = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 const SLOT_LABEL = { MATIN: 'Matin', APRES_MIDI: 'Après-midi', EXAMEN: 'Examen', DISTANCIEL: 'Distanciel' };
@@ -26,17 +27,24 @@ async function colonnesHoraires(conn) {
    ER_BAD_FIELD_ERROR : le code doit rendre la même forme AVANT et APRÈS la migration, les
    heures en moins. */
 async function lireCreneaux(conn, ids) {
-    const base = `SELECT session_intervenant_id AS si, DATE_FORMAT(date, '%Y-%m-%d') AS date, slot`;
-    const fin = ` FROM session_intervenant_slot WHERE session_intervenant_id IN (?)`;
-    try {
-        const [rows] = await conn.query(
-            `${base}, TIME_FORMAT(heure_debut, '%H:%i') AS debut, TIME_FORMAT(heure_fin, '%H:%i') AS fin${fin}`, [ids]);
-        return rows;
-    } catch (e) {
-        if (e && e.code !== 'ER_BAD_FIELD_ERROR') throw e;
-        const [rows] = await conn.query(base + fin, [ids]);
-        return rows;
+    const sel = ['session_intervenant_id AS si', "DATE_FORMAT(date, '%Y-%m-%d') AS date", 'slot'];
+    if (await colonnesHoraires(conn)) sel.push("TIME_FORMAT(heure_debut, '%H:%i') AS debut", "TIME_FORMAT(heure_fin, '%H:%i') AS fin");
+    if (await colonneExiste(conn, 'session_intervenant_slot', 'plages')) sel.push('plages'); // créneaux multiples (213)
+    const [rows] = await conn.query(
+        `SELECT ${sel.join(', ')} FROM session_intervenant_slot WHERE session_intervenant_id IN (?)`, [ids]);
+    return rows;
+}
+
+/** Les créneaux d'une demi-journée, en HH:MM pour l'écran : la liste `plages` (213) si elle existe,
+ *  sinon la plage unique heure_debut/heure_fin (181). Toujours au moins `[]`. */
+function plagesDuCreneau(s) {
+    let plages = [];
+    if (s.plages) {
+        try { plages = JSON.parse(s.plages).map((p) => ({ debut: String(p.debut || '').slice(0, 5), fin: String(p.fin || '').slice(0, 5) })).filter((p) => p.debut && p.fin); }
+        catch { plages = []; }
     }
+    if (!plages.length && (s.debut || s.fin)) plages = [{ debut: s.debut || '', fin: s.fin || '' }];
+    return plages;
 }
 
 // Vérifie que la session appartient à l'organisme du jeton.
@@ -55,26 +63,32 @@ const listSessionIntervenants = async (req, res) => {
         const orgId = req.user.organization_id;
         if (!await ownSession(conn, orgId, req.params.id)) return res.status(404).json({ message: 'Session introuvable' });
 
+        const aExtra = await colonneExiste(conn, 'session_intervenant', 'extra'); // « heures en plus » (213)
         const [assigned] = await conn.query(
-            `SELECT si.id, si.user_id, si.specialty, u.first_name, u.last_name, u.email
+            `SELECT si.id, si.user_id, si.specialty, ${aExtra ? 'si.extra' : '0 AS extra'}, u.first_name, u.last_name, u.email
              FROM session_intervenant si JOIN user u ON u.id = si.user_id
              WHERE si.session_id = ? AND si.organization_id = ?
              ORDER BY u.last_name, u.first_name`,
             [req.params.id, orgId]
         );
+        for (const a of assigned) { a.slots = []; a.extra = !!Number(a.extra); }
         if (assigned.length) {
             const ids = assigned.map((a) => a.id);
             const slots = await lireCreneaux(conn, ids);
             const by = {};
             for (const s of slots) {
-                (by[s.si] = by[s.si] || []).push({ date: s.date, slot: s.slot, debut: s.debut || null, fin: s.fin || null });
+                const plages = plagesDuCreneau(s);
+                (by[s.si] = by[s.si] || []).push({ date: s.date, slot: s.slot,
+                    debut: s.debut || (plages[0] && plages[0].debut) || null,
+                    fin: s.fin || (plages[0] && plages[0].fin) || null, plages });
             }
             for (const a of assigned) a.slots = by[a.id] || [];
         }
         /* `horaires` DIT À L'ÉCRAN CE QU'IL PEUT PROPOSER. Sans la 181, il affiche les cases sans
            les deux champs d'heures et l'explique, au lieu de laisser saisir des heures que
-           l'enregistrement jetterait en silence. */
+           l'enregistrement jetterait en silence. `multi` (213) : plusieurs créneaux + le drapeau « en plus ». */
         const horaires = await colonnesHoraires(conn);
+        const multi = await colonneExiste(conn, 'session_intervenant_slot', 'plages');
 
         // Vivier : comptes INTERVENANT actifs non déjà affectés à CETTE session.
         const [roster] = await conn.query(
@@ -84,7 +98,7 @@ const listSessionIntervenants = async (req, res) => {
              ORDER BY last_name, first_name`,
             [orgId, req.params.id]
         );
-        res.json({ data: { assigned, roster, horaires } });
+        res.json({ data: { assigned, roster, horaires, multi } });
     } catch (err) {
         console.error('Erreur liste intervenants session :', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -103,10 +117,11 @@ const addSessionIntervenant = async (req, res) => {
             "SELECT id FROM user WHERE id = ? AND organization_id = ? AND role = 'INTERVENANT'", [user_id, orgId]);
         if (!u) return res.status(422).json({ error: 'Compte intervenant invalide.' });
         const id = crypto.randomUUID();
+        const cols = ['id', 'organization_id', 'session_id', 'user_id', 'specialty'];
+        const vals = [id, orgId, req.params.id, user_id, specialty ? String(specialty).slice(0, 160) : null];
+        if (await colonneExiste(conn, 'session_intervenant', 'extra')) { cols.push('extra'); vals.push(req.body.extra ? 1 : 0); }
         try {
-            await conn.query(
-                'INSERT INTO session_intervenant (id, organization_id, session_id, user_id, specialty) VALUES (?, ?, ?, ?, ?)',
-                [id, orgId, req.params.id, user_id, specialty ? String(specialty).slice(0, 160) : null]);
+            await conn.query(`INSERT INTO session_intervenant (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         } catch (e) {
             if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Cet intervenant est déjà affecté à la session.' });
             throw e;
@@ -130,39 +145,45 @@ const setIntervenantSlots = async (req, res) => {
         if (!si) return res.status(404).json({ message: 'Affectation introuvable' });
 
         const list = Array.isArray(req.body?.slots) ? req.body.slots : [];
-        const horaires = await colonnesHoraires(conn);
+        const horaires = await colonnesHoraires(conn);                                  // 181 : heure_debut/fin
+        const multi = await colonneExiste(conn, 'session_intervenant_slot', 'plages');  // 213 : créneaux multiples
+
+        // « Heures en plus » (213) : drapeau porté par l'affectation, mis à jour quand il est fourni.
+        if (req.body.extra !== undefined && await colonneExiste(conn, 'session_intervenant', 'extra')) {
+            await conn.query('UPDATE session_intervenant SET extra = ? WHERE id = ?', [req.body.extra ? 1 : 0, si.id]);
+        }
+
         await conn.query('DELETE FROM session_intervenant_slot WHERE session_intervenant_id = ?', [si.id]);
-        let heuresPerdues = 0;
+        let heuresPerdues = 0, pausesPerdues = 0;
         for (const s of list) {
             const date = String(s.date || '').slice(0, 10);
             const slot = String(s.slot || '');
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !SLOTS.includes(slot)) continue;
-            /* UNE PLAGE INCOMPLÈTE OU À L'ENVERS N'EST PAS ENREGISTRÉE, et la demi-journée l'est
-               quand même : ce qui compte d'abord, c'est qu'il était là. `lirePlage` est la seule
-               règle (lib/plageHoraire.js), partagée avec la feuille d'émargement. */
-            const p = lirePlage(s.debut, s.fin);
-            if (horaires) {
-                await conn.query(
-                    `INSERT IGNORE INTO session_intervenant_slot
-                        (id, session_intervenant_id, date, slot, heure_debut, heure_fin)
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [crypto.randomUUID(), si.id, date, slot, p ? p.debut : null, p ? p.fin : null]);
-            } else {
-                if (p) heuresPerdues += 1;
-                await conn.query(
-                    'INSERT IGNORE INTO session_intervenant_slot (id, session_intervenant_id, date, slot) VALUES (?, ?, ?, ?)',
-                    [crypto.randomUUID(), si.id, date, slot]);
-            }
+            /* UN CRÉNEAU INCOMPLET OU À L'ENVERS N'EST PAS ENREGISTRÉ, la demi-journée l'est quand même :
+               ce qui compte d'abord, c'est qu'il était là. `lirePlages` (lib/plageHoraire.js) est la
+               seule règle, partagée avec la feuille. Forme NOUVELLE : `plages:[{debut,fin}]` (pauses) ;
+               l'ancienne `debut/fin` reste acceptée (un seul créneau). On garde la 1re plage dans
+               heure_debut/heure_fin (181) pour que tout code qui les lit encore marche. */
+            const brut = Array.isArray(s.plages) ? s.plages : ((s.debut || s.fin) ? [{ debut: s.debut, fin: s.fin }] : []);
+            const plages = lirePlages(brut);
+            const premiere = plages[0] || null;
+            const cols = ['id', 'session_intervenant_id', 'date', 'slot'];
+            const vals = [crypto.randomUUID(), si.id, date, slot];
+            if (horaires) { cols.push('heure_debut', 'heure_fin'); vals.push(premiere ? premiere.debut : null, premiere ? premiere.fin : null); }
+            if (multi) { cols.push('plages'); vals.push(plages.length ? JSON.stringify(plages) : null); }
+            if (!horaires && !multi && plages.length) heuresPerdues += 1;  // aucune colonne d'heures (ni 181 ni 213)
+            if (!multi && plages.length > 1) pausesPerdues += 1;           // 213 absente : seul le 1er créneau tient
+            await conn.query(`INSERT IGNORE INTO session_intervenant_slot (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
         }
         logAudit(req, 'session.intervenant.slots', 'TrainingSession', req.params.id);
         /* ON LE DIT PLUTÔT QUE DE REFUSER : les demi-journées, elles, sont bien enregistrées.
            Un 503 aurait fait croire que rien n'était passé, et l'école aurait tout ressaisi. */
-        res.json({
-            success: true, horaires,
-            message: heuresPerdues
-                ? 'Demi-journées enregistrées, SANS les heures : la migration 181 n’est pas jouée.'
-                : 'Demi-journées enregistrées.',
-        });
+        const message = heuresPerdues
+            ? 'Demi-journées enregistrées, SANS les heures : la migration 181 n’est pas jouée.'
+            : pausesPerdues
+                ? 'Demi-journées et 1re plage enregistrées, SANS les pauses : la migration 213 n’est pas jouée.'
+                : 'Demi-journées enregistrées.';
+        res.json({ success: true, horaires, multi, message });
     } catch (err) {
         console.error('Erreur demi-journées intervenant :', err);
         res.status(500).json({ error: 'Internal Server Error' });
