@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (381 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-21** : **2912 tests — 2905 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-22** : **2914 tests — 2907 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -300,6 +300,12 @@ deux créneaux + cocher « Heures en plus » sur un intervenant, puis `GET /api/
 ⚠️ Son revert retire les deux colonnes : les créneaux multiples reviennent à la plage unique (181, la 1re gardée en
 parallèle ; les pauses perdues), et les intervenants « extra » cessent de compter dans le total. Les demi-journées et
 signatures ne sont pas touchées. Tests : `intervenant-plages-extra.test.js` (+ `intervenant-heures.test.js` mis à jour).
+AFFINÉ le 2026-10-22 (SANS migration, rendu seul) : quand un intervenant enseigne PLUS TARD que la fin de la
+demi-journée (l'hygiène du soir, formation jusqu'à 16h30 mais hygiène jusqu'à 18h30), la plage affichée EN TÊTE de
+la feuille va jusqu'à SA fin — « 13h00 - 18h30 » — pour dire le temps réel d'activité. La DURÉE, elle, ne bouge pas
+(« 3h30 », celle du stagiaire) : jamais cumulée, les heures « en plus » restent comptées À PART dans le total
+(`finAffichee`/`finIntervenant`, lib/emargement.js ; la fin la plus tardive vient de `finDe`, `lignesIntervenants`).
+N'agit que si les intervenants sont montrés. Tests : `intervenant-plages-extra.test.js`.
 
 **212 est À JOUER** (`212_billing_profile_compta.sql`, des PARAMÈTRES DE GESTION PAR ENTITÉ ÉMETTRICE lus par
 la Comptabilité — demandé le 2026-10-20). Cinq colonnes sur `billing_profile` : `revenue_inscriptions`,

@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 const { htmlToPdf } = require('./docxpdf.js');
 const { decrypt } = require('./crypto.js');
-const { lirePlage, lirePlages, plagesFr, minutesPlages } = require('./plageHoraire.js');
+const { lirePlage, lirePlages, plagesFr, minutesPlages, enMinutes } = require('./plageHoraire.js');
 const { aRanger, mesureDisponible } = require('./coffre.js'); // le coffre est chiffré au repos
 const { FUSEAU, maintenantA } = require('./fuseau.js');
 const { colonneOuNull, colonneExiste } = require('./colonnes.js');
@@ -243,7 +243,9 @@ async function chargerIntervenants(conn, sessionId) {
         let plages = [];
         if (a.plages) { try { plages = lirePlages(JSON.parse(a.plages)); } catch { plages = []; } }
         if (!plages.length) { const p = lirePlage(a.hd, a.hf); if (p) plages = [p]; }
-        if (plages.length) iv.heures[cle] = { lignes: plagesFr(plages), minutes: minutesPlages(plages) };
+        // `fin` = l'heure de fin la PLUS TARDIVE de la demi-journée (minutes depuis minuit) : sert à
+        // étendre la fin affichée en tête quand un intervenant enseigne plus tard que la formation (213).
+        if (plages.length) iv.heures[cle] = { lignes: plagesFr(plages), minutes: minutesPlages(plages), fin: Math.max(...plages.map((p) => enMinutes(p.fin))) };
     }
     return parUtilisateur;
 }
@@ -263,6 +265,8 @@ const lignesIntervenants = (parUtilisateur, ivSig) => Object.values(parUtilisate
     },
     /** Minutes NETTES de toutes ses demi-journées — pour le total « en plus » quand il est extra. */
     minutesTotales: () => Object.values(iv.heures).reduce((t, h) => t + (h.minutes || 0), 0),
+    /** L'heure de FIN de sa demi-journée `k` (minutes depuis minuit), ou null — pour la fin globale en tête. */
+    finDe: (k) => (iv.heures[k] ? iv.heures[k].fin ?? null : null),
 }));
 
 /**
@@ -299,6 +303,26 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const plageDe = (c) => { const d = demiJourneesDuJour(horairesJours[joursFeuille.indexOf(c.date) + 1]); return d ? d[c.slot] || null : null; };
     const rangeFor = (c) => (cfg.show_hours ? plageDe(c) : null);
     const hasSched = cfg.show_hours && cols.some((c) => rangeFor(c));
+
+    /* FIN GLOBALE D'UNE DEMI-JOURNÉE (213) : quand un intervenant enseigne PLUS TARD que la fin de la
+       formation (l'hygiène du soir, 16h30 → 18h30), la plage affichée EN TÊTE va jusqu'à SA fin — pour
+       que la feuille dise « 13h00 - 18h30 », le temps réel d'activité. La DURÉE, elle, ne bouge pas :
+       elle reste celle du stagiaire (`durees` ci-dessous, « 3h30 »), jamais cumulée — les heures « en
+       plus » sont comptées À PART dans le total (extraMinutes). Seulement quand les intervenants sont
+       montrés (sinon rien, sur la feuille, n'expliquerait une fin plus tardive). */
+    const finIntervenant = (c) => {
+        if (!cfg.show_intervenants) return null;
+        const k = `${c.date}|${c.slot}`;
+        let fin = null;
+        for (const p of participants) {
+            if (p.role === 'intervenant' && typeof p.finDe === 'function') {
+                const f = p.finDe(k);
+                if (f != null && (fin == null || f > fin)) fin = f;
+            }
+        }
+        return fin;
+    };
+    const finAffichee = (c, finFormation) => { const f = finIntervenant(c); return f != null && f > finFormation ? f : finFormation; };
 
     /* HEURES « EN PLUS » DES INTERVENANTS (migration 213) : un intervenant marqué « extra » enseigne un
        temps qui n'est PAS dans les demi-journées du stagiaire (l'hygiène d'un NIV1H, p.ex.) ; le stagiaire
@@ -476,7 +500,8 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
         </tr>
         <tr>${cols.map((c) => {
             const r = rangeFor(c);
-            const plage = r ? `<div class="hs">${fmtHM(r[0])} - ${fmtHM(r[1])}</div><div class="hs">${fmtDur(r[1] - r[0])}</div>` : '';
+            // Fin ÉTENDUE si un intervenant finit plus tard (213) ; durée INCHANGÉE (celle du stagiaire).
+            const plage = r ? `<div class="hs">${fmtHM(r[0])} - ${fmtHM(finAffichee(c, r[1]))}</div><div class="hs">${fmtDur(r[1] - r[0])}</div>` : '';
             return `<td class="tete" align="center" width="${colWpx}" bgcolor="${pair(c.date) ? T.teteJour : T.tete}" style="${styleCol(c)}"><b>${SLOT[c.slot] || esc(c.slot)}</b>${plage}</td>`;
         }).join('')}</tr>`;
 
