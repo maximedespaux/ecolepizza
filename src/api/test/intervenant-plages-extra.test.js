@@ -54,6 +54,8 @@ function rendu(extra) {
             // 16h15 - 16h30 (15 min) + 16h45 - 18h15 (1h30) = 1h45 net, avec une pause.
             heuresDe: (k) => (k === CLE_HYG ? '16h15 - 16h30\n16h45 - 18h15\n1h45' : ''),
             minutesTotales: () => 105,
+            // La fin la PLUS TARDIVE de la demi-journée (18h15), comme la rend lignesIntervenants.
+            finDe: (k) => (k === CLE_HYG ? 18 * 60 + 15 : null),
         },
     ];
     return E.renderEmargementHtml({ org, e, rows, participants,
@@ -76,4 +78,29 @@ test('NON-EXTRA : les heures de l\'intervenant NE comptent PAS en plus (16h00)',
 test('CRÉNEAUX EMPILÉS : les plages et leur total net s\'impriment l\'un sous l\'autre', () => {
     const html = rendu(true);
     assert.match(html, /16h15 - 16h30<br\/>16h45 - 18h15<br\/>1h45/, 'les créneaux empilés, puis le total net');
+});
+
+// ── Fin GLOBALE en tête : la demi-journée va jusqu'à l'intervenant, la durée ne bouge pas ──────────
+test('FIN GLOBALE : la fin EN TÊTE va jusqu\'à l\'intervenant, la DURÉE reste celle du stagiaire', () => {
+    const html = rendu(true);
+    /* L'après-midi du 13/10 : la formation finit à 17h00, l'hygiène du soir à 18h15 → la plage affichée
+       va jusqu'à 18h15 (le temps réel d'activité), mais la DURÉE reste 4h00 (17h00 − 13h00), JAMAIS
+       cumulée. Les heures « en plus » sont comptées à part dans le total (cf. test « EXTRA »). */
+    assert.match(html, /13h00 - 18h15<\/div><div class="hs">4h00<\/div>/, 'fin étendue à 18h15, durée inchangée (4h00)');
+    /* L'autre après-midi (12/10), sans intervenant tardif, garde la fin de la formation (17h00). */
+    assert.match(html, /13h00 - 17h00<\/div><div class="hs">4h00<\/div>/);
+    /* JAMAIS cumulée : la durée n'affiche pas 5h15 (18h15 − 13h00). */
+    assert.doesNotMatch(html, /13h00 - 18h15<\/div><div class="hs">5h15<\/div>/);
+});
+
+test('SANS fin d\'intervenant tardive, la tête ne bouge pas (pas de finDe → fin de la formation)', () => {
+    // Un intervenant SANS finDe (ancienne forme, ou sans plage) n'étend rien : la tête reste à 17h00.
+    const html = E.renderEmargementHtml({ org, e, rows,
+        participants: [
+            { role: 'stagiaire', name: 'X', sigOf: () => null, appliesTo: (k) => cles.has(k), presentDe: (k) => cles.has(k) },
+            { role: 'intervenant', name: 'Y', specialty: '', extra: false, appliesTo: (k) => k === CLE_HYG, sigOf: () => null, heuresDe: () => '' },
+        ],
+        config: { slots: ['MATIN', 'APRES_MIDI'], show_intervenants: true, show_hours: true } });
+    assert.match(html, /13h00 - 17h00<\/div><div class="hs">4h00<\/div>/);
+    assert.doesNotMatch(html, /18h15/);
 });
