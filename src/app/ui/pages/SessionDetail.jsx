@@ -65,6 +65,8 @@ function SessionDetail() {
   const [companyId, setCompanyId] = useState("");
   const [companyLearners, setCompanyLearners] = useState(null); // null = pas encore chargé
   const [picked, setPicked] = useState(() => new Set());
+  // Sous-groupe d'entreprise (migration 215) : « 1 »/« 2 »… (rejoindre) ou « nouveau » (groupe séparé).
+  const [groupeChoix, setGroupeChoix] = useState("1");
   const [registering, setRegistering] = useState(false);
 
   async function load() {
@@ -198,6 +200,16 @@ function SessionDetail() {
     () => companies.find((c) => c.id === companyId)?.name || "",
     [companies, companyId]
   );
+  /* Les SOUS-GROUPES que cette entreprise a DÉJÀ dans la session (migration 215). S'il en existe,
+     on propose de rejoindre l'un d'eux ou d'en créer un nouveau (documents séparés). Sinon, le
+     premier arrivé forme le groupe 1, sans choix à faire. */
+  const groupesExistants = useMemo(
+    () => [...new Set((session?.enrollments || []).filter((e) => e.company_id === companyId)
+      .map((e) => Number(e.company_group) || 1))].sort((a, b) => a - b),
+    [session, companyId]
+  );
+  // À chaque changement d'entreprise, on repart sur son 1er groupe existant (rejoindre, défaut sûr).
+  useEffect(() => { setGroupeChoix(groupesExistants.length ? String(groupesExistants[0]) : "1"); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Seules les entreprises AYANT au moins un stagiaire rattaché sont proposées.
    *
@@ -234,7 +246,9 @@ function SessionDetail() {
       // PROFESSIONNEL sur l'inscription, ce qu'une inscription individuelle ne fait pas — c'est
       // ce rattachement qui regroupe ensuite les stagiaires sous leur entreprise, ici et sur les
       // documents de groupe.
-      const r = await registerCompanyStagiaires(companyId, { session_id: id, learner_ids: ids });
+      // Sous-groupe (215) : rejoindre un groupe existant, ou « nouveau » → documents séparés.
+      const r = await registerCompanyStagiaires(companyId, { session_id: id, learner_ids: ids,
+        company_group: groupeChoix === "nouveau" ? "nouveau" : (Number(groupeChoix) || 1) });
       const n = (r.data?.created || []).filter((c) => c.enrolled).length;
       const comptes = (r.data?.created || []).filter((c) => c.identifiants_envoyes !== null && c.identifiants_envoyes !== undefined);
       setStatus({
@@ -398,6 +412,24 @@ function SessionDetail() {
                 </p>
               ) : (
                 <>
+                  {/* SOUS-GROUPE (215) : si l'entreprise a déjà un groupe dans la session, on rejoint
+                      l'un d'eux ou on en crée un nouveau (ses propres documents). */}
+                  {groupesExistants.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                      <label style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name="building" size={14} /> Groupe&nbsp;:
+                        <select value={groupeChoix} onChange={(e) => setGroupeChoix(e.target.value)} style={{ fontSize: 13 }}>
+                          {groupesExistants.map((g) => <option key={g} value={String(g)}>Groupe {g} (existant)</option>)}
+                          <option value="nouveau">Nouveau groupe séparé</option>
+                        </select>
+                      </label>
+                      <span className="hint">
+                        {groupeChoix === "nouveau"
+                          ? "Un nouveau groupe aura ses PROPRES documents (devis, convention…)."
+                          : "Ces stagiaires rejoignent le groupe choisi et ses documents."}
+                      </span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 13 }}>
                       <input type="checkbox" checked={tousCoches} onChange={toutBasculer} />
@@ -539,7 +571,22 @@ function SessionDetail() {
                     {/* LES MEMBRES EN RETRAIT, derrière un filet : sans lui, l'intitulé se lisait
                         comme un séparateur et rien ne disait où le groupe s'arrête — le premier
                         individuel qui suivait paraissait encore appartenir à l'entreprise. */}
-                    <div className="sess-comp-membres">{g.members.map(enrollRow)}</div>
+                    {/* SOUS-GROUPES (215) : plusieurs groupes d'une même entreprise s'affichent
+                        séparément (« Groupe 1 / Groupe 2 »), chacun ayant ses propres documents. */}
+                    <div className="sess-comp-membres">{(() => {
+                      const parGroupe = new Map();
+                      for (const m of g.members) { const gr = Number(m.company_group) || 1; if (!parGroupe.has(gr)) parGroupe.set(gr, []); parGroupe.get(gr).push(m); }
+                      const grs = [...parGroupe.keys()].sort((a, b) => a - b);
+                      if (grs.length <= 1) return g.members.map(enrollRow);
+                      return grs.map((gr) => (
+                        <div key={gr}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", margin: "6px 0 2px" }}>
+                            Groupe {gr} <span className="arch-count">{parGroupe.get(gr).length}</span>
+                          </div>
+                          {parGroupe.get(gr).map(enrollRow)}
+                        </div>
+                      ));
+                    })()}</div>
                   </div>
                 ))}
                 {solo.length > 0 && companies.length > 0 && (

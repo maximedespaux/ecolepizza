@@ -144,10 +144,12 @@ test('ENTREPRISE : une étape de groupe montre TOUS ses documents — un par OPC
 test('ENTREPRISE : les cartes portent les gestes, le formulaire s\'ouvre dans l\'étape', () => {
     assert.match(appelParcours, /renderGestes=\{gestesEtapeGroupe\}/);
     assert.match(appelParcours, /renderPreparation=\{formulaireGroupe\}/);
-    assert.match(appelParcours, /onCharge=\{\(d\) => setSlugsEtapes\(new Set\(\(d\?\.steps \|\| \[\]\)\.filter\(\(x\) => x\.company_level\)\.map\(\(x\) => x\.key\)\)\)\}/);
+    assert.match(appelParcours, /onCharge=\{\(d\) => \{ setSlugsEtapes\(new Set\(\(d\?\.steps \|\| \[\]\)\.filter\(\(x\) => x\.company_level\)\.map\(\(x\) => x\.key\)\)\);/);
+    // Depuis la 215, onCharge capte aussi la LISTE des sous-groupes pour le sélecteur « Groupe 1/2 ».
+    assert.match(appelParcours, /if \(Array\.isArray\(d\?\.groups\) && d\.groups\.length\) setGroupsDispo\(d\.groups\);/);
     const gestes = fonction(ENTREPRISE, 'function gestesEtapeGroupe');
     assert.match(gestes, /if \(!s\.company_level\) return gestesStagiaire\(s\);/, 'une étape « stagiaire » mène à la fiche du stagiaire (2026-10-06)');
-    assert.match(gestes, /documentsDeLEtape\(companyDocs, s\.key, viewSessionId\)/, 'par modèle et par session, pas par le seul docId');
+    assert.match(gestes, /documentsDeLEtape\(companyDocsGroupe, s\.key, viewSessionId\)/, 'par modèle et par session, pas par le seul docId');
     assert.match(fonction(ENTREPRISE, 'function boutonsDocumentEntreprise'), /deleteCompanyDoc\(d\.id, d\.title, d\.status === "SIGNE"\)/,
         'la corbeille garde la confirmation de la page, plus ferme pour un document signé');
     // Plus de carte « Préparer un document » vers laquelle défiler, et un seul formulaire.
@@ -157,7 +159,7 @@ test('ENTREPRISE : les cartes portent les gestes, le formulaire s\'ouvre dans l\
     const generer = fonction(ENTREPRISE, 'async function prepareGroupDoc');
     assert.ok(generer.indexOf('fermer?.();') > generer.indexOf('await createCompanyDocument('), 'refermé après la génération');
     // La liste du bas : seulement ce qu'aucune étape ne montre, et rien tant que le parcours n'est pas arrivé.
-    assert.match(ENTREPRISE, /slugsEtapes \? documentsEntrepriseHorsParcours\(companyDocs, slugsEtapes, viewSessionId,/);
+    assert.match(ENTREPRISE, /slugsEtapes \? documentsEntrepriseHorsParcours\(companyDocsGroupe, slugsEtapes, viewSessionId,/);
     assert.match(ENTREPRISE, /onChange=\{\(e\) => \{ setViewSessionId\(e\.target\.value\); setSlugsEtapes\(null\); \}\}/);
 });
 

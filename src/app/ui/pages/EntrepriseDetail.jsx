@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
@@ -117,6 +117,9 @@ export default function EntrepriseDetail() {
   const [sessQ, setSessQ] = useState("");
   const [sessFocus, setSessFocus] = useState(false);
   const [viewSessionId, setViewSessionId] = useState("");
+  // Sous-groupe d'entreprise affiché (migration 215) : chaque groupe a SES propres documents.
+  const [viewGroup, setViewGroup] = useState(1);
+  const [groupsDispo, setGroupsDispo] = useState([1]); // les groupes de l'entreprise dans la session
   /* L'onglet affiché (Coordonnées / Stagiaires / Documents). Arriver d'une fiche stagiaire pour
      « gérer le groupe » (location.state.session) vise les documents : on ouvre alors « Documents ». */
   const [tab, setTab] = useState(() => (location.state?.session ? "documents" : "coordonnees"));
@@ -187,8 +190,15 @@ export default function EntrepriseDetail() {
   useEffect(() => {
     setLearnerDocs([]);
     if (!viewSessionId) return;
-    getCompanyLearnerDocuments(id, viewSessionId).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
-  }, [id, viewSessionId, parcoursRefresh]);
+    getCompanyLearnerDocuments(id, viewSessionId, viewGroup).then((r) => setLearnerDocs(r.data || [])).catch(() => {});
+  }, [id, viewSessionId, viewGroup, parcoursRefresh]);
+  // On repart sur le groupe 1 quand on change de session (migration 215) ; `onCharge` repeuplera la liste.
+  useEffect(() => { setViewGroup(1); setGroupsDispo([1]); }, [viewSessionId]);
+  // Les documents de GROUPE du sous-groupe affiché : chaque groupe a les siens (devis, convention…).
+  const companyDocsGroupe = useMemo(
+    () => companyDocs.filter((d) => (Number(d.company_group) || 1) === (Number(viewGroup) || 1)),
+    [companyDocs, viewGroup]
+  );
   // Modèles de documents de GROUPE par session de l'entreprise (pour le formulaire).
   const sessionKey = (data?.sessions || []).map((s) => s.id).join(",");
   useEffect(() => {
@@ -278,7 +288,7 @@ export default function EntrepriseDetail() {
     if (!sessions.length) { setStatus({ type: "error", message: "Ce document n'existe pas dans les formations sélectionnées." }); return; }
     setPreparing(true); setStatus(null);
     try {
-      await createCompanyDocument(id, { session_ids: sessions, template_slug: prep.slug });
+      await createCompanyDocument(id, { session_ids: sessions, template_slug: prep.slug, company_group: viewGroup });
       setStatus({ type: "success", message: sessions.length > 1 ? `Document de groupe préparé (${sessions.length} formations réunies).` : "Document de groupe préparé." });
       setPrep((p) => ({ ...p, slug: "" })); setParcoursRefresh((k) => k + 1); fermer?.();
     } catch (e) { setStatus({ type: "error", message: e.message }); }
@@ -374,7 +384,7 @@ export default function EntrepriseDetail() {
       demanderDepotRemise(dues[0].d, dues[0].r);
       return;
     }
-    const cible = cibleImportGroupe(documentsDeLEtape(companyDocs, step.key, viewSessionId));
+    const cible = cibleImportGroupe(documentsDeLEtape(companyDocsGroupe, step.key, viewSessionId));
     if (cible.refus === "plusieurs") {
       setStatus({ type: "info", message: `« ${step.label} » a un document par OPCO (${cible.n}) : importez chaque exemplaire signé sur sa ligne, avec son bouton d'import.` });
       return;
@@ -422,7 +432,7 @@ export default function EntrepriseDetail() {
     try {
       let docId = docIdExistant;
       if (!docId) {
-        await createCompanyDocument(id, { session_ids: sessionIds || [viewSessionId], template_slug: slug });
+        await createCompanyDocument(id, { session_ids: sessionIds || [viewSessionId], template_slug: slug, company_group: viewGroup });
         const r = await listCompanyDocuments(id);
         setCompanyDocs(r.data || []);
         const prepares = documentsDeLEtape(r.data || [], slug, viewSessionId);
@@ -443,7 +453,7 @@ export default function EntrepriseDetail() {
   }
   // Depuis la CARTE d'une étape de groupe : on résout son document (ou on demande quelles sessions couvrir).
   function marquerFaitGroupe(step) {
-    const cible = cibleImportGroupe(documentsDeLEtape(companyDocs, step.key, viewSessionId));
+    const cible = cibleImportGroupe(documentsDeLEtape(companyDocsGroupe, step.key, viewSessionId));
     if (cible.refus === "plusieurs") {
       setStatus({ type: "info", message: `« ${step.label} » a un document par OPCO (${cible.n}) : marquez chaque exemplaire sur sa ligne, avec son bouton.` });
       return;
@@ -510,7 +520,7 @@ export default function EntrepriseDetail() {
            chemins de préparation finiraient par produire deux documents différents.
            Les sessions cochées (fenêtre multi-formations) réunissent tout en un document ; à défaut,
            la seule session affichée. */
-        await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug });
+        await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug, company_group: viewGroup });
         const r = await listCompanyDocuments(id);
         setCompanyDocs(r.data || []);
         const prepares = documentsDeLEtape(r.data || [], cible.slug, viewSessionId);
@@ -575,7 +585,7 @@ export default function EntrepriseDetail() {
   function gestesEtapeGroupe(s) {
     if (s.remise) return gestesRemise(s);
     if (!s.company_level) return gestesStagiaire(s);
-    const liste = documentsDeLEtape(companyDocs, s.key, viewSessionId);
+    const liste = documentsDeLEtape(companyDocsGroupe, s.key, viewSessionId);
     if (!liste.length) return null;
     /* Plusieurs documents : chaque ligne porte le NOM de son OPCO et un état court — la date
        n'y tiendrait pas à côté de quatre boutons ; elle reste, complète, au survol. */
@@ -778,8 +788,8 @@ export default function EntrepriseDetail() {
 
   /* « AUTRES DOCUMENTS » : les documents de groupe qu'aucune étape ne montre (préparés hors
      parcours, ou d'une session qui n'est plus celle de l'entreprise). Sans session, tout y est. */
-  const autresDocs = !viewSessionId ? companyDocs
-    : slugsEtapes ? documentsEntrepriseHorsParcours(companyDocs, slugsEtapes, viewSessionId, (data.sessions || []).map((x) => x.id)) : [];
+  const autresDocs = !viewSessionId ? companyDocsGroupe
+    : slugsEtapes ? documentsEntrepriseHorsParcours(companyDocsGroupe, slugsEtapes, viewSessionId, (data.sessions || []).map((x) => x.id)) : [];
 
   return (
     <>
@@ -1042,13 +1052,23 @@ export default function EntrepriseDetail() {
               </select>
             </div>
           )}
+          {/* SOUS-GROUPES (215) : si l'entreprise a plusieurs groupes dans la session, chacun a SON
+              parcours et SES documents — on choisit lequel afficher. */}
+          {groupsDispo.length > 1 && (
+            <div className="seg" style={{ marginBottom: 12 }}>
+              {groupsDispo.map((g) => (
+                <button key={g} type="button" className={"seg-btn" + (Number(viewGroup) === Number(g) ? " on" : "")}
+                  onClick={() => { setViewGroup(g); setSlugsEtapes(null); }}>Groupe {g}</button>
+              ))}
+            </div>
+          )}
           {!viewSessionId ? (
             <EmptyState icon="file-text">Aucune session pour cette entreprise. Inscris un groupe à une session ci-dessus.</EmptyState>
           ) : (
             <EnrollmentParcours
-              fetcher={() => getCompanyParcours(id, viewSessionId)}
+              fetcher={() => getCompanyParcours(id, viewSessionId, viewGroup)}
               companyAttach={{ companyId: id, sessionId: viewSessionId }}
-              resetKey={`${id}:${viewSessionId}`}
+              resetKey={`${id}:${viewSessionId}:${viewGroup}`}
               refresh={parcoursRefresh}
               onPrepare={prepareCompanyDoc}
               onImport={demanderImportGroupe}
@@ -1056,8 +1076,9 @@ export default function EntrepriseDetail() {
               onOpenDoc={openCompanyDoc}
               renderGestes={gestesEtapeGroupe}
               renderPreparation={formulaireGroupe}
-              /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout. */
-              onCharge={(d) => setSlugsEtapes(new Set((d?.steps || []).filter((x) => x.company_level).map((x) => x.key)))}
+              /* Parcours illisible (null) : aucune étape ne montre rien, la liste du bas montre tout.
+                 On capte aussi la LISTE des sous-groupes (215) pour proposer le sélecteur ci-dessus. */
+              onCharge={(d) => { setSlugsEtapes(new Set((d?.steps || []).filter((x) => x.company_level).map((x) => x.key))); if (Array.isArray(d?.groups) && d.groups.length) setGroupsDispo(d.groups); }}
             />
           )}
 

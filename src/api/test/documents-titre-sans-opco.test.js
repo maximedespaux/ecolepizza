@@ -25,8 +25,8 @@ test('la génération écrit le libellé NU, et STOCKE toujours l\'OPCO à part'
     const ctrl = lire('controllers/company.controller.js');
     assert.match(ctrl, /const title = step\.label;/, 'le titre est le libellé nu');
     assert.doesNotMatch(ctrl, /const title = step\.label \+ \(g\.opco/, 'plus de suffixe « — OPCO » dans le titre');
-    /* L'OPCO reste écrit dans sa colonne (dernier paramètre de l'INSERT) : regroupement + jeton {OPCO}. */
-    assert.match(ctrl, /template_slug, title, company\.id, ancre, g\.opco\]/);
+    /* L'OPCO reste écrit dans sa colonne (ajouté aux paramètres de l'INSERT) : regroupement + jeton {OPCO}. */
+    assert.match(ctrl, /params\.push\(g\.opco\)/);
 });
 
 test('la migration 214 retire le suffixe « — OPCO » des titres existants, et son revert le remet', () => {

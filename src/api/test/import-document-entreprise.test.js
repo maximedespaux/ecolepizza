@@ -123,7 +123,7 @@ test('LE PARCOURS DE GROUPE n\'offre l\'import que sur un document de GROUPE (ou
 test('LA FICHE ENTREPRISE : vérifier, préparer au besoin par le chemin de « Préparer », puis rattacher', () => {
     const envoyer = fonction(ENTREPRISE, 'async function envoyerImportGroupe');
     const verif = envoyer.indexOf('const refus = refusDocumentRecu(file);');
-    const prep = envoyer.indexOf('await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug });');
+    const prep = envoyer.indexOf('await createCompanyDocument(id, { session_ids: cible.sessionIds || [viewSessionId], template_slug: cible.slug, company_group: viewGroup });');
     const imp = envoyer.indexOf('await importDocumentFile(fd);');
     assert.ok(verif > 0 && prep > verif && imp > prep, 'le fichier est vérifié AVANT toute préparation');
     assert.match(envoyer, /if \(refus\) \{ setStatus\(\{ type: "error", message: refus \}\); return; \}/);
@@ -132,7 +132,7 @@ test('LA FICHE ENTREPRISE : vérifier, préparer au besoin par le chemin de « P
     assert.match(envoyer, /e\.target\.value = "";/, 'réimporter le même fichier doit redéclencher « change »');
 
     const demander = fonction(ENTREPRISE, 'function demanderImportGroupe');
-    assert.match(demander, /cibleImportGroupe\(documentsDeLEtape\(companyDocs, step\.key, viewSessionId\)\)/);
+    assert.match(demander, /cibleImportGroupe\(documentsDeLEtape\(companyDocsGroupe, step\.key, viewSessionId\)\)/);
     assert.match(demander, /if \(cible\.refus === "plusieurs"\)/);
     assert.match(demander, /if \(cible\.refus === "signe"\)/);
 

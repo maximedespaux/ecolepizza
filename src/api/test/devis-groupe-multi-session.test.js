@@ -106,5 +106,5 @@ test('createCompanyDocument accepte session_ids, et la détection du parcours pa
 
 test('l\'écran envoie les sessions en UN SEUL appel', () => {
     const page = fs.readFileSync(path.join(__dirname, '../../app/ui/pages/EntrepriseDetail.jsx'), 'utf8');
-    assert.match(page, /createCompanyDocument\(id, \{ session_ids: sessions, template_slug: prep\.slug \}\)/);
+    assert.match(page, /createCompanyDocument\(id, \{ session_ids: sessions, template_slug: prep\.slug, company_group: viewGroup \}\)/);
 });

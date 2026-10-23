@@ -427,8 +427,12 @@ test('session : les inscrits d\'une entreprise sont EN RETRAIT sous elle, qui m�
 
     assert.match(SD, /<Link to=\{`\/entreprises\/\$\{g\.company_id\}`\} className="sess-comp-hd sess-comp-lien"/);
     assert.match(SD, /const entrepriseOuvrable = !!ENTREE_ENTREPRISES && canOpen\(user, ENTREE_ENTREPRISES\)/);
-    assert.match(SD, /<div className="sess-comp-membres">\{g\.members\.map\(enrollRow\)\}<\/div>/,
+    // Les membres vivent dans leur propre bloc (le filet les borde). Depuis la 215, le bloc répartit
+    // les sous-groupes (« Groupe 1/2 ») ; un seul groupe retombe sur `g.members.map(enrollRow)`.
+    assert.match(SD, /<div className="sess-comp-membres">\{\(\(\) => \{/,
         'les membres vivent dans leur propre bloc, sans quoi le filet n’a rien à border');
+    assert.match(SD, /if \(grs\.length <= 1\) return g\.members\.map\(enrollRow\);/,
+        'un seul groupe : affichage inchangé');
 
     /* LE FILET EST CE QUI REND L'APPARTENANCE VISIBLE. `var(--border)` et non `--border-soft` :
        sur un fond de carte, le second ne se voit pas. */
