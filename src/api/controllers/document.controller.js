@@ -312,7 +312,8 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
         // Infos du document entreprise (entreprise + session + OPCO) — colonnes présentes
         // selon migrations 077 / 089 : on lit en cascade.
         let gdInfo = null;
-        for (const cols of ['company_id, session_id, opco', 'company_id, session_id']) {
+        // `company_group` (migration 215) : le SOUS-GROUPE du document — on ne liste que SES stagiaires.
+        for (const cols of ['company_id, session_id, opco, company_group', 'company_id, session_id, opco', 'company_id, session_id']) {
             try { const [[gd2]] = await conn.query(`SELECT ${cols} FROM generated_document WHERE id = ?`, [documentId]); gdInfo = gd2 || null; break; }
             catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
         }
@@ -327,6 +328,12 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                sous celui de son ENTREPRISE : il était dans le groupe, et hors de la liste. La
                règle est désormais une seule fonction, partagée avec la génération
                (`stagiairesDuDocument`, lib/documents.js) — d'où l'OPCO de l'entreprise, lu ici. */
+            /* SOUS-GROUPE (migration 215) : la liste reste VIVANTE (stagiaires actuellement inscrits),
+               mais BORNÉE au groupe du document — sinon un devis du groupe 1 listait aussi les
+               stagiaires du groupe 2 (même entreprise, même session). Le filtre OPCO reste, EN PLUS. */
+            const filtreGroupe = gdInfo.company_group != null ? 'AND e.company_group = ?' : '';
+            const paramsGs = [gdInfo.company_id, gdInfo.session_id, organizationId];
+            if (filtreGroupe) paramsGs.push(gdInfo.company_group);
             const [gs] = await conn.query(
                 `SELECT DISTINCT l.id, l.civility, l.first_name, l.last_name, l.email,
                         l.phone, l.opco, l.town, l.address, l.zip_code, l.birth_place,
@@ -334,9 +341,9 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                  FROM enrollment e
                  JOIN learner l ON l.id = e.learner_id
                  LEFT JOIN company c ON c.id = e.company_id
-                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
+                 WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ? ${filtreGroupe}
                  ORDER BY l.last_name, l.first_name`,
-                [gdInfo.company_id, gdInfo.session_id, organizationId]
+                paramsGs
             );
             groupStagiaires = stagiairesDuDocument(gs, gdInfo.opco);
         } else {
