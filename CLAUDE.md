@@ -119,7 +119,7 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 
 ### 2.5 Tests
 `cd src/api && npm test` (node:test), **~8 s** (382 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-23** : **2919 tests — 2912 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+référence, **relevé le 2026-10-23** : **2920 tests — 2913 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -289,6 +289,10 @@ sans SQL** : inscrire un stagiaire « Via une entreprise » en « nouveau groupe
 de documents par entreprise) ; inscriptions, documents, signatures et fichiers ne sont pas touchés. Tests :
 `entreprise-sous-groupes.test.js` (+ `documents-entreprise-opco`, `documents-titre-sans-opco`, `fiche-entreprise-doc-stagiaire`,
 `plus-ou-equivalences`, `dossiers-a-suivre`, `parcours-documents-dans-les-etapes`, `import-*` mis à jour).
+⚠️ **CORRIGÉ le 2026-10-23 (RENDU)** : le document rendait la liste des stagiaires par une requête VIVANTE
+(entreprise + session + OPCO) qui ignorait le groupe — un devis du groupe 1 listait aussi les stagiaires du
+groupe 2. `loadContext` (document.controller.js) borne désormais cette liste au `company_group` du document
+(gdInfo), en plus du filtre OPCO ; la liste reste vivante (ajouter un stagiaire au groupe le fait apparaître).
 
 **214 est À JOUER mais FACULTATIVE** (`214_titres_documents_sans_opco.sql`, migration de DONNÉES — le TITRE d'un
 document de groupe ne porte PLUS l'OPCO, demandé le 2026-10-21). Un document d'entreprise se génère UN PAR OPCO

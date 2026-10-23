@@ -73,6 +73,17 @@ test('lecture : resolveGroupSteps filtre par groupe et expose la LISTE des group
     assert.match(c, /groups: grp\.groups,/);
 });
 
+test('RENDU : un document de groupe ne liste que les stagiaires de SON sous-groupe (vivant + borné)', () => {
+    const d = lire('controllers/document.controller.js');
+    // gdInfo lit `company_group` (cascade tolérante)…
+    assert.match(d, /'company_id, session_id, opco, company_group'/);
+    // …et la liste VIVANTE des stagiaires du groupe est BORNÉE à ce groupe (en plus du filtre OPCO).
+    assert.match(d, /const filtreGroupe = gdInfo\.company_group != null \? 'AND e\.company_group = \?' : '';/);
+    assert.match(d, /WHERE e\.company_id = \? AND e\.session_id = \? AND e\.organization_id = \? \$\{filtreGroupe\}/);
+    // La règle OPCO partagée reste appliquée par-dessus.
+    assert.match(d, /groupStagiaires = stagiairesDuDocument\(gs, gdInfo\.opco\);/);
+});
+
 test('le numéro de groupe n\'est PAS un « Champ document » (écarté dans conditions.js)', () => {
     assert.match(lire('lib/conditions.js'), /'company_group',/);
 });
