@@ -672,8 +672,10 @@ export function detachCompanyLearner(id, learnerId) {
   return request(`/companies/${id}/learners/${learnerId}`, { method: "DELETE" });
 }
 // Parcours documentaire COMPLET du groupe (même style « timeline » que la fiche stagiaire).
-export function getCompanyParcours(id, sessionId) {
-  return request(`/companies/${id}/parcours${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+// `companyGroup` (migration 215) : le SOUS-GROUPE de l'entreprise dont on lit le parcours (null = tous).
+export function getCompanyParcours(id, sessionId, companyGroup) {
+  const q = [sessionId ? `session_id=${sessionId}` : "", companyGroup != null ? `company_group=${companyGroup}` : ""].filter(Boolean).join("&");
+  return request(`/companies/${id}/parcours${q ? `?${q}` : ""}`, { silent: true });
 }
 // Récupération de parcours ENTREPRISE : documents de groupe détachés d'une session recréée.
 export function getCompanyDocumentsRecuperables(id, sessionId) {
@@ -688,8 +690,9 @@ export function recupererCompanyDocuments(id, sessionId, documentIds) {
 // dans EntrepriseDetail, sans appel — le balayage `portes-manquantes` le laissait passer. La
 // route serveur subsiste, sans appelant côté écran : à retirer aussi le jour où on la juge morte.
 // Documents des stagiaires du groupe à signer par le représentant (à leur place).
-export function getCompanyLearnerDocuments(id, sessionId) {
-  return request(`/companies/${id}/learner-documents${sessionId ? `?session_id=${sessionId}` : ""}`, { silent: true });
+export function getCompanyLearnerDocuments(id, sessionId, companyGroup) {
+  const q = [sessionId ? `session_id=${sessionId}` : "", companyGroup != null ? `company_group=${companyGroup}` : ""].filter(Boolean).join("&");
+  return request(`/companies/${id}/learner-documents${q ? `?${q}` : ""}`, { silent: true });
 }
 // Crée / réinitialise le compte de connexion du représentant de l'entreprise → { email, password }.
 export function createRepresentativeAccount(id) {

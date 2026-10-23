@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (381 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-22** : **2914 tests — 2907 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~8 s** (382 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-10-23** : **2919 tests — 2912 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,33 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 215 à jouer ; la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**215 est À JOUER** (`215_enrollment_company_group.sql`, les SOUS-GROUPES d'une entreprise dans une session —
+demandé le 2026-10-23). Deux colonnes `company_group` (smallint, défaut 1) : une sur `enrollment`, une sur
+`generated_document`. Un même employeur envoie parfois des stagiaires qui ne doivent PAS figurer sur les mêmes
+documents de groupe (deux dossiers de prise en charge distincts). Le « groupe » d'une entreprise + session était
+IMPLICITE (toutes ses inscriptions, un seul jeu de documents, scindé au plus par OPCO 089) ; on le rend EXPLICITE
+par un NUMÉRO. Deux inscriptions d'une même entreprise + session mais de groupe DIFFÉRENT forment deux groupes
+séparés, chacun avec ses PROPRES documents. Le numéro est repris sur le document (`generated_document.company_group`),
+à l'image d'`opco`, pour dédoublonner / régénérer UN groupe sans toucher au voisin. **Décidé avec l'école
+(AskUserQuestion) : un sous-groupe (pas une copie d'entreprise — pas de doublon dans la liste Entreprises) ; le
+groupe se choisit À L'INSCRIPTION « Via une entreprise » ; seulement via une entreprise (un stagiaire seul garde ses
+documents individuels).** Le groupe se répartit par (groupe, OPCO) à la génération (`createCompanyDocument`,
+`company_group` dans le corps = un groupe précis, défaut = tous), se lit par `resolveGroupSteps(…, companyGroup)`
+(filtre + expose la liste `groups`), et l'écran le montre : choix « Même groupe / Nouveau groupe » à l'inscription
+(SessionDetail, « nouveau » → MAX+1), badges « Groupe 1 / 2 » sous l'entreprise dans la session, et un sélecteur de
+groupe sur la fiche entreprise (EntrepriseDetail → parcours + documents PAR groupe). DÉFAUT = 1 : tant qu'un seul
+groupe existe, le comportement est STRICTEMENT celui d'avant. TOLÉRANT (`colonneExiste` partout) : sans la 215, tout
+est en groupe 1 et demander un 2ᵉ groupe répond 503 « migration 215 non jouée ». `company_group` est écarté des
+« Champs documents » (`EXCLUDED_EXACT`, lib/conditions.js) : c'est un numéro interne. **Elle se vérifie par l'API,
+sans SQL** : inscrire un stagiaire « Via une entreprise » en « nouveau groupe » répond 200 (et non 503), puis
+`GET /api/companies/:id/parcours?session_id=…` rend plusieurs `groups`. Ou une requête, qui doit rendre 2 :
+`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema='impastio' AND column_name='company_group' AND table_name IN ('enrollment','generated_document');`
+⚠️ Son revert retire les deux colonnes : la répartition en groupes est perdue (tout retombe en groupe 1, un seul jeu
+de documents par entreprise) ; inscriptions, documents, signatures et fichiers ne sont pas touchés. Tests :
+`entreprise-sous-groupes.test.js` (+ `documents-entreprise-opco`, `documents-titre-sans-opco`, `fiche-entreprise-doc-stagiaire`,
+`plus-ou-equivalences`, `dossiers-a-suivre`, `parcours-documents-dans-les-etapes`, `import-*` mis à jour).
 
 **214 est À JOUER mais FACULTATIVE** (`214_titres_documents_sans_opco.sql`, migration de DONNÉES — le TITRE d'un
 document de groupe ne porte PLUS l'OPCO, demandé le 2026-10-21). Un document d'entreprise se génère UN PAR OPCO

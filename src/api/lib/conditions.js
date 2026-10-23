@@ -44,6 +44,10 @@ const EXCLUDED_EXACT = new Set([
        comme « champ », elle imprimerait son JSON ; en condition, elle ne dit rien d'un dossier. */
     'email_signature',
     'avatar', 'profile_visibility', 'cadre', 'cadres_exclusifs',
+    /* LE SOUS-GROUPE D'ENTREPRISE (migration 215) : `enrollment.company_group` est un NUMÉRO de
+       regroupement interne (quel groupe d'une entreprise dans une session), pas une donnée du
+       dossier. Offert comme « champ », il imprimerait « 1 » ; en condition, il ne dit rien. */
+    'company_group',
     /* LE MOYEN DE PAIEMENT DU RÈGLEMENT (migration 195) : `enrollment.acompte_moyen` / `_ref` /
        `solde_moyen` / `_ref`. Ce ne sont pas des « Champs documents » — ils se saisissent sur la carte
        « Règlement » et s'impriment par les jetons nommés {Moyen acompte}/{Réf acompte}/{Moyen solde}/

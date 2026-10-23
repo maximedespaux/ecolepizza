@@ -34,7 +34,7 @@ const { SQL_BADGE_FORMATION } = require('../lib/badges.js');
 
 // Résout, pour chaque stagiaire de l'entreprise dans la session, les documents (slugs)
 // applicables à son dossier (conditions + variantes « OU »). Base du parcours de groupe.
-async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
+async function resolveGroupSteps(conn, orgId, companyId, sessionId, companyGroup = null) {
     const [[sess]] = await conn.query(
         `SELECT s.id, s.year, s.week,
                 DATE_FORMAT(s.start_date, '%Y-%m-%d') AS start_date, DATE_FORMAT(s.end_date, '%Y-%m-%d') AS end_date,
@@ -43,9 +43,18 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
          WHERE s.id = ? AND s.organization_id = ?`, [sessionId, orgId]);
     if (!sess) return null;
     const program = { id: sess.program_id, code: sess.program_code, days: sess.days, hygiene: sess.hygiene, rs_code: sess.rs_code };
-    const [enr] = await conn.query(
-        `SELECT e.id, e.learner_id, e.financing, l.opco, l.first_name, l.last_name FROM enrollment e JOIN learner l ON l.id = e.learner_id
-         WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?`, [companyId, sessionId, orgId]);
+    /* LE GROUPE d'une inscription (migration 215) : deux groupes d'une même entreprise + session ont
+       des documents SÉPARÉS. On lit TOUTES les inscriptions pour connaître la liste des groupes, puis
+       on ne garde que celles du groupe demandé (`companyGroup`) — null = tous (compat et groupe unique).
+       Sans la colonne, tout est en groupe 1 (comportement d'avant la 215). */
+    const aGroupe = await colonneExiste(conn, 'enrollment', 'company_group');
+    const [enrAll] = await conn.query(
+        `SELECT e.id, e.learner_id, e.financing, ${aGroupe ? 'e.company_group' : '1'} AS company_group, l.opco, l.first_name, l.last_name
+           FROM enrollment e JOIN learner l ON l.id = e.learner_id
+          WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?`, [companyId, sessionId, orgId]);
+    const grpDe = (e) => Number(e.company_group) || 1;
+    const groups = [...new Set(enrAll.map(grpDe))].sort((a, b) => a - b);
+    const enr = companyGroup != null ? enrAll.filter((e) => grpDe(e) === (Number(companyGroup) || 1)) : enrAll;
     const condById = await loadConditionMap(conn, orgId);
     const eqMap = equivalenceMap(await loadEquivalences(conn, orgId));
     const catalog = await champsDesConditions(conn, orgId, condById);
@@ -63,11 +72,11 @@ async function resolveGroupSteps(conn, orgId, companyId, sessionId) {
         };
         if (enrollments.length === 0) ctxGroupe = ctx;
         const resolved = await enrollmentSteps(conn, orgId, program, ctx, condById, eqMap);
-        enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null,
+        enrollments.push({ id: e.id, learner_id: e.learner_id, opco: e.opco || null, company_group: grpDe(e),
             name: `${e.last_name || ''} ${e.first_name || ''}`.trim() || 'Stagiaire',
             slugs: new Set(resolved.filter((s) => !s.quiz_id).map((s) => s.slug)) });
     }
-    return { sess, program, enrollments, eqMap, condById, ctxGroupe, allSteps: await formationSteps(conn, orgId, program) };
+    return { sess, program, enrollments, groups, eqMap, condById, ctxGroupe, allSteps: await formationSteps(conn, orgId, program) };
 }
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
@@ -436,6 +445,24 @@ const registerCompanyStagiaires = async (req, res) => {
             if (refus) return res.status(422).json({ error: refus });
         }
 
+        /* SOUS-GROUPE (migration 215) : par défaut 1 (tous ensemble, comportement d'avant). Le front
+           peut demander de rejoindre un groupe précis, ou « nouveau » → MAX + 1 pour cette entreprise
+           + session. On ne DÉPLACE un dossier déjà inscrit que si le groupe a été EXPLICITEMENT choisi
+           (sinon un ré-ajout par défaut remettrait en groupe 1 un stagiaire mis en groupe 2). */
+        const aGroupe = await colonneExiste(conn, 'enrollment', 'company_group');
+        const demandeGroupe = req.body.company_group;
+        if (demandeGroupe != null && String(demandeGroupe) !== '1' && !aGroupe) {
+            return res.status(503).json({ error: 'Migration 215 non jouée : les sous-groupes d’entreprise ne sont pas disponibles.' });
+        }
+        const groupeExplicite = aGroupe && !!sessionId && demandeGroupe != null;
+        let companyGroup = 1;
+        if (groupeExplicite) {
+            if (String(demandeGroupe).toLowerCase() === 'nouveau') {
+                const [[mx]] = await conn.query('SELECT COALESCE(MAX(company_group), 0) AS mx FROM enrollment WHERE company_id = ? AND session_id = ? AND organization_id = ?', [company.id, sessionId, orgId]);
+                companyGroup = (Number(mx.mx) || 0) + 1;
+            } else { companyGroup = Number(demandeGroupe) || 1; }
+        }
+
         // Inscrit un stagiaire (existant) à la session, sans doublon ; ajoute le badge.
         // Rend l'id du dossier (créé ou déjà existant) — l'écran en a besoin pour proposer la
         // récupération des documents orphelins d'une session recréée. Null si pas de session.
@@ -445,13 +472,16 @@ const registerCompanyStagiaires = async (req, res) => {
             let enrollmentId;
             if (ex) {
                 enrollmentId = ex.id;
-                await conn.query("UPDATE enrollment SET company_id = ?, financing = 'PROFESSIONNEL' WHERE id = ?", [company.id, ex.id]);
+                // On ne touche au groupe d'un dossier existant QUE si l'école l'a explicitement choisi.
+                await conn.query(
+                    `UPDATE enrollment SET company_id = ?, financing = 'PROFESSIONNEL'${groupeExplicite ? ', company_group = ?' : ''} WHERE id = ?`,
+                    groupeExplicite ? [company.id, companyGroup, ex.id] : [company.id, ex.id]);
             } else {
                 enrollmentId = crypto.randomUUID();
                 await conn.query(
-                    `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
-                    [enrollmentId, orgId, learnerId, sessionId, company.id]
+                    `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score${aGroupe ? ', company_group' : ''})
+                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE'${aGroupe ? ', ?' : ''})`,
+                    aGroupe ? [enrollmentId, orgId, learnerId, sessionId, company.id, companyGroup] : [enrollmentId, orgId, learnerId, sessionId, company.id]
                 );
             }
             if (badge) {
@@ -512,9 +542,9 @@ const registerCompanyStagiaires = async (req, res) => {
             if (sessionId) {
                 enrollmentId = crypto.randomUUID();
                 await conn.query(
-                    `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score)
-                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE')`,
-                    [enrollmentId, orgId, learnerId, sessionId, company.id]
+                    `INSERT INTO enrollment (id, organization_id, learner_id, session_id, company_id, financing, crm_stage, conformite_score${aGroupe ? ', company_group' : ''})
+                     VALUES (?, ?, ?, ?, ?, 'PROFESSIONNEL', 'INSCRIT', 'ROUGE'${aGroupe ? ', ?' : ''})`,
+                    aGroupe ? [enrollmentId, orgId, learnerId, sessionId, company.id, companyGroup] : [enrollmentId, orgId, learnerId, sessionId, company.id]
                 );
             }
             /* UNE TRACE PAR STAGIAIRE, pas une pour le lot. L'inscription de groupe est le
@@ -594,6 +624,7 @@ const listCompanyDocuments = async (req, res) => {
         const importe = await colonneExiste(conn, 'document_fichier', 'document_id');
         const [rows] = await conn.query(
             `SELECT d.id, d.type, d.template_slug, d.title, d.status, d.session_id, d.signer_name,
+                    ${await colonneOuNull(conn, 'generated_document', 'company_group', 'd.')},
                     DATE_FORMAT(d.created_at, '%Y-%m-%d %H:%i') AS created_at,
                     DATE_FORMAT(d.sent_at, '%Y-%m-%d %H:%i') AS sent_at,
                     DATE_FORMAT(d.signed_at, '%Y-%m-%d %H:%i') AS signed_at,
@@ -647,12 +678,22 @@ const createCompanyDocument = async (req, res) => {
         if (!step) return res.status(422).json({ error: 'Modèle « entreprise » introuvable.' });
 
         // Les inscriptions de l'entreprise sur TOUTES les sessions choisies. `session_id` est gardé
-        // pour ancrer le document (archive, listing) sur la 1re session de son groupe.
-        const [enr] = await conn.query(
-            `SELECT e.id, e.session_id, l.opco FROM enrollment e JOIN learner l ON l.id = e.learner_id
-             WHERE e.session_id IN (?) AND e.company_id = ? AND e.organization_id = ?`,
+        // pour ancrer le document (archive, listing) sur la 1re session de son groupe. Le SOUS-GROUPE
+        // (migration 215) : on génère pour UN groupe précis (`company_group`), ou pour tous (défaut).
+        const aGroupeEnr = await colonneExiste(conn, 'enrollment', 'company_group');
+        const aGroupeDoc = await colonneExiste(conn, 'generated_document', 'company_group');
+        const groupeDemande = req.body.company_group != null ? (Number(req.body.company_group) || 1) : null;
+        if (groupeDemande != null && groupeDemande !== 1 && !aGroupeEnr) {
+            return res.status(503).json({ message: 'Migration 215 non jouée : les sous-groupes d’entreprise ne sont pas disponibles.' });
+        }
+        const [enrToutes] = await conn.query(
+            `SELECT e.id, e.session_id, ${aGroupeEnr ? 'e.company_group' : '1'} AS company_group, l.opco
+               FROM enrollment e JOIN learner l ON l.id = e.learner_id
+              WHERE e.session_id IN (?) AND e.company_id = ? AND e.organization_id = ?`,
             [sessions, company.id, orgId]
         );
+        const grpDe = (e) => Number(e.company_group) || 1;
+        const enr = groupeDemande != null ? enrToutes.filter((e) => grpDe(e) === groupeDemande) : enrToutes;
         if (!enr.length) return res.status(422).json({ error: 'Aucun stagiaire de cette entreprise dans ces sessions.' });
         const enrIds = enr.map((e) => e.id);
         const sessionOf = new Map(enr.map((e) => [e.id, e.session_id]));
@@ -664,46 +705,51 @@ const createCompanyDocument = async (req, res) => {
         try { await conn.query('SELECT opco FROM generated_document LIMIT 1'); }
         catch (e) { if (e && e.code === 'ER_BAD_FIELD_ERROR') opcoSupported = false; else if (!isMissingSchema(e)) throw e; }
 
-        // Regroupement par OPCO : un stagiaire sans OPCO hérite de celui de l'entreprise
-        // (évite un 2e document « sans OPCO »). Clé normalisée (casse/espaces) pour ne
-        // pas scinder « OCAPIAT » et « Ocapiat ». LA RÈGLE EST PARTAGÉE avec le rendu
-        // (lib/documents.js) : chaque document doit LISTER exactement le groupe qui l'a fait naître.
-        let groups = new Map();
-        if (opcoSupported) {
-            groups = groupesParOpco(enr, company.opco);
-        } else {
-            groups.set('', { opco: null, ids: enrIds });
+        /* Regroupement par (SOUS-GROUPE, OPCO) : chaque sous-groupe (215) a ses PROPRES documents, et à
+           l'intérieur un document par OPCO (089) — un stagiaire sans OPCO hérite de celui de l'entreprise
+           (groupesParOpco, règle PARTAGÉE avec le rendu, lib/documents.js). Clé « groupe|opco ». Sans la
+           089, un document par groupe ; sans la 215, un seul groupe (1) — l'ancien comportement. */
+        const groupes = new Map();
+        const parGroupe = new Map();
+        for (const e of enr) { const g = grpDe(e); if (!parGroupe.has(g)) parGroupe.set(g, []); parGroupe.get(g).push(e); }
+        for (const [g, membres] of parGroupe) {
+            if (opcoSupported) {
+                for (const [cle, grp] of groupesParOpco(membres, company.opco)) groupes.set(`${g}|${cle}`, { ...grp, company_group: g });
+            } else {
+                groupes.set(`${g}|`, { opco: null, company_group: g, ids: membres.map((e) => e.id) });
+            }
         }
 
         /* Nettoyage : on retire les versions NON signées de ce document qui couvrent ces sessions —
            soit par leur session d'ancrage, soit (document fusionné) par une inscription liée (DELETE
-           en cascade sur document_formation). On évite ainsi les doublons d'une génération précédente,
-           y compris un ancien document « par session » que la fusion remplace. */
+           en cascade sur document_formation). SCOPÉ AU GROUPE quand on génère un groupe précis
+           (`company_group`), pour ne JAMAIS toucher les documents d'un groupe voisin. */
+        const scopeGroupe = (aGroupeDoc && groupeDemande != null) ? ' AND company_group = ?' : '';
         try {
             await conn.query(
                 `DELETE FROM generated_document
-                  WHERE organization_id = ? AND company_id = ? AND template_slug = ? AND scope = 'COMPANY' AND status <> 'SIGNE'
+                  WHERE organization_id = ? AND company_id = ? AND template_slug = ? AND scope = 'COMPANY' AND status <> 'SIGNE'${scopeGroupe}
                     AND (session_id IN (?) OR id IN (SELECT document_id FROM document_formation WHERE enrollment_id IN (?)))`,
-                [orgId, company.id, template_slug, sessions, enrIds]);
+                [orgId, company.id, template_slug, ...(scopeGroupe ? [groupeDemande] : []), sessions, enrIds]);
         } catch (e) { if (!isMissingSchema(e)) throw e; }
-        // OPCO déjà signés (on ne les régénère pas : on garde la version signée), par ancrage OU par lien.
-        const signedOpcos = new Set();
+        // (GROUPE, OPCO) déjà signés : on ne les régénère pas (on garde la version signée), par ancrage OU par lien.
+        const signedKeys = new Set();
         if (opcoSupported) {
             try {
                 const [srows] = await conn.query(
-                    `SELECT DISTINCT opco FROM generated_document
+                    `SELECT DISTINCT ${aGroupeDoc ? 'company_group' : '1'} AS company_group, opco FROM generated_document
                       WHERE organization_id = ? AND company_id = ? AND template_slug = ? AND scope = 'COMPANY' AND status = 'SIGNE'
                         AND (session_id IN (?) OR id IN (SELECT document_id FROM document_formation WHERE enrollment_id IN (?)))`,
                     [orgId, company.id, template_slug, sessions, enrIds]);
-                for (const r of srows) signedOpcos.add(cleOpco(r.opco));
+                for (const r of srows) signedKeys.add(`${Number(r.company_group) || 1}|${cleOpco(r.opco)}`);
             } catch (e) { if (!isMissingSchema(e)) throw e; }
         }
 
         // Jamais `step.doc_type` brut : il est vide sur un modèle sans « Type », et la colonne le refuse.
         const type = typeDuModele(step);
         let created = 0;
-        for (const g of groups.values()) {
-            if (signedOpcos.has(cleOpco(g.opco))) continue; // déjà signé → conservé
+        for (const g of groupes.values()) {
+            if (signedKeys.has(`${g.company_group}|${cleOpco(g.opco)}`)) continue; // (groupe, OPCO) déjà signé → conservé
 
             const id = crypto.randomUUID();
             /* Le titre d'un document de groupe ne porte PLUS l'OPCO (« — FAFCEA », demandé le
@@ -715,18 +761,16 @@ const createCompanyDocument = async (req, res) => {
                même titre (le bloc « par stagiaire » les distingue). */
             const title = step.label;
             const ancre = sessionOf.get(g.ids[0]) || sessions[0]; // session d'ancrage (1re du groupe)
+            /* INSERT à colonnes variables, mais les LITTÉRAUX (NULL / 'A_FAIRE' / 'COMPANY') restent à
+               leur place : l'ordre des paramètres ne bouge pas (id, org, type, slug, title, company,
+               session, [opco], [company_group]) — des tests lisent `params[6]`/`params[7]`. */
+            const cols = ['id', 'organization_id', 'learner_id', 'type', 'template_slug', 'title', 'status', 'scope', 'company_id', 'session_id'];
+            const vals = ['?', '?', 'NULL', '?', '?', '?', "'A_FAIRE'", "'COMPANY'", '?', '?'];
+            const params = [id, orgId, type, template_slug, title, company.id, ancre];
+            if (opcoSupported) { cols.push('opco'); vals.push('?'); params.push(g.opco); }
+            if (aGroupeDoc) { cols.push('company_group'); vals.push('?'); params.push(g.company_group); }
             try {
-                if (opcoSupported) {
-                    await conn.query(
-                        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id, opco)
-                         VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?, ?)`,
-                        [id, orgId, type, template_slug, title, company.id, ancre, g.opco]);
-                } else {
-                    await conn.query(
-                        `INSERT INTO generated_document (id, organization_id, learner_id, type, template_slug, title, status, scope, company_id, session_id)
-                         VALUES (?, ?, NULL, ?, ?, ?, 'A_FAIRE', 'COMPANY', ?, ?)`,
-                        [id, orgId, type, template_slug, title, company.id, ancre]);
-                }
+                await conn.query(`INSERT INTO generated_document (${cols.join(', ')}) VALUES (${vals.join(', ')})`, params);
             } catch (e) {
                 if (isMissingSchema(e)) return res.status(422).json({ message: 'Documents entreprise non initialisés (migration 077).' });
                 throw e;
@@ -825,7 +869,8 @@ const getCompanyParcours = async (req, res) => {
         const sessionId = req.query.session_id;
         if (!sessionId) return res.json({ data: empty });
 
-        const grp = await resolveGroupSteps(conn, orgId, company.id, sessionId);
+        // Sous-groupe demandé (migration 215) : null = tous (groupe unique / compat).
+        const grp = await resolveGroupSteps(conn, orgId, company.id, sessionId, req.query.company_group ?? null);
         if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
 
         // Section « à l'arrivée via une entreprise » (migration 092) : c'est ELLE qui
@@ -1040,6 +1085,10 @@ const getCompanyParcours = async (req, res) => {
                 currentIndex,
                 currentKey: currentIndex < steps.length ? steps[currentIndex].key : null,
                 steps,
+                // Sous-groupes (migration 215) : la LISTE des groupes de l'entreprise dans la session,
+                // et celui que ce parcours décrit. L'écran itère `groups` et redemande par groupe.
+                groups: grp.groups,
+                company_group: req.query.company_group != null ? (Number(req.query.company_group) || 1) : null,
             },
         });
     } catch (err) {
@@ -1062,7 +1111,8 @@ const generateGroupDocuments = async (req, res) => {
         if (!session_id || !slug) return res.status(422).json({ error: 'Session et document requis.' });
         const [[company]] = await conn.query('SELECT id FROM company WHERE id = ? AND organization_id = ?', [req.params.id, orgId]);
         if (!company) return res.status(404).json({ message: 'Entreprise introuvable.' });
-        const grp = await resolveGroupSteps(conn, orgId, company.id, session_id);
+        // Sous-groupe (215) : on ne génère que pour le groupe demandé (ses stagiaires), ou tous (défaut).
+        const grp = await resolveGroupSteps(conn, orgId, company.id, session_id, req.body.company_group ?? null);
         if (!grp) return res.status(404).json({ message: 'Session introuvable.' });
         /* UN DOCUMENT « ENTREPRISE SEULEMENT » N'EST PAS ACTIF, et c'est tout son intérêt.
            La section « À l'arrivée via une entreprise » REMPLACE le parcours du dossier : on y
@@ -1114,6 +1164,10 @@ const getCompanyLearnerDocuments = async (req, res) => {
         const sessionId = req.query.session_id;
         if (!sessionId) return res.json({ data: [] });
 
+        // Sous-groupe (215) : on ne liste que les documents des stagiaires du groupe demandé, ou tous.
+        const aGroupe = await colonneExiste(conn, 'enrollment', 'company_group');
+        const groupe = req.query.company_group != null ? (Number(req.query.company_group) || 1) : null;
+        const filtreGroupe = aGroupe && groupe != null ? 'AND e.company_group = ?' : '';
         const orgSteps = await loadOrgSteps(orgId);
         const [rows] = await conn.query(
             `SELECT DISTINCT gd.id, gd.title, gd.type, gd.status, gd.template_slug,
@@ -1122,9 +1176,9 @@ const getCompanyLearnerDocuments = async (req, res) => {
              JOIN learner l ON l.id = e.learner_id
              JOIN document_formation df ON df.enrollment_id = e.id
              JOIN generated_document gd ON gd.id = df.document_id AND gd.learner_id = l.id
-             WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ?
+             WHERE e.company_id = ? AND e.session_id = ? AND e.organization_id = ? ${filtreGroupe}
              ORDER BY l.last_name, l.first_name, gd.created_at`,
-            [company.id, sessionId, orgId]
+            filtreGroupe ? [company.id, sessionId, orgId, groupe] : [company.id, sessionId, orgId]
         );
         // Ne garde que les documents « signés par l'entreprise » (devis, convention…) :
         // ce sont ceux dont la signature incombe au représentant.

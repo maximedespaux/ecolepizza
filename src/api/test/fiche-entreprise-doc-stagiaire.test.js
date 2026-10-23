@@ -25,7 +25,7 @@ const lireApi = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 test('le serveur attache les stagiaires concernés à chaque étape « stagiaire » (ni groupe, ni QCM)', () => {
     const c = lireApi('controllers/company.controller.js');
     // Les inscriptions du groupe portent le nom du stagiaire, pour l'afficher dans le bouton.
-    assert.match(c, /l\.opco, l\.first_name, l\.last_name FROM enrollment e JOIN learner l/);
+    assert.match(c, /l\.opco, l\.first_name, l\.last_name\s+FROM enrollment e JOIN learner l/);
     assert.ok(c.includes("name: `${e.last_name || ''} ${e.first_name || ''}`.trim() || 'Stagiaire'"),
         'le nom du stagiaire est calculé sur l\'inscription');
     // L'étape « stagiaire » (pas company_level, pas QCM) porte la liste ; les autres, non.

@@ -60,6 +60,6 @@ test('fiche entreprise : la fenêtre s\'ouvre pour un document de groupe non pr�
     assert.match(e, /const eligibles = \(data\.sessions \|\| \[\]\)\.filter\(\(s\) => \(groupTplsBySession\[s\.id\] \|\| \[\]\)\.some\(\(t\) => t\.slug === step\.key\)\);/);
     assert.match(e, /if \(eligibles\.length > 1\) \{/);
     // Les sessions cochées réunies en UN document (session_ids), sinon la session affichée.
-    assert.match(e, /createCompanyDocument\(id, \{ session_ids: cible\.sessionIds \|\| \[viewSessionId\], template_slug: cible\.slug \}\)/);
+    assert.match(e, /createCompanyDocument\(id, \{ session_ids: cible\.sessionIds \|\| \[viewSessionId\], template_slug: cible\.slug, company_group: viewGroup \}\)/);
     assert.match(e, /<ImportSessionsModal /);
 });

@@ -129,7 +129,7 @@ test('le collapse du volet entreprise est appelé des TROIS côtés, avec le con
     assert.match(co, /resoudreVariantesEntreprise\(docSteps, grp\.ctxGroupe, grp\.condById, grp\.eqMap\)/,
         'fiche entreprise (getCompanyParcours) : le parcours de groupe collapse aussi ses « OU »');
     // resolveGroupSteps doit exposer de quoi collapser (contexte représentatif + équivalences).
-    assert.match(co, /return \{ sess, program, enrollments, eqMap, condById, ctxGroupe,/,
+    assert.match(co, /return \{ sess, program, enrollments, groups, eqMap, condById, ctxGroupe,/,
         'resolveGroupSteps rend le contexte de groupe pour le collapse');
 });
 

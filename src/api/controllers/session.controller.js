@@ -1,4 +1,5 @@
 const db = require('../config/database.js');
+const { colonneOuNull } = require('../lib/colonnes.js');
 const { companyStepSlugs } = require('../lib/parcours.js');
 const { formationSteps } = require('./formationProgram.controller.js');
 const { loadEquivalences, equivalenceMap } = require('../lib/equivalence.js');
@@ -96,7 +97,8 @@ const getSession = async (req, res) => {
         const [enrollments] = await conn.query(
             `SELECT e.id, e.learner_id, e.crm_stage, e.conformite_score, e.financing,
                     l.first_name, l.last_name, l.email, l.phone, l.opco,
-                    e.company_id, c.name AS company_name
+                    e.company_id, c.name AS company_name,
+                    ${await colonneOuNull(conn, 'enrollment', 'company_group', 'e.')}
              FROM enrollment e
              LEFT JOIN learner l ON l.id = e.learner_id
              LEFT JOIN company c ON c.id = e.company_id

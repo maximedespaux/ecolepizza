@@ -82,7 +82,9 @@ const lire = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 
 test('la génération et le rendu lisent la même règle', () => {
     const generation = lire('controllers/company.controller.js');
-    assert.match(generation, /groups = groupesParOpco\(enr, company\.opco\);/);
+    // La RÈGLE PARTAGÉE (groupesParOpco), appliquée par SOUS-GROUPE depuis la 215 (sur `membres`),
+    // pas une copie locale de la logique OPCO.
+    assert.match(generation, /groupesParOpco\(membres, company\.opco\)/);
     assert.doesNotMatch(generation, /const raw = \(e\.opco \|\| company\.opco \|\| ''\)\.trim\(\);/, 'plus de copie locale');
     const rendu = lire('controllers/document.controller.js');
     assert.match(rendu, /groupStagiaires = stagiairesDuDocument\(gs, gdInfo\.opco\);/);
