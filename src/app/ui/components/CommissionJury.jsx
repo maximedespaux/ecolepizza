@@ -54,6 +54,15 @@ const membreVide = (premier) => ({
   user_id: null, nom: "", prenom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
   employeur: "", externe: false, na_pas_forme: true,
 });
+/* Une clé de nom comparable (sans casse, espaces réduits), pour rattacher un ancien membre saisi à
+   la main à son compte, et repérer les HOMONYMES (deux comptes au même nom) à distinguer dans la liste. */
+const cleNom = (nom, prenom) => `${String(nom || "").trim().toLowerCase().replace(/\s+/g, " ")}|${String(prenom || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+/* Le rôle d'un membre d'ÉQUIPE, en clair, pour le distinguer dans la liste (un intervenant, lui, est
+   dans le groupe « Intervenants » : son rôle est déjà dit). */
+const ROLE_LABELS = {
+  SUPER_ADMIN: "administration", ADMIN_ORGANISME: "administration", SECRETARIAT: "secrétariat",
+  FORMATEUR: "formateur", AUDITEUR: "audit", INTERVENANT: "intervenant",
+};
 
 function CommissionJury({ sessionId }) {
   const { user } = useContext(UserContext);
@@ -103,13 +112,29 @@ function CommissionJury({ sessionId }) {
   useEffect(() => {
     if (!data || f) return;
     const c = data.commission;
+    /* RATTACHER À SON COMPTE un ancien membre SAISI À LA MAIN (sans user_id, d'avant le choix dans le
+       registre) : s'il existe UN SEUL compte à ce nom, on le relie (et fige le nom du compte). Sinon
+       (homonymes, ou nom introuvable) on le laisse tel quel — l'écran invitera à le choisir. Ça évite
+       le « actuellement : … » obscur : le membre apparaît directement sélectionné dans la liste. */
+    const parNom = new Map();
+    for (const p of data.personnes || []) {
+      const k = cleNom(p.last_name, p.first_name);
+      if (!parNom.has(k)) parNom.set(k, []);
+      parNom.get(k).push(p);
+    }
+    const rattacher = (m) => {
+      if (m.user_id) return m;
+      const cands = parNom.get(cleNom(m.nom, m.prenom)) || [];
+      return cands.length === 1 ? { ...m, user_id: cands[0].user_id, nom: cands[0].last_name, prenom: cands[0].first_name } : m;
+    };
+    const juryDefaut = [membreVide(true), membreVide(), membreVide()];
     setF(c ? {
-      ...c, jury: (c.jury || []).length ? c.jury : [membreVide(true), membreVide(), membreVide()],
+      ...c, jury: (c.jury || []).length ? c.jury.map(rattacher) : juryDefaut,
     } : {
       certification: data.session?.title || "", rncp_code: data.session?.rs_code || "",
       voie_acces: "FORMATION_CONTINUE", pv_ref: "", date_examen: data.session?.start_date || "",
       heure: "", lieu: "", centre: "", representant: "", representant_fonction: "", aleas: "",
-      jury: [membreVide(true), membreVide(), membreVide()],
+      jury: juryDefaut,
     });
   }, [data, f]);
 
@@ -123,6 +148,18 @@ function CommissionJury({ sessionId }) {
      choisit dans cette liste au lieu de retaper le nom. */
   const personnes = data?.personnes || [];
   const personnesParId = new Map(personnes.map((p) => [p.user_id, p]));
+  /* HOMONYMES : les noms portés par PLUSIEURS comptes (p. ex. deux « Despaux Maxime », un côté
+     administration, un côté formateur). On les distingue par l'e-mail, sinon on ne sait pas qui choisir. */
+  const nomsEnDouble = new Set();
+  { const vus = new Set(); for (const p of personnes) { const k = cleNom(p.last_name, p.first_name); if (vus.has(k)) nomsEnDouble.add(k); else vus.add(k); } }
+  const labelPersonne = (p) => {
+    const base = `${p.last_name || ""} ${p.first_name || ""}`.trim();
+    // Homonyme → l'e-mail tranche ; sinon, pour un membre d'équipe, son rôle ; un intervenant n'a rien à ajouter.
+    const dist = nomsEnDouble.has(cleNom(p.last_name, p.first_name)) ? ` · ${p.email || "?"}`
+      : (!p.intervenant ? ` · ${ROLE_LABELS[p.role] || p.role}` : "");
+    const forme = (p.intervenant && p.a_forme) ? " · a formé cette session" : "";
+    return base + dist + forme;
+  };
   /* Choisir une personne pour le membre i : on fige son nom/prénom (instantané imprimé) et on
      décoche « n'a pas formé » si elle a justement formé cette session (conflit à lever). */
   const choisirMembre = (i, userId) => {
@@ -284,22 +321,28 @@ function CommissionJury({ sessionId }) {
                 {(f.jury || []).map((m, i) => {
                   const perso = m.user_id ? personnesParId.get(m.user_id) : null;
                   const conflit = !!perso?.a_forme; // a formé un candidat de cette session → ne peut l'évaluer
+                  // Ancien membre saisi à la main qu'on n'a pas pu rattacher (homonyme, ou nom introuvable).
+                  const nonTrouve = !m.user_id && !!(m.nom || "").trim();
                   return (
                   <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {/* ON CHOISIT UNE PERSONNE ENREGISTRÉE (équipe / intervenant) plutôt que de retaper
-                        son nom : elle a un compte, donc elle pourra signer le PV, et on sait si elle a
-                        formé les candidats. Un externe est un intervenant enregistré comme tel. Un
-                        ancien membre saisi à la main (sans compte) reste affiché, le temps de le choisir. */}
+                    {/* ON CHOISIT UNE PERSONNE ENREGISTRÉE plutôt que de retaper son nom : elle a un compte,
+                        donc elle pourra signer le PV. Deux groupes — les INTERVENANTS (les membres du jury,
+                        dont les externes) d'abord, puis l'ÉQUIPE (pour la présidence, souvent interne) : un
+                        intervenant n'est pas un formateur, et la liste le dit en les séparant. Les homonymes
+                        sont départagés par l'e-mail (labelPersonne). Déjà choisie ailleurs → pas reproposée. */}
                     <select className="inp" style={{ flex: "1 1 240px", minWidth: 0 }} value={m.user_id || ""}
-                      onChange={(e) => choisirMembre(i, e.target.value)} aria-label="Membre (équipe ou intervenant)">
-                      <option value="">{!m.user_id && m.nom ? `actuellement : ${m.nom} ${m.prenom || ""}`.trim() : "— choisir une personne —"}</option>
-                      {personnes
-                        .filter((p) => p.user_id === m.user_id || !(f.jury || []).some((x, k) => k !== i && x.user_id === p.user_id))
-                        .map((p) => (
-                          <option key={p.user_id} value={p.user_id}>
-                            {p.last_name} {p.first_name}{p.intervenant ? " · intervenant" : ""}{p.a_forme ? " · a formé cette session" : ""}
-                          </option>
-                        ))}
+                      onChange={(e) => choisirMembre(i, e.target.value)} aria-label="Membre (intervenant ou équipe)">
+                      <option value="">— choisir une personne —</option>
+                      {[["intervenant", "Intervenants"], ["equipe", "Équipe"]].map(([grp, titre]) => {
+                        const liste = personnes.filter((p) =>
+                          (grp === "intervenant" ? p.intervenant : !p.intervenant)
+                          && (p.user_id === m.user_id || !(f.jury || []).some((x, k) => k !== i && x.user_id === p.user_id)));
+                        return liste.length ? (
+                          <optgroup key={grp} label={titre}>
+                            {liste.map((p) => <option key={p.user_id} value={p.user_id}>{labelPersonne(p)}</option>)}
+                          </optgroup>
+                        ) : null;
+                      })}
                     </select>
                     <input className="inp" style={{ flex: "1 1 160px", minWidth: 0 }} value={m.qualite}
                       onChange={(e) => setJure(i, { qualite: e.target.value })} placeholder={i === 0 ? "présidente de la présente commission de délibération" : "membre du jury de la présente commission de délibération"} />
@@ -321,6 +364,13 @@ function CommissionJury({ sessionId }) {
                     {conflit && (
                       <span className="hint" style={{ flex: "1 1 100%", margin: "2px 0 0", color: "var(--ember1)", fontSize: 11.5 }}>
                         ⚠ Cette personne a formé des candidats de cette session : elle ne peut pas les évaluer (règlement d’examen, art. 6).
+                      </span>
+                    )}
+                    {/* Ancien membre tapé à la main, pas (ou pas clairement) rattaché à un compte : on le
+                        DIT, au lieu d'un « actuellement : … » obscur. Sans compte, il ne pourra pas signer. */}
+                    {nonTrouve && (
+                      <span className="hint" style={{ flex: "1 1 100%", margin: "2px 0 0", color: "var(--amber, #b8860b)", fontSize: 11.5 }}>
+                        ⚠ « {`${m.nom} ${m.prenom || ""}`.trim()} » n’est pas rattaché à un compte — choisissez la personne dans la liste (sinon elle ne pourra pas signer le PV), ou retirez cette ligne.
                       </span>
                     )}
                   </div>
