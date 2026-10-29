@@ -262,7 +262,29 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 215 à jouer ; la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 216 à jouer ; la 215 à jouer ; la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**216 est À JOUER** (`216_exam_signature.sql`, les SIGNATURES À DISTANCE du procès-verbal de jury — demandé le
+2026-10-29). Une table `exam_signature` : une ligne par signataire (un MEMBRE de la commission, ou un CANDIDAT),
+l'image manuscrite CHIFFRÉE au repos (AES-256-GCM), le nom figé au moment de signer, et les traces de preuve (IP,
+appareil, empreinte SHA-256 du PV signé). Le PV n'est pas un document du dossier (il se rend à la demande depuis les
+données figées de la commission) : il n'a pas de ligne `generated_document` où poser une signature — d'où cette table
+à part. Clé UNIQUE (session, nature, référence) : une seule signature par signataire, un lien rejoué est refusé par la
+base. La composition se choisit désormais dans le registre (équipe + intervenants, migration 215 non requise — c'est du
+JSON) : un membre AVEC compte (user_id) peut donc signer ; chaque membre et chaque candidat signe par SON lien public
+(jeton JWT signé, `lib/signaturePv.js`, rien à stocker), sans compte, une fois la commission CLÔTURÉE (le PV figé).
+L'école copie les liens depuis l'écran de la commission (section « Signatures du procès-verbal ») et suit qui a signé.
+Sans la migration, rien ne casse : l'état des signatures et la signature répondent « migration 216 non jouée » (503),
+le reste de la commission marche. ⚠️ Ce sont des signatures électroniques SIMPLES (pad/lien), non qualifiées ; le PV
+n'étant pas un document du dossier, la chaîne attestation/horodatage RFC 3161 ne le couvre pas. **Elle se vérifie par
+l'API, sans SQL** : clôturer une commission, puis `GET /api/examens/session/:id/signatures` rend des liens (`url` non
+nul) ; sans la table, répond 503. Ou une requête, qui doit rendre 1 :
+`SELECT COUNT(*) FROM information_schema.TABLES WHERE table_schema='impastio' AND table_name='exam_signature';`
+⚠️ Son revert supprime la table : les signatures recueillies (membres et candidats) sont perdues ; les PV déjà
+téléchargés en PDF gardent les leurs (instantané), la commission n'est pas touchée. Tests : `signature-pv.test.js`,
+`signature-pv-lien.test.js`. (La composition du jury depuis le registre, elle, est SANS migration — cf. PR précédente,
+`jury-registre.test.js`.) Le RENDU des signatures DANS le PV (les poser dans les cases `{PVSignatures}` / `{PVMembres}`
+/ les candidats) est la tranche SUIVANTE — ici on ne fait que les RECUEILLIR.
 
 **215 est À JOUER** (`215_enrollment_company_group.sql`, les SOUS-GROUPES d'une entreprise dans une session —
 demandé le 2026-10-23). Deux colonnes `company_group` (smallint, défaut 1) : une sur `enrollment`, une sur

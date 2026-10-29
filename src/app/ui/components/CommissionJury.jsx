@@ -8,8 +8,9 @@ import { Squelette } from "./Squelette.jsx";
 import { Icon } from "./Icon.jsx";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
+import { dateFr } from "../lib/format.js";
 import {
-  getCommission, saveCommission, saveDecisionJury, cloturerCommission, setNumeroCertification, ouvrirPvJury, poserModelesJury, getPvApercu, telechargerPvJury,
+  getCommission, saveCommission, saveDecisionJury, cloturerCommission, setNumeroCertification, ouvrirPvJury, poserModelesJury, getPvApercu, telechargerPvJury, getPvSignatures,
 } from "../api/apiClient.js";
 
 /**
@@ -68,6 +69,8 @@ function CommissionJury({ sessionId }) {
   const [f, setF] = useState(null);      // formulaire de la commission
   const [apercu, setApercu] = useState(null);     // { html, cloture } de l'aperçu ouvert
   const [apercuEnCours, setApercuEnCours] = useState(false);
+  const [signatures, setSignatures] = useState(null); // état des signatures du PV (après clôture)
+  const [copie, setCopie] = useState(null);           // lien copié à l'instant (retour visuel)
 
   async function charger() {
     try {
@@ -77,6 +80,22 @@ function CommissionJury({ sessionId }) {
     } catch (e) { setErreur(e.message); }
   }
   useEffect(() => { charger(); }, [sessionId]);
+
+  /* LES SIGNATURES DU PV n'ont de sens qu'une fois la commission CLÔTURÉE (le PV est figé) : c'est
+     alors que les liens existent et que membres et candidats signent, à distance et quand ils veulent.
+     On recharge donc l'état à la clôture — et à la demande (bouton « Actualiser »), les signatures
+     arrivant hors de l'application. */
+  const loadSignatures = () => getPvSignatures(sessionId).then((r) => setSignatures(r.data)).catch(() => setSignatures(null));
+  useEffect(() => {
+    if (data?.commission?.status === "CLOTUREE") loadSignatures();
+    else setSignatures(null);
+  }, [data?.commission?.status, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function copierLien(url, ref) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopie(ref); setTimeout(() => setCopie((c) => (c === ref ? null : c)), 2000);
+    } catch { setStatus({ type: "error", message: "Copie impossible — sélectionnez et copiez le lien à la main." }); }
+  }
 
   /* Le formulaire part de la commission existante, ou de valeurs déduites de la session : la
      date de début, le nom de l'organisme, le code RS de la formation. Faire retaper ce que
@@ -387,6 +406,62 @@ function CommissionJury({ sessionId }) {
                   <button type="button" className="btn primary" onClick={cloturer}>Clôturer la commission</button>
                 )}
               </div>
+
+              {/* SIGNATURES DU PV, à distance : visibles une fois la commission clôturée. Chaque membre
+                  (par son compte) et chaque candidat a son propre lien, que l'école copie et lui envoie ;
+                  il signe sans compte. L'état (signé / en attente) s'actualise à la demande — les
+                  signatures arrivent hors de l'application. */}
+              {close && signatures && (
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <h3 style={{ fontSize: 15, margin: 0, display: "flex", alignItems: "center", gap: 7 }}>
+                      <Icon name="pencil" size={16} /> Signatures du procès-verbal
+                    </h3>
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="btn sm ghost" onClick={loadSignatures}>
+                      <Icon name="refresh" size={13} /> Actualiser
+                    </button>
+                  </div>
+                  <p className="hint" style={{ marginTop: 4 }}>
+                    Chaque personne signe par son lien, sans compte.
+                    {signatures.membres_sans_compte > 0 && (
+                      <> ⚠ {signatures.membres_sans_compte} membre(s) saisi(s) à la main (sans compte) ne peuvent pas signer à distance — choisissez-les dans la liste du jury pour leur donner un lien.</>
+                    )}
+                  </p>
+                  {[["membres", "Commission"], ["candidats", "Candidats"]].map(([grp, titre]) => (
+                    <div key={grp} style={{ marginTop: 8 }}>
+                      <div className="eyebrow">{titre}</div>
+                      {(signatures[grp] || []).length === 0 ? (
+                        <p className="hint" style={{ margin: "2px 0" }}>Aucun.</p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          {signatures[grp].map((s) => {
+                            const ref = `${s.kind}:${s.ref}`;
+                            return (
+                              <div key={ref} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border-soft)", flexWrap: "wrap" }}>
+                                <span style={{ flex: "1 1 160px", minWidth: 0 }}>{s.nom}</span>
+                                {s.signe ? (
+                                  <Badge tone="g">Signé{s.signe_le ? ` · ${dateFr(s.signe_le)}` : ""}</Badge>
+                                ) : (
+                                  <>
+                                    <Badge tone="a">En attente</Badge>
+                                    {s.url && (
+                                      <button type="button" className="btn sm ghost" onClick={() => copierLien(s.url, ref)}
+                                        title="Copier le lien de signature à envoyer à cette personne">
+                                        <Icon name={copie === ref ? "check" : "link"} size={13} /> {copie === ref ? "Lien copié" : "Copier le lien"}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </>

@@ -1,7 +1,9 @@
 const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
-const { colonneExiste, colonneOuNull } = require('../lib/colonnes.js');
+const { colonneExiste, colonneOuNull, tableExiste } = require('../lib/colonnes.js');
+const { encrypt } = require('../lib/crypto.js');
+const { signerLienPv, urlSignaturePv } = require('../lib/signaturePv.js');
 // Le numéro de certification (migration 205) : qui y a droit, le prochain de la séquence, la saisie.
 const { DECISIONS_NUMEROTEES, prochainsNumeros, numeroSaisi } = require('../lib/numeroCertification.js');
 const { getTemplateContent } = require('./template.controller.js');
@@ -116,6 +118,98 @@ async function personnesDuRegistre(conn, orgId, sessionId) {
         intervenant: u.role === 'INTERVENANT', a_forme: formateurs.has(u.user_id),
     }));
 }
+
+/* ═══════════════ SIGNATURES DU PROCÈS-VERBAL (migration 216) ═══════════════
+   Le PV se signe À DISTANCE : chaque membre de la commission et chaque candidat signe par un lien
+   qui lui est propre (lib/signaturePv). Les signatures vivent dans `exam_signature`, UNE par
+   signataire, l'image chiffrée au repos. Ces fonctions servent AUSSI au contrôleur public
+   (public.controller) : la validité d'un signataire et l'écriture d'une signature se décident ici,
+   au même endroit que la commission. */
+
+/** Les signatures déjà posées pour une commission : « NATURE:référence » → { signer_name, signed_at }. */
+async function signaturesDeLaSession(conn, examSessionId) {
+    const [rows] = await conn.query(
+        'SELECT signer_kind, signer_ref, signer_name, signed_at FROM exam_signature WHERE exam_session_id = ?',
+        [examSessionId]);
+    return new Map(rows.map((r) => [`${r.signer_kind}:${r.signer_ref}`, r]));
+}
+
+/** Cette commission a-t-elle déjà la signature de ce signataire ? Rend la ligne, ou null. */
+async function dejaSignePv(conn, examSessionId, signerKind, signerRef) {
+    const [[r]] = await conn.query(
+        'SELECT signed_at FROM exam_signature WHERE exam_session_id = ? AND signer_kind = ? AND signer_ref = ? LIMIT 1',
+        [examSessionId, signerKind, signerRef]);
+    return r || null;
+}
+
+/**
+ * LE NOM ATTENDU d'un signataire — et, du même geste, la preuve qu'il a bien le DROIT de signer CE
+ * PV : un membre doit être au jury (par son compte), un candidat doit être inscrit à la session. Un
+ * identifiant glissé dans un jeton qui ne désigne ni l'un ni l'autre rend `null` → signature refusée.
+ */
+async function nomDuSignataire(conn, orgId, sessionId, commission, signerKind, signerRef) {
+    if (signerKind === 'MEMBRE') {
+        const m = (commission.jury || []).find((x) => x.user_id === signerRef);
+        return m ? `${m.nom} ${m.prenom || ''}`.trim() : null;
+    }
+    if (signerKind === 'CANDIDAT') {
+        const [[l]] = await conn.query(
+            `SELECT l.first_name, l.last_name FROM enrollment e JOIN learner l ON l.id = e.learner_id
+              WHERE e.session_id = ? AND e.learner_id = ? AND e.organization_id = ? LIMIT 1`,
+            [sessionId, signerRef, orgId]);
+        return l ? `${l.last_name} ${l.first_name}`.trim() : null;
+    }
+    return null;
+}
+
+/** Écrit une signature du PV (image CHIFFRÉE au repos). La clé UNIQUE refuse un second passage. */
+async function recordSignaturePv(conn, { orgId, examSessionId, signerKind, signerRef, signerName, signatureData, ip, userAgent, hash }) {
+    await conn.query(
+        `INSERT INTO exam_signature (id, organization_id, exam_session_id, signer_kind, signer_ref, signer_name, signature, signer_ip, signer_user_agent, signed_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), orgId, examSessionId, signerKind, signerRef, signerName || null,
+            encrypt(signatureData), ip || null, (userAgent || '').slice(0, 400) || null, hash || null]);
+}
+
+/**
+ * GET /api/examens/session/:id/signatures — l'état des signatures du PV, et le lien de chacun.
+ *
+ * Les signataires attendus : les membres du jury QUI ONT UN COMPTE (user_id — un ancien membre
+ * saisi à la main ne peut pas signer à distance, on le compte à part), et tous les candidats de la
+ * session. Les liens ne sont donnés qu'une fois la commission CLÔTURÉE (le PV est figé) — avant, on
+ * rend la liste sans lien, pour que l'écran montre qui signera.
+ */
+const getSignatures = async (req, res) => {
+    const orgId = req.user.organization_id;
+    try {
+        const conn = db.promise();
+        if (!(await tableExiste(conn, 'exam_signature'))) {
+            return res.status(503).json({ error: 'La signature du procès-verbal arrive avec la migration 216 (non jouée).' });
+        }
+        const commission = await commissionDeLaSession(conn, orgId, req.params.id);
+        if (!commission) return res.status(404).json({ error: 'Aucune commission pour cette session.' });
+        const [candidats] = await conn.query(
+            `SELECT l.id AS learner_id, l.first_name, l.last_name FROM enrollment e JOIN learner l ON l.id = e.learner_id
+              WHERE e.session_id = ? AND e.organization_id = ? ORDER BY l.last_name, l.first_name`, [req.params.id, orgId]);
+        const faites = await signaturesDeLaSession(conn, commission.id);
+        const cloture = commission.status === 'CLOTUREE';
+        const lien = (kind, ref) => (cloture
+            ? urlSignaturePv(signerLienPv({ examSessionId: commission.id, signerKind: kind, signerRef: ref, orgId }))
+            : null);
+        const ligne = (kind, ref, nom) => {
+            const sig = faites.get(`${kind}:${ref}`);
+            return { kind, ref, nom, signe: !!sig, signe_le: (sig && sig.signed_at) || null, url: lien(kind, ref) };
+        };
+        const membres = (commission.jury || []).filter((m) => m.user_id)
+            .map((m) => ligne('MEMBRE', m.user_id, `${m.nom} ${m.prenom || ''}`.trim()));
+        const membresSansCompte = (commission.jury || []).filter((m) => !m.user_id && m.nom).length;
+        const candidatsSig = candidats.map((c) => ligne('CANDIDAT', c.learner_id, `${c.last_name} ${c.first_name}`.trim()));
+        res.json({ data: { cloture, membres, candidats: candidatsSig, membres_sans_compte: membresSansCompte } });
+    } catch (err) {
+        console.error('Erreur signatures PV :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
 
 /**
  * GET /api/examens/session/:id — la commission de cette session et ses candidats.
@@ -505,5 +599,7 @@ const pvApercu = async (req, res) => {
 
 module.exports = {
     getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu,
-    commissionDeLaSession, personnesDuRegistre, contexteExamen, contextePv, ADMIS, DECISIONS, ROLES_JURY,
+    getSignatures, commissionDeLaSession, personnesDuRegistre, contexteExamen, contextePv, ADMIS, DECISIONS, ROLES_JURY,
+    // Pour le contrôleur public (signature à distance du PV) :
+    nomDuSignataire, dejaSignePv, recordSignaturePv,
 };
