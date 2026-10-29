@@ -21,13 +21,19 @@ const poids = (o) => (o >= 1024 * 1024 ? `${Math.round((o / 1024 / 1024) * 10) /
 /* `refresh` : un compteur que l'appelant incrémente après avoir déposé une pièce POUR le
    stagiaire. Sans lui, la carte garderait l'état d'avant le dépôt — la pièce apparaîtrait
    encore « à fournir » alors qu'elle vient d'arriver, et il faudrait recharger la page. */
-export default function PiecesReview({ enrollmentId, refresh }) {
+export default function PiecesReview({ enrollmentId, refresh, onLoaded }) {
   const [pieces, setPieces] = useState(null);
   const [erreur, setErreur] = useState(null);
 
+  /* `onLoaded({ enrollmentId, pieces })` remonte les pièces chargées à la fiche stagiaire, qui en
+     tire les gestes « voir / télécharger / retirer » des cartes « pièce » du parcours — sans second
+     fetch. On joint l'enrollmentId pour qu'elle ne montre pas les fichiers de l'ancien dossier le
+     temps d'un changement d'onglet (avant que cette revue ait rechargé). */
   function load() {
-    if (!enrollmentId) { setPieces([]); return; }
-    getDossierPieces(enrollmentId).then((r) => setPieces(r.data || [])).catch(() => setPieces([]));
+    if (!enrollmentId) { setPieces([]); onLoaded?.({ enrollmentId, pieces: [] }); return; }
+    getDossierPieces(enrollmentId)
+      .then((r) => { setPieces(r.data || []); onLoaded?.({ enrollmentId, pieces: r.data || [] }); })
+      .catch(() => { setPieces([]); onLoaded?.({ enrollmentId, pieces: [] }); });
   }
   useEffect(() => { load(); }, [enrollmentId, refresh]);
 
