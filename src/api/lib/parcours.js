@@ -90,7 +90,7 @@ const pourcentFait = (faites, total) => (total ? Math.round((faites / total) * 1
  * représentant) — une remise qui lui est destinée va alors à elle ; sinon, elle revient au
  * stagiaire (cf. remise.controller, pourEntreprise).
  */
-function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, entreprise = false } = {}) {
+function computeDocParcours({ steps = [], docs = [], pieces = {}, pieceFichiers = {}, remises = {}, entreprise = false } = {}) {
     const rows = steps.map((s) => {
         // Étape « pièce » (dépôt du stagiaire, ex. carte d'identité) : sa complétion vient de
         // piece_depot.statut, PAS d'un document généré (il n'y en a pas). VALIDÉE ⇒ étape faite,
@@ -155,6 +155,10 @@ function computeDocParcours({ steps = [], docs = [], pieces = {}, remises = {}, 
            dépose en six allers-retours. */
         fichiers_attendus: Math.max(1, Number(r.s.fichiers_attendus) || 1),
         pieceStatus: r.pieceStatus || null, // ATTENDUE | DEPOSEE | VALIDEE | REFUSEE (étapes « pièce »)
+        /* LES FICHIERS DÉPOSÉS de la pièce (id + nom), pour « voir / télécharger / retirer » sur la
+           carte — lus du piece_depot (getParcours), donc présents même pour une pièce arrivée par
+           l'entreprise, que la liste des pièces du dossier ne renvoie pas. [] pour les non-pièces. */
+        fichiers: pieceFichiers[r.s.piece_id] || [],
         remise: !!r.s.remise_id,       // étape « remise » — gérée par le panneau Documents remis
         remise_id: r.s.remise_id || null,
         remiseId: r.remiseId || null,  // l'identifiant de LA remise du dossier (pas du type) : c'est lui qu'on exclut
