@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu,
+    getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu, getSignatures,
 } = require('../controllers/examen.controller.js');
 const { authenticateToken, authorizeRoles, STAFF_ROLES, ADMIN_ROLES } = require('../middlewares/auth.middleware.js');
 
@@ -20,5 +20,8 @@ router.post('/session/:id/cloturer', authorizeRoles(...ADMIN_ROLES), cloturerCom
 router.post('/session/:id/pv', authorizeRoles(...STAFF_ROLES), pvPdf);
 /* L'aperçu HTML du PV (sans LibreOffice) : une vue de ce qu'il donnera, même avant clôture. */
 router.get('/session/:id/pv/apercu', authorizeRoles(...STAFF_ROLES), pvApercu);
+/* L'état des signatures du PV (qui a signé, le lien de chacun) — lecture, donc le personnel.
+   Les membres et les candidats, eux, signent par leur lien PUBLIC (sans compte), cf. public.routes. */
+router.get('/session/:id/signatures', authorizeRoles(...STAFF_ROLES), getSignatures);
 
 module.exports = router;

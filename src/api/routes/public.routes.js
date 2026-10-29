@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    getSignPage, submitSign, getNewsletterUnsub, postNewsletterUnsub,
+    getSignPage, submitSign, getPvSignPage, submitPvSign, getNewsletterUnsub, postNewsletterUnsub,
 } = require('../controllers/public.controller.js');
 const { rateLimit } = require('../middlewares/rateLimit.js');
 
@@ -9,6 +9,12 @@ const router = express.Router();
 
 router.get('/sign/:token', getSignPage);
 router.post('/sign/:token', submitSign);
+
+/* Signature À DISTANCE du procès-verbal de jury, par un membre de la commission ou un candidat.
+   Comme le lien de signature d'un document : protégé par son jeton signé (JWT) et la clé UNIQUE de
+   `exam_signature` (une signature par signataire) — pas d'amplification, donc pas de plafond ici. */
+router.get('/pv-sign/:token', getPvSignPage);
+router.post('/pv-sign/:token', submitPvSign);
 
 /* Désinscription de la newsletter : GET valide + affiche, POST désinscrit (geste délibéré, pas un
    pré-chargement du client mail).

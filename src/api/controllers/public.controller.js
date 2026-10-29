@@ -1,5 +1,7 @@
 // Endpoints PUBLICS (sans authentification) : signature d'un document via un lien
-// partageable (le représentant d'une entreprise signe sans compte).
+// partageable (le représentant d'une entreprise signe sans compte), et — même idée — la
+// signature à distance du procès-verbal de jury par ses membres et ses candidats.
+const crypto = require('crypto');
 const db = require('../config/database.js');
 const { renderDocumentHtml, applySlotSignature, applyLearnerSignature, clientIp, consentementsManquants, questionsEnClair, zonesManquantesDuDocument } = require('./document.controller.js');
 const { notify } = require('./notification.controller.js');
@@ -8,6 +10,11 @@ const { libellesEnClair } = require('../lib/zonesARemplir.js');
 const { estSignatureValide } = require('../lib/signatures.js');
 const { verifierLienDesinscription } = require('../lib/newsletter.js');
 const { enregistrerNewsletter, estInscritNewsletter } = require('../lib/consentements.js');
+const { verifierLienPv } = require('../lib/signaturePv.js');
+const { tableExiste } = require('../lib/colonnes.js');
+const { commissionDeLaSession, contextePv, nomDuSignataire, dejaSignePv, recordSignaturePv } = require('./examen.controller.js');
+const { getTemplateContent } = require('./template.controller.js');
+const { avecPapierEnTete, renderTemplateHtml } = require('../lib/htmlfill.js');
 
 /* Le document attend une réponse que seul le stagiaire peut donner, depuis son espace. */
 const messageAttente = (manquants) => (manquants.length > 1
@@ -178,6 +185,120 @@ const submitSign = async (req, res) => {
 };
 
 /* ═════════════════════════════════════════════════════════════════════════════════════════════
+   PROCÈS-VERBAL DE JURY — signature À DISTANCE par un membre de la commission ou un candidat.
+
+   Chacun ouvre SON lien (jeton signé, lib/signaturePv), consulte le PV et le signe. Le PV n'est pas
+   un document du dossier : la signature se range dans `exam_signature` (migration 216), pas via le
+   circuit des documents. On ne signe qu'un PV CLÔTURÉ (figé), et une seule fois par signataire (la
+   clé UNIQUE de la table le garantit, même si deux onglets envoient en même temps). */
+
+/** Rend le PV en HTML (même contexte figé que l'aperçu du personnel), ou null. */
+async function rendrePvHtml(conn, orgId, trainingSessionId) {
+    try {
+        const ctx = await contextePv(conn, orgId, trainingSessionId);
+        const content = await getTemplateContent(orgId, 'pv-jury');
+        if (!ctx || !content || content.kind !== 'builder') return null;
+        return renderTemplateHtml(content.html, ctx, {
+            title: 'Procès-verbal de jury',
+            headerHtml: content.header, footerHtml: content.footer,
+            letterhead: avecPapierEnTete(content.layout),
+        });
+    } catch (e) { console.error('Aperçu PV (signature) :', e.message); return null; }
+}
+
+/* Charge la commission d'un jeton et vérifie qu'elle est signable (table présente, PV existant et
+   CLÔTURÉ, signataire légitime). Rend `{ ex, commission, nom }` ou envoie l'erreur et rend null. */
+async function contexteSignaturePv(conn, v, res) {
+    if (!(await tableExiste(conn, 'exam_signature'))) {
+        res.status(503).json({ message: 'La signature du procès-verbal n’est pas encore disponible (migration 216).' });
+        return null;
+    }
+    const [[ex]] = await conn.query(
+        'SELECT id, training_session_id, organization_id, status, pv_ref FROM exam_session WHERE id = ? AND organization_id = ?',
+        [v.examSessionId, v.orgId]);
+    if (!ex) { res.status(404).json({ message: 'Procès-verbal introuvable.' }); return null; }
+    if (ex.status !== 'CLOTUREE') {
+        res.status(409).json({ message: 'Le procès-verbal n’est pas encore finalisé : il pourra être signé une fois la commission clôturée.' });
+        return null;
+    }
+    const commission = await commissionDeLaSession(conn, v.orgId, ex.training_session_id);
+    const nom = commission ? await nomDuSignataire(conn, v.orgId, ex.training_session_id, commission, v.signerKind, v.signerRef) : null;
+    if (!nom) { res.status(404).json({ message: 'Signataire inconnu pour ce procès-verbal.' }); return null; }
+    return { ex, commission, nom };
+}
+
+/** GET /api/public/pv-sign/:token — infos + aperçu du PV à signer. */
+const getPvSignPage = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const v = verifierLienPv(req.params.token);
+        if (!v) return res.status(404).json({ message: 'Lien invalide.' });
+        const c = await contexteSignaturePv(conn, v, res);
+        if (!c) return undefined;
+        const deja = await dejaSignePv(conn, c.ex.id, v.signerKind, v.signerRef);
+        const html = await rendrePvHtml(conn, v.orgId, c.ex.training_session_id);
+        return res.json({ data: {
+            title: `Procès-verbal ${c.ex.pv_ref || ''}`.trim(),
+            role: v.signerKind === 'MEMBRE' ? 'Membre de la commission' : 'Candidat',
+            signer_name: c.nom,
+            signed: !!deja, signed_at: (deja && deja.signed_at) || null,
+            html: html || '<p>Aperçu indisponible.</p>',
+        } });
+    } catch (err) {
+        console.error('Erreur page signature PV :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/** POST /api/public/pv-sign/:token — enregistre la signature d'un membre ou d'un candidat. */
+const submitPvSign = async (req, res) => {
+    try {
+        const conn = db.promise();
+        const v = verifierLienPv(req.params.token);
+        if (!v) return res.status(404).json({ message: 'Lien invalide.' });
+        const c = await contexteSignaturePv(conn, v, res);
+        if (!c) return undefined;
+        if (await dejaSignePv(conn, c.ex.id, v.signerKind, v.signerRef)) {
+            return res.status(409).json({ message: 'Vous avez déjà signé ce procès-verbal.' });
+        }
+        const signer_name = String((req.body || {}).signer_name || '').trim() || c.nom;
+        const signature_data = (req.body || {}).signature_data;
+        // Hygiène STRICTE de la signature (image data-URL ancrée) : même garde que les documents.
+        if (!signature_data || !estSignatureValide(signature_data)) {
+            return res.status(422).json({ message: 'Signature invalide.' });
+        }
+        // Empreinte du PV signé (preuve de ce qui a été signé), best-effort.
+        const html = await rendrePvHtml(conn, v.orgId, c.ex.training_session_id);
+        const hash = html ? crypto.createHash('sha256').update(html).digest('hex') : null;
+        try {
+            await recordSignaturePv(conn, {
+                orgId: v.orgId, examSessionId: c.ex.id, signerKind: v.signerKind, signerRef: v.signerRef,
+                signerName: signer_name, signatureData: signature_data,
+                ip: clientIp(req), userAgent: req.headers['user-agent'] || '', hash,
+            });
+        } catch (e) {
+            // Course entre deux onglets : la clé UNIQUE tranche, on répond « déjà signé ».
+            if (e && e.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Vous avez déjà signé ce procès-verbal.' });
+            throw e;
+        }
+        /* Le bureau est prévenu, comme pour une signature de document par lien (le flux public ne
+           passe pas par la cloche authentifiée). Best-effort : une alerte manquée ne défait rien. */
+        try {
+            await notify(v.orgId, {
+                type: 'SIGNATURE', title: 'Procès-verbal signé',
+                body: `Signé par ${signer_name}${v.signerKind === 'MEMBRE' ? ' (commission)' : ' (candidat)'}`,
+                link: c.ex.training_session_id ? `/sessions/${c.ex.training_session_id}` : '/suivi',
+            });
+            publish(v.orgId, 'refresh', {});
+        } catch { /* diffusion best-effort */ }
+        return res.json({ success: true, message: 'Procès-verbal signé. Merci !' });
+    } catch (err) {
+        console.error('Erreur signature PV :', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
    NEWSLETTER — la désinscription publique (le lien au bas de chaque e-mail, sans login).
 
    DEUX TEMPS, exprès. Le GET ne CHANGE RIEN : il valide le jeton et dit l'état. Le POST, lui,
@@ -228,4 +349,4 @@ const postNewsletterUnsub = async (req, res) => {
     }
 };
 
-module.exports = { getSignPage, submitSign, getNewsletterUnsub, postNewsletterUnsub };
+module.exports = { getSignPage, submitSign, getPvSignPage, submitPvSign, getNewsletterUnsub, postNewsletterUnsub };

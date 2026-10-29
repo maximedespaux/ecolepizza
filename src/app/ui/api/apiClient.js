@@ -755,6 +755,9 @@ export function createSignLink(documentId, payload = {}) {
 // Signature publique par le représentant de l'entreprise (page /signer/:token).
 export function getPublicSignDoc(token) { return request(`/public/sign/${token}`, { silent: true }); }
 export function submitPublicSign(token, payload) { return request(`/public/sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
+// Signature publique du PROCÈS-VERBAL de jury par un membre / un candidat (page /pv-signer/:token).
+export function getPublicPvSign(token) { return request(`/public/pv-sign/${token}`, { silent: true }); }
+export function submitPublicPvSign(token, payload) { return request(`/public/pv-sign/${token}`, { method: "POST", body: JSON.stringify(payload) }); }
 /** Désinscription PUBLIQUE de la newsletter (lien au bas de chaque e-mail, sans compte). */
 export function getDesinscriptionNewsletter(token) { return request(`/public/newsletter/${token}`, { silent: true }); }
 export function desinscrireNewsletter(token) { return request(`/public/newsletter/${token}`, { method: "POST" }); }
@@ -1762,6 +1765,10 @@ export function cloturerCommission(sessionId) {
    même avant la clôture (brouillon). Silencieux : on l'ouvre souvent, pas de barre de chargement. */
 export function getPvApercu(sessionId) {
   return request(`/examens/session/${sessionId}/pv/apercu`, { silent: true });
+}
+// L'état des signatures du PV (qui a signé, le lien de chacun) — après clôture.
+export function getPvSignatures(sessionId) {
+  return request(`/examens/session/${sessionId}/signatures`, { silent: true });
 }
 export async function ouvrirPvJury(sessionId) {
   startLoading();
