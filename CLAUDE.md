@@ -283,8 +283,12 @@ nul) ; sans la table, répond 503. Ou une requête, qui doit rendre 1 :
 ⚠️ Son revert supprime la table : les signatures recueillies (membres et candidats) sont perdues ; les PV déjà
 téléchargés en PDF gardent les leurs (instantané), la commission n'est pas touchée. Tests : `signature-pv.test.js`,
 `signature-pv-lien.test.js`. (La composition du jury depuis le registre, elle, est SANS migration — cf. PR précédente,
-`jury-registre.test.js`.) Le RENDU des signatures DANS le PV (les poser dans les cases `{PVSignatures}` / `{PVMembres}`
-/ les candidats) est la tranche SUIVANTE — ici on ne fait que les RECUEILLIR.
+`jury-registre.test.js`.) Le RENDU des signatures DANS le PV est FAIT (tranche 3, SANS migration — c'est du rendu) :
+`contexteExamen` lit `exam_signature`, DÉCHIFFRE chaque image et rend `pvSignatures` (clé `MEMBRE:<user_id>` /
+`CANDIDAT:<learner_id>`) ; les tables du PV la posent dans les cases — `pvSignaturesTable` et `pvMembresTable`
+(membres), `pvCandidatsTable` (émargement du candidat), toutes trois dans lib/tokens.js, par `signatureBox`. Vaut
+pour l'aperçu, le PDF ET un PV de dossier (`loadContext` fait suivre `pvSignatures`). Une case sans signature reste
+vide, à signer à la main. Tests : `signature-pv-rendu.test.js`.
 
 **215 est À JOUER** (`215_enrollment_company_group.sql`, les SOUS-GROUPES d'une entreprise dans une session —
 demandé le 2026-10-23). Deux colonnes `company_group` (smallint, défaut 1) : une sur `enrollment`, une sur

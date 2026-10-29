@@ -114,7 +114,7 @@ test('le PV de la commission lit exactement la même chose', async () => {
     const { contextePv } = require('../controllers/examen.controller.js');
     resultats = [{ learner_id: 'l-1', decision: 'CERTIFIE', observations: '' }];
     const pv = await contextePv(conn, 'o1', 's-1');
-    assert.deepStrictEqual(Object.keys(pv).sort(), ['exam', 'examResult', 'org', 'pvCandidats']);
+    assert.deepStrictEqual(Object.keys(pv).sort(), ['exam', 'examResult', 'org', 'pvCandidats', 'pvSignatures']);
     assert.strictEqual(pv.exam.pv_ref, 'EPJJD-2026-38');
     assert.strictEqual(pv.pvCandidats.length, 2);
     /* Le PV de session ne nomme personne : {Décision} y reste vide, comme avant. */
