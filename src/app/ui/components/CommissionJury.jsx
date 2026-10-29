@@ -50,7 +50,7 @@ const ADMIS = new Set(["CERTIFIE", "BLOCS_ACQUIS"]);
 const QUALITE_PRESIDENT = "présidente de la présente commission de délibération";
 const QUALITE_MEMBRE = "membre du jury de la présente commission de délibération";
 const membreVide = (premier) => ({
-  nom: "", prenom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
+  user_id: null, nom: "", prenom: "", qualite: premier ? QUALITE_PRESIDENT : QUALITE_MEMBRE,
   employeur: "", externe: false, na_pas_forme: true,
 });
 
@@ -98,6 +98,19 @@ function CommissionJury({ sessionId }) {
   const close = commission?.status === "CLOTUREE";
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const setJure = (i, patch) => setF((p) => ({ ...p, jury: p.jury.map((m, k) => (k === i ? { ...m, ...patch } : m)) }));
+
+  /* LES PERSONNES À PROPOSER pour le jury — l'équipe et les intervenants de l'organisme (elles ont
+     un compte, donc elles pourront signer le PV, et on sait si elles ont formé cette session). On
+     choisit dans cette liste au lieu de retaper le nom. */
+  const personnes = data?.personnes || [];
+  const personnesParId = new Map(personnes.map((p) => [p.user_id, p]));
+  /* Choisir une personne pour le membre i : on fige son nom/prénom (instantané imprimé) et on
+     décoche « n'a pas formé » si elle a justement formé cette session (conflit à lever). */
+  const choisirMembre = (i, userId) => {
+    const p = personnesParId.get(userId);
+    if (!p) { setJure(i, { user_id: null }); return; }
+    setJure(i, { user_id: userId, nom: p.last_name || "", prenom: p.first_name || "", na_pas_forme: !p.a_forme });
+  };
 
   async function enregistrer() {
     setStatus(null);
@@ -249,17 +262,29 @@ function CommissionJury({ sessionId }) {
               <label>Composition de la commission
                 <HelpDot text={"Trois membres au minimum.\n\nLa majorité doit être EXTÉRIEURE à l'organisme, et aucun membre ne peut évaluer un candidat qu'il a formé. Ces deux règles s'impriment sur le procès-verbal — c'est ce qui les rend opposables."} /></label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {(f.jury || []).map((m, i) => (
+                {(f.jury || []).map((m, i) => {
+                  const perso = m.user_id ? personnesParId.get(m.user_id) : null;
+                  const conflit = !!perso?.a_forme; // a formé un candidat de cette session → ne peut l'évaluer
+                  return (
                   <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {/* NOM et PRÉNOM À PART : un nom composé (« Le Faou ») ne se devine pas d'un seul
-                        champ, et le PV imprime le patronyme en capitales pour qu'on le distingue. */}
-                    <input className="inp" style={{ flex: "1 1 120px", minWidth: 0 }} value={m.nom}
-                      onChange={(e) => setJure(i, { nom: e.target.value })} placeholder="Nom" aria-label="Nom (de famille)" />
-                    <input className="inp" style={{ flex: "1 1 110px", minWidth: 0 }} value={m.prenom || ""}
-                      onChange={(e) => setJure(i, { prenom: e.target.value })} placeholder="Prénom" aria-label="Prénom" />
+                    {/* ON CHOISIT UNE PERSONNE ENREGISTRÉE (équipe / intervenant) plutôt que de retaper
+                        son nom : elle a un compte, donc elle pourra signer le PV, et on sait si elle a
+                        formé les candidats. Un externe est un intervenant enregistré comme tel. Un
+                        ancien membre saisi à la main (sans compte) reste affiché, le temps de le choisir. */}
+                    <select className="inp" style={{ flex: "1 1 240px", minWidth: 0 }} value={m.user_id || ""}
+                      onChange={(e) => choisirMembre(i, e.target.value)} aria-label="Membre (équipe ou intervenant)">
+                      <option value="">{!m.user_id && m.nom ? `actuellement : ${m.nom} ${m.prenom || ""}`.trim() : "— choisir une personne —"}</option>
+                      {personnes
+                        .filter((p) => p.user_id === m.user_id || !(f.jury || []).some((x, k) => k !== i && x.user_id === p.user_id))
+                        .map((p) => (
+                          <option key={p.user_id} value={p.user_id}>
+                            {p.last_name} {p.first_name}{p.intervenant ? " · intervenant" : ""}{p.a_forme ? " · a formé cette session" : ""}
+                          </option>
+                        ))}
+                    </select>
                     <input className="inp" style={{ flex: "1 1 160px", minWidth: 0 }} value={m.qualite}
                       onChange={(e) => setJure(i, { qualite: e.target.value })} placeholder={i === 0 ? "présidente de la présente commission de délibération" : "membre du jury de la présente commission de délibération"} />
-                    <input className="inp" style={{ flex: "1 1 140px", minWidth: 0 }} value={m.employeur}
+                    <input className="inp" style={{ flex: "1 1 130px", minWidth: 0 }} value={m.employeur}
                       onChange={(e) => setJure(i, { employeur: e.target.value })} placeholder="Employeur" />
                     <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12 }}>
                       <input type="checkbox" checked={!!m.externe} onChange={(e) => setJure(i, { externe: e.target.checked })} /> extérieur
@@ -271,8 +296,17 @@ function CommissionJury({ sessionId }) {
                       onClick={() => setF((p) => ({ ...p, jury: p.jury.filter((_, k) => k !== i) }))}>
                       <Icon name="trash" size={14} />
                     </button>
+                    {/* LE CONTRÔLE « N'A PAS FORMÉ » automatique : si la personne choisie a enseigné cette
+                        session, elle ne peut pas évaluer ses candidats (règlement d'examen). On le dit,
+                        et « n'a pas formé » est décoché d'office — à ne cocher qu'en connaissance de cause. */}
+                    {conflit && (
+                      <span className="hint" style={{ flex: "1 1 100%", margin: "2px 0 0", color: "var(--ember1)", fontSize: 11.5 }}>
+                        ⚠ Cette personne a formé des candidats de cette session : elle ne peut pas les évaluer (règlement d’examen, art. 6).
+                      </span>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
                 <div><button type="button" className="btn sm ghost"
                   onClick={() => setF((p) => ({ ...p, jury: [...p.jury, membreVide()] }))}>＋ Membre</button></div>
               </div>

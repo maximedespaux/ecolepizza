@@ -72,6 +72,6 @@ test('un membre sans prénom (ancien format) garde un prénom vide, pas undefine
 
 test('juryPropre garde le prénom dans sa liste blanche (lu au source)', () => {
     const ctrl = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'examen.controller.js'), 'utf8');
-    const corps = ctrl.slice(ctrl.indexOf('function juryPropre'), ctrl.indexOf('function juryPropre') + 600);
+    const corps = ctrl.slice(ctrl.indexOf('function juryPropre'), ctrl.indexOf('function juryPropre') + 1200);
     assert.match(corps, /prenom: texte\(m && m\.prenom, 120\)/, 'le prénom est conservé à l\'écriture');
 });
