@@ -359,7 +359,7 @@ const standardTree = () => ({
  *               ce qui se range dans l'autre arbre (« de groupe », « de session »), et de quoi y aller.
  */
 export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nbFormations = 0, formation = null,
-  palette = null, groupes = null, lectureSeule = false, arbre = "stagiaire", ailleurs = null }) {
+  palette = null, groupes = null, lectureSeule = false, arbre = "stagiaire", ailleurs = null, nonRangesGlobal = [] }) {
   const folders = useMemo(() => tree?.folders || [], [tree]);
   const [enEdition, setEnEdition] = useState(null);
   const options = useMemo(() => buildOptions(docs, eqMap), [docs, eqMap]);
@@ -403,8 +403,9 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
   };
   const ctx = { lectureSeule, ex, concerne: ap && ap.concerne, formation, options, placeDe, nbFormations, op, enEdition, setEnEdition, ailleurs };
 
-  /* Une ligne des listes du bas : le document, et « Placer dans… » les dossiers qui peuvent le recevoir. */
-  const ligneAPlacer = (c) => {
+  /* Une ligne des listes : le document, un repère facultatif (ses formations, pour le récapitulatif
+     toutes formations), et « Placer dans… » les dossiers qui peuvent le recevoir. */
+  const ligneAPlacer = (c, repere = null) => {
     const o = options.find((x) => x.key === c || (x.group && clesCouvertes(itemDe(x), groupes).includes(c)));
     // Un document sans stagiaire ne se propose pas dans un dossier « un par stagiaire » (cf. ChoixDocument).
     const cibles = o && o.sansStagiaire ? cheminsDossiers.filter((p) => !p.sousStagiaire) : cheminsDossiers;
@@ -412,6 +413,7 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
       <li key={c}>
         <Icon name="file-text" size={14} aria-hidden="true" />
         <span className="arbo-doc-l">{(palette && palette.get(c)) || c}</span>
+        {repere}
         {!lectureSeule && o && cibles.length > 0 && (
           <select value="" aria-label={`Placer ${(palette && palette.get(c)) || c}`}
             onChange={(e) => { if (e.target.value) op.placer(e.target.value, o); }}>
@@ -438,6 +440,20 @@ export default function ArchiveTreeEditor({ tree, docs = [], eqMap, onChange, nb
 
   return (
     <div className={"arbo" + (lectureSeule ? " lecture" : "")}>
+      {/* CE QUI N'EST RANGÉ NULLE PART, TOUTES FORMATIONS CONFONDUES (2026-10-29) — un récapitulatif en
+          TÊTE, pour qu'un document ne se cache plus derrière « Aperçu pour » : une pièce du volet
+          entreprise d'une seule formation (« Attestation contribution au faf », NIV1PRO) n'apparaissait
+          qu'en la sélectionnant, et l'éditeur s'ouvre sur la première formation. Ici, tout ce qui ne
+          sera PAS archivé se voit d'un coup, et se place sans changer de formation. */}
+      {nonRangesGlobal.length > 0 && (
+        <div className="arbo-non-places global">
+          <div className="arbo-non-places-t">
+            <Icon name="info" size={15} aria-hidden="true" />
+            <span><b>{nonRangesGlobal.length} document{nonRangesGlobal.length > 1 ? "s" : ""} non rangé{nonRangesGlobal.length > 1 ? "s" : ""}</b>, toutes formations confondues — {nonRangesGlobal.length > 1 ? "ils ne seront" : "il ne sera"} pas dans l'archivage {arbre === "entreprise" ? "entreprise" : "stagiaire"}. Placez-{nonRangesGlobal.length > 1 ? "les" : "le"} ci-dessous, sans changer de formation.</span>
+          </div>
+          <ul>{nonRangesGlobal.map((d) => ligneAPlacer(d.cle, d.formations.length ? <span className="arbo-doc-qui">{d.formations.join(", ")}</span> : null))}</ul>
+        </div>
+      )}
       {folders.length === 0 ? (
         <div className="arbo-rien">
           <p>Aucun dossier pour l'instant.</p>

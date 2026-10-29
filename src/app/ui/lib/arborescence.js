@@ -118,6 +118,37 @@ export function formationDansLArbre(formation, kind, documents) {
   return { ...formation, documents: siens, aRanger: siens };
 }
 
+/**
+ * CE QUI N'EST RANGÉ NULLE PART, TOUTES FORMATIONS CONFONDUES (2026-10-29) — le récapitulatif en tête
+ * de l'éditeur, pour qu'un document ne se cache plus derrière le sélecteur « Aperçu pour ». Une pièce
+ * du volet entreprise de NIV1PRO (« Attestation contribution au faf ») n'apparaissait qu'en choisissant
+ * NIV1PRO ; l'éditeur s'ouvrant sur RS7404, elle semblait absente — et donc non archivée sans qu'on le voie.
+ *
+ * MÊME RÈGLE QUE L'APERÇU PAR FORMATION (formationDansLArbre → aRanger) : seul l'« à ranger » compte —
+ * stagiaire : tous les documents d'une formation sauf le groupe, plus ses documents de session ;
+ * entreprise : ses documents de groupe. Les copies facultatives de l'entreprise (aCopier) n'y sont PAS :
+ * elles ne se perdent pas, elles vivent dans l'arbre stagiaire. On agrège sur TOUTES les formations,
+ * puis on retire ce qui est déjà rangé dans l'arbre (clesRangees, qui déplie les « OU » placés).
+ *
+ * @returns [{ cle, label, formations: [codes] }] — trié par libellé
+ */
+export function nonRangesToutesFormations(documents, formations, kind, tree, groupes) {
+  const ranges = clesRangees(tree, groupes);
+  const libelle = new Map((documents || []).map((d) => [d.cle, d.label]));
+  const parCle = new Map();
+  for (const f of formations || []) {
+    const vue = formationDansLArbre(f, kind, documents);
+    for (const c of (vue && vue.aRanger) || []) {
+      if (ranges.has(c)) continue;
+      if (!parCle.has(c)) parCle.set(c, new Set());
+      parCle.get(c).add(f.code);
+    }
+  }
+  return [...parCle.entries()]
+    .map(([cle, codes]) => ({ cle, label: libelle.get(cle) || cle, formations: [...codes].sort() }))
+    .sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+}
+
 /** Un document SANS STAGIAIRE — de groupe, ou de session seulement — ne se range pas dans un dossier
     « un par stagiaire » : il n'aurait aucun nom à y prendre (le serveur le remonterait d'un cran). */
 export const sansStagiaire = (d) => !!d && (!!d.company_level || (!!d.session && !(d.formations || []).length));
