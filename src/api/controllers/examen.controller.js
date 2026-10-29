@@ -29,6 +29,12 @@ const { avecPapierEnTete, renderTemplateHtml } = require('../lib/htmlfill.js');
 
 const VOIES = ['FORMATION_CONTINUE', 'CANDIDATURE_INDIVIDUELLE', 'VAE'];
 const DECISIONS = ['EN_COURS', 'CERTIFIE', 'BLOCS_ACQUIS', 'AJOURNE', 'ABSENT', 'EXCLU'];
+/* QUI PEUT SIÉGER AU JURY : l'équipe ET les intervenants — les personnes DÉJÀ enregistrées de
+   l'organisme (un compte), par opposition à un nom tapé à la main. Mêmes rôles que l'équipe
+   (equipe.controller, TEAM_ROLES) — un test les tient d'accord. Un intervenant EXTERNE est le cas
+   qui fournit la majorité extérieure exigée du jury ; « externe » reste coché à la main, le rôle
+   ne le dit pas (un intervenant peut être interne). */
+const ROLES_JURY = ['SUPER_ADMIN', 'ADMIN_ORGANISME', 'SECRETARIAT', 'FORMATEUR', 'AUDITEUR', 'INTERVENANT'];
 /* ADMIS / NON ADMIS, tels qu'imprimés sur le PV de l'organisme. `EN_COURS` n'est ni l'un ni
    l'autre : la commission ne s'est pas prononcée, et forcer ce cas dans « non admis » ferait
    compter comme refusé quelqu'un qu'on n'a pas encore examiné. */
@@ -45,6 +51,10 @@ async function supportePv(conn) {
 function juryPropre(brut) {
     const liste = Array.isArray(brut) ? brut.slice(0, 10) : [];
     const out = liste.map((m) => ({
+        /* La personne choisie dans le registre (équipe / intervenant), par son compte — pour lui
+           demander sa signature (tranche suivante) et dire si elle a formé les candidats. Un ancien
+           membre saisi à la main n'a pas d'user_id (null) ; sanitisé, validé là où il SERT. */
+        user_id: texte(m && m.user_id, 64) || null,
         nom: texte(m && m.nom, 120) || '',
         /* LE PRÉNOM, saisi À PART du nom depuis le 2026-10-09 (noms composés). Il manquait à cette
            liste blanche : la saisie l'envoyait, l'écriture le JETAIT, et au rechargement le prénom
@@ -82,6 +92,32 @@ async function commissionDeLaSession(conn, orgId, sessionId) {
 }
 
 /**
+ * LES PERSONNES QUI PEUVENT SIÉGER AU JURY — l'équipe et les intervenants de l'organisme, pour les
+ * CHOISIR plutôt que retaper leur nom (et parce qu'un compte pourra signer le PV). Chacune porte
+ * `a_forme` : a-t-elle enseigné CETTE session ? Un membre qui a formé les candidats ne peut pas les
+ * évaluer (règlement d'examen) — l'écran le signale. Tolérant : sans la table des intervenants,
+ * personne n'a « formé » (aucun conflit connu), on rend quand même la liste des comptes.
+ */
+async function personnesDuRegistre(conn, orgId, sessionId) {
+    let formateurs = new Set();
+    try {
+        const [f] = await conn.query(
+            'SELECT DISTINCT user_id FROM session_intervenant WHERE session_id = ? AND organization_id = ?',
+            [sessionId, orgId]);
+        formateurs = new Set(f.map((r) => r.user_id));
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
+    const [users] = await conn.query(
+        `SELECT id AS user_id, first_name, last_name, role FROM user
+          WHERE organization_id = ? AND active = 1 AND role IN (?)
+          ORDER BY FIELD(role, 'INTERVENANT') DESC, last_name, first_name`,
+        [orgId, ROLES_JURY]);
+    return users.map((u) => ({
+        user_id: u.user_id, first_name: u.first_name, last_name: u.last_name, role: u.role,
+        intervenant: u.role === 'INTERVENANT', a_forme: formateurs.has(u.user_id),
+    }));
+}
+
+/**
  * GET /api/examens/session/:id — la commission de cette session et ses candidats.
  *
  * LES CANDIDATS VIENNENT DE LA SESSION, pas d'une liste saisie à part : ce sont les stagiaires
@@ -108,7 +144,12 @@ const getCommission = async (req, res) => {
               ORDER BY l.last_name, l.first_name`, [req.params.id, orgId]);
 
         const commission = await commissionDeLaSession(conn, orgId, req.params.id);
-        res.json({ data: { session: s, candidats, commission } });
+        /* LES PERSONNES à proposer pour composer le jury (équipe + intervenants). À part du reste :
+           une liste indisponible (cas improbable) ne doit pas priver l'écran de la commission. */
+        let personnes = [];
+        try { personnes = await personnesDuRegistre(conn, orgId, req.params.id); }
+        catch (e) { console.error('Registre du jury indisponible :', e && e.message); }
+        res.json({ data: { session: s, candidats, commission, personnes } });
     } catch (err) {
         if (err && err.code === 'ER_NO_SUCH_TABLE') {
             return res.status(409).json({ error: 'Migration 150 non jouée : procès-verbal indisponible.' });
@@ -464,5 +505,5 @@ const pvApercu = async (req, res) => {
 
 module.exports = {
     getCommission, saveCommission, saveDecision, cloturerCommission, setNumeroCertification, pvPdf, pvApercu,
-    commissionDeLaSession, contexteExamen, contextePv, ADMIS, DECISIONS,
+    commissionDeLaSession, personnesDuRegistre, contexteExamen, contextePv, ADMIS, DECISIONS, ROLES_JURY,
 };

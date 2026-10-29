@@ -136,15 +136,16 @@ test('écran : bouton « Aperçu du PV », fenêtre d\'aperçu, et « Générer 
     assert.match(api, /\/examens\/session\/\$\{sessionId\}\/pv\/apercu/);
 });
 
-test('écran : télécharger le PV depuis l\'aperçu, et saisir NOM / Prénom à part', () => {
+test('écran : télécharger le PV depuis l\'aperçu, et composer le jury depuis le registre', () => {
     const jsx = lire(path.join(UI, 'components/CommissionJury.jsx'));
     // Le téléchargement, dans la fenêtre d'aperçu.
     assert.match(jsx, /telechargerPvJury/, 'le téléchargeur est importé');
     assert.match(jsx, /onClick=\{telecharger\}[\s\S]*Télécharger le PDF/, 'bouton « Télécharger le PDF » dans l\'aperçu');
-    // Nom et prénom saisis séparément (noms composés).
-    assert.match(jsx, /prenom: ""/, 'un membre a un champ prénom à part');
-    assert.match(jsx, /placeholder="Prénom"/, 'le champ Prénom existe');
-    assert.match(jsx, /setJure\(i, \{ prenom: e\.target\.value \}\)/, 'le prénom se saisit à part du nom');
+    // Le membre garde un nom ET un prénom (noms composés), mais ils sont FIGÉS depuis la personne
+    // choisie dans le registre (un select), non plus tapés à la main.
+    assert.match(jsx, /prenom: ""/, 'un membre a un champ prénom (instantané imprimé)');
+    assert.match(jsx, /onChange=\{\(e\) => choisirMembre\(i, e\.target\.value\)\}/, 'on choisit la personne dans un select');
+    assert.match(jsx, /nom: p\.last_name \|\| "", prenom: p\.first_name \|\| ""/, 'le nom/prénom sont figés depuis la personne choisie');
     const api = lire(path.join(UI, 'api/apiClient.js'));
     assert.match(api, /export async function telechargerPvJury\(sessionId/);
     assert.match(api, /a\.download = filename/, 'un vrai téléchargement de fichier');
