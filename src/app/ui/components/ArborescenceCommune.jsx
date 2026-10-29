@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getArborescenceCommune, saveArborescenceCommune, getEquivalences } from "../api/apiClient.js";
 import ArchiveTreeEditor, { treeHasEmptyName } from "./ArchiveTreeEditor.jsx";
 import StatusMessage from "./StatusMessage.jsx";
-import { groupesDepuis, paletteDeLArbre, horsDeLArbre, formationDansLArbre } from "../lib/arborescence.js";
+import { groupesDepuis, paletteDeLArbre, horsDeLArbre, formationDansLArbre, nonRangesToutesFormations } from "../lib/arborescence.js";
 
 /**
  * L'ARBORESCENCE D'ARCHIVAGE COMMUNE (migration 182, demandée le 2026-09-24) — une fois pour toutes
@@ -50,13 +50,19 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
   const groupes = useMemo(() => groupesDepuis(eqMap), [eqMap]);
   const documents = useMemo(() => etat?.documents || [], [etat]);
   const libelles = useMemo(() => new Map(documents.map((d) => [d.cle, d.label])), [documents]);
-  const formations = etat?.formations || [];
+  const formations = useMemo(() => etat?.formations || [], [etat]);
   const isEnt = kind === "entreprise";
   /* Archivage STAGIAIRE : le dossier de chaque stagiaire, inscrit seul ou par une entreprise — tous
      ses documents, sauf ceux de groupe (🏢) —, et les documents de session. Archivage ENTREPRISE : des
      copies, et les documents de groupe. La règle vit dans lib/arborescence.js, partagée avec l'onglet
      de la formation, et le serveur exclut de l'archive exactement ce que l'aperçu dit non rangé. */
   const docs = useMemo(() => paletteDeLArbre(documents, kind), [documents, kind]);
+  /* CE QUI N'EST RANGÉ NULLE PART, TOUTES FORMATIONS CONFONDUES — le récapitulatif en tête, pour qu'un
+     document ne se cache plus derrière « Aperçu pour » (cf. lib/arborescence.js). Recalculé à chaque
+     placement : un document rangé en sort aussitôt. */
+  const nonRangesGlobal = useMemo(
+    () => nonRangesToutesFormations(documents, formations, kind, isEnt ? companyTree : tree, groupes),
+    [documents, formations, kind, isEnt, companyTree, tree, groupes]);
   const ailleurs = useMemo(() => ({
     stagiaire: { docs: horsDeLArbre(documents, "stagiaire"), nature: "de groupe", arbre: "entreprise", ouvrir: () => setKind("entreprise") },
     entreprise: { docs: horsDeLArbre(documents, "entreprise"), nature: "de session", arbre: "stagiaire", ouvrir: () => setKind("stagiaire") },
@@ -184,7 +190,7 @@ export default function ArborescenceCommune({ onClose, onSaved }) {
               <ArchiveTreeEditor tree={isEnt ? companyTree : tree} onChange={isEnt ? setCompanyTree : setTree}
                 eqMap={eqMap} docs={docs} nbFormations={formations.length}
                 formation={formationVue} palette={libelles} groupes={groupes}
-                arbre={kind} ailleurs={ailleurs[kind]} />
+                arbre={kind} ailleurs={ailleurs[kind]} nonRangesGlobal={nonRangesGlobal} />
             </>
           )}
         </div>

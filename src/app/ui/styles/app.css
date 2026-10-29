@@ -1385,6 +1385,9 @@ button.arbo-nom:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
 /* Les copies pour l'entreprise qu'on n'a pas faites : une information, pas une alerte — le ton neutre le dit. */
 .arbo-non-places.copies{border-color:var(--border);background:var(--surface2)}
 .arbo-non-places.copies .arbo-non-places-t > svg{color:var(--dim)}
+/* Le récapitulatif EN TÊTE (toutes formations) : collé au haut de l'éditeur, détaché de l'arbre, un fond
+   légèrement bleuté pour qu'il se lise comme un filet de sécurité et non comme un doublon des listes du bas. */
+.arbo-non-places.global{margin-top:0;margin-bottom:14px;background:color-mix(in srgb,var(--blue) 7%,var(--surface))}
 /* SANS SURVOL (téléphone, tablette), les actions restent visibles : cachées, elles seraient introuvables. */
 @media (hover:none){.arbo-actions,.arbo-retirer{opacity:1}}
 @media (max-width:640px){
