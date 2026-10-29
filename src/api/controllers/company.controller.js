@@ -915,6 +915,7 @@ const getCompanyParcours = async (req, res) => {
             let gen = 0, total = 0, signed = 0, recu = 0, docId = null; // `recu` : reçus (envoyés), pour un document SANS signature
             let remise = null; // l'état d'une REMISE pour le groupe (`compteRemiseGroupe`), sinon null
             let piece = null;  // l'état d'une PIÈCE pour le groupe (`comptePieceGroupe`), sinon null
+            let piecesParDossier = null; // pièce : fichiers déposés par dossier (enrollment_id → [{id, nom}]), pour l'œil « Voir » de la carte
             let nbFichiersGroupe = 0; // fichiers déposés, tous dossiers concernés confondus (migration 203)
             if (s.company_level) {
                 // Document de GROUPE : UNE signature collective (organisme + entreprise),
@@ -998,6 +999,24 @@ const getCompanyParcours = async (req, res) => {
                 const c = comptePieceGroupe(ids, lignes);
                 total = c.total; gen = c.gen; signed = c.signed; recu = c.gen; // gen = déposées (reçues), signed = validées
                 piece = c;
+                /* LES FICHIERS DÉPOSÉS, par dossier : pour que la carte offre un œil « Voir » direct
+                   (comme une remise au stagiaire), sans aller sur la fiche. Une pièce REFUSÉE a vu ses
+                   fichiers purgés (piece.controller `verifier`) : la liste est alors vide, donc pas d'œil. */
+                piecesParDossier = new Map();
+                if (ids.length) {
+                    try {
+                        const [fichiers] = await conn.query(
+                            `SELECT d.enrollment_id, pf.id, pf.nom FROM piece_fichier pf
+                               JOIN piece_depot d ON d.id = pf.depot_id
+                              WHERE d.organization_id = ? AND d.enrollment_id IN (?) AND d.piece_type_id = ?
+                              ORDER BY pf.sort_order, pf.created_at`,
+                            [orgId, ids, s.piece_id]);
+                        for (const f of fichiers) {
+                            if (!piecesParDossier.has(f.enrollment_id)) piecesParDossier.set(f.enrollment_id, []);
+                            piecesParDossier.get(f.enrollment_id).push({ id: f.id, nom: f.nom });
+                        }
+                    } catch (e) { if (!isMissingSchema(e)) throw e; } // migration 127 non jouée
+                }
             } else {
                 const applicable = dossiersConcernes(s);
                 total = applicable.length;
@@ -1037,7 +1056,9 @@ const getCompanyParcours = async (req, res) => {
                    directement, plusieurs se choisissent. Ces documents se préparent sur la fiche de
                    chaque stagiaire, pas ici. */
                 stagiaires: (!s.company_level && !s.quiz_id)
-                    ? dossiersConcernes(s).map((e) => ({ enrollment_id: e.id, learner_id: e.learner_id, name: e.name }))
+                    ? dossiersConcernes(s).map((e) => ({ enrollment_id: e.id, learner_id: e.learner_id, name: e.name,
+                        // Pièce : ses fichiers déposés, pour l'œil « Voir » de la carte (sinon absent).
+                        ...(piecesParDossier ? { fichiers: piecesParDossier.get(e.id) || [] } : {}) }))
                     : undefined,
                 piece: !!piece, piece_id: s.piece_id || null, // étape « pièce » (dépôt du stagiaire), gérée sur sa fiche
                 remise: !!remise, remise_id: s.remise_id || null, remiseEntreprise,

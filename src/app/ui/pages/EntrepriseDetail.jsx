@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { getCompany, updateCompany, deleteCompany, registerCompanyStagiaires, getSessions, getStagiaires,
   detachCompanyLearner, getOpcos, getCompanyParcours, getCompanyLearnerDocuments, createCompanyDocument, getCompanyDocTemplates, listCompanyDocuments, sendDocument, deleteDocument, downloadDocumentPdf, createSignLink, documentPdfUrl, createRepresentativeAccount,
-  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl, supprimerRemiseFichier,
+  importDocumentFile, marquerDocumentFait, downloadDocumentImporte, getRemisesGroupe, deposerRemise, remiseFichierUrl, supprimerRemiseFichier, pieceFichierUrl,
   getReglementsEntreprise, updateReglementEntreprise } from "../api/apiClient.js";
 import { UserContext } from "../context/UserContext.jsx";
 import { peutEcrire } from "../lib/nav.js";
@@ -620,18 +620,35 @@ export default function EntrepriseDetail() {
     const info = s.piece
       ? `« ${s.label} » se dépose et se valide sur la fiche du stagiaire (panneau « Pièces justificatives »), où vous pouvez la voir et la retirer.`
       : `« ${s.label} » se prépare sur la fiche du stagiaire, dans son parcours.`;
+    /* UNE PIÈCE DÉPOSÉE SE REGARDE ICI MÊME — un œil « Voir » sur le dernier fichier déposé, comme une
+       remise au stagiaire (gestesRemise) —, pour la vérifier sans ouvrir la fiche. Rien à voir tant
+       qu'aucun fichier n'est déposé, ni après un refus (verifier PURGE les fichiers) : pas d'œil. */
+    const oeil = (st) => {
+      const fichiers = st.fichiers || [];
+      const dernier = fichiers[fichiers.length - 1];
+      if (!s.piece || !dernier) return null;
+      return (
+        <button className="iconbtn" title={`Voir ${dernier.nom || "le document déposé"}`}
+          aria-label={`Voir la pièce déposée pour ${st.name}`}
+          onClick={() => window.open(pieceFichierUrl(dernier.id), "_blank", "noopener")}><Icon name="eye" size={16} /></button>
+      );
+    };
     const lien = (st, label) => (
       <Link key={st.enrollment_id} className="btn ghost sm" to={lienDossier(st.learner_id, st.enrollment_id)} state={{ info }}
         title={`Ouvrir le parcours de ${st.name} sur sa fiche`}>
         <Icon name="user" size={14} /> {label}
       </Link>
     );
-    if (stagiaires.length === 1) return lien(stagiaires[0], "Gérer sur la fiche stagiaire");
+    if (stagiaires.length === 1) {
+      const st = stagiaires[0];
+      return <>{oeil(st)}{lien(st, "Gérer sur la fiche stagiaire")}</>;
+    }
     return (
       <div className="parc-gestes-multi">
         {stagiaires.map((st) => (
           <div key={st.enrollment_id} className="parc-geste-ligne">
             <span className="parc-trace">{st.name}</span>
+            {oeil(st)}
             {lien(st, "Ouvrir sa fiche")}
           </div>
         ))}

@@ -30,7 +30,16 @@ test('le serveur attache les stagiaires concernés à chaque étape « stagiaire
         'le nom du stagiaire est calculé sur l\'inscription');
     // L'étape « stagiaire » (pas company_level, pas QCM) porte la liste ; les autres, non.
     assert.match(c, /stagiaires: \(!s\.company_level && !s\.quiz_id\)/);
-    assert.match(c, /dossiersConcernes\(s\)\.map\(\(e\) => \(\{ enrollment_id: e\.id, learner_id: e\.learner_id, name: e\.name \}\)\)/);
+    assert.match(c, /dossiersConcernes\(s\)\.map\(\(e\) => \(\{ enrollment_id: e\.id, learner_id: e\.learner_id, name: e\.name,/);
+});
+
+test('une étape PIÈCE attache aussi les fichiers déposés par dossier (pour l\'œil « Voir » de la carte)', () => {
+    const c = lireApi('controllers/company.controller.js');
+    // Les fichiers déposés se lisent dans la branche pièce, par dossier (enrollment_id → [{id, nom}]).
+    assert.match(c, /piecesParDossier = new Map\(\);/);
+    assert.match(c, /SELECT d\.enrollment_id, pf\.id, pf\.nom FROM piece_fichier pf\s+JOIN piece_depot d ON d\.id = pf\.depot_id/);
+    // La liste des stagiaires porte ces fichiers UNIQUEMENT pour une pièce (piecesParDossier non nul).
+    assert.match(c, /\.\.\.\(piecesParDossier \? \{ fichiers: piecesParDossier\.get\(e\.id\) \|\| \[\] \} : \{\}\)/);
 });
 
 test('la fiche entreprise mène à la fiche stagiaire : un seul directement, plusieurs au choix', () => {
@@ -41,11 +50,24 @@ test('la fiche entreprise mène à la fiche stagiaire : un seul directement, plu
     // Le lien ouvre la fiche du stagiaire sur CE dossier (lib/lienDossier, onglet Formation).
     assert.match(e, /import \{ lienDossier \} from "\.\.\/lib\/lienDossier\.js";/);
     assert.match(e, /to=\{lienDossier\(st\.learner_id, st\.enrollment_id\)\}/);
-    // Un seul stagiaire : un bouton direct. Plusieurs : une ligne par stagiaire, à choisir.
-    assert.match(e, /if \(stagiaires\.length === 1\) return lien\(stagiaires\[0\], "Gérer sur la fiche stagiaire"\);/);
+    // Un seul stagiaire : un bouton direct (plus l'œil « Voir » si pièce). Plusieurs : une ligne par stagiaire.
+    assert.match(e, /lien\(st, "Gérer sur la fiche stagiaire"\)/);
     assert.match(e, /stagiaires\.map\(\(st\) => \(/);
     // Aucun stagiaire concerné : aucun bouton (la sous-ligne le dit déjà).
     assert.match(e, /if \(!stagiaires\.length\) return null;/);
+});
+
+test('une pièce déposée se regarde depuis la carte entreprise : un œil « Voir » sur le dernier fichier', () => {
+    const e = lireUi('pages/EntrepriseDetail.jsx');
+    // L'œil n'apparaît QUE pour une pièce, et seulement si un fichier est déposé (rien après un refus).
+    assert.match(e, /const oeil = \(st\) => \{/);
+    assert.match(e, /const dernier = fichiers\[fichiers\.length - 1\];/);
+    assert.match(e, /if \(!s\.piece \|\| !dernier\) return null;/);
+    // Il ouvre le fichier en ligne (même chemin que la remise au stagiaire), via pieceFichierUrl.
+    assert.match(e, /window\.open\(pieceFichierUrl\(dernier\.id\), "_blank", "noopener"\)/);
+    assert.match(e, /pieceFichierUrl,/); // importé depuis apiClient
+    // L'œil est posé aussi bien pour un seul stagiaire que pour chacun d'une liste.
+    assert.match(e, /return <>\{oeil\(st\)\}\{lien\(st, "Gérer sur la fiche stagiaire"\)\}<\/>;/);
 });
 
 test('la fiche stagiaire affiche le message venu de la fiche entreprise (location.state.info)', () => {
