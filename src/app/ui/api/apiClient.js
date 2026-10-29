@@ -1340,6 +1340,9 @@ export async function deposerPiece(enrollmentId, pieceTypeId, file) {
 }
 // URL directe du fichier (déchiffré à la volée côté serveur) — pour un aperçu inline.
 export function pieceFichierUrl(fichierId) { return `${API_BASE_URL}/pieces/fichier/${fichierId}`; }
+// Télécharge (et non « voir ») un fichier de pièce — le serveur le sert en `inline`, le blob est
+// récupéré puis enregistré sous son nom (comme downloadRemiseFichier). Une lecture : rien n'est touché.
+export function downloadPieceFichier(fichierId, filename) { return download(`/pieces/fichier/${fichierId}`, filename || "piece"); }
 /* Retirer UN fichier d'une pièce (pas tout le dépôt) : le serveur supprime la ligne, et si c'était
    le dernier, le dépôt redevient « à fournir ». Personnel à tout moment, stagiaire tant que non
    validée (cf. supprimerFichier). C'est la « purge manuelle » des copies chiffrées. */
