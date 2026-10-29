@@ -318,7 +318,7 @@ test('le parcours dit quand une remise va à l\'entreprise — seulement si le d
     // Et la fiche le demande sur le compte du représentant, pas sur la seule présence d'une entreprise.
     const ctrl = fs.readFileSync(path.join(__dirname, '../controllers/enrollment.controller.js'), 'utf8');
     assert.match(ctrl, /SELECT user_id FROM company WHERE id = \? AND organization_id = \?/);
-    assert.match(ctrl, /computeDocParcours\(\{ steps, docs, pieces, remises, entreprise: entrepriseAvecEspace \}\)/);
+    assert.match(ctrl, /computeDocParcours\(\{ steps, docs, pieces, pieceFichiers, remises, entreprise: entrepriseAvecEspace \}\)/);
 });
 
 test('UNE ÉTAPE FACULTATIVE NE FERME AUCUN POINT D\'ACCÈS — dossier comme entreprise', () => {

@@ -111,11 +111,6 @@ function StagiaireDetail() {
      ne garde que les autres. `null` tant que le parcours de l'onglet n'est pas arrivé — sans quoi
      la liste afficherait tout, puis se viderait d'un coup. */
   const [docsEtapes, setDocsEtapes] = useState(null);
-  /* LES PIÈCES DU DOSSIER AFFICHÉ, remontées par la revue des pièces (PiecesReview → onLoaded), pour
-     les gestes « voir / télécharger / retirer » des cartes « pièce » du parcours (gestesEtape) — sans
-     second fetch. Porte son enrollmentId : on ne montre pas les fichiers de l'ancien dossier le temps
-     d'un changement d'onglet. `null` tant que rien n'est chargé. */
-  const [piecesDossier, setPiecesDossier] = useState(null);
 
   function loadLearner() {
     return getStagiaire(id).then((r) => setL(r.data)).catch((err) => setStatus({ type: "error", message: err.message }));
@@ -280,14 +275,14 @@ function StagiaireDetail() {
   }
   /* RETIRER UN FICHIER DE PIÈCE depuis sa carte — la même purge manuelle que la revue des pièces
      (PiecesReview.retirerFichier, cf. règle de conservation, CLAUDE.md) : définitive, d'où la
-     confirmation, et si c'était le dernier la pièce redevient « à fournir ». On recharge le parcours
-     ET la revue (parcoursRefresh), qui remonte à son tour les pièces à jour. */
-  async function retirerPiece(f, p) {
-    const fichiers = p.fichiers || [];
+     confirmation, et si c'était le dernier la pièce redevient « à fournir ». `s` est l'étape de
+     parcours (ses fichiers, son statut, son libellé). On recharge le parcours (parcoursRefresh). */
+  async function retirerPiece(f, s) {
+    const fichiers = s.fichiers || [];
     const suite = fichiers.length <= 1
       ? "\nC'est son dernier fichier : la pièce redeviendra « à fournir »."
-      : p.statut === "VALIDEE" ? "\nLa pièce reste validée." : "";
-    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${p.label} » ?${suite}\nLa suppression est définitive.`)) return;
+      : s.pieceStatus === "VALIDEE" ? "\nLa pièce reste validée." : "";
+    if (!window.confirm(`Retirer « ${f.nom || "ce fichier"} » de « ${s.label} » ?${suite}\nLa suppression est définitive.`)) return;
     try { await supprimerPieceFichier(f.id); setParcoursRefresh((n) => n + 1); }
     catch (err) { setStatus({ type: "error", message: err.message }); }
   }
@@ -340,13 +335,6 @@ function StagiaireDetail() {
      c'est l'école qui le dit, pas un calcul. Le bandeau n'apparaît donc que lorsque les deux
      conditions objectives sont réunies — session passée ET parcours complet — et il faut cliquer. */
   const curEnr = enrollments.find((e) => e.id === curEnrId) || null;
-  /* Les pièces du dossier affiché, indexées par leur TYPE (= `step.piece_id`), pour gestesEtape.
-     Bornées au dossier courant : au changement d'onglet, on n'affiche pas les fichiers de l'ancien
-     dossier tant que la revue (PiecesReview) n'a pas rechargé. Simple Map en rendu (quelques pièces),
-     pas un hook — `curEnrId` n'existe qu'ici, après le garde `if (!l)`. */
-  const piecesParType = (piecesDossier && piecesDossier.enrollmentId === curEnrId)
-    ? new Map((piecesDossier.pieces || []).map((p) => [p.piece_type_id, p]))
-    : new Map();
   const terminees = String(l.completed_levels || "").split(",").map((x) => x.trim()).filter(Boolean);
   const sessionPassee = !!(curEnr?.end_date && curEnr.end_date < new Date().toISOString().slice(0, 10));
   const aMarquer = !!(curEnr?.program_code && sessionPassee && !terminees.includes(curEnr.program_code));
@@ -698,15 +686,15 @@ function StagiaireDetail() {
       );
     }
     /* UNE PIÈCE (reçue du stagiaire, ou déposée par l'école) ne produit aucun document généré : ses
-       gestes portent sur les FICHIERS déposés — voir, télécharger, retirer —, les mêmes que la revue
-       des pièces plus bas, mais SUR LA CARTE, pour ne plus avoir à descendre (demandé le 2026-10-29).
-       Les fichiers viennent de cette revue (piecesParType), bornés au dossier affiché. Rien tant
-       qu'aucun fichier n'est déposé (la pastille dit « à fournir »), ni après un refus (verifier
-       PURGE les fichiers). Retirer un fichier EST la purge manuelle (cf. conservation, CLAUDE.md). */
+       gestes portent sur les FICHIERS déposés — voir, télécharger, retirer —, SUR LA CARTE, pour ne
+       plus avoir à descendre (demandé le 2026-10-29). Les fichiers sont portés par l'étape elle-même
+       (`s.fichiers`, posés par le serveur depuis piece_depot) — donc présents AUSSI pour une pièce
+       arrivée par l'entreprise, que la liste des pièces du dossier ne renvoie pas (c'était le défaut).
+       Rien tant qu'aucun fichier n'est déposé (la pastille dit « à fournir »), ni après un refus
+       (verifier PURGE les fichiers). Retirer un fichier EST la purge manuelle (cf. conservation, CLAUDE.md). */
     if (s.piece) {
-      const p = piecesParType.get(s.piece_id);
-      const fichiers = (p && p.fichiers) || [];
-      if (!p || !fichiers.length) return null;
+      const fichiers = s.fichiers || [];
+      if (!fichiers.length) return null;
       const boutonsFichier = (f, i) => (
         <>
           <button className="iconbtn" title={`Voir ${f.nom || "le fichier"}`}
@@ -717,20 +705,16 @@ function StagiaireDetail() {
             onClick={() => telechargerPiece(f)}><Icon name="download" size={16} /></button>
           <button className="iconbtn del" title="Retirer ce fichier (suppression définitive)"
             aria-label={`Retirer ${f.nom || `le fichier ${i + 1}`} de ${s.label}`}
-            onClick={() => retirerPiece(f, p)}><Icon name="trash" size={15} /></button>
+            onClick={() => retirerPiece(f, s)}><Icon name="trash" size={15} /></button>
         </>
       );
-      /* Un seul fichier : les trois gestes directement, comme un document (trace = dépôt/validation,
-         détail au survol). Plusieurs : une ligne par fichier (son nom) — même disposition que les
+      /* Un seul fichier : les trois gestes directement, comme un document (trace = état de la pièce,
+         nom au survol). Plusieurs : une ligne par fichier (son nom) — même disposition que les
          documents par OPCO (.parc-gestes-multi). */
       if (fichiers.length === 1) {
         const f = fichiers[0];
-        const trace = p.statut === "VALIDEE"
-          ? `validée${p.verifie_le ? ` le ${dateFr(p.verifie_le)}` : ""}`
-          : "déposée, à vérifier";
-        const detail = [f.nom, p.statut === "VALIDEE" && p.verifie_par && `validée par ${p.verifie_par}${p.verifie_le ? ` le ${dateHeure(p.verifie_le)}` : ""}`]
-          .filter(Boolean).join(" · ") || undefined;
-        return <><span className="parc-trace" title={detail}>{trace}</span>{boutonsFichier(f, 0)}</>;
+        const trace = s.pieceStatus === "VALIDEE" ? "validée" : "déposée, à vérifier";
+        return <><span className="parc-trace" title={f.nom || undefined}>{trace}</span>{boutonsFichier(f, 0)}</>;
       }
       return (
         <div className="parc-gestes-multi">
@@ -1028,7 +1012,7 @@ function StagiaireDetail() {
                 onValider={validerImportMulti} onClose={() => setImportMulti(null)} />
             )}
             {/* Pièces justificatives du dossier sélectionné : validation/refus par le personnel. */}
-            <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} onLoaded={setPiecesDossier} />
+            <PiecesReview enrollmentId={curEnrId} refresh={parcoursRefresh} />
             {/* L'AUTRE SENS, juste en dessous : ce que l'ÉCOLE remet. Les deux cartes se
                 ressemblent volontairement — c'est le même geste, dans les deux directions — et
                 chacune disparaît si son parcours n'en prévoit aucune. */}

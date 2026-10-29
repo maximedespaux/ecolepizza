@@ -80,5 +80,5 @@ test('la revue des pièces se rafraîchit après un dépôt du personnel', () =>
     /* Sans cela, la pièce resterait affichée « à fournir » juste après son arrivée, et il
        faudrait recharger la page pour la voir. */
     assert.match(REVUE, /\[enrollmentId, refresh\]/, 'la carte doit dépendre du compteur de rafraîchissement');
-    assert.match(FICHE, /<PiecesReview enrollmentId=\{curEnrId\} refresh=\{parcoursRefresh\} onLoaded=\{setPiecesDossier\} \/>/);
+    assert.match(FICHE, /<PiecesReview enrollmentId=\{curEnrId\} refresh=\{parcoursRefresh\} \/>/);
 });

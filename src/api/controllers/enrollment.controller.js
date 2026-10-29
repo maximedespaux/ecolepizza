@@ -170,6 +170,21 @@ const getParcours = async (req, res) => {
                 const [pd] = await conn.query('SELECT piece_type_id, statut FROM piece_depot WHERE enrollment_id = ? AND organization_id = ?', [e.id, orgId]);
                 pieces = Object.fromEntries(pd.map((r) => [r.piece_type_id, r.statut]));
             } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 127 non jouée
+            /* LES FICHIERS DÉPOSÉS de chaque pièce (id + nom seulement, jamais les octets), pour « voir /
+               télécharger / retirer » sur la carte du parcours (fiche stagiaire). Lus DU MÊME piece_depot
+               que le statut ci-dessus — donc couvrent aussi une pièce arrivée PAR L'ENTREPRISE, que la
+               liste des pièces du dossier (listDossier, bornée aux piece_steps du programme) ne voit pas :
+               c'est précisément ce décalage qui laissait la carte sans boutons. */
+            let pieceFichiers = {};
+            try {
+                const [pf] = await conn.query(
+                    `SELECT d.piece_type_id, pf.id, pf.nom
+                       FROM piece_fichier pf
+                       JOIN piece_depot d ON d.id = pf.depot_id
+                      WHERE d.enrollment_id = ? AND d.organization_id = ?
+                      ORDER BY pf.sort_order, pf.created_at`, [e.id, orgId]);
+                for (const r of pf) (pieceFichiers[r.piece_type_id] ||= []).push({ id: r.id, nom: r.nom });
+            } catch (err) { if (!(err && (err.code === 'ER_BAD_FIELD_ERROR' || err.code === 'ER_NO_SUCH_TABLE'))) throw err; } // migration 127 non jouée
             /* Statut des REMISES (migration 160) : même rôle que les pièces au-dessus, dans
                l'autre sens. `sans_objet` (161) est relu à part — sans la colonne, on relit sans
                elle et aucune remise n'est exclue. */
@@ -204,7 +219,7 @@ const getParcours = async (req, res) => {
                     entrepriseAvecEspace = !!(c && c.user_id);
                 } catch (err) { if (!(err && err.code === 'ER_BAD_FIELD_ERROR')) throw err; } // migration 084 non jouée
             }
-            parc = computeDocParcours({ steps, docs, pieces, remises, entreprise: entrepriseAvecEspace });
+            parc = computeDocParcours({ steps, docs, pieces, pieceFichiers, remises, entreprise: entrepriseAvecEspace });
         }
 
         res.json({
