@@ -499,6 +499,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
     let exam = null;
     let pvCandidats = [];
     let examResult = null;
+    let pvSignatures = {}; // signatures recueillies du PV (migration 216), posées dans ses cases
     if (documentId) {
         try {
             const [[ds]] = await conn.query(
@@ -517,7 +518,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
                    appel, sans la moindre erreur au chargement. */
                 const { contexteExamen } = require('./examen.controller.js');
                 const px = await contexteExamen(conn, organizationId, ds.session_id, learnerId);
-                if (px) ({ exam, pvCandidats, examResult } = px);
+                if (px) ({ exam, pvCandidats, examResult, pvSignatures } = px);
             }
         } catch (e) { /* migration 150 non jouée, ou pas de commission : jetons du PV vides */ }
     }
@@ -555,7 +556,7 @@ async function loadContext(conn, organizationId, learnerId, documentId) {
             saisies = zonesARemplir.lireSaisies(s && s.saisies);
         } catch (e) { if (!(e && e.code === 'ER_BAD_FIELD_ERROR')) throw e; }
     }
-    const ctx = { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, examResult, consentements: consentementsCtx, saisies, figeLe };
+    const ctx = { org: org || {}, learner: learner || {}, company, formations, slotSignatures, fields, customTokens, groupStagiaires, financeur, evaluation, jury, exam, pvCandidats, pvSignatures, examResult, consentements: consentementsCtx, saisies, figeLe };
 
     /* FIGER LES DONNÉES DU DOCUMENT À SON ÉMISSION (demandé le 2026-10-04). Un document émis ne doit
        plus bouger : prix, adresses, dates, intitulés… tels qu'au jour de l'envoi. On CRISTALLISE

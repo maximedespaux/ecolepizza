@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database.js');
 const { logAudit } = require('../lib/audit.js');
 const { colonneExiste, colonneOuNull, tableExiste } = require('../lib/colonnes.js');
-const { encrypt } = require('../lib/crypto.js');
+const { encrypt, decrypt } = require('../lib/crypto.js');
 const { signerLienPv, urlSignaturePv } = require('../lib/signaturePv.js');
 // Le numéro de certification (migration 205) : qui y a droit, le prochain de la séquence, la saisie.
 const { DECISIONS_NUMEROTEES, prochainsNumeros, numeroSaisi } = require('../lib/numeroCertification.js');
@@ -504,9 +504,23 @@ async function contexteExamen(conn, orgId, sessionId, learnerId = null) {
         observations: (parCandidat.get(c.learner_id) || {}).observations || '',
     }));
     const sien = learnerId ? parCandidat.get(learnerId) : null;
+    /* LES SIGNATURES RECUEILLIES (migration 216), DÉCHIFFRÉES, pour les poser dans les cases du PV :
+       clé « MEMBRE:<user_id> » / « CANDIDAT:<learner_id> » → l'image. Tolérant : sans la table, aucune
+       signature — le PV garde ses cases vides (à signer à la main), comme avant la 216. Une image
+       illisible (clé ?) est sautée plutôt que de casser le rendu du document entier. */
+    let pvSignatures = {};
+    try {
+        const [sigs] = await conn.query(
+            'SELECT signer_kind, signer_ref, signature FROM exam_signature WHERE exam_session_id = ?', [commission.id]);
+        for (const s of sigs) {
+            const clair = decrypt(s.signature);
+            if (clair) pvSignatures[`${s.signer_kind}:${s.signer_ref}`] = clair;
+        }
+    } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
     return {
         exam: commission,
         pvCandidats: lignes,
+        pvSignatures,
         examResult: sien ? { decision: sien.decision, observations: sien.observations || '' } : null,
     };
 }

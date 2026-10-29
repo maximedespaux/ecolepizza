@@ -871,7 +871,7 @@ function juryMembresTable(membres) {
 
 /* Tableaux du procès-verbal. RAW, et `width="100%"` en ATTRIBUT (LibreOffice ignore le CSS). */
 const PV_ADMIS = new Set(['CERTIFIE', 'BLOCS_ACQUIS']);
-function pvCandidatsTable(lignes) {
+function pvCandidatsTable(lignes, sigs = {}) {
     if (!lignes || !lignes.length) return '';
     const head = '<tr><th>NOM</th><th>Prénom</th><th>Date de naissance</th><th>Émargement</th>'
         + '<th>Décision du jury</th></tr>';
@@ -879,8 +879,12 @@ function pvCandidatsTable(lignes) {
         /* « — » ET NON « Non admis » QUAND LA COMMISSION NE S'EST PAS PRONONCÉE. Compter comme
            refusé quelqu'un qu'on n'a pas examiné serait faux, et le PV est signé. */
         const d = PV_ADMIS.has(c.decision) ? 'Admis' : c.decision === 'EN_COURS' ? '—' : 'Non admis';
+        /* LA SIGNATURE DU CANDIDAT (recueillie à distance, migration 216) s'imprime dans sa case
+           d'émargement ; sinon la case reste vide, à signer à la main. */
+        const sig = c.learner_id && sigs[`CANDIDAT:${c.learner_id}`];
+        const emarg = sig ? signatureBox(sig, `Émargement de ${(c.last_name || '').toUpperCase()} ${c.first_name || ''}`.trim(), 150, 44) : '&nbsp;<br>&nbsp;';
         return `<tr><td>${escCell((c.last_name || '').toUpperCase())}</td><td>${escCell(c.first_name)}</td>`
-            + `<td>${escCell(c.birthday ? `Né(e) le ${c.birthday}` : '')}</td><td>&nbsp;<br>&nbsp;</td>`
+            + `<td>${escCell(c.birthday ? `Né(e) le ${c.birthday}` : '')}</td><td>${emarg}</td>`
             + `<td>${escCell(d)}</td></tr>`;
     }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
@@ -921,15 +925,20 @@ function pvJuryListe(jury) {
  * voisine (chaque cellule tient sur une ligne), et un tableau garde les trois blocs alignés
  * quelle que soit la longueur des noms.
  */
-function pvSignaturesTable(jury) {
+function pvSignaturesTable(jury, sigs = {}) {
     if (!jury || !jury.length) return '';
     const cel = (v) => `<td valign="top">${v}</td>`;
     const qualites = jury.map((m) => cel(`<strong>${escCell(m.qualite || 'Membre du jury')},</strong>`)).join('');
     const noms = jury.map((m) => cel(`<strong>${escCell(nomJure(m))}</strong>`)).join('');
-    const vides = jury.map(() => cel('&nbsp;<br>&nbsp;<br>&nbsp;')).join('');
-    const sigs = jury.map(() => cel('<strong>Signature</strong>')).join('');
+    /* LA SIGNATURE RECUEILLIE s'imprime dans la case du membre (par son compte, migration 216) ;
+       sinon la case reste vide, à signer à la main. */
+    const cases = jury.map((m) => {
+        const sig = m.user_id && sigs[`MEMBRE:${m.user_id}`];
+        return cel(sig ? signatureBox(sig, `Signature de ${nomJure(m)}`, 150, 46) : '&nbsp;<br>&nbsp;<br>&nbsp;');
+    }).join('');
+    const etiquettes = jury.map(() => cel('<strong>Signature</strong>')).join('');
     return `<table width="100%" data-border="0"><tbody><tr>${qualites}</tr><tr>${noms}</tr>`
-        + `<tr>${vides}</tr><tr>${sigs}</tr></tbody></table>`;
+        + `<tr>${cases}</tr><tr>${etiquettes}</tr></tbody></table>`;
 }
 
 /** « Monsieur QUET Vincent » — une ligne par candidat, comme sur le procès-verbal. */
@@ -939,7 +948,7 @@ function pvListe(lignes) {
         .filter(Boolean).join(' '))}`).join('<br>');
 }
 
-function pvMembresTable(jury) {
+function pvMembresTable(jury, sigs = {}) {
     if (!jury || !jury.length) return '';
     const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
     const body = jury.map((m) => {
@@ -949,8 +958,11 @@ function pvMembresTable(jury) {
         let nom, prenom;
         if (String(m.prenom || '').trim()) { nom = String(m.nom || ''); prenom = String(m.prenom); }
         else { const [n, ...reste] = String(m.nom || '').trim().split(/\s+/); nom = n || ''; prenom = reste.join(' '); }
+        // L'émargement recueilli (migration 216) s'imprime dans sa case ; sinon case vide à signer.
+        const sig = m.user_id && sigs[`MEMBRE:${m.user_id}`];
+        const emarg = sig ? signatureBox(sig, `Émargement de ${nomJure(m)}`, 160, 46) : '&nbsp;<br>&nbsp;';
         return `<tr><td>${escCell(nom.toUpperCase())}</td><td>${escCell(prenom)}</td>`
-            + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>&nbsp;<br>&nbsp;</td></tr>`;
+            + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>${emarg}</td></tr>`;
     }).join('');
     return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
 }
@@ -1654,6 +1666,9 @@ function resolveTokens(ctx = {}) {
         : '';
 
     const pvLignes = Array.isArray(ctx.pvCandidats) ? ctx.pvCandidats : [];
+    // Les signatures recueillies du PV (migration 216), à poser dans les cases : « MEMBRE:<user_id> »
+    // / « CANDIDAT:<learner_id> » → image. Vide partout où rien n'a été signé (le PV reste blanc).
+    const pvSig = (ctx.pvSignatures && typeof ctx.pvSignatures === 'object') ? ctx.pvSignatures : {};
     const factureVals = invoiceTokens(ctx.invoice);
     const evalVals = evaluationTokens(ctx.evaluation);
     const juryVals = juryTokens(ctx.jury);
@@ -1781,10 +1796,10 @@ function resolveTokens(ctx = {}) {
         'PVListePrésentés': pvListe(pvLignes.filter((c) => c.decision !== 'ABSENT')),
         PVListeAdmis: pvListe(pvLignes.filter((c) => PV_ADMIS.has(c.decision))),
         PVListeNonAdmis: pvListe(pvLignes.filter((c) => c.decision !== 'EN_COURS' && !PV_ADMIS.has(c.decision))),
-        PVCandidats: pvCandidatsTable(pvLignes),
-        PVMembres: pvMembresTable(jury),
+        PVCandidats: pvCandidatsTable(pvLignes, pvSig),
+        PVMembres: pvMembresTable(jury, pvSig),
         PVJuryListe: pvJuryListe(jury),
-        PVSignatures: pvSignaturesTable(jury),
+        PVSignatures: pvSignaturesTable(jury, pvSig),
         'PVAléas': ex.aleas || '',
         // Évaluation pratique (grille du formateur) — vide sans grille sur la formation.
         ...evalVals,
