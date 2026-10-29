@@ -96,25 +96,33 @@ async function commissionDeLaSession(conn, orgId, sessionId) {
 /**
  * LES PERSONNES QUI PEUVENT SIÉGER AU JURY — l'équipe et les intervenants de l'organisme, pour les
  * CHOISIR plutôt que retaper leur nom (et parce qu'un compte pourra signer le PV). Chacune porte
- * `a_forme` : a-t-elle enseigné CETTE session ? Un membre qui a formé les candidats ne peut pas les
- * évaluer (règlement d'examen) — l'écran le signale. Tolérant : sans la table des intervenants,
- * personne n'a « formé » (aucun conflit connu), on rend quand même la liste des comptes.
+ * `a_forme` : a-t-elle ENSEIGNÉ cette session ? Un membre qui a formé les candidats ne peut pas les
+ * évaluer (règlement d'examen) — l'écran le signale.
+ *
+ * ⚠️ « A ENSEIGNÉ », PAS « EST INTERVENANT DE LA SESSION ». Les membres du jury sont eux-mêmes
+ * inscrits comme intervenants de la session, mais avec la SPÉCIALITÉ « Jury » (ils ne forment pas,
+ * ils délibèrent). Compter tout `session_intervenant` comme formateur les signalait à tort en conflit
+ * — relevé le 2026-10-29 sur RIOS / LE FAOU, intervenants « Jury » de leur propre commission. On
+ * écarte donc les créneaux dont la spécialité porte « jury ». Tolérant : sans la table, personne n'a
+ * formé (aucun conflit connu), on rend quand même la liste des comptes.
  */
 async function personnesDuRegistre(conn, orgId, sessionId) {
     let formateurs = new Set();
     try {
         const [f] = await conn.query(
-            'SELECT DISTINCT user_id FROM session_intervenant WHERE session_id = ? AND organization_id = ?',
-            [sessionId, orgId]);
+            `SELECT DISTINCT user_id FROM session_intervenant
+              WHERE session_id = ? AND organization_id = ?
+                AND (specialty IS NULL OR LOWER(specialty) NOT LIKE ?)`,
+            [sessionId, orgId, '%jury%']);
         formateurs = new Set(f.map((r) => r.user_id));
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
     const [users] = await conn.query(
-        `SELECT id AS user_id, first_name, last_name, role FROM user
+        `SELECT id AS user_id, first_name, last_name, email, role FROM user
           WHERE organization_id = ? AND active = 1 AND role IN (?)
           ORDER BY FIELD(role, 'INTERVENANT') DESC, last_name, first_name`,
         [orgId, ROLES_JURY]);
     return users.map((u) => ({
-        user_id: u.user_id, first_name: u.first_name, last_name: u.last_name, role: u.role,
+        user_id: u.user_id, first_name: u.first_name, last_name: u.last_name, email: u.email, role: u.role,
         intervenant: u.role === 'INTERVENANT', a_forme: formateurs.has(u.user_id),
     }));
 }
