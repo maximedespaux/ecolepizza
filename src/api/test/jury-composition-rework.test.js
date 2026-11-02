@@ -26,13 +26,14 @@ const { personnesDuRegistre } = require('../controllers/examen.controller.js');
 test('personnesDuRegistre : rend l\'e-mail et EXCLUT la spécialité « jury » du « a formé »', async () => {
     const conn = {
         query: async (sql) => {
-            if (/FROM session_intervenant/i.test(sql)) {
-                // Le filtre « pas jury » DOIT être dans la requête (sinon un membre « Jury » serait flaggé).
-                assert.match(sql, /LOWER\(specialty\) NOT LIKE/, 'la spécialité « jury » est écartée côté SQL');
-                return [[{ user_id: 'u-form' }]]; // ce que la base RENVOIE une fois filtrée : un vrai formateur
-            }
+            // « A formé » = être FORMATEUR de la session (session_trainer), PAS intervenant.
+            if (/FROM session_trainer/i.test(sql)) return [[{ user_id: 'u-form' }]];
+            // Un intervenant (même renvoyé ici) ne doit PAS compter comme formateur : on vérifie
+            // que la requête « a formé » ne lit plus session_intervenant.
+            if (/FROM session_intervenant/i.test(sql)) { assert.fail('« a formé » ne doit plus lire session_intervenant'); }
             if (/FROM user/i.test(sql)) return [[
-                { user_id: 'u-form', first_name: 'Paul', last_name: 'Dubois', email: 'p@x.fr', role: 'INTERVENANT' },
+                { user_id: 'u-form', first_name: 'Paul', last_name: 'Dubois', email: 'p@x.fr', role: 'FORMATEUR' },
+                { user_id: 'u-iv', first_name: 'Pascal', last_name: 'Rios', email: 'r@x.fr', role: 'INTERVENANT' },
                 { user_id: 'u-sec', first_name: 'Marie', last_name: 'Albert', email: 'm@x.fr', role: 'SECRETARIAT' },
             ]];
             return [[]];
@@ -41,15 +42,16 @@ test('personnesDuRegistre : rend l\'e-mail et EXCLUT la spécialité « jury » 
     const personnes = await personnesDuRegistre(conn, 'o1', 's-1');
     const parId = new Map(personnes.map((p) => [p.user_id, p]));
     assert.strictEqual(parId.get('u-form').email, 'p@x.fr', 'l\'e-mail est rendu (pour départager les homonymes)');
-    assert.strictEqual(parId.get('u-form').a_forme, true, 'un formateur (hors jury) reste signalé');
+    assert.strictEqual(parId.get('u-form').a_forme, true, 'le FORMATEUR de la session est signalé');
+    assert.strictEqual(parId.get('u-iv').a_forme, false, 'un intervenant (jury) n\'est PAS « a formé »');
     assert.strictEqual(parId.get('u-sec').a_forme, false);
 });
 
-test('examen.controller : la requête « a formé » écarte la spécialité « jury » et lit l\'e-mail', () => {
+test('examen.controller : « a formé » lit les FORMATEURS (session_trainer), pas les intervenants', () => {
     const ctrl = lireApi('controllers/examen.controller.js');
     const fn = ctrl.slice(ctrl.indexOf('async function personnesDuRegistre'), ctrl.indexOf('async function personnesDuRegistre') + 1300);
-    assert.match(fn, /AND \(specialty IS NULL OR LOWER\(specialty\) NOT LIKE \?\)/);
-    assert.match(fn, /'%jury%'/);
+    assert.match(fn, /SELECT DISTINCT user_id FROM session_trainer WHERE session_id = \?/);
+    assert.doesNotMatch(fn, /FROM session_intervenant/, 'plus de confusion intervenant = formateur');
     assert.match(fn, /SELECT id AS user_id, first_name, last_name, email, role FROM user/);
 });
 

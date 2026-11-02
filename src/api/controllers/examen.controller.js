@@ -96,24 +96,23 @@ async function commissionDeLaSession(conn, orgId, sessionId) {
 /**
  * LES PERSONNES QUI PEUVENT SIÉGER AU JURY — l'équipe et les intervenants de l'organisme, pour les
  * CHOISIR plutôt que retaper leur nom (et parce qu'un compte pourra signer le PV). Chacune porte
- * `a_forme` : a-t-elle ENSEIGNÉ cette session ? Un membre qui a formé les candidats ne peut pas les
- * évaluer (règlement d'examen) — l'écran le signale.
+ * `a_forme` : a-t-elle FORMÉ cette session ? Un formateur ne peut pas évaluer les candidats qu'il a
+ * formés (règlement d'examen) — l'écran le signale.
  *
- * ⚠️ « A ENSEIGNÉ », PAS « EST INTERVENANT DE LA SESSION ». Les membres du jury sont eux-mêmes
- * inscrits comme intervenants de la session, mais avec la SPÉCIALITÉ « Jury » (ils ne forment pas,
- * ils délibèrent). Compter tout `session_intervenant` comme formateur les signalait à tort en conflit
- * — relevé le 2026-10-29 sur RIOS / LE FAOU, intervenants « Jury » de leur propre commission. On
- * écarte donc les créneaux dont la spécialité porte « jury ». Tolérant : sans la table, personne n'a
- * formé (aucun conflit connu), on rend quand même la liste des comptes.
+ * ⚠️ « A FORMÉ » = EST FORMATEUR DE LA SESSION (`session_trainer`), PAS intervenant. Les membres du
+ * jury sont inscrits comme INTERVENANTS de la session (`session_intervenant` — `evaluation.controller`
+ * en fait d'ailleurs la composition du jury de la grille), avec une spécialité « Jury » OU VIDE.
+ * Compter les intervenants comme formateurs signalait à tort RIOS / LE FAOU, jurys de leur propre
+ * commission : d'abord par leur spécialité « Jury » (contournée le 2026-10-29), puis — sur une autre
+ * session — par une spécialité NULLE, que le contournement laissait passer. On lit donc les VRAIS
+ * formateurs (`session_trainer`, migration 029), ceux qui ont enseigné. Tolérant : sans la table,
+ * personne n'a formé (aucun conflit connu), on rend quand même la liste des comptes.
  */
 async function personnesDuRegistre(conn, orgId, sessionId) {
     let formateurs = new Set();
     try {
         const [f] = await conn.query(
-            `SELECT DISTINCT user_id FROM session_intervenant
-              WHERE session_id = ? AND organization_id = ?
-                AND (specialty IS NULL OR LOWER(specialty) NOT LIKE ?)`,
-            [sessionId, orgId, '%jury%']);
+            'SELECT DISTINCT user_id FROM session_trainer WHERE session_id = ?', [sessionId]);
         formateurs = new Set(f.map((r) => r.user_id));
     } catch (e) { if (!(e && (e.code === 'ER_NO_SUCH_TABLE' || e.code === 'ER_BAD_FIELD_ERROR'))) throw e; }
     const [users] = await conn.query(
