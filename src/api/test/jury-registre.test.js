@@ -37,7 +37,7 @@ const faux = {
             if (/FROM enrollment e JOIN learner l/i.test(sql)) return [[{ learner_id: 'l1', first_name: 'Zoé', last_name: 'Martin' }]];
             if (/FROM exam_session/i.test(sql)) return [commission ? [commission] : []];
             if (/FROM exam_result/i.test(sql)) return [[]];
-            if (/FROM session_intervenant/i.test(sql)) return [[{ user_id: 'u-form' }]]; // u-form a enseigné cette session
+            if (/FROM session_trainer/i.test(sql)) return [[{ user_id: 'u-form' }]]; // u-form est FORMATEUR de la session
             if (/FROM user\b/i.test(sql)) return [USERS];
             if (/INSERT INTO exam_session|UPDATE exam_session/i.test(sql)) { ecrit = { sql, params }; return [{}]; }
             return [[]];
@@ -92,8 +92,8 @@ test('getCommission rend les personnes du registre, avec « a formé cette sessi
     const personnes = res.corps.data.personnes;
     assert.ok(Array.isArray(personnes) && personnes.length === 3, 'les 3 comptes proposables sont rendus');
     const parId = new Map(personnes.map((p) => [p.user_id, p]));
-    assert.strictEqual(parId.get('u-form').a_forme, true, 'l\'intervenant qui a enseigné la session est signalé');
-    assert.strictEqual(parId.get('u-ext').a_forme, false, 'un intervenant qui n\'a pas enseigné : pas de conflit');
+    assert.strictEqual(parId.get('u-form').a_forme, true, 'le formateur de la session est signalé');
+    assert.strictEqual(parId.get('u-ext').a_forme, false, 'un intervenant qui n\'a pas formé : pas de conflit');
     assert.strictEqual(parId.get('u-form').intervenant, true);
     assert.strictEqual(parId.get('u-sec').intervenant, false, 'un membre de l\'équipe n\'est pas un intervenant');
 });

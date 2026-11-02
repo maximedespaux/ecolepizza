@@ -157,7 +157,9 @@ function CommissionJury({ sessionId }) {
     // Homonyme → l'e-mail tranche ; sinon, pour un membre d'équipe, son rôle ; un intervenant n'a rien à ajouter.
     const dist = nomsEnDouble.has(cleNom(p.last_name, p.first_name)) ? ` · ${p.email || "?"}`
       : (!p.intervenant ? ` · ${ROLE_LABELS[p.role] || p.role}` : "");
-    const forme = (p.intervenant && p.a_forme) ? " · a formé cette session" : "";
+    // `a_forme` = formateur de la session (session_trainer) ; souvent un FORMATEUR, pas un intervenant
+    // — on ne gate donc pas sur `intervenant`, sinon un formateur qui a enseigné ne serait pas signalé.
+    const forme = p.a_forme ? " · a formé cette session" : "";
     return base + dist + forme;
   };
   /* Choisir une personne pour le membre i : on fige son nom/prénom (instantané imprimé) et on
