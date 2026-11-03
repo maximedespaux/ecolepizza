@@ -118,8 +118,8 @@ esbuild src/app/ui/pages/X.jsx --loader:.jsx=jsx --jsx=automatic --bundle \
 ```
 
 ### 2.5 Tests
-`cd src/api && npm test` (node:test), **~8 s** (382 fichiers ; « ~0,4 s » datait des 373 tests). État de
-référence, **relevé le 2026-10-23** : **2920 tests — 2913 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
+`cd src/api && npm test` (node:test), **~11 s** (383 fichiers ; « ~0,4 s » datait des 373 tests). État de
+référence, **relevé le 2026-11-03** : **2973 tests — 2966 réussis, 0 échec, 7 ignorés. Garder ce niveau.**
 
 Ce compteur disait « 373 / 366 » jusqu'au 2026-09-16 : le même travers que le § 4 — un chiffre
 précis, donc crédible, et faux depuis des semaines. Un relevé périmé À LA BAISSE est le pire des
@@ -262,7 +262,30 @@ le drapeau.
 
 ---
 
-## 4. Migrations — **la 216 à jouer ; la 215 à jouer ; la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+## 4. Migrations — **la 217 à jouer ; la 216 à jouer ; la 215 à jouer ; la 214 à jouer (DONNÉES, facultative) ; la 213 à jouer ; la 212 à jouer ; la 211 à jouer ; la 210 à jouer ; la 209 à jouer ; la 208 à jouer ; la 207 à jouer ; la 206 À JOUER (FACULTATIVE) ; la 205 à jouer ; la 204 à REVERTER (inutilisée), la 203 à jouer ; la 202, la 201 et la 200, la 199 et la 198 à jouer ; la 197 jouée (2026-10-01) ; la 196, la 195, la 194 et la 193 à jouer, la 192 jouée (2026-09-30) ; la 191 à jouer, la 190 à reverter (2026-09-29) ; la 186 et la 188 à jouer ; toutes jouées jusqu'à la 185 ; la 177 et la 175 à constater (relevé le 2026-09-28)**
+
+**217 est À JOUER** (`217_seed_quest_niv1pro.sql`, la banque Pizza Quest de la formation NIV1PRO — demandé le
+2026-11-03, tiré du « Manuel Technique Niveau I PRO », mise à jour du 14/01/2026). DONNÉES, à jouer APRÈS la 102
+(les tables `quest_chapter` / `quest_question` / `quest_option` en viennent, jouées de longue date). Un stagiaire
+inscrit en NIV1PRO ouvrait Pizza Quest sur un chemin VIDE : aucun chapitre n'était rattaché à ce code — seules NIV1
+et NIV2 avaient du contenu, et la 146 l'avait recopié vers RS7404 et NIV1H, jamais vers NIV1PRO. Le seed écrit
+**13 chapitres et 112 questions — 90 QCM, 15 vrai/faux, 7 associations** (histoire, céréales, gluten, mouture,
+farine, types/raffinage, force W, levure, eau, température de l'eau, sel, huile, substitutions/adjonctions,
+protocoles), chacune sourcée à sa page du manuel. La formation est désignée par son CODE (`WHERE code = 'NIV1PRO'`,
+jamais un identifiant en dur) et l'organisme déduit d'elle. CONVENTIONS DE LA 146, qu'un client SQL strict impose :
+apostrophe typographique « ’ » (jamais `''`), commentaires en blocs, aucun `;` dans un texte ni un commentaire.
+Difficultés reprises par SLUG (`facile` / `normal` / `difficile`, créées par 102_seed) ; absentes, les questions
+prennent l'XP par défaut. REJOUABLE : chaque chapitre est supprimé par son TITRE puis réinséré (questions et
+options par cascade) — une retouche faite à la main sur CES chapitres serait écrasée, un chapitre NIV1PRO créé
+sous un AUTRE titre est préservé. Aucun schéma à sonder (c'est de la donnée) : **elle se vérifie à l'usage** — un
+stagiaire NIV1PRO ouvre Pizza Quest et voit 13 chapitres, ou `GET /api/mon-espace/quest/<id NIV1PRO>/chapitres`
+les rend. Ou une requête, qui doit rendre 112 :
+`SELECT COUNT(*) FROM quest_question q JOIN quest_chapter c ON c.id=q.chapter_id JOIN training_program p ON p.id=c.program_id WHERE p.code='NIV1PRO';`
+⚠️ Son revert retire TOUS les chapitres NIV1PRO (et eux seuls — NIV1, NIV2, RS7404, NIV1H gardent leur banque) ;
+NIV1PRO n'ayant aucun contenu avant, cela revient à l'état d'origine. Rien ne dépend du code applicatif (Pizza
+Quest lit déjà la banque de l'organisme) : avant la migration, chemin vide ; après, 13 chapitres. Tests :
+`quest-niv1pro.test.js` (lit le SQL — conventions ET cohérence de chaque question : un QCM a exactement une bonne
+réponse, un vrai/faux aucune option, une association ses paires).
 
 **216 est À JOUER** (`216_exam_signature.sql`, les SIGNATURES À DISTANCE du procès-verbal de jury — demandé le
 2026-10-29). Une table `exam_signature` : une ligne par signataire (un MEMBRE de la commission, ou un CANDIDAT),
