@@ -225,6 +225,10 @@ export function signAttendanceSheet(sheetId, payload) {
 export function rattraperEmargement(recordId, payload) {
   return request(`/attendance/record/${recordId}/rattrapage`, { method: "POST", body: JSON.stringify(payload) });
 }
+// Redemander une signature de stagiaire ratée (blanche) : elle écrase l'ancienne. { signature_data }.
+export function resignEmargement(recordId, payload) {
+  return request(`/attendance/record/${recordId}/resign`, { method: "POST", body: JSON.stringify(payload) });
+}
 // Émargement du stagiaire (espace) : liste + signature d'une demi-journée.
 export function getMyEmargement() {
   return request("/mon-espace/emargement");

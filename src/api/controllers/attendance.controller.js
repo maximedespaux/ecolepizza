@@ -330,6 +330,59 @@ const rattraperPresence = async (req, res) => {
 };
 
 /**
+ * POST /api/attendance/record/:id/resign — REDEMANDER une signature de stagiaire ratée (blanche).
+ *
+ * Une signature de stagiaire ne se remplaçait plus (décidé le 2026-09-26, contre la falsification :
+ * une seconde signature écrasait la première). EXCEPTION demandée par l'école le 2026-11-25 : un pad
+ * VALIDÉ À VIDE n'est pas une signature — l'école doit pouvoir la refaire. Le stagiaire RESIGNE sur
+ * le poste de l'école, tout de suite (comme le rattrapage) ; la nouvelle image ÉCRASE la blanche, et
+ * le geste est TRACÉ au journal (`attendance.resign`) — c'est la trace qui tient lieu de garde-fou.
+ *
+ * On ne « redemande » QUE ce qui a déjà été signé : une demi-journée jamais signée passe par le
+ * rattrapage (présent) ou la signature normale, pas ici — d'où le refus 409 sans signature. Un motif
+ * de rattrapage éventuel (migration 184) n'est PAS touché : seule l'image de signature change. Aucune
+ * migration : on ne lit et n'écrit que des colonnes de base (signature_data, signed_at, signer_name).
+ * Corps : { signature_data } (image obligatoire).
+ */
+const resignPresence = async (req, res) => {
+    const signature = (req.body && req.body.signature_data) || null;
+    if (!estSignatureValide(signature)) return res.status(422).json({ message: 'Signature invalide (image attendue).' });
+    try {
+        const conn = db.promise();
+        const [[r]] = await conn.query(
+            `SELECT r.id, r.learner_id, (r.signature_data IS NOT NULL) AS signee, s.session_id,
+                    l.first_name, l.last_name
+             FROM attendance_record r
+             JOIN attendance_sheet s ON s.id = r.sheet_id
+             JOIN training_session ts ON ts.id = s.session_id
+             LEFT JOIN learner l ON l.id = r.learner_id
+             WHERE r.id = ? AND ts.organization_id = ?`,
+            [req.params.id, req.user.organization_id]
+        );
+        if (!r) return res.status(404).json({ message: 'Présence introuvable.' });
+        if (!r.signee) return res.status(409).json({ message: "Cette demi-journée n'a pas de signature à refaire." });
+        const nomStagiaire = `${r.last_name || ''} ${r.first_name || ''}`.trim();
+        /* On n'écrase QUE si la signature existe encore (course : une autre resignature entre-temps) ;
+           le nom redevient celui du stagiaire, comme pour une signature sur le poste de l'école. */
+        const [resultat] = await conn.query(
+            `UPDATE attendance_record SET present = 1, signed_at = NOW(), signer_name = ?, signature_data = ?
+              WHERE id = ? AND signature_data IS NOT NULL`,
+            [nomStagiaire, encrypt(signature), req.params.id]
+        );
+        if (!resultat || !resultat.affectedRows) return res.status(409).json({ message: 'Cette signature a changé entre-temps.' });
+        logAudit(req, 'attendance.resign', 'AttendanceRecord', req.params.id);
+        res.json({ success: true, message: 'Signature refaite.' });
+
+        // Met à jour la feuille d'émargement archivée du dossier (non bloquant).
+        const [[en]] = await conn.query('SELECT id FROM enrollment WHERE session_id = ? AND learner_id = ? LIMIT 1', [r.session_id, r.learner_id]);
+        if (en) regenEmargement(conn, req.user.organization_id, en.id).catch(() => {});
+    } catch (err) {
+        console.error('Erreur resignature émargement :', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+/**
  * POST /api/attendance/sheet/:id/sign — le formateur signe la feuille (demi-journée).
  * Corps : { signature_data, signer_name? }.
  */
@@ -400,4 +453,4 @@ const regenerateEmargement = async (req, res) => {
     }
 };
 
-module.exports = { getAttendance, generateSheets, rattraperPresence, signSheet, regenerateEmargement, demiJourneesVoulues };
+module.exports = { getAttendance, generateSheets, rattraperPresence, resignPresence, signSheet, regenerateEmargement, demiJourneesVoulues };
