@@ -69,6 +69,7 @@ const ACTION_LABEL = {
     'attendance.sign': ['Émargement signé', G],
     // La demi-journée suit entre parenthèses (« RS7404 · 14/09 matin ») : elle dit déjà l'émargement.
     'attendance.rattrapage': ['Présence rattrapée par l\'école', A],
+    'attendance.resign': ['Signature d\'émargement refaite', A],
     'emargement.regenerate': ['Émargement régénéré', A],
     'intervenant.emargement.sign': ['Émargement signé par un intervenant', G],
     'emargement_template.create': ['Modèle d\'émargement créé', G],

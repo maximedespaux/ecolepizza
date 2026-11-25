@@ -915,7 +915,13 @@ d'émargement par l'école — revue des feuilles d'émargement du 2026-09-26). 
 `rattrapage_motif`, `rattrapage_par`, `rattrapage_le`. **Décidé par l'école le même jour : le stagiaire ne signe plus
 que PENDANT la demi-journée**, de son heure de début (horaires de la formation ; 8h30 / 13h30 à défaut) jusqu'à minuit
 (`fenetreSignature`, lib/emargement.js) — relevé sur les deux sessions du 14/09 : sept après-midi signés dès 8h40, et
-quinze signatures sur cinquante faites le lendemain ; une signature ne se remplace plus. Une demi-journée manquée se
+quinze signatures sur cinquante faites le lendemain ; une signature ne se remplace plus — **SAUF une signature BLANCHE**
+(pad validé à vide), que l'école REDEMANDE depuis le 2026-11-25 : bouton « Redemander une signature » en tête de la
+feuille (choisit le stagiaire + la demi-journée DÉJÀ signée), le stagiaire resigne sur le poste, et la nouvelle image
+ÉCRASE la blanche (`resignPresence`, POST `/attendance/record/:id/resign` ; refuse 409 une case sans signature — ce
+n'est pas un second rattrapage ; ne touche AUCUNE colonne de la 184 → aucune migration ; tracé au journal
+`attendance.resign` — c'est la trace qui tient lieu de garde-fou ; `emargement-resignature.test.js`). Une demi-journée
+manquée se
 RATTRAPE par le personnel (Sessions → Émargement, « Rattraper »), avec un motif imprimé dans la case et le nom de qui
 l'a enregistrée ; le stagiaire peut signer sur le poste de l'école, sinon la présence est attestée sans signature.
 POURQUOI AVANT : la fenêtre, elle, est dans le code — déployé sans la 184, un oubli ne se rattrape pas (503) tant qu'elle

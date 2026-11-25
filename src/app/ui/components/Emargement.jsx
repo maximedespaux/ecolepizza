@@ -7,6 +7,7 @@ import Card from "./Card.jsx";
 import StatusMessage from "./StatusMessage.jsx";
 import SignatureModal from "./SignatureModal.jsx";
 import RattrapageModal from "./RattrapageModal.jsx";
+import RedemanderSignatureModal from "./RedemanderSignatureModal.jsx";
 import { initials, dateHeure } from "../lib/format.js";
 
 const SLOT_SHORT = { MATIN: "Matin", APRES_MIDI: "Après-m.", EXAMEN: "Examen", DISTANCIEL: "Distanciel" };
@@ -26,6 +27,7 @@ function Emargement({ sessionId, feuilleVisee = null }) {
   const [busy, setBusy] = useState(false);
   const [signSheetRec, setSignSheetRec] = useState(null); // feuille que le formateur signe
   const [rattrapage, setRattrapage] = useState(null); // { rec, sheet, learner } : présence à rattraper
+  const [redemande, setRedemande] = useState(false); // fenêtre « Redemander une signature » ouverte
   const carteRef = useRef(null);
   const dejaPlace = useRef(null); // la feuille vers laquelle on a déjà défilé (une seule fois)
 
@@ -78,6 +80,9 @@ function Emargement({ sessionId, feuilleVisee = null }) {
     return m;
   }, [records]);
 
+  // Au moins une signature de stagiaire : sinon « Redemander une signature » n'a rien à proposer.
+  const aDesSignatures = useMemo(() => records.some((r) => r.learner_id && r.has_signature), [records]);
+
   async function generate() {
     setBusy(true);
     setStatus(null);
@@ -127,6 +132,12 @@ function Emargement({ sessionId, feuilleVisee = null }) {
             title="Met à jour la grille : ajoute les lignes des nouveaux stagiaires, formateurs ou intervenants affectés à la session.">
             {busy ? "…" : sheets.length ? "Mettre à jour les feuilles" : "Générer les feuilles"}
           </button>
+          {sheets.length > 0 && aDesSignatures && (
+            <button className="btn sm ghost" onClick={() => setRedemande(true)} disabled={busy}
+              title="Une signature de stagiaire est blanche (pad validé à vide) ? L'effacer et faire resigner le stagiaire sur ce poste.">
+              Redemander une signature
+            </button>
+          )}
           {sheets.length > 0 && (
             <button className="btn sm" onClick={regenDocs} disabled={busy}
               title="Crée / régénère la feuille d'émargement archivée (visible dans le suivi Qualiopi du stagiaire).">
@@ -290,6 +301,16 @@ function Emargement({ sessionId, feuilleVisee = null }) {
           defaultName={`${user?.first_name || ""} ${user?.last_name || ""}`.trim()}
           onConfirm={onSignSheet}
           onClose={() => setSignSheetRec(null)}
+        />
+      )}
+
+      {redemande && (
+        <RedemanderSignatureModal
+          learners={learners}
+          sheets={sheets}
+          byKey={byKey}
+          onDone={(message) => { setRedemande(false); setStatus({ type: "success", message }); load(); }}
+          onClose={() => setRedemande(false)}
         />
       )}
     </Card>
