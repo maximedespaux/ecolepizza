@@ -29,6 +29,19 @@ function frDate(iso) {
 }
 const SLOT_ORDER = ['MATIN', 'APRES_MIDI', 'EXAMEN', 'DISTANCIEL'];
 
+/* PIED DE PAGE LÉGAL DE L'ÉCOLE — trois lignes centrées tout en bas de la feuille d'émargement
+   (demandé le 2026-11-26). TEXTE FIXE, à la demande de l'école : reproduit mot pour mot, il ne
+   suit PAS la fiche Organisme — alors que l'adresse, le SIRET, le NAF, le NDA, le téléphone et
+   l'e-mail y sont pourtant stockés, et que le site web, le portable et « préfet de la région
+   Occitanie » n'y ont pas de champ. Choix assumé (static vs dynamique, tranché par l'école) : si
+   l'on veut un jour que ce pied suive les modifications, remplacer ces constantes par les champs
+   de `org` et ajouter un champ « site web / portable / région du préfet » à l'organisme. */
+const MENTIONS_ECOLE = [
+    '101 rue Alsace Lorraine 65300 LANNEMEZAN SIRET 87995513600012 - NAF 8559A - NDA 76650098965 auprès du préfet de la région Occitanie',
+    'www.ecole-pizza.com Tél 05 62 50 18 64 - Port. 06 84 54 24 96',
+    'contact@ecole-pizza.com',
+];
+
 // ── Analyse du champ « Horaires » (texte libre) en plages par jour ────────────
 // Ex. : « Jour 1 : 8h45 - 12h00 / 13h00 - 17h15 » ; une ligne sans « Jour N » sert
 // de valeur par défaut pour les jours non précisés. Retourne { [jour]: {matin:[deb,fin], aprem:[deb,fin]} }.
@@ -397,7 +410,12 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const noteLines = cfg.header_note ? String(cfg.header_note).split(/\r?\n/).length : 0;
     // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
     const headerH = 34 + (horairesLines + noteLines) * 4; // titre + organisme, filet, bandeau d'informations
-    const footerH = (orgSig ? 34 : 18) + 4;               // « Fait à », mention, cadre du cachet
+    /* Les trois lignes de mentions légales (MENTIONS_ECOLE) ajoutent de la hauteur au pied : on la
+       RÉSERVE ici, sinon les lignes de signatures ne rétréciraient pas d'autant et la feuille
+       déborderait en page 2 (CLAUDE.md § 3). ~2,6 mm par ligne + un filet d'air → 11 mm, large par
+       sécurité (la ligne 1 tient sur une ligne tant que le tableau fait la largeur utile). */
+    const mentionsH = 11;
+    const footerH = (orgSig ? 34 : 18) + 4 + mentionsH;   // « Fait à », cachet, mentions légales
     const theadH = hasSched ? 17 : 10;                    // jours, demi-journées (et leurs horaires)
     const sectionH = equipe.length ? 6 : 0;               // intertitre « Équipe pédagogique »
     const availBody = Math.max(18, contentH - headerH - footerH - theadH - sectionH - 12); // marge de sécurité anti-débordement
@@ -566,6 +584,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
         .fait{font-size:9.5px}
         .legende{font-size:7px;color:${T.doux};margin-top:2px}
         .cap{font-size:8px;color:#555}
+        .mentions{font-size:7.5px;color:${T.doux};line-height:1.3}
     </style></head><body>
         <table width="${px(tableW)}" cellspacing="0" cellpadding="${px(0.8)}" border="0"><tr>
             <td valign="bottom" align="left" style="border-bottom:1.5pt solid ${cfg.accent}">
@@ -594,6 +613,9 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
                 ${orgSig ? (() => { const b = ajuster(orgSig, 46, 17); return `<img src="${attr(orgSig)}" width="${px(b.largeur)}" height="${px(b.hauteur)}" style="object-fit:contain"/>`; })() : '<p style="margin:0">&nbsp;</p><p style="margin:0">&nbsp;</p>'}
                 ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
             </td>` : ''}
+        </tr></table>
+        <table width="${px(tableW)}" cellspacing="0" cellpadding="0" border="0"><tr>
+            <td class="mentions" align="center">${MENTIONS_ECOLE.map(esc).join('<br/>')}</td>
         </tr></table>
     </body></html>`;
 }

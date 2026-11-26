@@ -347,8 +347,11 @@ test('LIBREOFFICE : ce qui a été éprouvé sur la feuille, et qui ne se voit q
     // Un paragraphe d'espacement avant le pied faisait passer le pied ENTIER en page 2.
     assert.doesNotMatch(rendu, /<p style="margin:0;font-size:5px">&nbsp;<\/p>\s*<table width="\$\{px\(tableW\)\}" cellspacing="\$\{px\(1\.2\)\}"/);
     // Dans un tableau imbriqué, LibreOffice perdait l'image du cachet : une seule cellule bordée.
-    const pied = rendu.slice(rendu.indexOf('<div class="fait">'));
-    assert.strictEqual((pied.match(/<table\b/g) || []).length, 0, 'aucun tableau dans le pied');
+    // On borne au tableau « Fait à … | cachet » (jusqu'à son </table>) : les mentions légales qui le
+    // SUIVENT sont un tableau frère, à part, sans image — elles ne menacent pas le cachet.
+    const piedDebut = rendu.indexOf('<div class="fait">');
+    const pied = rendu.slice(piedDebut, rendu.indexOf('</table>', piedDebut));
+    assert.strictEqual((pied.match(/<table\b/g) || []).length, 0, 'aucun tableau imbriqué dans le pied (le cachet y perdrait son image)');
     assert.ok(pied.indexOf('<img src="${attr(orgSig)}"') < pied.indexOf('<div class="cap">'), 'l\'image avant la légende');
 });
 
@@ -383,6 +386,24 @@ test('L\'APERÇU DU MODÈLE est la feuille elle-même, sur un exemple — plus u
     const ecran = lireUi('pages/EmargementEditor.jsx');
     assert.match(ecran, /emargementPreviewPdfUrl\(JSON\.parse\(cle\)\)/);
     assert.doesNotMatch(ecran, /function EmargementPreview/, 'l\'imitation en React est partie');
+});
+
+test('LE PIED DE PAGE LÉGAL : trois lignes de mentions, centrées tout en bas (texte fixe)', () => {
+    const ex = E.feuilleExemple({ org: { legal_name: 'ECOLE PIZZA', nda: '76 65 00989 65', town: 'LANNEMEZAN' }, config: { slots: ['MATIN', 'APRES_MIDI'] }, aujourdHui: '2026-09-26' });
+    const html = E.renderEmargementHtml(ex);
+    // Une cellule CENTRÉE (align attribut — LibreOffice ignore text-align, CLAUDE.md § 3).
+    assert.match(html, /<td class="mentions" align="center">/);
+    // Les trois lignes, mot pour mot, séparées par des <br/> (choix « texte fixe tel que collé »).
+    const l1 = '101 rue Alsace Lorraine 65300 LANNEMEZAN SIRET 87995513600012 - NAF 8559A - NDA 76650098965 auprès du préfet de la région Occitanie';
+    const l2 = 'www.ecole-pizza.com Tél 05 62 50 18 64 - Port. 06 84 54 24 96';
+    const l3 = 'contact@ecole-pizza.com';
+    assert.ok(html.includes(`${l1}<br/>${l2}<br/>${l3}`), 'les trois lignes, dans l\'ordre, à la suite');
+    // TOUT EN BAS : après le « Fait à … » et la légende de l'émargement électronique.
+    assert.ok(html.indexOf('class="mentions"') > html.indexOf('class="legende"'), 'le pied légal vient après la légende');
+    // La hauteur du pied est RÉSERVÉE dans le calcul d'une page (sinon débordement en page 2, § 3).
+    const src = lire('lib/emargement.js');
+    assert.match(src, /const MENTIONS_ECOLE = \[/, 'le texte fixe est une constante nommée');
+    assert.match(src, /const footerH = \(orgSig \? 34 : 18\) \+ 4 \+ mentionsH;/, 'la hauteur des mentions entre dans footerH');
 });
 
 /* Le chargeur, sur une base simulée : ce que la feuille lit VRAIMENT (et pas des participants
