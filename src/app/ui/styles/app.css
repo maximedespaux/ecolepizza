@@ -6510,6 +6510,12 @@ label .requis {
 .fp-allerg { margin: 10px 0 0; font-size: 12.5px; color: #111; line-height: 1.4; }
 @media print {
   body > *:not(.fiche-print) { display: none !important; }
+  /* Une AUTRE feuille d'impression (la progression, plus haut dans ce fichier) pose
+     `body *{visibility:hidden}` puis ne révèle QUE `.print-area`. Les deux blocs @media print
+     s'appliquent ensemble : sans la contre-mesure ci-dessous, tout le contenu de la fiche restait
+     masqué et la page sortait BLANCHE (signalé le 2026-11-26). On ré-affiche donc explicitement la
+     feuille — `.fiche-print *` est plus spécifique que `body *`, elle l'emporte. */
+  .fiche-print, .fiche-print * { visibility: visible !important; }
   .fiche-print { position: static; padding: 0; overflow: visible; }
   .no-print { display: none !important; }
   .fp-table { font-size: 11px; }

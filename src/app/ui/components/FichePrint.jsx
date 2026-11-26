@@ -70,10 +70,23 @@ export default function FichePrint({ fiche, onClose }) {
   // La cellule « procédure » couvre la ligne des en-têtes de colonnes + les ingrédients + les 2 totaux.
   const procSpan = rows.length + 3 + (fini ? 1 : 0);
 
+  // Le PDF enregistré par le navigateur prend le nom de l'onglet (document.title) : on le nomme
+  // d'après la fiche le temps de l'impression, puis on le remet. Sinon le fichier sortait au titre
+  // de l'app (« Impastio… »), pas de la recette. Demandé le 2026-11-26.
+  const imprimer = () => {
+    const nom = (fiche.name || "").trim() || "Fiche technique";
+    const precedent = document.title;
+    const remettre = () => { document.title = precedent; window.removeEventListener("afterprint", remettre); };
+    document.title = nom;
+    window.addEventListener("afterprint", remettre);
+    window.print();
+    setTimeout(remettre, 1000); // filet si « afterprint » ne se déclenche pas sur le navigateur
+  };
+
   return createPortal(
     <div className="fiche-print">
       <div className="fp-bar no-print">
-        <button className="btn primary sm" onClick={() => window.print()}><Icon name="printer" size={14} /> Imprimer</button>
+        <button className="btn primary sm" onClick={imprimer}><Icon name="printer" size={14} /> Imprimer</button>
         <button className="btn ghost sm" onClick={onClose}><Icon name="x" size={14} /> Fermer</button>
         <span className="hint" style={{ marginLeft: 8 }}>Astuce : dans la fenêtre d'impression, choisis « Enregistrer au format PDF ».</span>
       </div>
