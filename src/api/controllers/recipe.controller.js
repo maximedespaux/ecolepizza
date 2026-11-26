@@ -457,10 +457,16 @@ const prixPateLus = (dp) => (dp.prices && typeof dp.prices === 'object'
     ? { ...dp, prices: Object.fromEntries(Object.entries(dp.prices).map(([k, v]) => [k, v === '' || v == null ? v : prixLu(v)])) }
     : dp);
 
+/** Le nom d'une fiche est OBLIGATOIRE (demandé le 2026-11-26) : on ne fabrique plus de nom par
+ *  défaut (« Préparation maison » côté écran, « Nouvelle fiche » ici). L'écran le signale aussi,
+ *  mais le serveur refuse — pour qu'un client périmé ne crée pas de fiche anonyme. */
+const NOM_FICHE_OBLIGATOIRE = 'Le nom de la fiche est obligatoire.';
+const refusNomFiche = (b) => (String((b || {}).name || '').trim() ? null : NOM_FICHE_OBLIGATOIRE);
+
 function normRecipe(b) {
     return {
         kind: ['PATE', 'PREPARATION', 'RECETTE'].includes(b.kind) ? b.kind : 'RECETTE',
-        name: String(b.name || '').trim().slice(0, 160) || 'Nouvelle fiche',
+        name: String(b.name || '').trim().slice(0, 160),
         type: b.type ? String(b.type).slice(0, 40) : null,
         description: b.description ? String(b.description).slice(0, 5000) : null,
         servings: Math.max(1, parseInt(b.servings, 10) || 6),
@@ -506,6 +512,8 @@ async function ecrireAllergenes(conn, id, body) {
 const createRecipe = async (req, res) => {
     try {
         const conn = db.promise();
+        const refusNom = refusNomFiche(req.body);
+        if (refusNom) return res.status(422).json({ message: refusNom });
         const refus = refusPrixFiche(req.body || {});
         if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});
@@ -538,6 +546,8 @@ const updateRecipe = async (req, res) => {
         const { trouvee, moderation, autorise } = await droitEcritureFiche(conn, req.params.id, req.user);
         if (!trouvee) return res.status(404).json({ message: 'Recette introuvable.' });
         if (!autorise) return res.status(403).json({ message: 'Seul l\'auteur, ou la modération, peut modifier cette fiche.' });
+        const refusNom = refusNomFiche(req.body);
+        if (refusNom) return res.status(422).json({ message: refusNom });
         const refus = refusPrixFiche(req.body || {});
         if (refus) return res.status(422).json({ message: refus });
         const r = normRecipe(req.body || {});

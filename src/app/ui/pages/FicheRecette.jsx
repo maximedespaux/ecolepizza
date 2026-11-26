@@ -992,6 +992,7 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
   // sans rouvrir l'éditeur. `mode` ne sert plus qu'à l'initialisation (fiche neuve).
   const kind = r.kind;
   const [busy, setBusy] = useState(false);
+  const [erreurNom, setErreurNom] = useState(false); // « nom obligatoire » : le champ à remplir est surligné
   const [catalogueOpen, setCatalogueOpen] = useState(false);
   const [pateOpen, setPateOpen] = useState(false);
   const [mercOpen, setMercOpen] = useState(false);
@@ -1256,16 +1257,27 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
     setAFocaliser(null);
   }, [aFocaliser]);
 
+  // Dès qu'un nom est saisi, l'alerte « nom obligatoire » s'efface d'elle-même.
+  useEffect(() => { if (erreurNom && String(r.name || "").trim()) setErreurNom(false); }, [r.name, erreurNom]);
+
   const dejaProduits = useMemo(() => new Set(r.ingredients.map((i) => i.product_id).filter(Boolean)), [r.ingredients]);
   const dejaFiches = useMemo(() => new Set(r.ingredients.map((i) => i.component_recipe_id).filter(Boolean)), [r.ingredients]);
   const dejaLabels = useMemo(() => new Set(r.ingredients.map((i) => normaliser(i.label)).filter(Boolean)), [r.ingredients]);
 
   async function persist(overrides = {}) {
-    setBusy(true);
     const merged = { ...r, ...overrides };
+    const name = String(merged.name || "").trim();
+    // Le nom est OBLIGATOIRE : on ne fabrique plus « Préparation maison ». Sans nom, on signale le
+    // champ manquant et on y amène l'œil, plutôt que d'enregistrer une fiche à demi nommée (le
+    // serveur refuse aussi, cf. recipe.controller). Demandé par l'école le 2026-11-26.
+    if (!name) {
+      setErreurNom(true);
+      const el = document.querySelector(".fe .fe-nom input");
+      if (el) { el.focus(); if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+      return;
+    }
+    setBusy(true);
     const nettoyer = (a) => (a || []).map((s) => String(s).trim()).filter(Boolean);
-    const nomParDefaut = merged.kind === "PREPARATION" ? "Préparation maison" : `${merged.type} maison`;
-    const name = String(merged.name || "").trim() || nomParDefaut;
     const payload = { ...merged, name,
       // En mode « par farine », le rendement enregistré = nb de pâtons obtenus.
       servings: (merged.kind === "PATE" && dpMode === "farine") ? Math.max(1, effNb) : merged.servings,
@@ -1570,7 +1582,11 @@ function FicheRecette({ mode = "realisation", openId = null, onExit = null, onOp
             </select>
             <Icon name="chevron-down" size={13} aria-hidden="true" />
           </label>
-          <label className="fe-nom" data-valeur={r.name || nomExemple}>
+          <label className={"fe-nom" + (erreurNom ? " err" : "")} data-valeur={r.name || nomExemple}>
+            {/* Un intitulé discret coiffe le champ : sans lui, le grand texte passe pour un titre
+                figé, et l'école a signalé que personne ne devine qu'on écrit là (2026-11-26). Sans
+                nom, il vire au rouge et dit ce qui manque. */}
+            <span className="fe-nom-cap" aria-hidden="true">{erreurNom ? "Nom de la fiche — à remplir" : "Nom de la fiche"}</span>
             {/* `size={1}` : sans lui, le champ garde sa largeur par défaut (20 caractères) et c'est
                 elle, pas le texte, qui fixe la case. */}
             <input value={r.name} onChange={set("name")} maxLength={160} size={1} aria-label="Nom de la fiche" placeholder={nomExemple} />
