@@ -190,6 +190,21 @@ test('chaque membre a sa case d\'émargement, et le NOM est en capitales', () =>
     assert.match(html, /<th>Émargement<\/th>/);
 });
 
+test('Annexe 1 : colonnes à largeur figée — le NOM ne se coupe plus sous une Fonction longue', () => {
+    /* Sans largeurs de colonnes, LibreOffice (et le navigateur en aperçu) répartissait la place
+       selon le CONTENU : la Fonction (« présidente de la présente commission de délibération »)
+       raflait la largeur et « DESPAUX » se coupait en « DESPAU / X ». On fige NOM et Prénom assez
+       larges pour tenir sur une ligne ; la Fonction absorbe le reste en passant à la ligne. Un
+       <colgroup> de pourcentages est la seule forme de largeur de colonne que LibreOffice suive. */
+    const html = resolveTokens(ctxPv(['CERTIFIE'])).PVMembres;
+    assert.match(
+        html,
+        /<colgroup><col width="20%"><col width="22%"><col width="32%"><col width="26%"><\/colgroup>/,
+        'quatre colonnes à largeur fixe (NOM, Prénom, Fonction, Émargement)',
+    );
+    assert.ok(html.indexOf('<colgroup>') < html.indexOf('<tbody>'), 'le colgroup est AVANT le corps, sinon LibreOffice l\'ignore');
+});
+
 test('NOM COMPOSÉ : patronyme en CAPITALES, prénom à part (saisie séparée) — l\'ancien format tient', () => {
     /* Nom et prénom sont désormais saisis À PART : un nom composé (« Le Faou ») ne se devine pas
        d'un seul champ, et le PV imprime le PATRONYME EN CAPITALES pour qu'on le distingue du prénom

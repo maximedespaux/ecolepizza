@@ -950,6 +950,14 @@ function pvListe(lignes) {
 
 function pvMembresTable(jury, sigs = {}) {
     if (!jury || !jury.length) return '';
+    /* LARGEURS DE COLONNES EXPLICITES (demandé le 2026-11-26). Sans elles, LibreOffice — comme le
+       navigateur en aperçu — répartit la largeur selon le CONTENU : la Fonction (« présidente de la
+       présente commission de délibération ») raflait la place et écrasait le NOM, au point de couper
+       « DESPAUX » en « DESPAU / X ». On fige donc le NOM et le Prénom assez larges pour tenir sur une
+       ligne, on réserve l'Émargement pour la signature (150 px), et on laisse la Fonction — seule
+       phrase longue — absorber le reste en passant à la ligne. Même idiome que le tableau des articles
+       d'une facture (<colgroup>), seule forme de largeur de colonne que LibreOffice suive (cf. § 3). */
+    const colgroup = '<colgroup><col width="20%"><col width="22%"><col width="32%"><col width="26%"></colgroup>';
     const head = '<tr><th>NOM</th><th>Prénom</th><th>Fonction</th><th>Émargement</th></tr>';
     const body = jury.map((m) => {
         /* NOM (patronyme) en capitales, Prénom à part. Saisis séparément désormais, donc sûrs même
@@ -960,11 +968,11 @@ function pvMembresTable(jury, sigs = {}) {
         else { const [n, ...reste] = String(m.nom || '').trim().split(/\s+/); nom = n || ''; prenom = reste.join(' '); }
         // L'émargement recueilli (migration 216) s'imprime dans sa case ; sinon case vide à signer.
         const sig = m.user_id && sigs[`MEMBRE:${m.user_id}`];
-        const emarg = sig ? signatureBox(sig, `Émargement de ${nomJure(m)}`, 160, 46) : '&nbsp;<br>&nbsp;';
+        const emarg = sig ? signatureBox(sig, `Émargement de ${nomJure(m)}`, 150, 46) : '&nbsp;<br>&nbsp;';
         return `<tr><td>${escCell(nom.toUpperCase())}</td><td>${escCell(prenom)}</td>`
             + `<td>${escCell(m.qualite || 'Membre du jury')}</td><td>${emarg}</td></tr>`;
     }).join('');
-    return `<table width="100%"><tbody>${head}${body}</tbody></table>`;
+    return `<table width="100%">${colgroup}<tbody>${head}${body}</tbody></table>`;
 }
 
 // « ROSSI Paul — pizzaïolo, La Napoli ». Le rôle vient de la position dans le jury ; le nom, « NOM
