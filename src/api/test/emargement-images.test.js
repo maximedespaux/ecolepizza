@@ -92,9 +92,9 @@ test('UNE SIGNATURE PIÉGÉE ne sort pas de son attribut : `"` est échappé au 
     const html = feuille('data:image/png;base64,AA" onerror="alert(1)');
     assert.ok(!html.includes('" onerror="'), 'le `"` fermait l\'attribut src');
     assert.ok(html.includes('src="data:image/png;base64,AA&quot; onerror=&quot;alert(1)"'), 'la valeur reste entière, dans son attribut');
-    // Le cachet et le logo passent par le même échappement.
+    // Le cachet, le logo ET le pixel de comblement du bas de page passent par le même échappement.
     const src = lire('lib/emargement.js');
-    assert.strictEqual((src.match(/<img src="\$\{attr\(/g) || []).length, 3, 'les trois images de la feuille : signature, logo, cachet');
+    assert.strictEqual((src.match(/<img src="\$\{attr\(/g) || []).length, 4, 'les quatre images : signature, logo, cachet, pixel de comblement');
     assert.ok(!/<img src="\$\{(?!attr\()/.test(src), 'aucune image glissée sans échappement');
 });
 
