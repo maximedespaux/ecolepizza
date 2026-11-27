@@ -41,6 +41,11 @@ const MENTIONS_ECOLE = [
     'www.ecole-pizza.com Tél 05 62 50 18 64 - Port. 06 84 54 24 96',
     'contact@ecole-pizza.com',
 ];
+/* UN PIXEL TRANSPARENT (PNG 1×1 RGBA) pour COMBLER le bas de page. LibreOffice n'honore aucune
+   hauteur de tableau ni de bloc (§ 3) ; une IMAGE, elle, prend EXACTEMENT la boîte de ses attributs
+   width/height. Étiré à 1 × N px, il réserve une hauteur précise sans rien dessiner — c'est ce qui
+   pousse les mentions légales tout en bas quand la feuille ne remplit pas la page. */
+const PX_TRANSPARENT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=';
 
 // ── Analyse du champ « Horaires » (texte libre) en plages par jour ────────────
 // Ex. : « Jour 1 : 8h45 - 12h00 / 13h00 - 17h15 » ; une ligne sans « Jour N » sert
@@ -411,10 +416,12 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
     const headerH = 34 + (horairesLines + noteLines) * 4; // titre + organisme, filet, bandeau d'informations
     /* Les trois lignes de mentions légales (MENTIONS_ECOLE) ajoutent de la hauteur au pied : on la
-       RÉSERVE ici, sinon les lignes de signatures ne rétréciraient pas d'autant et la feuille
-       déborderait en page 2 (CLAUDE.md § 3). ~2,6 mm par ligne + un filet d'air → 11 mm, large par
-       sécurité (la ligne 1 tient sur une ligne tant que le tableau fait la largeur utile). */
-    const mentionsH = 11;
+       RÉSERVE généreusement ici, sinon les lignes de signatures ne rétréciraient pas d'autant et la
+       feuille déborderait en page 2 (CLAUDE.md § 3). Les 3 lignes ne font que ~8 mm, mais sur une
+       feuille déjà pleine (4-5 stagiaires) les lignes rendent un peu plus haut que leur réserve et
+       grignotent la marge : 18 mm garantit qu'elles se resserrent assez pour garder UNE page (mesuré
+       à la conversion soffice réelle — sans quoi 4 stagiaires passaient en page 2). */
+    const mentionsH = 18;
     const footerH = (orgSig ? 34 : 18) + 4 + mentionsH;   // « Fait à », cachet, mentions légales
     const theadH = hasSched ? 17 : 10;                    // jours, demi-journées (et leurs horaires)
     const sectionH = equipe.length ? 6 : 0;               // intertitre « Équipe pédagogique »
@@ -428,6 +435,26 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const px = (mm) => Math.round(mm * MM);
 
     const colWpx = px(colW), nameWpx = px(nameW), rowHpx = px(rowH), totWpx = px(totalW);
+
+    /* POUSSER LES MENTIONS AU BAS DE LA PAGE (demandé le 2026-11-26 : « pas au bas de la page, mais
+       proche »). Avec peu de participants les lignes plafonnent (rowH) et la feuille ne remplit pas la
+       hauteur : les mentions flottaient au milieu. On estime la hauteur RENDUE du contenu (`hautContenu`)
+       et on comble le reste par le pixel transparent (PX_TRANSPARENT) — seul moyen fiable de réserver
+       une hauteur sous LibreOffice (§ 3 : la boîte d'une image est honorée, pas la hauteur d'un tableau
+       ni d'un bloc). Le pied « Fait à / cachet » reste SOUS le tableau ; seules les mentions descendent.
+       TOUT est calé à la VRAIE conversion soffice (le navigateur sous-rend ~30 mm et trompe) :
+       · ROWPAD : une ligne rend un peu plus haut que rowH (davantage en portrait, où une ligne seule
+         monte à ~40 mm) ;
+       · le pied rend ~18 mm, cachet ou non (le cachet gonfle la RÉSERVE footerH, qui resserre les
+         lignes, mais pas le rendu) : on l'estime à plat, sinon un cachet figerait le comble à 0 ;
+       · BORD_BAS : LibreOffice bascule en page 2 ~20 mm du bord — on vise ~23 mm rendus, la marge
+         couvrant l'erreur d'estimation et la variation d'une feuille à l'autre.
+       Vérifié sur 14 feuilles (1 à 5 stagiaires, paysage et portrait, avec et sans cachet) : AUCUNE
+       ne passe sur deux pages, et les mentions atterrissent à 21-31 mm du bord. */
+    const ROWPAD = cfg.orientation === 'portrait' ? 5 : 1;
+    const hautContenu = headerH + theadH + sectionH + nRows * (rowH + ROWPAD) + 18 + 4 + 9; // pied ~22 + mentions ~9 (RENDUS, pas la réserve)
+    const BORD_BAS = 27;
+    const combleMm = Math.max(0, pageH - margin - hautContenu - BORD_BAS);
 
     /* ── LA MISE EN PAGE, refaite le 2026-09-26 (« améliore l'affichage de la feuille ») ──────────
        · un EN-TÊTE en deux colonnes — le titre et la formation à gauche, l'organisme à droite (sa
@@ -614,6 +641,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
                 ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
             </td>` : ''}
         </tr></table>
+        ${combleMm > 2 ? `<div style="margin:0;font-size:0;line-height:0"><img src="${attr(PX_TRANSPARENT)}" width="1" height="${px(combleMm)}" alt=""/></div>` : ''}
         <table width="${px(tableW)}" cellspacing="0" cellpadding="0" border="0"><tr>
             <td class="mentions" align="center">${MENTIONS_ECOLE.map(esc).join('<br/>')}</td>
         </tr></table>
