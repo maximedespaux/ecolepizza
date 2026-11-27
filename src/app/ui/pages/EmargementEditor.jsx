@@ -7,12 +7,21 @@ import Card from "../components/Card.jsx";
 import StatusMessage from "../components/StatusMessage.jsx";
 import { reduireEnDataUrl, PROFILS } from "../lib/image.js";
 
+// Pied de page légal par défaut — reflète le repli serveur (MENTIONS_ECOLE, lib/emargement.js) : ne
+// sert qu'à l'état initial et au bouton « Réinitialiser », le serveur renvoyant toujours la valeur
+// effective (défaut ou personnalisée) d'un modèle chargé. Modifiable dans l'éditeur, une ligne par ligne.
+export const MENTIONS_DEFAUT = [
+  "101 rue Alsace Lorraine 65300 LANNEMEZAN SIRET 87995513600012 - NAF 8559A - NDA 76650098965 auprès du préfet de la région Occitanie",
+  "www.ecole-pizza.com Tél 05 62 50 18 64 - Port. 06 84 54 24 96",
+  "contact@ecole-pizza.com",
+].join("\n");
+
 export const EMARG_DEFAULTS = {
   orientation: "landscape", title: "Feuille d'émargement", accent: "#c0392b", show_logo: false,
   show_duration: true, show_horaires: true, show_lieu: true, header_note: "",
   slots: ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"],
   show_formateurs: true, show_intervenants: true, show_organization: false, show_hours: true, density: "normal", margin_mm: 10,
-  footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", show_stamp: true,
+  footer_left: "", footer_caption: "Signature et cachet de l'organisme de formation", footer_mentions: MENTIONS_DEFAUT, show_stamp: true,
   extra_columns: [],
 };
 const SLOT_ORDER = ["MATIN", "APRES_MIDI", "EXAMEN", "DISTANCIEL"];
@@ -188,6 +197,11 @@ export default function EmargementEditor() {
           <div className="field"><label>Pied de page, légende du cachet</label>
             <input className="inp" value={cfg.footer_caption} onChange={set("footer_caption")}
               placeholder="Signature et cachet de l'organisme de formation" /></div>
+
+          <div className="field"><label>Pied de page, mentions légales</label>
+            <textarea className="inp" rows={4} value={cfg.footer_mentions ?? ""} onChange={set("footer_mentions")}
+              placeholder="Une ligne par ligne. Videz le champ pour n'afficher aucune mention." />
+            <span className="hint">Lignes centrées tout en bas de la feuille (coordonnées, SIRET, NAF, NDA…), une ligne de texte par ligne. Laissez le champ vide pour masquer ce pied.</span></div>
 
           <div className="field">
             <Toggle k="show_stamp" label="Intégrer la signature/cachet enregistré(e) de l'organisme" />
