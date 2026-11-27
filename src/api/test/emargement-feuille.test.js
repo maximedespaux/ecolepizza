@@ -388,12 +388,12 @@ test('L\'APERÇU DU MODÈLE est la feuille elle-même, sur un exemple — plus u
     assert.doesNotMatch(ecran, /function EmargementPreview/, 'l\'imitation en React est partie');
 });
 
-test('LE PIED DE PAGE LÉGAL : trois lignes de mentions, centrées tout en bas (texte fixe)', () => {
+test('LE PIED DE PAGE LÉGAL : trois lignes de mentions, centrées tout en bas (texte par défaut)', () => {
     const ex = E.feuilleExemple({ org: { legal_name: 'ECOLE PIZZA', nda: '76 65 00989 65', town: 'LANNEMEZAN' }, config: { slots: ['MATIN', 'APRES_MIDI'] }, aujourdHui: '2026-09-26' });
     const html = E.renderEmargementHtml(ex);
     // Une cellule CENTRÉE (align attribut — LibreOffice ignore text-align, CLAUDE.md § 3).
     assert.match(html, /<td class="mentions" align="center">/);
-    // Les trois lignes, mot pour mot, séparées par des <br/> (choix « texte fixe tel que collé »).
+    // Sans réglage, le pied prend le DÉFAUT (MENTIONS_ECOLE) : les trois lignes, mot pour mot, séparées par des <br/>.
     const l1 = '101 rue Alsace Lorraine 65300 LANNEMEZAN SIRET 87995513600012 - NAF 8559A - NDA 76650098965 auprès du préfet de la région Occitanie';
     const l2 = 'www.ecole-pizza.com Tél 05 62 50 18 64 - Port. 06 84 54 24 96';
     const l3 = 'contact@ecole-pizza.com';
@@ -402,8 +402,27 @@ test('LE PIED DE PAGE LÉGAL : trois lignes de mentions, centrées tout en bas (
     assert.ok(html.indexOf('class="mentions"') > html.indexOf('class="legende"'), 'le pied légal vient après la légende');
     // La hauteur du pied est RÉSERVÉE dans le calcul d'une page (sinon débordement en page 2, § 3).
     const src = lire('lib/emargement.js');
-    assert.match(src, /const MENTIONS_ECOLE = \[/, 'le texte fixe est une constante nommée');
+    assert.match(src, /const MENTIONS_ECOLE = \[/, 'le texte par défaut est une constante nommée');
     assert.match(src, /const footerH = \(orgSig \? 34 : 18\) \+ 4 \+ mentionsH;/, 'la hauteur des mentions entre dans footerH');
+});
+
+test('LE PIED DE PAGE LÉGAL est RÉGLABLE dans l\'éditeur (cfg.footer_mentions) : texte propre, ou aucun', () => {
+    const base = { org: { legal_name: 'ECOLE PIZZA', nda: '76 65 00989 65', town: 'LANNEMEZAN' }, aujourdHui: '2026-09-26' };
+    // Un texte propre, saisi dans l'éditeur : il remplace le défaut, une ligne par ligne.
+    const perso = E.renderEmargementHtml(E.feuilleExemple({ ...base, config: { slots: ['MATIN', 'APRES_MIDI'], footer_mentions: 'Mon organisme\nMa ligne deux' } }));
+    assert.match(perso, /<td class="mentions" align="center">Mon organisme<br\/>Ma ligne deux<\/td>/, 'le texte réglé remplace le défaut');
+    assert.doesNotMatch(perso, /Alsace Lorraine/, 'le défaut de l\'école ne s\'imprime plus');
+    // Les caractères spéciaux sont échappés (c'est du texte, pas du HTML).
+    const dangereux = E.renderEmargementHtml(E.feuilleExemple({ ...base, config: { slots: ['MATIN'], footer_mentions: 'A & <b>B</b>' } }));
+    assert.match(dangereux, /A &amp; &lt;b&gt;B&lt;\/b&gt;/, 'le pied est échappé');
+    // Champ vidé : AUCUNE mention — ni la cellule, ni le pixel de comblement qui la pousse en bas.
+    const vide = E.renderEmargementHtml(E.feuilleExemple({ ...base, config: { slots: ['MATIN', 'APRES_MIDI'], footer_mentions: '' } }));
+    assert.doesNotMatch(vide, /class="mentions"/, 'rien n\'est rendu quand le champ est vide');
+    // mergeEmargConfig : absent => défaut (modèles existants inchangés), '' => vide, borné à 6 lignes.
+    assert.strictEqual(E.mergeEmargConfig({ slots: ['MATIN'] }).footer_mentions.split('\n').length, 3, 'absent => les 3 lignes par défaut');
+    assert.strictEqual(E.mergeEmargConfig({ slots: ['MATIN'], footer_mentions: '' }).footer_mentions, '', 'vidé => aucune mention');
+    const trop = E.mergeEmargConfig({ slots: ['MATIN'], footer_mentions: '1\n2\n3\n4\n5\n6\n7\n8' }).footer_mentions;
+    assert.strictEqual(trop.split('\n').length, 6, 'borné à 6 lignes');
 });
 
 /* Le chargeur, sur une base simulée : ce que la feuille lit VRAIMENT (et pas des participants

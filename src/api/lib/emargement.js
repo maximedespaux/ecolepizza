@@ -178,6 +178,7 @@ const DEFAULT_EMARG_CONFIG = {
     margin_mm: 10,                   // marge de page
     footer_left: '',                 // '' -> « Fait à {ville}, le {date} »
     footer_caption: "Signature et cachet de l'organisme de formation",
+    footer_mentions: MENTIONS_ECOLE.join('\n'), // pied légal, une ligne par ligne (défaut : mentions de l'école) ; vidé => aucun
     show_stamp: true,
     // Colonnes personnalisées ajoutées par l'organisme : { label, text, side, width_mm }.
     // text = contenu fixe répété sur chaque ligne (vide = case à remplir). side = 'before'|'after' la grille.
@@ -207,6 +208,13 @@ function mergeEmargConfig(raw) {
     c.slots = validSlots.length ? validSlots : [...DEFAULT_EMARG_CONFIG.slots];
     c.footer_left = String(c.footer_left || '');
     c.footer_caption = String(c.footer_caption == null ? DEFAULT_EMARG_CONFIG.footer_caption : c.footer_caption);
+    /* Pied légal : texte libre réglé dans l'éditeur, une ligne par ligne. ABSENT (== null) => mentions
+       par défaut de l'école, pour que les modèles existants gardent leur pied inchangé ; '' (champ vidé
+       par l'école) => AUCUNE mention. Borné à 6 lignes de 200 car. : un pied démesuré pousserait la
+       feuille en page 2 (§ 3). */
+    c.footer_mentions = c.footer_mentions == null
+        ? DEFAULT_EMARG_CONFIG.footer_mentions
+        : String(c.footer_mentions).split(/\r?\n/).slice(0, 6).map((l) => l.slice(0, 200)).join('\n');
     delete c.sig_height; // option retirée : dimensionnement automatique
     const m = parseInt(c.margin_mm, 10);
     c.margin_mm = Number.isFinite(m) ? Math.min(25, Math.max(4, m)) : DEFAULT_EMARG_CONFIG.margin_mm;
@@ -415,13 +423,17 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
     const noteLines = cfg.header_note ? String(cfg.header_note).split(/\r?\n/).length : 0;
     // Hauteur de ligne : on répartit la place verticale restante entre les lignes.
     const headerH = 34 + (horairesLines + noteLines) * 4; // titre + organisme, filet, bandeau d'informations
-    /* Les trois lignes de mentions légales (MENTIONS_ECOLE) ajoutent de la hauteur au pied : on la
-       RÉSERVE généreusement ici, sinon les lignes de signatures ne rétréciraient pas d'autant et la
-       feuille déborderait en page 2 (CLAUDE.md § 3). Les 3 lignes ne font que ~8 mm, mais sur une
-       feuille déjà pleine (4-5 stagiaires) les lignes rendent un peu plus haut que leur réserve et
-       grignotent la marge : 18 mm garantit qu'elles se resserrent assez pour garder UNE page (mesuré
-       à la conversion soffice réelle — sans quoi 4 stagiaires passaient en page 2). */
-    const mentionsH = 18;
+    /* LE PIED LÉGAL se règle dans l'éditeur (cfg.footer_mentions, une ligne par ligne ; champ vidé =>
+       aucune mention). Il ajoute de la hauteur au pied : on la RÉSERVE généreusement, 6 mm PAR LIGNE
+       (3 lignes -> 18 mm, comme le texte fixe d'avant), sinon les lignes de signatures ne rétréciraient
+       pas d'autant et la feuille déborderait en page 2 (CLAUDE.md § 3). Les 3 lignes ne font que ~8 mm
+       rendus, mais sur une feuille déjà pleine (4-5 stagiaires) elles montent un peu plus haut que leur
+       réserve et grignotent la marge : 6 mm/ligne garantit qu'elles se resserrent assez pour garder UNE
+       page (mesuré à la conversion soffice réelle — sans quoi 4 stagiaires passaient en page 2). */
+    const mentionLignes = String(cfg.footer_mentions == null ? '' : cfg.footer_mentions)
+        .split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const nMentions = mentionLignes.length;
+    const mentionsH = nMentions * 6;
     const footerH = (orgSig ? 34 : 18) + 4 + mentionsH;   // « Fait à », cachet, mentions légales
     const theadH = hasSched ? 17 : 10;                    // jours, demi-journées (et leurs horaires)
     const sectionH = equipe.length ? 6 : 0;               // intertitre « Équipe pédagogique »
@@ -452,7 +464,7 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
        Vérifié sur 14 feuilles (1 à 5 stagiaires, paysage et portrait, avec et sans cachet) : AUCUNE
        ne passe sur deux pages, et les mentions atterrissent à 21-31 mm du bord. */
     const ROWPAD = cfg.orientation === 'portrait' ? 5 : 1;
-    const hautContenu = headerH + theadH + sectionH + nRows * (rowH + ROWPAD) + 18 + 4 + 9; // pied ~22 + mentions ~9 (RENDUS, pas la réserve)
+    const hautContenu = headerH + theadH + sectionH + nRows * (rowH + ROWPAD) + 18 + 4 + nMentions * 3; // pied ~22 + mentions ~3 mm/ligne (RENDUS, pas la réserve)
     const BORD_BAS = 27;
     const combleMm = Math.max(0, pageH - margin - hautContenu - BORD_BAS);
 
@@ -641,10 +653,10 @@ function renderEmargementHtml({ org, e, rows, participants = [], config, lieu = 
                 ${cfg.footer_caption ? `<div class="cap">${esc(cfg.footer_caption)}</div>` : ''}
             </td>` : ''}
         </tr></table>
-        ${combleMm > 2 ? `<div style="margin:0;font-size:0;line-height:0"><img src="${attr(PX_TRANSPARENT)}" width="1" height="${px(combleMm)}" alt=""/></div>` : ''}
+        ${nMentions ? `${combleMm > 2 ? `<div style="margin:0;font-size:0;line-height:0"><img src="${attr(PX_TRANSPARENT)}" width="1" height="${px(combleMm)}" alt=""/></div>` : ''}
         <table width="${px(tableW)}" cellspacing="0" cellpadding="0" border="0"><tr>
-            <td class="mentions" align="center">${MENTIONS_ECOLE.map(esc).join('<br/>')}</td>
-        </tr></table>
+            <td class="mentions" align="center">${mentionLignes.map(esc).join('<br/>')}</td>
+        </tr></table>` : ''}
     </body></html>`;
 }
 
